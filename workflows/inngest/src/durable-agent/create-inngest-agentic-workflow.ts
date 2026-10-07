@@ -13,6 +13,7 @@ import {
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
+  globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -25,7 +26,7 @@ import type { PubSub } from '@mastra/core/events';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
-import type { Inngest } from 'inngest';
+import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
@@ -325,7 +326,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         { id: 'init-iteration-state' },
       )
       // Run the agentic loop with dowhile
-      .dowhile(singleIterationWorkflow, async ({ inputData }) => {
+      .dowhile(singleIterationWorkflow, async ({ inputData, engine }) => {
         const state = inputData as IterationState;
 
         // bail() from a delegation hook is a hard stop. The flag travels on
@@ -341,7 +342,29 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
-        return shouldContinue && underMaxSteps;
+        if (!shouldContinue || !underMaxSteps) {
+          return false;
+        }
+
+        // stopWhen is a closure parked on the in-process run registry; on a
+        // cross-worker resume the entry is absent and we fall back to maxSteps.
+        // The lookup happens inside a memoized step so Inngest replays reuse the
+        // recorded decision (even on a worker without the registry entry) instead
+        // of re-invoking (possibly stateful) user predicates.
+        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+        const stopped: boolean = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+          const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
+          if (!stopWhen || state.accumulatedSteps.length === 0) {
+            return false;
+          }
+          const steps = state.accumulatedSteps as any;
+          const conditions = await Promise.all(
+            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
+          );
+          return conditions.some(Boolean);
+        });
+
+        return !stopped;
       })
       // Map final state to output format, close agent span, and emit finish event
       .map(
