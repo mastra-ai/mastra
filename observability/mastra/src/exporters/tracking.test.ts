@@ -1052,6 +1052,24 @@ describe('TrackingExporter', () => {
       expect(exporter.abortedSpans.size).toBe(0);
     });
 
+    it('should finish a span whose start and end wait for a late root, then a late parent', async () => {
+      traceId = generateTraceId();
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('child', 'parent')));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('child', 'parent', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('root')));
+      await flushAsync();
+      expect(finishCalls('child')).toHaveLength(0);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_started', span('parent', 'root')));
+      await flushAsync();
+      expect(finishCalls('child')).toHaveLength(1);
+
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('parent', 'root', t)));
+      await exporter.exportTracingEvent(createTracingEvent('span_ended', span('root', undefined, t)));
+      await exporter.shutdown();
+      expect(exporter.abortedSpans.has('child')).toBe(false);
+    });
+
     it('should finish an already built span immediately', async () => {
       await exporter.exportTracingEvent(createTracingEvent('span_started', span('tool', 'root')));
       await exporter.exportTracingEvent(createTracingEvent('span_ended', span('tool', 'root', t)));

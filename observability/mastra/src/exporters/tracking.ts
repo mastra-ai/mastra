@@ -728,6 +728,16 @@ export abstract class TrackingExporter<
         }
 
         case 'handleSpanEnd': {
+          if (!traceData.hasSpan({ spanId: exportedSpan.id })) {
+            // The span's start is still queued (e.g. moved on to wait for its parent): wait for the span itself
+            traceData.addToWaitingQueue({
+              event,
+              waitingFor: exportedSpan.id,
+              attempts: queuedEvent.attempts,
+              queuedAt: queuedEvent.queuedAt,
+            });
+            return true;
+          }
           traceData.endSpan({ spanId: exportedSpan.id });
           await this._finishSpan({ span: exportedSpan, traceData });
           // Check if we should schedule cleanup
