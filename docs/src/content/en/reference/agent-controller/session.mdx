@@ -148,20 +148,25 @@ Returns: `() => void`
 
 ### Messages and run control
 
-#### `sendMessage({ content, files?, requestContext? })`
+#### `sendMessage({ content, files?, requestContext?, author? })`
 
-Send a user message. The session creates a thread first when no thread is active.
+Send a user message. The session creates a thread first when no thread is active. Pass `author` when the host has authenticated the sender.
 
 ```typescript
 await session.sendMessage({
   content: 'Summarize this file.',
   files: [{ data: fileContents, mediaType: 'text/plain', filename: 'notes.txt' }],
+  author: { id: 'user-123' },
 })
 ```
 
-When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the stored message names that sender under `content.providerMetadata.mastra.author`. See [Reserved keys](/docs/server/request-context#reserved-keys).
+The author persists under `content.metadata.signal.author`. Read it with `getMessageAuthor(message)` from `@mastra/core/agent`. When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the session uses that value if `author` is omitted. See [Reserved keys](/docs/server/request-context#reserved-keys).
 
-#### `steer({ content, requestContext? })`
+#### `queueMessage({ content, files?, requestContext?, author? })`
+
+Queue a message for the next run, or send it immediately while the session is idle. Author metadata persists with the queued message.
+
+#### `steer({ content, requestContext?, author? })`
 
 Queue steering content into an active run.
 
