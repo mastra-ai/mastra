@@ -955,10 +955,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       validationError = 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance';
     } else if (!resolvedTableName) {
       validationError = 'tableName or indexName is required';
-    } else if (!(await this.lanceClient.tableNames()).includes(resolvedTableName)) {
-      validationError = `Table ${resolvedTableName} does not exist`;
     }
-    if (validationError || !resolvedTableName) {
+    if (validationError || !resolvedTableName || !this.lanceClient) {
       throw new MastraError({
         id: createVectorErrorId('LANCE', operation, 'INVALID_ARGS'),
         text: validationError,
@@ -967,7 +965,31 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         details: { tableName: resolvedTableName ?? '' },
       });
     }
-    return { table: await this.lanceClient.openTable(resolvedTableName), resolvedTableName };
+
+    let tableExists: boolean;
+    try {
+      tableExists = (await this.lanceClient.tableNames()).includes(resolvedTableName);
+      if (tableExists) {
+        return { table: await this.lanceClient.openTable(resolvedTableName), resolvedTableName };
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('LANCE', operation, 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName: resolvedTableName },
+        },
+        error,
+      );
+    }
+    throw new MastraError({
+      id: createVectorErrorId('LANCE', operation, 'INVALID_ARGS'),
+      text: `Table ${resolvedTableName} does not exist`,
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      details: { tableName: resolvedTableName },
+    });
   }
 
   /**
@@ -977,35 +999,38 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * Never runs implicitly. Concurrent calls for the same table share a single in-flight run.
    */
   async optimize(params: LanceOptimizeParams): Promise<OptimizeStats> {
-    const { table, resolvedTableName } = await this.openExistingTable(params, 'OPTIMIZE');
-
-    const inFlight = this.optimizeInFlight.get(resolvedTableName);
+    const key = params.tableName ?? params.indexName;
+    const inFlight = key ? this.optimizeInFlight.get(key) : undefined;
     if (inFlight) {
       return inFlight;
     }
 
+    // Registered before the async table lookup so concurrent callers always share one run.
     const run = (async () => {
       try {
-        return await table.optimize({
-          ...(params.cleanupOlderThan ? { cleanupOlderThan: params.cleanupOlderThan } : {}),
-          deleteUnverified: params.deleteUnverified ?? false,
-        });
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: createVectorErrorId('LANCE', 'OPTIMIZE', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { tableName: resolvedTableName },
-          },
-          error,
-        );
+        const { table, resolvedTableName } = await this.openExistingTable(params, 'OPTIMIZE');
+        try {
+          return await table.optimize({
+            ...(params.cleanupOlderThan ? { cleanupOlderThan: params.cleanupOlderThan } : {}),
+            deleteUnverified: params.deleteUnverified ?? false,
+          });
+        } catch (error) {
+          throw new MastraError(
+            {
+              id: createVectorErrorId('LANCE', 'OPTIMIZE', 'FAILED'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { tableName: resolvedTableName },
+            },
+            error,
+          );
+        }
       } finally {
-        this.optimizeInFlight.delete(resolvedTableName);
+        if (key) this.optimizeInFlight.delete(key);
       }
     })();
 
-    this.optimizeInFlight.set(resolvedTableName, run);
+    if (key) this.optimizeInFlight.set(key, run);
     return run;
   }
 
@@ -1021,12 +1046,14 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       const coverage: LanceIndexCoverage[] = [];
       for (const index of indices) {
         const stats = await table.indexStats(index.name);
+        // Undefined means the index was dropped after listIndices(); reporting zeros would hide real coverage.
+        if (!stats) continue;
         coverage.push({
           indexName: index.name,
-          indexType: stats?.indexType ?? index.indexType,
+          indexType: stats.indexType,
           columns: index.columns,
-          numIndexedRows: stats?.numIndexedRows ?? 0,
-          numUnindexedRows: stats?.numUnindexedRows ?? 0,
+          numIndexedRows: stats.numIndexedRows,
+          numUnindexedRows: stats.numUnindexedRows,
         });
       }
       return coverage;

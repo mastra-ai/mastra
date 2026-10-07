@@ -102,6 +102,35 @@ describe('LanceVectorStore table maintenance', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it('coalesces a call that arrives while the first is still resolving the table', async () => {
+    const indexName = 'optimize_slow_lookup';
+    await createIndexedTable(indexName);
+    const spy = vi.spyOn(await tablePrototype(indexName), 'optimize');
+    const client = (store as unknown as { lanceClient: Connection }).lanceClient;
+    const original = client.tableNames.bind(client);
+    const lookup = vi.spyOn(client, 'tableNames').mockImplementationOnce(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return original();
+    });
+
+    const [a, b] = await Promise.all([store.optimize({ indexName }), store.optimize({ indexName })]);
+    expect(a).toBe(b);
+    expect(spy).toHaveBeenCalledTimes(1);
+    lookup.mockRestore();
+  });
+
+  it('wraps table lookup failures as third-party MastraErrors', async () => {
+    const client = (store as unknown as { lanceClient: Connection }).lanceClient;
+    const lookup = vi.spyOn(client, 'tableNames').mockRejectedValue(new Error('connection lost'));
+
+    for (const call of [store.optimize({ indexName: 'any' }), store.getIndexCoverage({ indexName: 'any' })]) {
+      const error = await call.catch(e => e);
+      expect(error).toBeInstanceOf(MastraError);
+      expect(error.category).toBe('THIRD_PARTY');
+    }
+    lookup.mockRestore();
+  });
+
   it('passes safe defaults to LanceDB and forwards retention options', async () => {
     const indexName = 'optimize_options';
     await createIndexedTable(indexName);
