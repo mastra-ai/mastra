@@ -729,6 +729,45 @@ LIMIT 1`,
       });
     });
 
+    it('keeps a tenant trace when another tenant has a root with the same traceId', async () => {
+      await withFallbackStorage(async (isolatedStorage, client) => {
+        const startedAt = new Date();
+        const timeRange = {
+          from: new Date(startedAt.getTime() - 1_000).toISOString(),
+          to: new Date(startedAt.getTime() + 60_000).toISOString(),
+        };
+        const root = (organizationId: string, spanId: string) => ({
+          ...spanRecordToRow({
+            traceId: 'shared-trace-id',
+            spanId,
+            parentSpanId: null,
+            name: `${organizationId} root`,
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1),
+          }),
+          organizationId,
+        });
+        // The other tenant's root has the lower dedupeKey, so it would win an unscoped dedupe.
+        await client.insert({
+          table: TABLE_TRACE_ROOTS,
+          format: 'JSONEachRow',
+          values: [root('org-b', 'a-root'), root('org-a', 'b-root')],
+        });
+
+        const scope = { organizationId: 'org-a' };
+        const traces = await isolatedStorage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } }), { scope }),
+        );
+        expect('traces' in traces && traces.traces.map(trace => trace.name)).toEqual(['org-a root']);
+        const aggregate = await isolatedStorage.aggregateTraces(
+          planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count'] }), { scope }),
+        );
+        expect(aggregate.rows).toEqual([{ measures: { count: 1 } }]);
+      });
+    });
+
     it('characterizes concurrent trace inserts and delta polls with numbered-page reconciliation', async () => {
       await withFallbackStorage(async isolatedStorage => {
         const startedAt = new Date();
