@@ -838,6 +838,7 @@ export class Mastra<
   #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
+  #durableRecoveryRechecksInFlight = new Set<Promise<void>>();
   #shuttingDown = false;
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
@@ -4291,7 +4292,7 @@ export class Mastra<
     const delay = Math.max(0, run.retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
     const timer = setTimeout(() => {
       this.#durableRecoveryRechecks.delete(key);
-      void agent
+      const recheck = agent
         .recoverActiveRuns({ runId: run.runId })
         .then(result => {
           for (const next of result.recovered) {
@@ -4304,7 +4305,9 @@ export class Mastra<
             runId: run.runId,
             error,
           });
-        });
+        })
+        .finally(() => this.#durableRecoveryRechecksInFlight.delete(recheck));
+      this.#durableRecoveryRechecksInFlight.add(recheck);
     }, delay);
     timer.unref?.();
     this.#durableRecoveryRechecks.set(key, timer);
@@ -7508,7 +7511,9 @@ export class Mastra<
     const deadline = Date.now() + drainTimeout;
 
     // A pending durable-agent recovery re-check must not start a run while the
-    // instance drains.
+    // instance drains. One already under way may still be claiming its run, so
+    // the drain below waits for it like a run: what it claims is then drained
+    // or abandoned, not left claimed until the claim expires.
     this.#shuttingDown = true;
     this.#durableRecoveryRechecks.forEach(timer => clearTimeout(timer));
     this.#durableRecoveryRechecks.clear();
@@ -7531,9 +7536,11 @@ export class Mastra<
     // returning a settled execution, which would otherwise spin this loop.
     const awaited = new Set<Promise<unknown>>();
     for (;;) {
-      const pendingRuns = [...this.#activeEventedRuns, ...getActiveDurableAgentWorkflowExecutions(this)].filter(
-        run => !awaited.has(run),
-      );
+      const pendingRuns = [
+        ...this.#activeEventedRuns,
+        ...getActiveDurableAgentWorkflowExecutions(this),
+        ...this.#durableRecoveryRechecksInFlight,
+      ].filter(run => !awaited.has(run));
       if (pendingRuns.length === 0) break;
       pendingRuns.forEach(run => awaited.add(run));
       const drained = await this.#awaitBounded(

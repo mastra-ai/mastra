@@ -767,6 +767,70 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       recovered.cleanup();
     });
 
+    it('shutdown() waits for a recovery re-check still claiming its run, and releases the run it claimed', async () => {
+      const storage = createStorage(backend);
+
+      // ---- A crashed process left the run checkpointed as running.
+      const crashed = gatedModel('never produced');
+      const crashedAgent = buildAgent({ model: crashed.model, storage });
+      const { runId } = await crashedAgent.stream('What is the answer?');
+      await crashed.entered;
+      await waitForCheckpoint(storage, runId);
+      const crashedFence = ExecutionFence.getLocalActive(runId)!;
+      globalRunRegistry.clear();
+      __resetExecutionFencesForTests();
+      const foreign = foreignOwnership(backend, storage, crashedAgent.pubsub);
+      await foreign.vanish(crashedFence);
+
+      const next = gatedModel('recovered answer');
+      const durableAgent = createDurableAgent({
+        agent: new Agent({
+          id: 'fence-agent',
+          name: 'Fence Agent',
+          instructions: 'You are a helpful agent.',
+          model: next.model as LanguageModelV2,
+        }),
+        pubsub,
+      });
+      const mastra = new Mastra({
+        agents: { 'fence-agent': durableAgent as any },
+        logger: false,
+        storage,
+        pubsub,
+        recovery: { durableAgents: 'auto' },
+      });
+
+      // ---- Boot recovery skipped the run, so a re-check is due right away; it blocks mid-claim.
+      vi.spyOn(durableAgent, 'recoverActiveRuns').mockResolvedValueOnce({
+        recovered: [{ runId, status: 'skipped', reason: 'run-active', retryAt: Date.now() }],
+        succeeded: 0,
+        failed: 0,
+      });
+      let enterClaim!: () => void;
+      const claimEntered = new Promise<void>(resolve => (enterClaim = resolve));
+      let releaseClaim!: () => void;
+      const claimGate = new Promise<void>(resolve => (releaseClaim = resolve));
+      const claim = ExecutionFence.claim.bind(ExecutionFence);
+      vi.spyOn(ExecutionFence, 'claim').mockImplementation(async args => {
+        enterClaim();
+        await claimGate;
+        return claim(args);
+      });
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      await mastra.recoverAllDurableAgents();
+      await claimEntered;
+
+      // ---- Shutdown starts before the re-check's claim lands, which then outlives the drain deadline.
+      const shutdown = mastra.shutdown({ drainTimeout: 200 });
+      releaseClaim();
+      await shutdown;
+      await next.entered;
+
+      expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+      expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
+      next.release();
+    });
+
     it('stream({ runId }) rejects with CONFLICT while another execution holds the run', async () => {
       const storage = createStorage(backend);
       const model = gatedModel('never produced');
