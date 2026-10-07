@@ -104,6 +104,43 @@ describe('useTraceMetadataFilterFields', () => {
     });
   });
 
+  describe('when the server reports canonical trace fields', () => {
+    it('exposes them alongside the metadata fields', async () => {
+      server.use(
+        http.post(FIELDS_URL, () =>
+          HttpResponse.json({
+            ...traceQueryFieldsFixture,
+            canonicalFields: [
+              {
+                path: 'tags',
+                valueKind: 'array',
+                operators: ['includes', 'notIncludes', 'exists', 'notExists'],
+                valueSuggestions: true,
+              },
+            ],
+          }),
+        ),
+      );
+
+      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+
+      await waitFor(() => expect(result.current.canonicalFields).toHaveLength(1));
+      expect(result.current.canonicalFields[0]).toMatchObject({ path: 'tags', valueSuggestions: true });
+      expect(result.current.fields).toHaveLength(2);
+    });
+
+    it('exposes no canonical fields when disabled', () => {
+      const { result } = renderHook(
+        () => useTraceMetadataFilterFields({ timeRange, queryOptions: { enabled: false } }),
+        { wrapper: makeWrapper(newQueryClient()) },
+      );
+
+      expect(result.current.canonicalFields).toEqual([]);
+    });
+  });
+
   describe('when the time range changes after the first load', () => {
     it('keeps the previous fields instead of dropping back to loading', async () => {
       server.use(http.post(FIELDS_URL, () => HttpResponse.json(traceQueryFieldsFixture)));

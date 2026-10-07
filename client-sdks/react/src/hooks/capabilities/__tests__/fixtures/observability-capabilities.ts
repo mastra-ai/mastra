@@ -46,3 +46,12 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     spanQuery: false,
   },
 };
+
+/** Store declares `trace-query` but not `trace-query-discovery` (or the core lacks the discovery planners). */
+export const traceQueryWithoutDiscoveryCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryDiscovery: false,
+  },
+};
