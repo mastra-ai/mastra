@@ -84,7 +84,7 @@ Guidelines:
       scratchThreadId = scratch.id;
     }
     const result = await agent.generate([{ role: 'user', content: directive }], {
-      model: 'mastra/deepseek/deepseek-flash',
+      model: 'mastra/deepseek/deepseek-flash-latest',
       activeTools: [],
       ...(scratchThreadId ? { memory: { thread: scratchThreadId, resource: AGENT_ID } } : {}),
     });
