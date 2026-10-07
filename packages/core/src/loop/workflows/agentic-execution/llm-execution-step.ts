@@ -43,7 +43,7 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
-import { execute } from '../../../stream/aisdk/v5/execute';
+import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -2024,6 +2024,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 specificationVersion: currentStep.model.specificationVersion,
+                stripToolsWhenNone: sendsNativeResponseFormat(currentStep.structuredOutput, currentStep.model),
               })
             : undefined;
           modelSpanTracker?.setInferenceContext?.({
@@ -3069,6 +3070,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         if (providerToolCallIds.length > 0) {
           messageList.addOutputErrorsToProviderToolCalls(outputStream.messageId, providerToolCallIds);
         }
+      }
+
+      // A processOutputStep rejection that ends the run (retries exhausted, or an abort
+      // without retry) must drop the rejected step too, or it is persisted to memory and
+      // surfaces in response messages and result text (issue #26048). Rolled back before the
+      // step snapshot below so its response messages exclude it as well.
+      if (processOutputStepTripwire && !shouldRetry) {
+        eagerCoordinator?.recarryCommittedWork(outputStream.messageId);
+        messageList.rollbackToStepBoundary(outputStream.messageId, iterationBoundary);
+        await discardAttemptEagerWork();
       }
 
       const steps = inputData.output?.steps || [];

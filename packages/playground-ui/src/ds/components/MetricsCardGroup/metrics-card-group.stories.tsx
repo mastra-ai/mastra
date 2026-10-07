@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { BotIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { MetricsKpiCard } from '../MetricsKpiCard';
 import { MetricsCardGroup } from './metrics-card-group';
 
@@ -7,12 +8,6 @@ const meta: Meta<typeof MetricsCardGroup> = {
   component: MetricsCardGroup,
   parameters: {
     layout: 'padded',
-  },
-  args: {
-    variant: 'default',
-  },
-  argTypes: {
-    variant: { control: 'inline-radio', options: ['default', 'inset'] },
   },
 };
 
@@ -30,12 +25,11 @@ export const KpiCards: Story = {
     <MetricsCardGroup {...args}>
       {kpis.map(({ label, value, ...change }) => (
         <MetricsKpiCard key={label}>
-          <MetricsKpiCard.Header>
-            <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
-            <MetricsKpiCard.Change comparison="vs previous 24h" {...change} />
-          </MetricsKpiCard.Header>
+          <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
           <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{value}</MetricsKpiCard.Value>
+            <MetricsKpiCard.Change comparison="vs previous 24h" {...change} />
+            <MetricsKpiCard.Prev value={change.prevValue} />
           </MetricsKpiCard.ValueRow>
         </MetricsKpiCard>
       ))}
@@ -47,25 +41,23 @@ export const MixedStates: Story = {
   render: args => (
     <MetricsCardGroup {...args}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Header>
-          <MetricsKpiCard.Label>Agent runs</MetricsKpiCard.Label>
-          <MetricsKpiCard.Change comparison="vs previous 24h" changePct={15.3} prevValue="10.7k" />
-        </MetricsKpiCard.Header>
+        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
+          <MetricsKpiCard.Change comparison="vs previous 24h" changePct={15.3} prevValue="10.7k" />
         </MetricsKpiCard.ValueRow>
+        <MetricsKpiCard.Footer detail="41 runs today" prevValue="10.7k" />
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label>Model cost</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<CoinsIcon />}>Model cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Loading />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label>Tokens</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<HashIcon />}>Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2M</MetricsKpiCard.Value>
-          <MetricsKpiCard.NoChange />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>

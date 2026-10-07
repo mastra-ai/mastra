@@ -56,6 +56,15 @@ type InputShared_Auxiliary_204 =
       value: string;
     }
   | {
+      op: 'matches' | 'notMatches';
+      left: {
+        path: string;
+      };
+      right: {
+        literal: string;
+      };
+    }
+  | {
       op: 'and' | 'or';
       args: InputShared_Auxiliary_204[];
     }
@@ -66,32 +75,32 @@ type InputShared_Auxiliary_204 =
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_227;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_227;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_227;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_227;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_227;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_227;
           };
     };
 
-type InputShared_Auxiliary_223 =
+type InputShared_Auxiliary_227 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -130,22 +139,31 @@ type InputShared_Auxiliary_223 =
       value: string;
     }
   | {
+      op: 'matches' | 'notMatches';
+      left: {
+        path: string;
+      };
+      right: {
+        literal: string;
+      };
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_223[];
+      args: InputShared_Auxiliary_227[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_223;
+      arg: InputShared_Auxiliary_227;
     };
 
-type InputShared_Auxiliary_254 =
+type InputShared_Auxiliary_261 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_254[];
+      args: InputShared_Auxiliary_261[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_254;
+      arg: InputShared_Auxiliary_261;
     }
   | {
       traces:
@@ -157,7 +175,7 @@ type InputShared_Auxiliary_254 =
           };
     };
 
-type InputShared_Auxiliary_682 =
+type InputShared_Auxiliary_689 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -202,19 +220,19 @@ type InputShared_Auxiliary_682 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_682[];
+      args: InputShared_Auxiliary_689[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_682;
+      arg: InputShared_Auxiliary_689;
     };
 
-type InputShared_Auxiliary_756 = {
+type InputShared_Auxiliary_763 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_756[] | undefined;
+  children?: InputShared_Auxiliary_763[] | undefined;
 };
 
 type Shared_Auxiliary_764 = {
@@ -266,6 +284,7 @@ type InputShared_Type_2 = {
   requestContextKeys?: string[] | undefined;
   traceId?: string | undefined;
   parentSpanId?: string | undefined;
+  nestUnderParent?: boolean | undefined;
   tags?: string[] | undefined;
   hideInput?: boolean | undefined;
   hideOutput?: boolean | undefined;
@@ -1781,7 +1800,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_682[];
+  predicates: InputShared_Auxiliary_689[];
 };
 
 type InputShared_Type_89 = {
@@ -1795,7 +1814,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_682;
+  predicate: InputShared_Auxiliary_689;
 };
 
 type InputShared_Type_90 =
@@ -9086,6 +9105,7 @@ export type PostMemoryThreadsThreadIdWorkingMemory_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  mode?: ('replace' | 'merge') | undefined;
 };
 
 export type PostMemoryThreadsThreadIdWorkingMemory_Response = PostAuthRefresh_Response;
@@ -10413,7 +10433,7 @@ export type PostObservabilityTracesAggregate_Body = {
       )
     | `countDistinct.${string}`
   )[];
-  having?: InputShared_Auxiliary_223 | undefined;
+  having?: InputShared_Auxiliary_227 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10497,7 +10517,7 @@ export type PostObservabilityThreadsQuery_Body = {
     };
     where?: InputShared_Auxiliary_204 | undefined;
   };
-  where?: InputShared_Auxiliary_254 | undefined;
+  where?: InputShared_Auxiliary_261 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10540,7 +10560,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_223 | undefined;
+  where?: InputShared_Auxiliary_227 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
@@ -10640,6 +10660,8 @@ export type PostObservabilityTracesQueryFields_Response = {
       | 'notExists'
       | 'includes'
       | 'notIncludes'
+      | 'matches'
+      | 'notMatches'
     )[];
     valueSuggestions: boolean;
   }[];
@@ -18441,7 +18463,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_756[] | undefined;
+  files?: InputShared_Auxiliary_763[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18499,7 +18521,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_756[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_763[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
