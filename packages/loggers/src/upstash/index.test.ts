@@ -267,16 +267,43 @@ describe('UpstashTransport', () => {
         expect(result.hasMore).toBe(true);
       });
 
-      it('should request the next window only after a full chunk', async () => {
+      it('should stop at the list length captured when the scan started', async () => {
         list = Array.from({ length: 1000 }, (_, i) => JSON.stringify({ msg: `m${i}`, level: LogLevel.INFO }));
+        const respond = fetchMock.getMockImplementation();
+        fetchMock.mockImplementation((url: string, init: { body: string }) => {
+          // Simulate writers appending 1,000 entries between every request.
+          const reply = respond(url, init);
+          list = list.concat(Array.from({ length: 1000 }, () => JSON.stringify({ level: LogLevel.INFO })));
+          return reply;
+        });
 
         const result = await transport.listLogs({ logLevel: LogLevel.INFO, page: 1, perPage: 1 });
 
-        expect(lrangeWindows()).toEqual([
+        expect(sentCommands()).toEqual([
+          ['LLEN', 'test-logs'],
           ['LRANGE', 'test-logs', 0, 999],
-          ['LRANGE', 'test-logs', 1000, 1999],
         ]);
         expect(result).toMatchObject({ total: 1000, hasMore: true });
+      });
+
+      it('should fall back to an empty result when a later window fails', async () => {
+        list = Array.from({ length: 1500 }, () => JSON.stringify({ level: LogLevel.ERROR, runId: 'run' }));
+        const respond = fetchMock.getMockImplementation();
+        fetchMock.mockImplementation((url: string, init: { body: string }) =>
+          fetchMock.mock.calls.length > 1
+            ? Promise.resolve({ ok: true, json: () => Promise.resolve([{ error: 'ERR timeout' }]) })
+            : respond(url, init),
+        );
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        await expect(transport.listLogs({ logLevel: LogLevel.ERROR })).resolves.toEqual({
+          logs: [],
+          total: 0,
+          page: 1,
+          perPage: 100,
+          hasMore: false,
+        });
+        await expect(transport.listLogsByRunId({ runId: 'run' })).resolves.toMatchObject({ logs: [], total: 0 });
       });
 
       it('should page run ID queries from bounded windows', async () => {

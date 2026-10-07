@@ -190,12 +190,20 @@ export class UpstashTransport extends LoggerTransport {
   ): Promise<{ logs: BaseLogMessage[]; total: number }> {
     const logs: BaseLogMessage[] = [];
     let total = 0;
+    // Captured on the first request so concurrent writes can't extend the scan indefinitely.
+    let length = Infinity;
 
-    for (let offset = 0; ; offset += SCAN_CHUNK_SIZE) {
-      const response = await this.executeUpstashCommands([
-        ['LRANGE', this.listName, offset, offset + SCAN_CHUNK_SIZE - 1],
-      ]);
-      const chunk = response?.[0]?.result;
+    for (let offset = 0; offset < length; offset += SCAN_CHUNK_SIZE) {
+      const lrange = ['LRANGE', this.listName, offset, offset + SCAN_CHUNK_SIZE - 1];
+      const response = await this.executeUpstashCommands(offset === 0 ? [['LLEN', this.listName], lrange] : [lrange]);
+      const items: any[] = Array.isArray(response) ? response : [];
+      for (const item of items) {
+        if (item?.error) throw new Error(`Upstash command failed: ${item.error}`);
+      }
+      if (offset === 0) length = Number(items[0]?.result) || 0;
+
+      const chunk = items[items.length - 1]?.result;
+      if (!Array.isArray(chunk)) throw new Error('Invalid Upstash LRANGE response');
 
       for (const log of this.parseLogs(chunk)) {
         if (!this.matchesLog(log, criteria)) continue;
@@ -203,7 +211,7 @@ export class UpstashTransport extends LoggerTransport {
         total++;
       }
 
-      if (!Array.isArray(chunk) || chunk.length < SCAN_CHUNK_SIZE) break;
+      if (chunk.length < SCAN_CHUNK_SIZE) break;
     }
 
     return { logs, total };
