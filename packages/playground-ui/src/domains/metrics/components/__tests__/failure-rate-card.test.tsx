@@ -21,7 +21,7 @@ describe('FailureRateCard', () => {
   it('says so when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<FailureRateCard />);
-    expect(await screen.findByText("Couldn't load")).toBeDefined();
+    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
   });
 
   it('calls the handler from "View errors in Logs"', async () => {

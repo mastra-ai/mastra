@@ -23,7 +23,7 @@ describe('LatencyCard', () => {
   it('keeps the tabs and says so when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<LatencyCard />);
-    expect(await screen.findByText("Couldn't load")).toBeDefined();
+    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Workflows' })).toBeDefined();
   });
 

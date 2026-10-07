@@ -24,7 +24,7 @@ describe('TokenUsageCard', () => {
   it('says so when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<TokenUsageCard />);
-    expect(await screen.findByText("Couldn't load")).toBeDefined();
+    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
   });
 
   it('only offers "View in Traces" with a handler, and calls it', async () => {

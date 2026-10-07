@@ -125,19 +125,21 @@ function UsageFrame({
     title: 'Usage',
     description: 'Who is spending: cost share, with tokens.',
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
+    toolbar: (
+      <MetricsCard.Toolbar>
+        <MetricsCard.Tabs<View> value={view} onValueChange={onViewChange}>
+          <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
+          <MetricsCard.Tab value="models">Models</MetricsCard.Tab>
+          <MetricsCard.Tab value="threads">Threads</MetricsCard.Tab>
+        </MetricsCard.Tabs>
+        <MetricsShareList.Header columns={COLUMNS} valueLabel="Cost" />
+      </MetricsCard.Toolbar>
+    ),
   };
-  const tabs = (
-    <MetricsCard.Tabs<View> value={view} onValueChange={onViewChange}>
-      <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
-      <MetricsCard.Tab value="models">Models</MetricsCard.Tab>
-      <MetricsCard.Tab value="threads">Threads</MetricsCard.Tab>
-    </MetricsCard.Tabs>
-  );
 
-  // Without rows, the column header would label nothing; the tabs stay to try another view.
   if (isError) {
     return (
-      <ChartCard {...layout} toolbar={<MetricsCard.Toolbar>{tabs}</MetricsCard.Toolbar>}>
+      <ChartCard {...layout}>
         <ChartCardError />
       </ChartCard>
     );
@@ -146,12 +148,6 @@ function UsageFrame({
   return (
     <ChartCard
       {...layout}
-      toolbar={
-        <MetricsCard.Toolbar>
-          {tabs}
-          <MetricsShareList.Header columns={COLUMNS} valueLabel="Cost" />
-        </MetricsCard.Toolbar>
-      }
       summary={
         <MetricsCard.Summary
           value={formatUsd(rows.reduce((sum, r) => sum + r.cost, 0))}
