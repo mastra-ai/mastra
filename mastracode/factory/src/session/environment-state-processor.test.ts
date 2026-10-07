@@ -7,6 +7,7 @@ import {
   FactoryEnvironmentStateProcessor,
   peekSessionEnvironmentTeardown,
   recordSessionEnvironment,
+  setSessionEnvironmentNote,
   updateSessionEnvironmentRepository,
 } from './environment-state-processor.js';
 import type { SessionEnvironmentState } from './environment-state-processor.js';
@@ -151,6 +152,35 @@ describe('FactoryEnvironmentStateProcessor', () => {
       '1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7 (default main, setup ok)\n',
     );
     expect(environment.repositories[1]!.branch).toBeNull();
+  });
+
+  it('renders the boot note as the last line, drops it when cleared, and changes the cache key both ways', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+    const first = (await processor.computeStateSignal(stateArgs(requestContext()))) as { cacheKey: string };
+
+    setSessionEnvironmentNote(
+      'sess-1',
+      'GH_TOKEN covers acme/template-docs-expert only; use the source_control_* tools.',
+    );
+    setSessionEnvironmentNote('other', 'ignored');
+    const noted = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(noted.cacheKey).not.toBe(first.cacheKey);
+    expect(
+      noted.contents.endsWith('\nGH_TOKEN covers acme/template-docs-expert only; use the source_control_* tools.'),
+    ).toBe(true);
+
+    setSessionEnvironmentNote('sess-1', null);
+    const cleared = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(cleared.cacheKey).toBe(first.cacheKey);
+    expect(cleared.contents).not.toContain('GH_TOKEN');
+    expect('note' in environment).toBe(false);
   });
 
   it('never renders a token or a clone URL: the state only carries slugs, paths, branches and statuses', async () => {

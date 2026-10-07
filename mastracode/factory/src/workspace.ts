@@ -49,7 +49,11 @@ import {
 } from './sandbox/session-sandbox.js';
 import type { SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
-import { clearSessionEnvironment, recordSessionEnvironment } from './session/environment-state-processor.js';
+import {
+  clearSessionEnvironment,
+  recordSessionEnvironment,
+  setSessionEnvironmentNote,
+} from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
@@ -301,7 +305,7 @@ export interface WorkspaceSourceControlProvider {
   /** Stable integration id used to select the provider-owned storage partition. */
   id: string;
   /** Provider capability used to resolve fresh repository credentials. */
-  versionControl: Pick<VersionControl, 'getRepositoryAccess'>;
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>;
   /** Provider-owned source-control rows, including Factory sessions. */
   storage: SourceControlStorageHandle;
   /** Present only for GitHub, whose CLI PAT rotation has additional semantics. */
@@ -572,8 +576,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`${sourceControl.id} installation ${connection.installationId} was not found`);
     }
     const repoFullName = repository.slug;
-    if (githubProvider)
-      registerGithubRefreshTarget(requestContext, { orgId: session.orgId, repositoryId: repository.id });
     // The factory environment: every `inEnvironment` link of the session's
     // factory in position order, with the project's settings. Absent when the
     // factory has none (or the session predates `factoryProjectId`), which
@@ -585,6 +587,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const environment = resolvedEnvironment?.repos.some(repo => repo.projectRepositoryId === projectRepository.id)
       ? resolvedEnvironment
       : undefined;
+    // `GH_TOKEN` should reach every environment repository, the session's own
+    // first; the refresh tool re-mints for the same set.
+    const tokenRepositoryIds = environment
+      ? [repository.id, ...environment.repos.map(repo => repo.repositoryId).filter(id => id !== repository.id)]
+      : [repository.id];
+    if (githubProvider) {
+      registerGithubRefreshTarget(requestContext, {
+        orgId: session.orgId,
+        repositoryId: repository.id,
+        ...(tokenRepositoryIds.length > 1 ? { repositoryIds: tokenRepositoryIds } : {}),
+      });
+    }
 
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —
@@ -846,7 +860,40 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         orgId: session.orgId,
         repositoryId: repository.id,
       });
+    // Resolve the minted token `GH_TOKEN` carries. With several environment
+    // repositories the provider may mint one credential for all of them; when
+    // it cannot (no such capability, several installations, too many
+    // repositories) the session repository's token is used and the agent is
+    // told through the environment signal, so it reaches the other
+    // repositories through the source_control_* tools instead of raw `gh`.
+    let tokenScopeWarned = false;
     const getRepositoryToken = async (): Promise<string> => {
+      if (tokenRepositoryIds.length > 1) {
+        const wide = sourceControl.versionControl.getRepositoriesAccess
+          ? await sourceControl.versionControl.getRepositoriesAccess({
+              orgId: session.orgId,
+              repositoryIds: tokenRepositoryIds,
+            })
+          : undefined;
+        if (wide?.authorization?.token) {
+          setSessionEnvironmentNote(session.sessionId, null);
+          return wide.authorization.token;
+        }
+        if (!tokenScopeWarned) {
+          tokenScopeWarned = true;
+          console.warn('[Mastra Factory] GH_TOKEN covers the session repository only', {
+            sessionId: session.sessionId,
+            repositories: environment?.repos.map(repo => repo.slug) ?? [repoFullName],
+            reason: sourceControl.versionControl.getRepositoriesAccess
+              ? 'provider cannot mint one token for this repository set'
+              : 'provider mints per-repository tokens only',
+          });
+        }
+        setSessionEnvironmentNote(
+          session.sessionId,
+          `GH_TOKEN covers ${repoFullName} only; use the source_control_* tools for other repositories.`,
+        );
+      }
       const token = (await getRepositoryAccess()).authorization?.token;
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
       return token;

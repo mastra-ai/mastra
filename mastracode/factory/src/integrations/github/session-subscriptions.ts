@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import type { VersionControl } from '../../capabilities/version-control.js';
 import { findEnvironmentRepository, resolveSessionRepositories } from '../../session/environment-repositories.js';
 import type { EnvironmentRepository } from '../../session/environment-repositories.js';
 import { runsPullRequestCreate } from '../../session/shell-commands.js';
@@ -12,6 +13,7 @@ import type { GithubIntegration } from './integration.js';
 import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
 import { getGithubRefreshTarget, getRegisteredGithubPatKind, requireGithubTokenInjector } from './token-refresh.js';
+import type { GithubRefreshTarget } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string };
 
@@ -285,10 +287,28 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
     inject(pat);
     return;
   }
-  const access = await github.versionControl.getRepositoryAccess(target);
-  const token = access.authorization?.token;
+  const token = await resolveEnvironmentToken(github.versionControl, target);
   if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
   inject(token);
+}
+
+/**
+ * The minted token `GH_TOKEN` carries: one covering every environment
+ * repository when the provider can mint it, else the session repository's.
+ * The same rule the workspace applies at boot, so a refresh never narrows
+ * (or widens) what `gh` reaches.
+ */
+export async function resolveEnvironmentToken(
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>,
+  target: GithubRefreshTarget,
+): Promise<string | undefined> {
+  const repositoryIds = target.repositoryIds ?? [];
+  if (repositoryIds.length > 1 && versionControl.getRepositoriesAccess) {
+    const wide = await versionControl.getRepositoriesAccess({ orgId: target.orgId, repositoryIds });
+    if (wide?.authorization?.token) return wide.authorization.token;
+  }
+  const access = await versionControl.getRepositoryAccess({ orgId: target.orgId, repositoryId: target.repositoryId });
+  return access.authorization?.token;
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
