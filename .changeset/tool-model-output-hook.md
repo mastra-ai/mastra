@@ -1,0 +1,18 @@
+---
+'@mastra/core': minor
+'@mastra/server': patch
+'@mastra/client-js': patch
+---
+
+Added a `processToolModelOutput` processor hook that changes what the model reads from a tool result without changing the result itself. Use it to shorten, reformat, or redact the model-facing copy of a tool result while memory, message history, and streamed chunks keep the full result.
+
+```ts
+const shortener: Processor = {
+  id: 'shortener',
+  processToolModelOutput: ({ result }) => ({
+    modelOutput: { type: 'text', value: String(result).slice(0, 2000) },
+  }),
+};
+```
+
+The hook runs after every `processToolResult` and after the tool's `toModelOutput`, on both the default and durable engines and for background task results. Stored processor configs and the server accept the new `processToolModelOutput` phase.

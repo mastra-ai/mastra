@@ -19,6 +19,7 @@ const processorPhaseSchema = z.enum([
   'processOutputResult',
   'processOutputStep',
   'processToolResult',
+  'processToolModelOutput',
 ]);
 
 export const getProcessorProvidersResponseSchema = z.object({

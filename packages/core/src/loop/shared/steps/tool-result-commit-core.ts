@@ -1,6 +1,8 @@
 import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
+import type { ToolModelOutput } from '../../../processors';
+import type { ProcessorRunner } from '../../../processors/runner';
 import type { ProviderMetadata } from '../../../stream/types';
 import { normalizeModelOutput } from '../normalize-model-output';
 
@@ -180,4 +182,45 @@ export function commitToolResult(deps: {
   }
 
   return updated;
+}
+
+/**
+ * Run `processToolModelOutput` over the model-facing output in
+ * `providerMetadata.mastra.modelOutput` and return provider metadata carrying
+ * the final value. The tool result itself is never touched. Returns the input
+ * metadata unchanged when no processor changes the output.
+ */
+export async function applyToolModelOutputProcessors(
+  runner: ProcessorRunner | undefined,
+  args: Omit<Parameters<ProcessorRunner['runProcessToolModelOutput']>[0], 'modelOutput'> & {
+    providerMetadata: Record<string, unknown> | undefined;
+  },
+): Promise<Record<string, unknown> | undefined> {
+  if (!runner?.hasToolModelOutputProcessor()) return args.providerMetadata;
+  const { providerMetadata, ...rest } = args;
+  const existingMastra = (providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+  const current = existingMastra?.modelOutput as ToolModelOutput | undefined;
+  const next = await runner.runProcessToolModelOutput({ ...rest, modelOutput: current });
+  if (next === current) return providerMetadata;
+  const mastra: Record<string, unknown> = { ...existingMastra };
+  if (next == null) delete mastra.modelOutput;
+  else mastra.modelOutput = normalizeModelOutput(next);
+  return { ...providerMetadata, mastra };
+}
+
+/**
+ * Background-task variant: runs `processToolModelOutput` on an already mapped
+ * output and returns the final value, or the input unchanged when no
+ * processor implements the hook.
+ */
+export async function runBackgroundModelOutputProcessors(
+  runner: ProcessorRunner | undefined,
+  args: Omit<Parameters<ProcessorRunner['runProcessToolModelOutput']>[0], 'modelOutput'> & { modelOutput: unknown },
+): Promise<unknown> {
+  if (!runner?.hasToolModelOutputProcessor()) return args.modelOutput;
+  const next = await runner.runProcessToolModelOutput({
+    ...args,
+    modelOutput: args.modelOutput as ToolModelOutput | undefined,
+  });
+  return next === args.modelOutput ? next : normalizeModelOutput(next);
 }

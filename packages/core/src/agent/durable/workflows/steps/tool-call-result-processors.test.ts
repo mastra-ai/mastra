@@ -179,6 +179,30 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(toolResultChunks[0].payload.result).toEqual(REDACTED_RESULT);
   });
 
+  it('caps only the model-facing copy with processToolModelOutput', async () => {
+    const messageList = seedMessageList();
+    const big = 'word '.repeat(2000);
+    setupRegistry(
+      {
+        id: 'shortener',
+        name: 'shortener',
+        processToolModelOutput: async ({ result }: any) => ({
+          modelOutput: { type: 'text', value: String(result).slice(0, 10) + '[cut]' },
+        }),
+      },
+      messageList,
+    );
+    globalRunRegistry.get(RUN_ID)!.tools = { [TOOL_NAME]: { execute: vi.fn().mockResolvedValue(big) } } as any;
+
+    const output = await runToolCallStep();
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toBe(big);
+    expect(output.providerMetadata.mastra.modelOutput).toEqual({ type: 'text', value: 'word word [cut]' });
+    const toolResultChunks = emittedChunksOfType('tool-result');
+    expect(toolResultChunks[0].payload.result).toBe(big);
+  });
+
   it('replaces the tool-result with a tripwire and blocks the commit when a processor aborts', async () => {
     const messageList = seedMessageList();
     setupRegistry(

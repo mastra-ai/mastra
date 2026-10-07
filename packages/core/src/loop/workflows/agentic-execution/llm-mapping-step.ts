@@ -14,7 +14,11 @@ import type { RunScopeContext } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
 import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
-import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
+import {
+  applyToolModelOutputProcessors,
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+} from '../../shared/steps/tool-result-commit-core';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError, getSubAgentErrorResult } from '../errors';
@@ -93,9 +97,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     };
     stepNumber: number;
     steps: Array<StepResult<ToolSet>>;
-  }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
+    providerMetadata: Record<string, unknown> | undefined;
+  }): Promise<{ ok: true; providerMetadata: Record<string, unknown> | undefined } | { ok: false; tripwire: TripWire }> {
     if (!processorRunner || !rest.outputProcessors?.length) {
-      return { ok: true };
+      return { ok: true, providerMetadata: args.providerMetadata };
     }
     const { chunk, stepNumber, steps } = args;
     try {
@@ -122,7 +127,31 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;
       }
-      return { ok: true };
+
+      // Provider-executed results are committed by llm-execution-step, which runs
+      // processToolModelOutput itself.
+      if (chunk.payload.providerExecuted) {
+        return { ok: true, providerMetadata: args.providerMetadata };
+      }
+      const providerMetadata = await applyToolModelOutputProcessors(processorRunner, {
+        steps,
+        messageList: rest.messageList,
+        stepNumber,
+        toolName: chunk.payload.toolName,
+        toolCallId: chunk.payload.toolCallId,
+        toolArgs: chunk.payload.args,
+        result: chunk.payload.result,
+        providerMetadata: args.providerMetadata,
+        ...observabilityContext,
+        requestContext: rest.requestContext,
+        retryCount: 0,
+        writer: streamWriter,
+        abortSignal: rest.options?.abortSignal,
+      });
+      if (providerMetadata !== args.providerMetadata) {
+        (chunk.payload as { providerMetadata?: unknown }).providerMetadata = providerMetadata;
+      }
+      return { ok: true, providerMetadata };
     } catch (error) {
       if (error instanceof TripWire) {
         return { ok: false, tripwire: error };
@@ -353,6 +382,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               },
               stepNumber,
               steps,
+              providerMetadata,
             });
             if (!trResult.ok) {
               return bailOnToolResultTripwire(trResult.tripwire);
@@ -370,9 +400,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolName: toolCall.toolName,
                 toolArgs: toolCall.args,
                 approval: toolCall.approval,
-                providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
-                  | ProviderMetadata
-                  | undefined,
+                providerMetadata: withToolPayloadTransformProviderMetadata(
+                  trResult.providerMetadata,
+                  chunk.metadata,
+                ) as ProviderMetadata | undefined,
               });
             }
 
@@ -508,6 +539,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             },
             stepNumber: stepNumberForToolResults,
             steps: stepsForToolResults,
+            providerMetadata,
           });
           if (!trResult.ok) {
             return bailOnToolResultTripwire(trResult.tripwire);
@@ -525,7 +557,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               toolName: toolCall.toolName,
               toolArgs: toolCall.args,
               approval: toolCall.approval,
-              providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
+              providerMetadata: withToolPayloadTransformProviderMetadata(trResult.providerMetadata, chunk.metadata) as
                 | ProviderMetadata
                 | undefined,
             });

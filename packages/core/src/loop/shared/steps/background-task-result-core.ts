@@ -73,6 +73,9 @@ export async function applyBackgroundToolResult(deps: {
     providerMetadata: ProviderMetadata | undefined;
   }>;
   toModelOutput?: (output: unknown) => unknown;
+  /** Runs `processToolModelOutput` processors on the mapped output. Returns
+   * the final model output, or null/undefined to fall back to the raw result. */
+  processModelOutput?: (args: { result: unknown; modelOutput: unknown }) => Promise<unknown>;
   generateId?: () => string;
   logger?: IMastraLogger;
   /** Engine-specific memory flush (save-queue wiring differs per engine). */
@@ -134,6 +137,9 @@ export async function applyBackgroundToolResult(deps: {
       );
       modelOutput = null;
     }
+  }
+  if (!failed && deps.processModelOutput) {
+    modelOutput = (await deps.processModelOutput({ result, modelOutput: modelOutput ?? undefined })) ?? null;
   }
   const providerMetadata = {
     ...transformed.providerMetadata,

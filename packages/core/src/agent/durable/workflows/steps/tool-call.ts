@@ -9,6 +9,10 @@ import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
+import {
+  applyToolModelOutputProcessors,
+  runBackgroundModelOutputProcessors,
+} from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
@@ -1501,6 +1505,32 @@ export function createDurableToolCallStep() {
                   };
                 },
                 toModelOutput: mappingTool.toModelOutput,
+                // Resolved from the live registry like the mapping tool. After a
+                // process restart without a live entry, no processors run.
+                processModelOutput: ({ result, modelOutput }) =>
+                  runBackgroundModelOutputProcessors(
+                    liveEntry?.outputProcessors?.length
+                      ? new ProcessorRunner({
+                          inputProcessors: [],
+                          outputProcessors: liveEntry.outputProcessors,
+                          logger,
+                          agentName: initData.agentId,
+                          processorStates: liveEntry.processorStates,
+                        })
+                      : undefined,
+                    {
+                      steps: [],
+                      stepNumber: 0,
+                      messageList,
+                      toolName: params.toolName,
+                      toolCallId: params.toolCallId,
+                      toolArgs: cleanedArgs,
+                      result,
+                      modelOutput,
+                      requestContext: liveEntry?.requestContext,
+                      retryCount: 0,
+                    },
+                  ),
                 // Respect a custom idGenerator for the fallback appended message —
                 // parity with main, which reads generateId from its run scope.
                 generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
@@ -1745,6 +1775,20 @@ export function createDurableToolCallStep() {
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
+            providerMetadata = (await applyToolModelOutputProcessors(resultProcessorRunner, {
+              steps: [],
+              stepNumber: 0,
+              messageList,
+              toolName,
+              toolCallId,
+              toolArgs: cleanedArgs,
+              result,
+              providerMetadata: providerMetadata as Record<string, unknown> | undefined,
+              ...(processorObservabilityContext ?? {}),
+              requestContext: registryEntry.requestContext,
+              retryCount: 0,
+              abortSignal: toolAbortSignal,
+            })) as typeof providerMetadata;
           } catch (processorError) {
             if (processorError instanceof TripWire) {
               // Blocked: emit a tripwire chunk instead of the tool-result and

@@ -30,7 +30,7 @@ import {
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
 import { initContextStorage } from '../../observability/context-storage';
 import { executeWithContext } from '../../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter, ToolModelOutput } from '../../processors';
 import {
   ProcessorRunner,
   ProcessorState,
@@ -200,6 +200,7 @@ function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processOutputResult === 'function' ||
       typeof (obj as any).processOutputStep === 'function' ||
       typeof (obj as any).processToolResult === 'function' ||
+      typeof (obj as any).processToolModelOutput === 'function' ||
       typeof (obj as any).computeStateSignal === 'function')
   );
 }
@@ -313,6 +314,7 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processOutputResult: Function })
     | (Processor<TProcessorId> & { processOutputStep: Function })
     | (Processor<TProcessorId> & { processToolResult: Function })
+    | (Processor<TProcessorId> & { processToolModelOutput: Function })
     | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
@@ -758,6 +760,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       case 'outputStep':
         return EntityType.OUTPUT_STEP_PROCESSOR;
       case 'toolResult':
+      case 'toolModelOutput':
         return EntityType.TOOL_RESULT_PROCESSOR;
       default:
         return EntityType.OUTPUT_PROCESSOR;
@@ -779,6 +782,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return 'output step processor';
       case 'toolResult':
         return 'tool result processor';
+      case 'toolModelOutput':
+        return 'tool model output processor';
       default:
         return 'processor';
     }
@@ -799,6 +804,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         return !!processor.processOutputStep;
       case 'toolResult':
         return !!processor.processToolResult;
+      case 'toolModelOutput':
+        return !!processor.processToolModelOutput;
       default:
         return false;
     }
@@ -857,6 +864,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        toolModelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
@@ -1050,7 +1058,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // the public processor span would export as an orphan trace root.
       const fallbackSpan = currentSpan && getRootExportSpan(currentSpan) ? currentSpan : undefined;
       const parentSpan =
-        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
+        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult' || phase === 'toolModelOutput'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
           : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
 
@@ -1068,7 +1076,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
-                ...resolveProcessorSpanAttributes(processor, phase),
+                ...resolveProcessorSpanAttributes(processor, phase === 'toolModelOutput' ? 'toolResult' : phase),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
@@ -1171,6 +1179,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        toolModelOutput,
         providerExecuted,
       };
 
@@ -1677,6 +1686,29 @@ function createStepFromProcessor<TProcessorId extends string>(
                 };
               }
               return { ...passThrough, messages };
+            }
+            return { ...passThrough, messages };
+          }
+
+          case 'toolModelOutput': {
+            if (processor.processToolModelOutput) {
+              const result = await processor.processToolModelOutput({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList!,
+                stepNumber: stepNumber ?? 0,
+                toolName: toolName ?? '',
+                toolCallId: toolCallId ?? '',
+                args: toolCallArgs,
+                result: toolResultValue,
+                modelOutput: toolModelOutput as ToolModelOutput | undefined,
+                providerExecuted,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                steps: steps ?? [],
+              });
+              if (result && 'modelOutput' in result) {
+                return { ...passThrough, messages, toolModelOutput: result.modelOutput };
+              }
             }
             return { ...passThrough, messages };
           }

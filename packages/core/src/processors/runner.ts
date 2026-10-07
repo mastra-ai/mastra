@@ -56,6 +56,7 @@ import type {
   RunProcessInputStepArgs,
   RunProcessInputStepResult,
   ToolCallInfo,
+  ToolModelOutput,
 } from './index';
 
 /**
@@ -2487,6 +2488,152 @@ export class ProcessorRunner {
     }
 
     return messageList;
+  }
+
+  /**
+   * Run processToolModelOutput on all output processors that implement it.
+   * Called once per tool result, after runProcessToolResult and after the tool's
+   * `toModelOutput` mapping. Each processor sees the previous processor's output.
+   * Returns the final model-facing output; the tool result itself is never touched.
+   */
+  async runProcessToolModelOutput(
+    args: {
+      steps: Array<StepResult<any>>;
+      messageList: MessageList;
+      stepNumber: number;
+      toolName: string;
+      toolCallId: string;
+      toolArgs: unknown;
+      result: unknown;
+      modelOutput: ToolModelOutput | undefined;
+      providerExecuted?: boolean;
+      requestContext?: RequestContext;
+      retryCount?: number;
+      writer?: ProcessorStreamWriter;
+      abortSignal?: AbortSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ToolModelOutput | undefined> {
+    const {
+      steps,
+      messageList,
+      stepNumber,
+      toolName,
+      toolCallId,
+      toolArgs,
+      result,
+      providerExecuted,
+      requestContext,
+      retryCount = 0,
+      writer,
+      abortSignal,
+    } = args;
+    let modelOutput = args.modelOutput;
+    const observabilityContext = resolveObservabilityContext(args);
+
+    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        if (processorOrWorkflow.__processToolModelOutput === false) continue;
+        const output = await this.executeWorkflowAsProcessor(
+          processorOrWorkflow,
+          {
+            phase: 'toolModelOutput',
+            messages: messageList.get.all.db(),
+            messageList,
+            stepNumber,
+            toolName,
+            toolCallId,
+            args: toolArgs,
+            toolResultValue: result,
+            toolModelOutput: modelOutput,
+            providerExecuted,
+            systemMessages: messageList.getAllSystemMessages(),
+            steps,
+            retryCount,
+          },
+          observabilityContext,
+          requestContext,
+          writer,
+          abortSignal,
+        );
+        if ('toolModelOutput' in output) {
+          modelOutput = output.toolModelOutput as ToolModelOutput | undefined;
+        }
+        continue;
+      }
+
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processToolModelOutput?.bind(processor);
+      if (!processMethod) continue;
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: processor.spanType ?? SpanType.PROCESSOR_RUN,
+        name: resolveProcessorSpanName(processor, 'toolResult', `tool model output processor: ${processor.id}`),
+        entityType: EntityType.TOOL_RESULT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
+        attributes: {
+          ...resolveProcessorSpanAttributes(processor, 'toolResult'),
+          processorExecutor: 'legacy',
+          processorIndex: index,
+        },
+        input: { toolName, toolCallId, stepNumber, ...(providerExecuted !== undefined ? { providerExecuted } : {}) },
+      });
+
+      const processorState = this.getProcessorState(processor.id);
+      try {
+        const processorResult = await processMethod({
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber,
+          toolName,
+          toolCallId,
+          args: toolArgs,
+          result,
+          modelOutput,
+          providerExecuted,
+          systemMessages: messageList.getAllSystemMessages(),
+          steps,
+          state: processorState.customState,
+          abort,
+          ...createObservabilityContext({ currentSpan: processorSpan }),
+          requestContext,
+          retryCount,
+          writer,
+          abortSignal,
+        });
+        const changed = !!processorResult && 'modelOutput' in processorResult;
+        if (changed) modelOutput = processorResult.modelOutput;
+        processorSpan?.end({ output: changed ? { modelOutput } : {} });
+      } catch (error) {
+        if (error instanceof TripWire) {
+          processorSpan?.error({
+            error,
+            endSpan: true,
+            attributes: {
+              tripwireAbort: { reason: error.message, retry: error.options?.retry, metadata: error.options?.metadata },
+            },
+          });
+          throw error;
+        }
+        processorSpan?.error({ error: error as Error, endSpan: true });
+        throw error;
+      }
+    }
+
+    return modelOutput;
+  }
+
+  /** Whether any output processor may implement processToolModelOutput. */
+  hasToolModelOutputProcessor(): boolean {
+    return this.outputProcessors.some(p =>
+      isProcessorWorkflow(p) ? p.__processToolModelOutput !== false : !!p.processToolModelOutput,
+    );
   }
 
   /**

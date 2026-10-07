@@ -59,6 +59,12 @@ export class PhaseFilteredProcessor<TId extends string = string, TTripwireMetada
         TTripwireMetadata
       >['processToolResult'];
     }
+    if (this.#enabledPhases.has('processToolModelOutput') && inner.processToolModelOutput) {
+      this.processToolModelOutput = inner.processToolModelOutput.bind(inner) as Processor<
+        TId,
+        TTripwireMetadata
+      >['processToolModelOutput'];
+    }
   }
 
   processInput?: Processor<TId, TTripwireMetadata>['processInput'];
@@ -67,6 +73,7 @@ export class PhaseFilteredProcessor<TId extends string = string, TTripwireMetada
   processOutputResult?: Processor<TId, TTripwireMetadata>['processOutputResult'];
   processOutputStep?: Processor<TId, TTripwireMetadata>['processOutputStep'];
   processToolResult?: Processor<TId, TTripwireMetadata>['processToolResult'];
+  processToolModelOutput?: Processor<TId, TTripwireMetadata>['processToolModelOutput'];
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     this.#inner.__registerMastra?.(mastra);
