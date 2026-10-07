@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { UnsupportedFunctionalityError } from '@ai-sdk/provider-v5';
+import { APICallError, UnsupportedFunctionalityError } from '@ai-sdk/provider-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
@@ -229,6 +229,51 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
     expect(prompts).toHaveLength(4);
     expect(userTexts(prompts[1]!)).toContain(unsentNote('old.xlsx'));
     expect(userTexts(prompts[3]!)).toContain(unsentNote('old.xlsx'));
+  });
+
+  // A provider can reject a file in its HTTP response with no file-specific text, like Gemini's 502.
+  describe('when the provider rejects the request over HTTP', () => {
+    const httpError = () =>
+      new APICallError({
+        message: '[Google AI Studio] An internal error has occurred',
+        url: 'https://example.com/v1/chat',
+        requestBodyValues: {},
+        statusCode: 502,
+        isRetryable: false,
+      });
+    const rejectsOverHttp =
+      (...mediaTypes: string[]): Rejection =>
+      prompt =>
+        userFileParts(prompt).some(part => mediaTypes.includes(part.mediaType)) ? httpError() : undefined;
+
+    it('replaces a file the model may not read, and calls the model again', async () => {
+      const { agent, prompts } = createAgent(rejectsOverHttp(XLSX));
+
+      const result = await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+
+      expect(result.text).toBe('ok');
+      expect(prompts).toHaveLength(2);
+      expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
+    });
+
+    it('keeps the next text-only turn of the thread working', async () => {
+      const { agent, prompts } = createAgent(rejectsOverHttp(XLSX));
+
+      await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+      const next = await agent.generate('Just say hi', { memory: MEMORY });
+
+      expect(next.text).toBe('ok');
+      expect(userTexts(prompts.at(-1)!)).toContain(unsentNote('leads.xlsx'));
+    });
+
+    it('leaves the error alone when the request holds no file the model may not read', async () => {
+      const { agent, prompts } = createAgent(() => httpError());
+
+      await expect(
+        agent.generate(turnWith(file('%PDF report', 'report.pdf', 'application/pdf')), { memory: MEMORY }),
+      ).rejects.toThrow('An internal error has occurred');
+      expect(prompts).toHaveLength(1);
+    });
   });
 
   it('leaves a rejection that is not about a file alone', async () => {
