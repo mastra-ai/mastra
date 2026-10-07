@@ -596,7 +596,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
             );
           } catch {
-            cleanup();
+            cleanup(controller);
             return;
           }
 
