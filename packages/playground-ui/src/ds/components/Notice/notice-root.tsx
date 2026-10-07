@@ -54,7 +54,6 @@ export function NoticeRoot({ variant, title, icon, action, children, className }
       data-slot="notice"
       className={cn(
         'relative isolate flex flex-col gap-2 overflow-hidden rounded-2xl border border-surface-rim p-3',
-        'motion-safe:transition-[opacity,translate] motion-safe:duration-normal motion-safe:ease-out-custom motion-safe:starting:-translate-y-2 motion-safe:starting:opacity-0',
         className,
       )}
     >
