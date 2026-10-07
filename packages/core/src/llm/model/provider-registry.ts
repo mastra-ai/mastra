@@ -704,8 +704,8 @@ export function getModelReasoningOptions(modelRouterId: string): ModelReasoningO
 
   const reasoningByModel = loadReasoningByModel(provider);
   const directOptions = reasoningByModel?.[parsed.modelId];
-  const gatewayAnswers = reasoningByModel !== undefined && providerListsModel(provider, parsed.modelId);
-  if (directOptions || gatewayAnswers) return directOptions;
+  if (directOptions) return directOptions;
+  if (reasoningByModel && providerListsModel(provider, parsed.modelId)) return undefined;
 
   const nested = splitNestedModelId(parsed.modelId);
   return nested ? loadReasoningByModel(nested.provider)?.[nested.modelId] : undefined;
