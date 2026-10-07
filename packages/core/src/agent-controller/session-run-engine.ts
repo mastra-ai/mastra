@@ -1119,6 +1119,8 @@ export class SessionRunEngine {
         state.terminalError = errorMessage;
         state.terminalFinishReason = 'tripwire';
         this.retractFailedRunSuspensions({
+          resourceId: state.resourceId,
+          threadId: state.threadId,
           runId: chunk.runId ?? this.#session.run.getRunId(),
           reason: errorMessage,
         });
