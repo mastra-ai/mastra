@@ -427,6 +427,16 @@ export class ObserverRunner {
     });
     const extractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
     const extractionFailures = mergeExtractionFailures(parsed.extractionFailures, structuredExtraction.failures);
+    const missingSlugs = activeExtractors
+      .filter(extractor => extractor.mode === 'inline' && extractor.required)
+      .map(extractor => extractor.slug)
+      .filter(slug => parsed.extractionFailures?.some(failure => failure.slug === slug));
+    if (missingSlugs.length > 0) {
+      this.mastra?.getLogger?.().warn('OM observer output is missing required sections', {
+        missingSlugs,
+        threadId: messagesToObserve[0]?.threadId,
+      });
+    }
     const builtIns = getBuiltInExtractedValues(extractedValues);
 
     const systemPrompt = buildObserverSystemPrompt(
