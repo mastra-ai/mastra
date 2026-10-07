@@ -1,5 +1,7 @@
 ---
 '@mastra/core': minor
+'@mastra/server': minor
+'@mastra/client-js': patch
 ---
 
 Added `ToolResultTokenLimiter`, an output processor that caps how many tokens of each tool result the model reads. The stored and streamed result stays whole; only the copy sent to the model is truncated, ending with a marker such as `[truncated: showing 2,000 of 18,400 tokens]`.

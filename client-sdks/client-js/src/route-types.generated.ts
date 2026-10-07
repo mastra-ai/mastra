@@ -1143,6 +1143,7 @@ type InputShared_Type_47 = {
     | 'processOutputResult'
     | 'processOutputStep'
     | 'processToolResult'
+    | 'processToolModelOutput'
   )[];
 };
 
@@ -2495,6 +2496,7 @@ type Shared_Type_17 = {
     | 'processOutputResult'
     | 'processOutputStep'
     | 'processToolResult'
+    | 'processToolModelOutput'
   )[];
 };
 
@@ -19185,6 +19187,7 @@ export type GetProcessorProviders_Response = {
       | 'processOutputResult'
       | 'processOutputStep'
       | 'processToolResult'
+      | 'processToolModelOutput'
     )[];
   }[];
 };
@@ -19223,6 +19226,7 @@ export type GetProcessorProvidersProviderId_Response = {
     | 'processOutputResult'
     | 'processOutputStep'
     | 'processToolResult'
+    | 'processToolModelOutput'
   )[];
   configSchema: {
     [key: string]: unknown;
