@@ -134,6 +134,16 @@ const restartedResult = await run.restart()
           },
         ],
       },
+      {
+        parameters: [
+          {
+            name: 'includeResumeLabels',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Whether to include resume labels in the result.',
+          },
+        ],
+      },
     ],
   },
 ]}
