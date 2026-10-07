@@ -21,7 +21,7 @@ import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { enforceThreadAccess } from './utils';
+import { enforceThreadAccess, getContextResourceId } from './utils';
 
 /**
  * AgentController session routes.
@@ -688,6 +688,12 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      // Check ownership before touching the gate or the stored-approval claim:
+      // answering consumes them, and the agent's own check only runs afterwards.
+      const callerResourceId = getContextResourceId(requestContext);
+      if (callerResourceId && callerResourceId !== session.identity.getResourceId()) {
+        throw new HTTPException(403, { message: 'Access denied: session belongs to a different resource' });
+      }
       // Resolve the parked approval gate so the session's own run loop drives the
       // continuation and emits its events to subscribers (the open SSE stream).
       // Calling approveToolCall/declineToolCall directly would bypass the gate,

@@ -568,6 +568,51 @@ describe('agent-controller routes', () => {
         approved: true,
       } as any);
 
+    it('rejects a caller mapped to another resource without consuming the armed gate', async () => {
+      const session = await getRouteSession('user-gate-owner');
+      const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'owned-call' });
+      const requestContext = new RequestContext();
+      requestContext.set('mastra__resourceId', 'user-gate-intruder');
+
+      const result = await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-gate-owner',
+        toolCallId: 'owned-call',
+        approved: true,
+        requestContext,
+      } as any).catch((error: unknown) => error);
+
+      expect(result).toBeInstanceOf(HTTPException);
+      expect((result as HTTPException).status).toBe(403);
+      expect(session.approval.isArmed({ toolCallId: 'owned-call' })).toBe(true);
+      expect(await approve('user-gate-owner', 'owned-call')).toEqual({ ok: true });
+      await expect(decision).resolves.toMatchObject({ decision: 'approve' });
+    });
+
+    it('rejects a caller mapped to another resource before claiming a stored approval', async () => {
+      const session = await getRouteSession('user-stored-owner');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
+      const claim = vi.spyOn(session, 'claimToolResponse');
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
+      const requestContext = new RequestContext();
+      requestContext.set('mastra__resourceId', 'user-stored-intruder');
+
+      const result = await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-stored-owner',
+        toolCallId: 'stored-call',
+        approved: true,
+        requestContext,
+      } as any).catch((error: unknown) => error);
+
+      expect(result).toBeInstanceOf(HTTPException);
+      expect((result as HTTPException).status).toBe(403);
+      expect(claim).not.toHaveBeenCalled();
+      expect(persisted).not.toHaveBeenCalled();
+    });
+
     it('accepts the armed call once, then rejects a duplicate decision', async () => {
       const session = await getRouteSession('user-ack-dup');
       const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
