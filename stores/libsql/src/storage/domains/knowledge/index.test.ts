@@ -191,7 +191,7 @@ describe('KnowledgeLibSQL initialization', () => {
       );
 
       await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow(
-        'await storage.stores.knowledge.dangerouslyReset()',
+        'await storage.stores?.knowledge?.dangerouslyReset()',
       );
       expect((await client.execute('SELECT agent FROM mastra_knowledge_cursors')).rows).toHaveLength(1);
     } finally {
