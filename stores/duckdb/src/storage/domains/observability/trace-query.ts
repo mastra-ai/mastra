@@ -9,6 +9,7 @@ import type {
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
+  TraceQuerySelectField,
   TraceQuerySpanField,
   TraceQueryTenantScope,
   TrustedThreadPredicate,
@@ -127,13 +128,6 @@ const TRACE_SELECT = `
   r.entityType AS entityType,
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
-
-function traceSelect(plan: TrustedTraceQueryPlan): string {
-  if (plan.result !== 'traces') return TRACE_SELECT;
-  return `${TRACE_SELECT}${plan.select?.includes('outputPreview') ? `, ${payloadColumnSql('r.output')} AS output` : ''}${
-    plan.select?.includes('errorPreview') ? `, ${payloadColumnSql('r.error')} AS selectedError` : ''
-  }`;
-}
 
 function fieldDefinition<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
@@ -606,7 +600,7 @@ export function compileDuckDBTraceCandidates(
 export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
   const { ctes, values } = compileDuckDBTraceCandidates(
     plan,
-    `${traceSelect(plan)}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}`,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}`,
   );
 
   const candidates = `WITH ${ctes.join(',\n  ')}`;
@@ -691,6 +685,60 @@ ORDER BY ${orderField} ${direction}, traceId ASC
 LIMIT ?`,
     values,
   };
+}
+
+/**
+ * Reads selected previews for the traces already on a page, so the candidate sorts never carry the
+ * payloads. Keeps each trace's newest root event, the same row `current_roots` keeps. A root's events
+ * are written at its `startedAt` and `endedAt`, so the time bounds always include that row and let the
+ * scan skip unrelated blocks; a long `IN` list alone becomes a join that reads every root row.
+ */
+export function compileDuckDBTraceRootPreviews(
+  rows: Array<{ traceId: string; startedAt: string; endedAt: string }>,
+  select: readonly TraceQuerySelectField[],
+): CompiledDuckDBTraceQuery {
+  const columns = [
+    ...(select.includes('outputPreview') ? [`${payloadColumnSql('output')} AS output`] : []),
+    ...(select.includes('errorPreview') ? [`${payloadColumnSql('error')} AS selectedError`] : []),
+  ];
+  const startedAt = rows.map(row => row.startedAt).sort()[0]!;
+  const endedAt = rows
+    .map(row => row.endedAt)
+    .sort()
+    .at(-1)!;
+  return {
+    sql: `SELECT traceId, ${columns.join(', ')}
+FROM (
+  SELECT *, row_number() OVER (PARTITION BY traceId ORDER BY cursorId DESC) AS rootRank
+  FROM span_events
+  WHERE parentSpanId IS NULL
+    AND timestamp >= CAST(? AS TIMESTAMP)
+    AND timestamp <= CAST(? AS TIMESTAMP)
+    AND traceId IN (${rows.map(() => '?').join(', ')})
+)
+WHERE rootRank = 1`,
+    values: [startedAt, endedAt, ...rows.map(row => row.traceId)],
+  };
+}
+
+async function withSelectedPreviews(
+  db: DuckDBConnection,
+  plan: coreStorage.TrustedTraceQueryTracesPlan,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (!plan.select?.length || rows.length === 0) return rows;
+  const query = compileDuckDBTraceRootPreviews(
+    rows.map(row => ({
+      traceId: String(row.traceId),
+      startedAt: asIsoTimestamp(row.startedAt),
+      endedAt: asIsoTimestamp(row.endedAt),
+    })),
+    plan.select,
+  );
+  const previews = new Map(
+    (await db.query<Record<string, unknown>>(query.sql, query.values)).map(row => [String(row.traceId), row]),
+  );
+  return rows.map(row => ({ ...row, ...previews.get(String(row.traceId)) }));
 }
 
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
@@ -903,7 +951,12 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
-    const traces = rows.filter(row => row.traceId != null).map(row => traceRowToResult(row, plan));
+    const pageRows = await withSelectedPreviews(
+      db,
+      plan,
+      rows.filter(row => row.traceId != null),
+    );
+    const traces = pageRows.map(row => traceRowToResult(row, plan));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       // The list-polling feature predates the trace-query cursor encoder.
@@ -938,7 +991,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
-  const traces = visibleRows.map(row => traceRowToResult(row, plan));
+  const traces = (await withSelectedPreviews(db, plan, visibleRows)).map(row => traceRowToResult(row, plan));
   if (plan.paginationMode === 'delta') {
     const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
     const head = String(rows[0]?.streamHead ?? 0);

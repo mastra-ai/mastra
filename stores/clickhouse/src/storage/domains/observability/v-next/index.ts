@@ -961,7 +961,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
-        'trace-query-select',
+        'trace-query-select:outputPreview',
+        'trace-query-select:errorPreview',
         'trace-aggregate',
         ...spanQueryFeatures,
       ] as const;
@@ -984,7 +985,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
-      'trace-query-select',
+      'trace-query-select:outputPreview',
+      'trace-query-select:errorPreview',
       'trace-aggregate',
       ...spanQueryFeatures,
     ] as const;

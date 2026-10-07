@@ -3148,7 +3148,10 @@ function toTraceQueryTrace(
     entityType: root.entityType,
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
-    ...(plan.select?.includes('outputPreview') ? { outputPreview: buildOutputPreview(root.output) ?? null } : {}),
+    // Stores preview the stored JSON text, so a string output keeps its quotes here too.
+    ...(plan.select?.includes('outputPreview')
+      ? { outputPreview: buildOutputPreview(root.output == null ? null : JSON.stringify(root.output)) ?? null }
+      : {}),
     ...(plan.select?.includes('errorPreview') ? { errorPreview: buildErrorPreview(root.error) ?? null } : {}),
   };
 }

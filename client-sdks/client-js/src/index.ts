@@ -44,6 +44,7 @@ export type {
   QueryTracesDeltaInput,
   QueryTracesKeysetInput,
   QueryTracesPaginatedInput,
+  TraceQuerySelectField,
 } from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type { GetMetricTimeSeriesResponse } from './types';

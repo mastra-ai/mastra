@@ -135,11 +135,15 @@ export interface LegacyGetTracesResponse {
 
 export type ListScoresBySpanParams = SpanIds & PaginationArgs;
 
+/** Fields `select` can add to trace rows. Send only those listed in `observabilityStorageCapabilities.traceQuerySelect`. */
+export type TraceQuerySelectField = 'outputPreview' | 'errorPreview';
+
 type QueryTracesBaseInput = Omit<
   TraceQueryRequest,
-  'group' | 'where' | 'page' | 'pagination' | 'mode' | 'after' | 'limit'
+  'group' | 'where' | 'page' | 'pagination' | 'mode' | 'after' | 'limit' | 'select'
 > & {
   where?: TraceQueryPredicate;
+  select?: TraceQuerySelectField[];
 };
 
 export type QueryTracesKeysetInput = QueryTracesBaseInput & {

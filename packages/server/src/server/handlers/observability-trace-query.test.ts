@@ -714,20 +714,19 @@ describe('QUERY_TRACES', () => {
     }
   });
 
-  it('requires the select capability only when previews are requested', async () => {
+  it('passes only the selected fields the store declares', async () => {
     const legacy = createHarness(['trace-query']);
-    const error = await captureHttpException(
-      QUERY_TRACES.handler(params(legacy.mastra, { timeRange: TIME_RANGE, select: ['outputPreview'] })),
+    await QUERY_TRACES.handler(params(legacy.mastra, { timeRange: TIME_RANGE, select: ['outputPreview'] }));
+    expect(legacy.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.not.objectContaining({ select: expect.anything() }),
     );
-    expect(error.status).toBe(501);
-    expect(legacy.observabilityStore.queryTraces).not.toHaveBeenCalled();
 
-    const supported = createHarness(['trace-query', 'trace-query-select']);
+    const partial = createHarness(['trace-query', 'trace-query-select:outputPreview']);
     await QUERY_TRACES.handler(
-      params(supported.mastra, { timeRange: TIME_RANGE, select: ['errorPreview', 'outputPreview'] }),
+      params(partial.mastra, { timeRange: TIME_RANGE, select: ['errorPreview', 'outputPreview', 'tags'] }),
     );
-    expect(supported.observabilityStore.queryTraces).toHaveBeenCalledWith(
-      expect.objectContaining({ select: ['outputPreview', 'errorPreview'] }),
+    expect(partial.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({ select: ['outputPreview'] }),
     );
   });
 

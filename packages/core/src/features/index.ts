@@ -25,6 +25,8 @@ export const coreFeatures = new Set<string>([
   'observability:v1.13.2',
   'observability-delta-polling',
   'observability-trace-query-tenant-scope',
+  // `queryTraces({ select })`: the request schema and planner accept selected root-span fields.
+  'observability-trace-query-select',
   'channels',
   'deploy-diagnosis',
   'model-inference-span',

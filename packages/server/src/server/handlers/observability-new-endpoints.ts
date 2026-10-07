@@ -100,10 +100,10 @@ import {
   assertObservabilityTraceQueryRootDurationSupported,
   isTraceQueryContextIdField,
   assertObservabilityTraceQuerySupported,
-  assertObservabilityTraceQuerySelectSupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
+  narrowTraceQuerySelect,
   NEW_ROUTE_DEFS,
   NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
@@ -355,10 +355,6 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
-      assertObservabilityTraceQuerySelectSupported(
-        observabilityStore,
-        plan.result === 'traces' ? plan.select : undefined,
-      );
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
@@ -373,7 +369,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     }
 
     try {
-      return await observabilityStore.queryTraces(plan);
+      return await observabilityStore.queryTraces(narrowTraceQuerySelect(observabilityStore, plan));
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryCursorError) {
         throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {

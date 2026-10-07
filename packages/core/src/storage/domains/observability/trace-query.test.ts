@@ -148,15 +148,23 @@ describe('trace select contract', () => {
     expect(plan.binding).toBe(plain.binding);
   });
 
-  it('rejects grouped selections, unknown fields, and pages over 100 rows', () => {
+  it('rejects grouped selections, oversized field lists, and pages over 100 rows', () => {
     expect(
       traceQueryRequestSchema.safeParse({ ...baseRequest, group: { by: ['threadId'] }, select: ['outputPreview'] })
         .success,
     ).toBe(false);
-    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, select: ['model'] }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, select: ['x'.repeat(65)] }).success).toBe(false);
+    expect(traceQueryRequestSchema.safeParse({ ...baseRequest, select: Array(33).fill('model') }).success).toBe(false);
     expect(
       traceQueryRequestSchema.safeParse({ ...baseRequest, page: { limit: 101 }, select: ['errorPreview'] }).success,
     ).toBe(false);
+  });
+
+  it('leaves out field names it does not know', () => {
+    expect(planTraceQuery(parsed({ ...baseRequest, select: ['model', 'outputPreview'] }))).toMatchObject({
+      select: ['outputPreview'],
+    });
+    expect(planTraceQuery(parsed({ ...baseRequest, select: ['model'] }))).not.toHaveProperty('select');
   });
 
   it('accepts selected previews in trace responses while leaving them optional', () => {

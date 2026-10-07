@@ -156,17 +156,20 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
-Add `select` when the table needs a short preview from the root span:
+Add `select` when the table needs a short preview from the root span. Request only the fields the server lists in `traceQuerySelect`:
 
 ```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+const select = capabilities?.traceQuerySelect ?? []
+
 const result = await mastraClient.queryTraces({
   timeRange,
   page: { limit: 25 },
-  select: ['outputPreview', 'errorPreview'],
+  ...(select.length ? { select } : {}),
 })
 ```
 
-`outputPreview` returns up to 100 characters from the root output. `errorPreview` returns up to 200 characters from the root error name and message, without its stack. A missing value is returned as `null`. Requests with `select` are limited to 100 traces per page and can't use deprecated thread grouping.
+`outputPreview` returns up to 100 characters from the root output. `errorPreview` returns up to 200 characters from the root error name and message, without its stack. A selected field with no data is returned as `null`. A field the server or store doesn't support is left out of the row. Servers released before `select` reject the key, so send it only when `traceQuerySelect` lists fields. Requests with `select` are limited to 100 traces per page and can't use deprecated thread grouping.
 
 A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId`, `scorerVersion`, and `score` must match on the same score record. A `none` clause uses anti-existence semantics: it matches when no related record satisfies its complete nested predicate. A trace with no related scores therefore matches `scores.none`.
 
@@ -378,7 +381,7 @@ Both routes require `observability:read` and use the configured observability st
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
 | `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
 | `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
-| `select` | No | Adds root-span `outputPreview` and/or `errorPreview` to each trace row. Selected requests support up to 100 rows. |
+| `select` | No | Adds root-span `outputPreview` and/or `errorPreview` to each trace row. Unsupported fields are left out. Selected requests support up to 100 rows. |
 | `after` | No | Delta mode only. Opaque `deltaCursor` from a numbered page or previous poll. Omit to establish the current watermark. |
 | `limit` | No | Delta mode only. Maximum results per batch. Defaults to 10 and has a maximum of 100. |
 

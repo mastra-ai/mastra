@@ -663,10 +663,17 @@ export function compileClickHouseTraceRootPayloads(
     ...(plan?.select?.includes('outputPreview') ? ['output'] : []),
     ...(plan?.select?.includes('errorPreview') ? ['error AS selectedError'] : []),
   ];
+  // Plain min/max bounds let partition and primary-key pruning work without analysing the tuple set.
+  const bounds = (['startedAt', 'endedAt'] as const).map(column => {
+    const values = keys.map(key => key[column]).sort();
+    const type = "DateTime64(3, 'UTC')";
+    return `${column} >= ${parameters.add(values[0]!, type)} AND ${column} <= ${parameters.add(values.at(-1)!, type)}`;
+  });
   return {
     query: `SELECT traceId, spanId AS rootSpanId, ${columns.join(', ')}
 FROM ${TABLE_TRACE_ROOTS}
-WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
+WHERE ${bounds.join(' AND ')}
+  AND (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
 LIMIT 1 BY traceId, spanId`,
     query_params: parameters.params,
   };

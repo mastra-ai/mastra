@@ -2,7 +2,7 @@
 '@mastra/server': minor
 ---
 
-Added support for selected trace output and error previews in observability routes.
+Added selected trace output and error previews to observability routes. `GET /api/system/packages` now lists the supported fields in `observabilityStorageCapabilities.traceQuerySelect`. Fields the store doesn't support are left out of each row instead of failing the request.
 
 ```http
 POST /api/observability/traces/query
@@ -13,3 +13,5 @@ Content-Type: application/json
   "select": ["outputPreview", "errorPreview"]
 }
 ```
+
+Send `select` only when `traceQuerySelect` lists fields. Older servers reject the key, and an older `@mastra/server` running with a newer `@mastra/core` accepts it but returns no previews.

@@ -58,6 +58,9 @@ describe('ClickHouse advanced trace query', () => {
     expect(compileClickHouseTraceRootPayloads([key], pagePlan).query).toContain(
       'SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input, output, error AS selectedError\n',
     );
+    expect(compileClickHouseTraceRootPayloads([key], keysetPlan).query).toMatch(
+      /WHERE startedAt >= \{\w+:DateTime64\(3, 'UTC'\)\} AND startedAt <= .+ AND endedAt >= .+ AND endedAt <= /,
+    );
   });
 
   it('compiles root duration predicates from root timestamps', () => {
@@ -918,11 +921,16 @@ describe('ClickHouse advanced trace query', () => {
         }),
       }),
     );
-    expect(query.mock.calls[1]![0].query).toContain('WHERE (startedAt, traceId, spanId, endedAt) IN (');
+    expect(query.mock.calls[1]![0].query).toContain('AND (startedAt, traceId, spanId, endedAt) IN (');
+    // The page row's key, then its startedAt and endedAt min/max bounds.
     expect(Object.values(query.mock.calls[1]![0].query_params)).toEqual([
       '2026-01-01 10:00:00.000',
       'trace-c',
       'root-trace-c',
+      '2026-01-01 10:00:01.000',
+      '2026-01-01 10:00:00.000',
+      '2026-01-01 10:00:00.000',
+      '2026-01-01 10:00:01.000',
       '2026-01-01 10:00:01.000',
     ]);
     expect(response).toMatchObject({

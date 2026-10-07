@@ -27,7 +27,7 @@ const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
 const OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE = 'span-query';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
-const OBSERVABILITY_TRACE_QUERY_SELECT_STORAGE_FEATURE = 'trace-query-select';
+const OBSERVABILITY_TRACE_QUERY_SELECT_CORE_FEATURE = 'observability-trace-query-select';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
@@ -126,16 +126,30 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
-export function assertObservabilityTraceQuerySelectSupported(
+/**
+ * `select` fields this deployment can serve: known to the installed core and declared by the store
+ * (`trace-query-select:<field>`). Empty when either predates `select`.
+ */
+export function getTraceQuerySelectFields(
   observabilityStore: ObservabilityStorage,
-  select: readonly coreStorage.TraceQuerySelectField[] | undefined,
-) {
-  if (!select?.length) return;
-  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_SELECT_STORAGE_FEATURE)) return;
+): coreStorage.TraceQuerySelectField[] {
+  if (!coreFeatures.has(OBSERVABILITY_TRACE_QUERY_SELECT_CORE_FEATURE)) return [];
+  const features = getFeatures(observabilityStore) ?? [];
+  return (coreStorage.TRACE_QUERY_SELECT_FIELDS ?? []).filter(field =>
+    features.includes(`trace-query-select:${field}`),
+  );
+}
 
-  throw new HTTPException(501, {
-    message: 'Selected trace fields are not supported by the configured observability store',
-  });
+/** Leaves out `select` fields the store can't serve: an absent key means unsupported, `null` means no data. */
+export function narrowTraceQuerySelect(
+  observabilityStore: ObservabilityStorage,
+  plan: coreStorage.TrustedTraceQueryPlan,
+): coreStorage.TrustedTraceQueryPlan {
+  if (plan.result !== 'traces' || !plan.select) return plan;
+  const supported = getTraceQuerySelectFields(observabilityStore);
+  const { select, ...rest } = plan;
+  const kept = select.filter(field => supported.includes(field));
+  return kept.length ? { ...rest, select: kept } : rest;
 }
 
 export function assertObservabilityTraceAggregateSupported(observabilityStore: ObservabilityStorage) {
@@ -284,6 +298,8 @@ export type ObservabilityStorageCapabilities = {
   traceQueryContextIds: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
+  /** `select` fields trace queries can add to each row; empty when `select` is unsupported. */
+  traceQuerySelect: coreStorage.TraceQuerySelectField[];
   threadQuery: boolean;
   spanQuery: boolean;
   feedback: boolean;
@@ -306,6 +322,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceQuerySelect: [],
   threadQuery: false,
   spanQuery: false,
   feedback: false,
@@ -383,6 +400,7 @@ export function getObservabilityStorageCapabilities(
       (traceQuery || threadQuery) &&
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
+    traceQuerySelect: traceQuery ? getTraceQuerySelectFields(observabilityStore) : [],
     threadQuery,
     spanQuery: newApiCore && supportsSpanQueryCore() && declares(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),

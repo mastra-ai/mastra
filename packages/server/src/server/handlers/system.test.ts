@@ -22,6 +22,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceQuerySelect: [],
   threadQuery: false,
   spanQuery: false,
   feedback: false,
@@ -662,6 +663,22 @@ describe('System Handlers', () => {
           threadQuery: true,
           spanQuery: true,
         });
+      });
+
+      it('lists the select fields the store declares', async () => {
+        class SelectStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query', 'trace-query-select:outputPreview'] as const;
+          }
+        }
+        class NoTraceQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query-select:outputPreview'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SelectStore())).toMatchObject({ traceQuerySelect: ['outputPreview'] });
+        expect(await capabilitiesFor(new NoTraceQueryStore())).toMatchObject({ traceQuerySelect: [] });
       });
 
       it('treats a declared feature list as final even when methods are overridden', async () => {

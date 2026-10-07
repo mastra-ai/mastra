@@ -25,6 +25,7 @@ export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 export const TRACE_QUERY_SELECT_MAX_PAGE_SIZE = 100;
 export const TRACE_QUERY_SELECT_FIELDS = ['outputPreview', 'errorPreview'] as const;
 export type TraceQuerySelectField = (typeof TRACE_QUERY_SELECT_FIELDS)[number];
+const TRACE_QUERY_SELECT_MAX_NAMES = 32;
 
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
@@ -320,8 +321,11 @@ const traceQueryRequestObjectSchema = z
     mode: z.literal('delta').optional(),
     after: deltaCursorSchema.optional(),
     limit: deltaLimitSchema,
-    /** Optional root-span previews to add to every returned trace. */
-    select: z.array(z.enum(TRACE_QUERY_SELECT_FIELDS)).optional(),
+    /**
+     * Optional root-span fields to add to every returned trace. Unknown names are accepted and
+     * left out, so a client can send a field an older server doesn't know without failing the page.
+     */
+    select: z.array(z.string().min(1).max(64)).max(TRACE_QUERY_SELECT_MAX_NAMES).optional(),
   })
   .strict()
   .superRefine((request, context) => {
