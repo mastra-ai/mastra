@@ -84,16 +84,18 @@ export const githubIssue: GithubIssue = {
   updatedAt: now,
 };
 
-export const wireSourceCards = sourceCards.map(({ githubProjectId, source, sourceKey, url, ...item }) => ({
-  ...item,
-  factoryProjectId: githubProjectId,
-  externalSource:
-    source === 'manual'
-      ? null
-      : {
-          integrationId: source === 'linear-issue' ? 'linear' : 'github',
-          type: 'issue',
-          externalId: sourceKey,
-          url,
-        },
-}));
+function wireSourceCard({ githubProjectId, source, sourceKey, url, ...item }: WorkItem) {
+  const base = { ...item, factoryProjectId: githubProjectId };
+  if (source === 'manual') return { ...base, externalSource: null };
+  return {
+    ...base,
+    externalSource: {
+      integrationId: source === 'linear-issue' ? 'linear' : 'github',
+      type: 'issue',
+      externalId: sourceKey,
+      url,
+    },
+  };
+}
+
+export const wireSourceCards = sourceCards.map(wireSourceCard);

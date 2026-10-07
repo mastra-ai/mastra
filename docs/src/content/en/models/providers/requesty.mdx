@@ -7,7 +7,7 @@ description: "Browse Requesty model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 
-Access 166 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
+Access 168 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
 
 Learn more in the [Requesty documentation](https://requesty.ai/solution/llm-routing/models).
 
@@ -1592,6 +1592,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 0.4,
     "outputCost": 2
+  },
+  {
+    "model": "requesty/mistral-large-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
+    "inputCost": 0.68,
+    "outputCost": 2.09
+  },
+  {
+    "model": "requesty/mistral-large-4@eu",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
+    "inputCost": 0.68,
+    "outputCost": 2.09
   },
   {
     "model": "requesty/mistral-medium-3-5",

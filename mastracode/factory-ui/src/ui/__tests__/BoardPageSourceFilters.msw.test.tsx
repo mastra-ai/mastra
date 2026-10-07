@@ -117,6 +117,34 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
   });
 
+  it('hides a repository-scoped candidate already filed with a legacy key when source filters combine feeds', async () => {
+    stubSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
+        HttpResponse.json({
+          issues: new URL(request.url).searchParams.has('label') ? [] : [{ ...githubIssue, repositoryId: 987 }],
+          nextPage: null,
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: wireSourceCards.map(item => {
+            if (item.id !== '50' || !item.externalSource) return item;
+            return {
+              ...item,
+              externalSource: { ...item.externalSource, externalId: 'github-issue:42', url: githubIssue.url },
+            };
+          }),
+        }),
+      ),
+    );
+    const view = renderBoard('?source=github&source=linear');
+    await waitForMutationsIdle(view.client);
+    await screen.findByText('Portal: add account switcher');
+    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
+    expect(screen.queryByText('GitHub: improve error messages')).not.toBeInTheDocument();
+  });
+
   it('restores a project-only URL and combines it with existing label and text filters', async () => {
     stubSources();
     const view = renderBoard('?linearProject=project-a&label=feature&q=Portal');
@@ -161,6 +189,35 @@ describe('Board source and Linear project filters', () => {
     await screen.findByText('Portal: later page');
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
   });
+  it('retries a failed page in a combined feed without losing the other source cards', async () => {
+    stubSources();
+    let pageAttempts = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) => {
+        if (!new URL(request.url).searchParams.has('after')) {
+          return HttpResponse.json({ issues: [linearIssues[0]], nextCursor: 'next-page' });
+        }
+        pageAttempts += 1;
+        if (pageAttempts === 1) return HttpResponse.json({ error: 'Linear page unavailable' }, { status: 502 });
+        return HttpResponse.json({
+          issues: [linearIssue('ENG-105', 'project-a', 'Portal: later page')],
+          nextCursor: null,
+        });
+      }),
+    );
+    const view = renderBoard('?source=github&source=linear');
+    await waitForMutationsIdle(view.client);
+    await screen.findByText('Portal: add account switcher');
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more candidates' }));
+    await screen.findByText('Linear page unavailable');
+    expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('Portal: later page');
+    expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
+    expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
+    expect(screen.queryByText('Linear page unavailable')).not.toBeInTheDocument();
+  });
+
   it('matches any selected Linear project and respects an incompatible source filter', async () => {
     stubSources();
     const first = renderBoard('?linearProject=project-a&linearProject=project-b');
@@ -189,7 +246,7 @@ describe('Board source and Linear project filters', () => {
         ),
       ),
     );
-    renderBoard('?source=linear');
+    renderBoard('?source=github&source=linear');
     await screen.findByRole('button', { name: 'Connect Linear' });
     expect(screen.getByText('Linear authorization expired. Reconnect to keep syncing issues.')).toBeInTheDocument();
   });

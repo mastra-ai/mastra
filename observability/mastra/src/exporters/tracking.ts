@@ -728,6 +728,16 @@ export abstract class TrackingExporter<
         }
 
         case 'handleSpanEnd': {
+          if (!traceData.hasSpan({ spanId: exportedSpan.id })) {
+            // The span's start is still queued (e.g. moved on to wait for its parent): wait for the span itself
+            traceData.addToWaitingQueue({
+              event,
+              waitingFor: exportedSpan.id,
+              attempts: queuedEvent.attempts,
+              queuedAt: queuedEvent.queuedAt,
+            });
+            return true;
+          }
           traceData.endSpan({ spanId: exportedSpan.id });
           await this._finishSpan({ span: exportedSpan, traceData });
           // Check if we should schedule cleanup
@@ -1177,6 +1187,16 @@ export abstract class TrackingExporter<
             traceId: exportedSpan.traceId,
             spanId: exportedSpan.id,
           });
+          if (!traceData.hasSpan({ spanId: exportedSpan.id })) {
+            // The span's start hasn't been built yet (still in flight, or queued for its
+            // parent). Replay the end once it is, so the span isn't left open.
+            this.logger.debug(`${this.name}: adding span end to waiting queue`, {
+              traceId: exportedSpan.traceId,
+              waitingFor: exportedSpan.id,
+            });
+            traceData.addToWaitingQueue({ event, waitingFor: exportedSpan.id });
+            break;
+          }
           traceData.endSpan({ spanId: exportedSpan.id });
           await this._finishSpan({ span: exportedSpan, traceData });
           // Schedule cleanup when all spans have ended

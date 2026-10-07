@@ -36,7 +36,7 @@ import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
 import type { DragPayload } from '../../domains/factory/boardDrag';
-import { cardMatchesSearch } from '../../domains/factory/boardItems';
+import { cardMatchesSearch, isPersistedCandidate } from '../../domains/factory/boardItems';
 import { orderWorkItemsForStage } from '../../domains/factory/boardOrder';
 import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../../domains/factory/workItemActivity';
@@ -214,7 +214,7 @@ export function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredCandidateCount = sourceFiltered
-    ? intake.participantCandidates.filter(candidate => !items.knownSourceKeys.has(candidate.sourceKey)).length
+    ? intake.participantCandidates.filter(candidate => !isPersistedCandidate(items.knownSourceKeys, candidate)).length
     : intake.candidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';

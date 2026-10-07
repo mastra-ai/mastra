@@ -1,4 +1,4 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useEffect, useId } from 'react';
@@ -49,7 +49,7 @@ export function SettingsPage() {
 /** Moves focus to the section title on desktop so section switches are announced; mobile focuses its own title. */
 function FocusedTitle({ children }: { children: ReactNode }) {
   const id = useId();
-  const { isMobile } = useMainSidebar();
+  const { isMobile } = useSidebar();
   useEffect(() => {
     if (!isMobile) document.getElementById(id)?.focus();
   }, [id, isMobile]);
@@ -74,7 +74,7 @@ export function SettingsPageLayout({
   header: ReactNode;
   breadcrumbs?: ReactNode;
 }) {
-  const { isMobile, desktopState } = useMainSidebar();
+  const { isMobile, desktopState } = useSidebar();
   const sidebarCollapsed = !isMobile && desktopState === 'collapsed';
 
   return (

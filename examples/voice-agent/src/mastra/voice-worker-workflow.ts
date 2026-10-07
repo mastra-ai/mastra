@@ -3,11 +3,12 @@
 // runs once to completion per turn (no suspend/resume). This worker is now at feature parity with
 // the agent worker (voice-worker.ts): the same caller-scoped memory, greeting persistence, spoken
 // tool feedback, and post-turn CRM log all work here too. Run one worker at a time — both
-// register as `mastra-voice`.
+// use LIVEKIT_AGENT_NAME (defaults to `mastra-voice`).
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { recordContact } from './backend';
 import { mastra } from './index';
+import { liveKitAgentName } from './livekit';
 import { callCenterMemory, summarizeCall } from './memory';
 
 export default createLiveKitWorker({
@@ -81,5 +82,5 @@ export default createLiveKitWorker({
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' });
+  runLiveKitWorker({ entry: import.meta.url, agentName: liveKitAgentName });
 }

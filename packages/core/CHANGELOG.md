@@ -1,5 +1,84 @@
 # @mastra/core
 
+## 1.75.0-alpha.8
+
+### Patch Changes
+
+- Fixed three cases where a durable agent's stream, or a regular agent's saved approval metadata, did not match what the stream reported. ([#26006](https://github.com/mastra-ai/mastra/pull/26006))
+
+  - Tool result chunks now include `providerExecuted`, which tells the caller whether the tool ran on the provider's side. It was missing on durable runs, so clients received `undefined` where regular agents report the value.
+  - Approval requests on durable agents now publish the same `resumeSchema` as regular agents, including `$schema`, `additionalProperties: false` and the field descriptions. The accepted resume data is unchanged.
+  - Approval metadata saved by regular agents now carries the same `resumeSchema` as the live approval request, including the optional `reason` field the saved copy was missing. The accepted resume data is unchanged.
+
+- Fixed `fetchWithRetry` ignoring cancellation. An already-aborted `signal` now rejects immediately, and aborting during a request or backoff delay stops further retries instead of waiting through the remaining delays. Retries for non-aborted requests are unchanged. ([#26164](https://github.com/mastra-ai/mastra/pull/26164))
+
+- Fixed pausing, clearing, or replacing a goal while its judge is running being silently undone. The judge's verdict is now discarded when the objective changed during evaluation, so the agent stops instead of continuing a goal you already stopped. ([#26093](https://github.com/mastra-ai/mastra/pull/26093))
+
+- Fixed `goal.scorer` so a string resolves a registered scorer by its id, as documented. Previously it was looked up by registration key, so a scorer registered as `scorers: { testsPass }` with id `tests-pass` failed with "Scorer with tests-pass not found" and paused the goal. Registration keys still work as a fallback. ([#26154](https://github.com/mastra-ai/mastra/pull/26154))
+
+- Fixed evented agents hanging forever when workflow workers run in a separate process (for example, an API server started with `MASTRA_WORKERS=false` plus a dedicated worker deployment). Runs now reach the worker process and stream back to the caller. Values used in more than one place in a workflow now keep their data when sent between processes instead of arriving as `null`. A process without workers now logs a warning instead of silently dropping a workflow it can only run locally. ([#26036](https://github.com/mastra-ai/mastra/pull/26036))
+
+- Fixed agents running out of memory when `untilIdle` is set in `defaultOptions`. `agent.stream()` and `agent.resumeStream()` now wait for background tasks once instead of looping endlessly before calling the model. Fixes [#26043](https://github.com/mastra-ai/mastra/issues/26043). ([#26125](https://github.com/mastra-ai/mastra/pull/26125))
+
+- Fixed agent runs stopping with "Interrupted" when an Observational Memory reflection didn't compress enough on its first try. The reflector retries at a stronger compression level, but each retry was reported as a failure, and the agent controller cancelled the run before the retry could finish. Retry attempts are now marked as retrying, so only a final failure stops the run. ([#26105](https://github.com/mastra-ai/mastra/pull/26105))
+
+- Fixed `ResponseCache` sharing cached responses between users who are identified only through `memory: { resource }`. When no `scope` is set, the cache now falls back to the memory resource ID after the auth resource ID, so each user gets their own cache entries. Set `scope: null` to keep sharing responses across users. ([#26192](https://github.com/mastra-ai/mastra/pull/26192))
+
+- Fixed `processToolResult` aborts in output processors so they end the run at the first aborted tool result. Previously, aborting with parallel tool calls crashed the run with `Controller is already closed`, and aborting a single tool call made an extra model call after the stream had ended. ([#26157](https://github.com/mastra-ai/mastra/pull/26157))
+
+- Fixed two restart problems on durable runs. ([#26035](https://github.com/mastra-ai/mastra/pull/26035))
+
+  **Recovering a suspended durable agent run** now fails immediately with a clear message pointing at `resume()`. Previously it resolved, then emitted a lone "This workflow run was not active" error. Continue a run that is suspended on a tool call or an approval with `resume(runId, ...)`.
+
+  **Restarting an evented workflow in a process that has not started its workers** now starts them before the restart is published. Previously the restart was published to no one, so the run stalled forever with no error, and starting the workers later could not revive it. This does not change instances configured with `workers: false` (or `MASTRA_WORKERS=false`). Those still publish the restart to the broker, so the run completes only if another worker consumes it.
+
+- Fixed Workspace search indexing creating an extra chunk at the end of large files that only repeated content from the previous chunk. ([#26166](https://github.com/mastra-ai/mastra/pull/26166))
+
+## 1.75.0-alpha.7
+
+### Minor Changes
+
+- Changed AgentController sessions to keep one active model instead of a separate model for each mode. Switching modes no longer changes the model automatically, and `session.model.switch` no longer accepts `modeId` or `scope`. The `model_changed` event no longer includes `modeId` or `scope`; consumers should read its `modelId` and current `thinkingLevel` fields. When an existing thread is first reopened, its active legacy per-mode selection is copied to `currentModelId`, a migration marker is stored, and obsolete `modeModelId_*` keys are removed. Later model selections persist as the thread's authoritative `currentModelId`. Use `session.model.set` for an in-memory selection that should not be persisted or emit a model-change event. ([#25997](https://github.com/mastra-ai/mastra/pull/25997))
+
+  **Before**
+
+  ```ts
+  await session.model.switch({ modelId: 'openai/gpt-5.6', modeId: 'build' });
+  await session.mode.switch({ modeId: 'plan' }); // Restored the plan mode model.
+  ```
+
+  **After**
+
+  ```ts
+  await session.model.switch('openai/gpt-5.6');
+  await session.mode.switch({ modeId: 'plan' }); // Keeps openai/gpt-5.6 active.
+  ```
+
+- Changed `session.model.switch` to accept a model ID followed by an optional options object. Pass `{ thinkingLevel }` to apply and persist model and thinking level together. Every `model_changed` event includes the current thinking level, even when it is unchanged. Sessions synchronize both preferences from persisted thread settings before the next request, including thinking-only changes and removed overrides. Switches canceled by a thread change before any selection is committed reject without counting model use; writes already committed to the captured thread remain successful. ([#26069](https://github.com/mastra-ai/mastra/pull/26069))
+
+  ```ts
+  // Before
+  await session.model.switch({ modelId: 'openai/gpt-5.5' });
+  await session.state.set({ thinkingLevel: 'high' });
+
+  // After
+  await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
+  ```
+
+### Patch Changes
+
+- Fixed MCP resource reads dropping `mimeType` and `_meta`. Reading a resource from a server registered through `MCPClient` (`MCPClientServerProxy.readResource()`) and reading an app resource from a local `MCPServer` (`MCPServer.readResource()`, used by Studio) now return the same metadata as `listResources()` and the MCP `resources/read` request, so MCP App `ui://` resources keep their content type and UI settings such as CSP. Fixes #23068. ([#25992](https://github.com/mastra-ai/mastra/pull/25992))
+
+- Fixed workspace search reporting the wrong `lineRange` when a custom tokenizer preserves case. Highlighting now uses the same tokens as retrieval, so searching `Python` points at the line containing `Python` rather than a line containing `python`. ([#26014](https://github.com/mastra-ai/mastra/pull/26014))
+
+- Fixed directly resumed nested workflows so successful children continue suspended parent runs. Fixes #24588. ([#25817](https://github.com/mastra-ai/mastra/pull/25817))
+
+- Resource read results from MCP servers now include the optional `mimeType` and `_meta` fields, both in the `MCPServerBase.readResource()` type and in the `POST /mcp/:serverId/resources/read` response returned to `readMcpServerResource()`. ([#25992](https://github.com/mastra-ai/mastra/pull/25992))
+
+- Fixed streamed `PIIDetector` output with the `block` and `filter` strategies. When a Social Security number, email address or similar value arrived split across several stream chunks, the first part of it reached the user before the rest was recognized. Now `block` stops the response before any part of the value is shown, and `filter` removes the text up to and including the value while keeping the text after it. Very long email addresses are now also held until they are complete, including with `redact`. As with `redact`, the end of a response may arrive slightly later. ([#26082](https://github.com/mastra-ai/mastra/pull/26082))
+
+- Fixed thread streams treating a run as finished while it was still waiting for a tool approval or a suspended tool. When thread updates were delivered with a delay (for example with `@mastra/redis-streams`), the thread could unblock and subscribers on other servers could lose the pending approval. The run now stays waiting until the approval or tool resumes it. ([#25962](https://github.com/mastra-ai/mastra/pull/25962))
+
 ## 1.75.0-alpha.6
 
 ### Patch Changes

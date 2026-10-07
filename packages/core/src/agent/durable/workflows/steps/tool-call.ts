@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
@@ -833,15 +834,6 @@ export function createDurableToolCallStep() {
       const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
 
       if (approvalGated && !approvalDecision) {
-        const resumeSchema = JSON.stringify({
-          type: 'object',
-          properties: {
-            approved: { type: 'boolean' },
-            reason: { type: 'string' },
-          },
-          required: ['approved'],
-        });
-
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
@@ -854,7 +846,7 @@ export function createDurableToolCallStep() {
               type: 'tool-call-approval' as const,
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, resumeSchema, updatedAt: Date.now() },
+              payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
             },
             {
               policy: registryEntry?.toolPayloadTransform,
@@ -872,12 +864,12 @@ export function createDurableToolCallStep() {
             toolName,
             args,
             type: 'approval',
-            resumeSchema,
+            resumeSchema: approvalResumeSchema,
           });
         }
 
         // Add approval metadata to message before persisting
-        addToolMetadata({ type: 'approval', resumeSchema });
+        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
 
         // Flush messages before suspension
         await doFlush();
@@ -1151,15 +1143,6 @@ export function createDurableToolCallStep() {
             const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : args;
 
             // Tool is requesting approval during execution
-            const approvalResumeSchema = JSON.stringify({
-              type: 'object',
-              properties: {
-                approved: { type: 'boolean' },
-                reason: { type: 'string' },
-              },
-              required: ['approved'],
-            });
-
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
@@ -1418,6 +1401,7 @@ export function createDurableToolCallStep() {
                     args: cleanedArgs,
                     result: chunk.payload.result,
                     providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
+                    providerExecuted,
                   },
                 });
               } else if (chunk.type === 'background-task-failed') {
@@ -1818,7 +1802,7 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result },
+                payload: { toolCallId, toolName, args, result, providerExecuted },
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
