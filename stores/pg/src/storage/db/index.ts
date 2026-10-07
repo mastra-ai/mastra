@@ -580,6 +580,15 @@ export class PgDB extends MastraBase {
   }
 
   /**
+   * Records an out-of-band index removal, including one that vanished with a dropped table, so a
+   * later createIndex() with the same name rebuilds it. See {@link noteTableRenamed}.
+   */
+  noteIndexDropped(indexName: string): void {
+    this.schemaSnapshot?.indexes.delete(indexName);
+    this.schemaSnapshot?.replicaIdentityIndexes.delete(indexName);
+  }
+
+  /**
    * Records an out-of-band `ALTER TABLE … ADD COLUMN` in the init snapshot.
    * See {@link noteTableRenamed} for why raw-DDL migrations must call this.
    */
