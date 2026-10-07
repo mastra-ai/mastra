@@ -172,15 +172,15 @@ describe('MODEL_INFERENCE tools', () => {
     expect(spans.map(span => span.attributes?.availableTools)).toEqual(perStep);
   });
 
-  it("records no tools when a processor sets toolChoice to 'none'", async () => {
+  it("keeps recording tools when a processor sets toolChoice to 'none'", async () => {
     const agent = createAgent(1, [{ id: 'none', processInputStep: async () => ({ toolChoice: 'none' }) }]);
 
     await run(agent);
 
-    expect(providerTools).toEqual([[]]);
+    expect(providerTools).toEqual([['a', 'b', 'hidden']]);
     const [span] = inferenceSpans();
-    expect(span!.attributes?.availableTools).toEqual([]);
-    expect(span!.attributes?.tools).toBeUndefined();
+    expect(span!.attributes?.availableTools).toEqual(['a', 'b', 'hidden']);
+    expect(names(span!.attributes?.tools)).toEqual(['a', 'b', 'hidden']);
     expect(span!.attributes?.toolChoice).toBe('none');
   });
 
