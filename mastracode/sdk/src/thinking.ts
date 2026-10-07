@@ -99,14 +99,10 @@ function runOpenAIThinkingLevel(
   return level === 'max' && !supportsMaxReasoningEffort(modelId) ? 'xhigh' : level;
 }
 
-/**
- * The level a request actually runs when `level` is selected for `modelId`.
- * `reasoningOptions` comes from `getModelReasoningOptions`; without it the built-in rules apply.
- */
 export function runThinkingLevel(
   modelId: string,
   level: ThinkingLevelSetting,
-  reasoningOptions?: readonly ModelReasoningOption[],
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ThinkingLevelSetting {
   if (level === 'off') return 'off';
   const { provider, bareModelId } = splitProvider(modelId);
@@ -118,7 +114,6 @@ export function runThinkingLevel(
   return closestOfferedEffort(level, reasoningOptions) ?? level;
 }
 
-/** Off plus every level that runs as itself, so no two choices send the same request. */
 export function getAvailableThinkingLevelsForModel(
   modelId: string,
   reasoningOptions?: readonly ModelReasoningOption[],
