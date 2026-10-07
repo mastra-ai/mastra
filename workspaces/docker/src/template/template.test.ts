@@ -84,6 +84,30 @@ describe('DockerTemplate builder', () => {
     expect(new DockerTemplate().from('ubuntu:24.04').dockerfile).toBe('FROM ubuntu:24.04 AS mastra-main-0\n');
   });
 
+  it('chowns secret-step output to the given owner without changing the default identity', () => {
+    const plain = new DockerTemplate().runWithSecrets('git clone x /w/app', { secrets: [], output: '/w/app' });
+    const owned = new DockerTemplate().runWithSecrets('git clone x /w/app', {
+      secrets: [],
+      output: '/w/app',
+      owner: 'node:node',
+    });
+    expect(owned.dockerfile).toContain('COPY --chown=node:node --from=mastra-secret-0 /w/app /w/app');
+    expect(plain.dockerfile).toContain('COPY --from=mastra-secret-0 /w/app /w/app');
+    expect(owned.templateId).not.toBe(plain.templateId);
+    const unset = new DockerTemplate().runWithSecrets('git clone x /w/app', {
+      secrets: [],
+      output: '/w/app',
+      owner: undefined,
+    });
+    expect(unset.templateId).toBe(plain.templateId);
+  });
+
+  it('rejects owners that are not user[:group] or uid[:gid]', () => {
+    for (const owner of ['', 'node node', 'node\nRUN x', 'a:b:c']) {
+      expect(() => new DockerTemplate().runWithSecrets('x', { secrets: [], output: '/o', owner })).toThrow();
+    }
+  });
+
   it('runs secret steps in a throwaway stage and keeps values out of the Dockerfile', () => {
     const template = new DockerTemplate().runWithSecrets('git clone x /workspace/app', {
       secrets: ['GIT_TOKEN'],
