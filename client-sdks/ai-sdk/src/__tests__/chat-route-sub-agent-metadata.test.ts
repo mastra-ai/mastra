@@ -25,6 +25,26 @@ function createSupervisorStream() {
       },
     },
     {
+      type: 'tool-output',
+      runId: 'outer-run',
+      from: ChunkFrom.USER,
+      payload: {
+        toolCallId: 'call-helper',
+        toolName: 'agent-helper',
+        output: {
+          type: 'step-finish',
+          runId: 'inner-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: 'step-1',
+            stepResult: { reason: 'stop', warnings: [] },
+            output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            metadata: {},
+          },
+        },
+      },
+    },
+    {
       type: 'finish',
       runId: 'outer-run',
       from: ChunkFrom.AGENT,
@@ -87,6 +107,10 @@ function countAgentParts(parts: any[]) {
   return parts.filter(part => part.type === 'data-tool-agent').length;
 }
 
+function countAgentStepParts(parts: any[]) {
+  return parts.filter(part => part.type === 'data-tool-agent-step').length;
+}
+
 describe('handleChatStream sub-agent metadata', () => {
   it.each(['v5', 'v6', 'v7'] as const)('emits data-tool-agent parts by default (%s)', async version => {
     const { mastra } = createMastra();
@@ -99,8 +123,9 @@ describe('handleChatStream sub-agent metadata', () => {
 
     const parts = await collectParts(stream as ReadableStream<any>);
     const agentParts = parts.filter(part => part.type === 'data-tool-agent');
-    expect(agentParts).toHaveLength(1);
-    expect(agentParts[0]).toMatchObject({ id: 'inner-run', data: { text: 'sub-agent says hi' } });
+    expect(agentParts.length).toBeGreaterThan(0);
+    expect(agentParts.at(-1)).toMatchObject({ id: 'inner-run', data: { text: 'sub-agent says hi' } });
+    expect(countAgentStepParts(parts)).toBe(1);
   });
 
   it.each(['v5', 'v6', 'v7'] as const)('omits data-tool-agent parts when opted out (%s)', async version => {
@@ -113,7 +138,9 @@ describe('handleChatStream sub-agent metadata', () => {
       params: { messages: userMessages as any },
     });
 
-    expect(countAgentParts(await collectParts(stream as ReadableStream<any>))).toBe(0);
+    const parts = await collectParts(stream as ReadableStream<any>);
+    expect(countAgentParts(parts)).toBe(0);
+    expect(countAgentStepParts(parts)).toBe(0);
   });
 
   it.each(['v6', 'v7'] as const)('emits data-tool-agent parts on the %s approval-resume path', async version => {
@@ -127,7 +154,8 @@ describe('handleChatStream sub-agent metadata', () => {
 
     const parts = await collectParts(stream as ReadableStream<any>);
     expect(agent.resumeStream).toHaveBeenCalledTimes(1);
-    expect(countAgentParts(parts)).toBe(1);
+    expect(countAgentParts(parts)).toBeGreaterThan(0);
+    expect(countAgentStepParts(parts)).toBe(1);
   });
 });
 
@@ -153,10 +181,12 @@ describe('chatRoute sub-agent metadata', () => {
   it.each(['v5', 'v6', 'v7'] as const)('streams data-tool-agent parts by default (%s)', async version => {
     const body = await invokeRoute(chatRoute({ path: '/chat/:agentId', version }));
     expect(body).toContain('"type":"data-tool-agent"');
+    expect(body).toContain('"type":"data-tool-agent-step"');
   });
 
   it('omits data-tool-agent parts when opted out', async () => {
     const body = await invokeRoute(chatRoute({ path: '/chat/:agentId', includeSubAgentMetadata: false }));
     expect(body).not.toContain('"type":"data-tool-agent"');
+    expect(body).not.toContain('"type":"data-tool-agent-step"');
   });
 });
