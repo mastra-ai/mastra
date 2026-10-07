@@ -1611,16 +1611,29 @@ describe('KnowledgeRoutes', () => {
     expect(body).toMatchObject({ status: 'pending' });
   });
 
-  it('filters importer metadata through the host-vouched perspective without requiring organization admin', async () => {
+  it('filters importer metadata through the host-vouched perspective for profile-granted operators', async () => {
     const runtime = new Knowledge({
       id: 'mastra',
       storage: new InMemoryStore(),
       importers: [{ id: 'calendar', handler: async () => {} }],
     });
-    const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      isOrganizationAdmin: async () => false,
+      accessProfile: async ({ builtInScopes, request }) => ({
+        id: 'project',
+        rootScopeAddress: builtInScopes.resource.address,
+        baselineScopes: [builtInScopes.org, builtInScopes.resource],
+        ...(request.headers.get('x-operator') === '1' ? { importOperator: true } : {}),
+      }),
+    });
+    const path = `/web/factory/projects/${h.projectId}/knowledge/importers`;
 
-    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ importers: [] });
+    const operator = await h.app.request(path, { headers: { 'x-operator': '1' } });
+    expect(operator.status).toBe(200);
+    await expect(operator.json()).resolves.toEqual({ importers: [] });
+
+    // Without profile trust, a non-administrator is not an import operator.
+    expect((await h.app.request(path)).status).toBe(403);
   });
 });
