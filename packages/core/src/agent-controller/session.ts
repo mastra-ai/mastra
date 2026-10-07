@@ -2213,8 +2213,12 @@ export class SessionModel {
 
   /** Set the in-memory selected model id (no persistence). */
   set({ modelId }: { modelId: string }): void {
-    if (this.#defaultId === undefined) this.#defaultId = modelId;
     this.#id = modelId;
+  }
+
+  /** @internal Record the host-configured model used when resetting or creating threads. */
+  setDefault({ modelId }: { modelId: string }): void {
+    this.#defaultId = modelId;
   }
 
   /** Restore the host-configured model before hydrating another thread. */
@@ -2380,8 +2384,12 @@ export class SessionMode {
 
   /** Set the currently-selected mode id (on default resolution or hydration). */
   set({ modeId }: { modeId: string }): void {
-    if (this.#defaultId === undefined) this.#defaultId = modeId;
     this.#id = modeId;
+  }
+
+  /** @internal Record the host-configured mode used when resetting or creating threads. */
+  setDefault({ modeId }: { modeId: string }): void {
+    this.#defaultId = modeId;
   }
 
   /** Restore the host-configured mode before hydrating another thread. */

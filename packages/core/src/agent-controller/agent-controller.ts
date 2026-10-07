@@ -378,6 +378,7 @@ export class AgentController<TState = {}> {
    */
   #wireSession(session: Session<TState>): Session<TState> {
     const defaultMode = this.#defaultMode;
+    session.mode.setDefault({ modeId: defaultMode.id });
     session.mode.set({ modeId: defaultMode.id });
     session.setStore({
       getAllOn: async threadId => (await session.thread.getById({ threadId }))?.metadata ?? {},
@@ -448,10 +449,10 @@ export class AgentController<TState = {}> {
     // session, not in persisted state, so initialState.currentModelId is read
     // here as a construction-time input only.
     const initialModelId = (this.config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
-    if (initialModelId) {
-      session.model.set({ modelId: initialModelId });
-    } else if (defaultMode.defaultModelId) {
-      session.model.set({ modelId: defaultMode.defaultModelId });
+    const defaultModelId = initialModelId || defaultMode.defaultModelId || '';
+    session.model.setDefault({ modelId: defaultModelId });
+    if (defaultModelId) {
+      session.model.set({ modelId: defaultModelId });
     }
 
     return session;
