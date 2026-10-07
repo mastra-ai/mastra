@@ -2386,14 +2386,20 @@ export class MessageList {
 
     const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
 
-    // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
+    // Keep these replacement-target guards here instead of MessageMerger.shouldMerge().
     // shouldMerge() only decides whether to append to the latest assistant message,
     // but replace-by-id can target an older sealed message elsewhere in the list.
+    // An incoming message whose id already exists earlier in the list (e.g. a previously
+    // saved assistant message re-added on suspended-tool resume) must update that message
+    // in place, not have its parts merged into the latest response — that would re-save
+    // earlier turns' parts under the current message id.
+    const incomingExistsEarlierInList = !!replacementTarget && replacementTarget !== latestMessage;
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
       options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
+      !incomingExistsEarlierInList &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
