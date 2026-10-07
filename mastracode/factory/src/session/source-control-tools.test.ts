@@ -564,7 +564,15 @@ describe('createSourceControlTools', () => {
       const built = await tools(setup);
       const { sandbox } = fakeSandbox();
 
+      await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
+      const [pushed] = await setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' });
+      await new Promise(resolve => setTimeout(resolve, 5));
       await (built.source_control_create_change_request!.execute as any)({ title: 'Own' });
+      const [opened] = await setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' });
+      // Opening the change request pushes nothing, so the push time stays.
+      expect(opened?.pushedAt).toEqual(pushed?.pushedAt);
+      expect(opened?.changeRequestUrl).toBe('https://gitlab.com/acme/repo/-/merge_requests/17');
+
       await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
 
       await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
