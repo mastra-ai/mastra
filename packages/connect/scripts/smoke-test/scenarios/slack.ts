@@ -277,6 +277,8 @@ export const slackScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('search channels', 'slack_search_channels', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(makeStep('search channels', 'slack_search_channels', 'skip', 'missing tool slack_search_channels'));
     }
     if (tools['slack_search_files']) {
       try {

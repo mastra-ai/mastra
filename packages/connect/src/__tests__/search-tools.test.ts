@@ -81,6 +81,29 @@ describe('slack_search_channels', () => {
     expect(second.next_cursor).toBe('cursor-2');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('stops scanning when Slack returns a cursor that does not advance', async () => {
+    const pageFor = (cursor: string) => ({
+      channels: [{ id: `C-${cursor}`, name: 'other', created: 1, creator: 'U1', is_archived: false }],
+      response_metadata: { next_cursor: 'cursor-1' },
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const cursor = new URL(String(input)).searchParams.get('cursor') ?? 'first';
+      return Response.json(pageFor(cursor));
+    });
+
+    const tools = createSlackTools({ connectionId: 'connection', client: client(fetchMock) });
+    const result = await tools.slack_search_channels!.execute!(
+      { query: 'team' },
+      { requestContext: new RequestContext() },
+    );
+
+    // Page 1 advances to cursor-1; page 2 echoes cursor-1 back, which must be
+    // treated as the end of pagination instead of looping on the same page.
+    expect(result.total).toBe(0);
+    expect(result.next_cursor).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('github search tools', () => {

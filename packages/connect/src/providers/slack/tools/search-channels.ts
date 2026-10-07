@@ -101,7 +101,10 @@ export function searchChannelsTool(proxy: PlatformProxy) {
 
         const channels: any[] = response.data.channels || [];
         const responseMetadata = response.data.response_metadata || {};
-        const slackNextCursor: string | undefined = responseMetadata.next_cursor || undefined;
+        // Treat a cursor that does not advance as the end of pagination so a
+        // misbehaving response cannot loop the scan on the same page forever.
+        const rawNextCursor: string | undefined = responseMetadata.next_cursor || undefined;
+        const slackNextCursor = rawNextCursor !== pageCursor ? rawNextCursor : undefined;
 
         for (let index = offset; index < channels.length; index++) {
           const channel = channels[index];

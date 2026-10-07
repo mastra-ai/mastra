@@ -19,7 +19,8 @@ export const searchIssuesInputSchema = z.object({
   per_page: z.number().int().min(1).max(100).optional().describe('The number of results per page (max 100).'),
   cursor: z
     .string()
-    .regex(/^\d+$/, 'Cursor must be a page number.')
+    .regex(/^[1-9]\d*$/, 'Cursor must be a positive page number.')
+    .refine(value => Number.isSafeInteger(Number.parseInt(value, 10)), 'Cursor must be a positive page number.')
     .optional()
     .describe('Pagination cursor (page number). Omit for the first page.'),
 });
