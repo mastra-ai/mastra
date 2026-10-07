@@ -29,3 +29,23 @@ export async function getLineageHead(
   );
   return history.some(record => record.id === origin.id) ? head : null;
 }
+
+/**
+ * The generation `id` of `origin`'s lineage, or `null` when that lineage is gone or `id` is not
+ * part of it. Unlike {@link getLineageHead}, this keeps naming `id` after later reflections have
+ * superseded it, e.g. to report which generation a write landed on.
+ */
+export async function getLineageRecord(
+  storage: MemoryStorage,
+  origin: Pick<ObservationalMemoryRecord, 'id' | 'threadId' | 'resourceId' | 'generationCount'>,
+  id: string,
+): Promise<ObservationalMemoryRecord | null> {
+  const head = await getLineageHead(storage, origin);
+  if (!head || head.id === id) return head;
+  const history = await storage.getObservationalMemoryHistory(
+    origin.threadId,
+    origin.resourceId,
+    head.generationCount - origin.generationCount + 3,
+  );
+  return history.find(record => record.id === id) ?? null;
+}

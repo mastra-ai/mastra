@@ -102,7 +102,10 @@ export type ObservationPersistOutcome =
       status: 'committed';
       /** The observation as committed (recomposed when the head changed under the cycle). */
       processed: ProcessedObservation;
-      /** The head record the observation was written to, as read before the write. */
+      /**
+       * The generation the observation was written to (the head at write time). Later
+       * reflections may have superseded it by the time the outcome is returned.
+       */
       record: ObservationalMemoryRecord;
     }
   | {

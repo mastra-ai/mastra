@@ -13,7 +13,7 @@ import { getBufferedChunks, combineObservationsForBuffering } from '../message-u
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
-import { getLineageHead } from '../record-lineage';
+import { getLineageHead, getLineageRecord } from '../record-lineage';
 import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
@@ -211,9 +211,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     } else {
       this.persistedRecordId = appendResult?.recordId ?? record.id;
     }
-    // Storage redirects an append aimed at a retired generation to the head; report that head.
+    // Storage redirects an append aimed at a retired generation to the head; report the
+    // generation the chunk landed on, which a later reflection may already have superseded.
     if (committedRecord.id !== this.persistedRecordId) {
-      committedRecord = (await getLineageHead(this.storage, record)) ?? committedRecord;
+      const landedOn = await getLineageRecord(this.storage, record, this.persistedRecordId);
+      if (!landedOn) {
+        return { status: 'not-committed', reason: 'the observational memory record was cleared' };
+      }
+      committedRecord = landedOn;
     }
 
     await this.indexObservationGroups(
