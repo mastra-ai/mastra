@@ -1,0 +1,5 @@
+---
+'@mastra/factory': minor
+---
+
+Factory sessions in a multi-repository environment can push and open change requests in any environment repository: `source_control_push_branch` and `source_control_create_change_request` take an optional `repository` slug (default: the repository the session is filed under; the tool description lists the valid slugs). Every push and change request is recorded per repository in `source_control_session_repositories`, and a push after a change request keeps the change request fields. The `gh pr create` observer and the auto-subscribe path attribute a pull request to its repository and accept any environment repository; pull request subscriptions and the `github_subscribe_pr` / `github_unsubscribe_pr` tools are gated on the Factory (`factoryProjectId`), so web user sessions get them too. On the platform GitHub provider `GH_TOKEN` is minted for every environment repository when they share one installation and number at most ten; otherwise the session repository's token is installed with a warning and the environment signal tells the agent to use the `source_control_*` tools for the other repositories.
