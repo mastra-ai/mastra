@@ -46,6 +46,11 @@ export interface RunWithSecretsOptions {
    * values) stays in a throwaway build stage.
    */
   output: string;
+  /**
+   * Owner of the copied output, as `user[:group]` or `uid[:gid]`. Set this when
+   * the base image runs as a non-root `USER`; otherwise the output is owned by root.
+   */
+  owner?: string;
 }
 
 export type DockerTemplateOperation =
@@ -169,13 +174,13 @@ export function synthesizeDockerfile(definition: DockerTemplateDefinition): stri
         lines.push(`RUN ${toCommandList(operation.args[0]).join(' && ')}`);
         break;
       case 'runWithSecrets': {
-        const [command, { secrets, output }] = operation.args;
+        const [command, { secrets, output, owner }] = operation.args;
         const snapshot = mainStageName(mainIndex);
         const stage = secretStageName(index);
         lines.push(`FROM ${snapshot} AS ${stage}`, renderSecretRun(command, secrets));
         mainIndex += 1;
         openMain(snapshot);
-        lines.push(`COPY --from=${stage} ${output} ${output}`);
+        lines.push(`COPY ${owner ? `--chown=${owner} ` : ''}--from=${stage} ${output} ${output}`);
         break;
       }
       case 'aptInstall':
@@ -216,8 +221,11 @@ function canonicalOperation(operation: DockerTemplateOperation): unknown {
     case 'setEnvs':
       return { method: 'setEnvs', args: [sortedEntries(operation.args[0])] };
     case 'runWithSecrets': {
-      const [command, { secrets, output }] = operation.args;
-      return { method: 'runWithSecrets', args: [command, { secrets: [...secrets].sort(), output }] };
+      const [command, { secrets, output, owner }] = operation.args;
+      return {
+        method: 'runWithSecrets',
+        args: [command, { secrets: [...secrets].sort(), output, ...(owner !== undefined ? { owner } : {}) }],
+      };
     }
     default:
       return operation;

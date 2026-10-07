@@ -120,6 +120,8 @@ interface InFlightBuild {
  * Operation methods return a new instance (like the platform `Template()`
  * builder); `build`/`createSandbox`/`dispose` operate against the daemon.
  */
+const OWNER_PATTERN = /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.-]+)?$/;
+
 export class DockerTemplate {
   readonly #baseImage: string;
   readonly #operations: readonly DockerTemplateOperation[];
@@ -205,9 +207,19 @@ export class DockerTemplate {
     });
     const output = validateString(options.output, 'output');
     if (!output.startsWith('/')) throw new TypeError('output must be an absolute path');
+    let owner: string | undefined;
+    if (options.owner !== undefined) {
+      owner = validateString(options.owner, 'owner');
+      if (!OWNER_PATTERN.test(owner)) {
+        throw new TypeError(`owner must be user[:group] or uid[:gid], got ${JSON.stringify(owner)}`);
+      }
+    }
     return this.#append({
       method: 'runWithSecrets',
-      args: [validateStringOrStrings(command, 'command'), { secrets, output }],
+      args: [
+        validateStringOrStrings(command, 'command'),
+        { secrets, output, ...(owner !== undefined ? { owner } : {}) },
+      ],
     });
   }
 
