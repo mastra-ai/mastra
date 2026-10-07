@@ -485,4 +485,44 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     expect(await runtime.knowledge.getNode(node.id)).toBeNull();
     expect(await memory.getThreadById({ threadId: 'preserved-thread' })).toMatchObject({ title: 'Preserved' });
   });
+
+  it('upgrades a database written by the published v1 Knowledge release', async () => {
+    const { storage, location } = await createStorage('wave-1-upgrade', adapter);
+    const { countV1Nodes, hasTable } = await seedPublishedKnowledgeV1(adapter, storage, location);
+
+    // Ordinary memory keeps working on the upgraded database while Knowledge is unused.
+    const plainMemory = new Memory({ storage });
+    new Mastra({ memory: { default: plainMemory }, logger: false });
+    await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'shipyard', title: 'Kept' });
+    await plainMemory.saveMessages({ messages: [message('kept-thread')] });
+
+    // Turning Knowledge on refuses to reinterpret v1 rows and names the explicit reset.
+    const vector = await createVector();
+    const blocked = createRuntime(storage, vector);
+    await expect(blocked.knowledge.reconcile()).rejects.toThrow('await storage.stores.knowledge.dangerouslyReset()');
+    expect(await countV1Nodes()).toBe(1);
+
+    await storage.stores!.knowledge!.dangerouslyReset();
+    // Reset removes the retired v1 cursor table from this store's own schema.
+    if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
+    const upgraded = createRuntime(storage, vector);
+    const reconciled = await upgraded.knowledge.reconcile();
+    const threadId = `upgrade-${randomUUID()}`;
+    await upgraded.memory.createThread({ threadId, resourceId: 'shipyard', title: 'After upgrade' });
+    await upgraded.memory.saveMessages({ messages: [message(threadId)] });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'acme');
+    await (await upgraded.memory.omEngine)!.observe({
+      threadId,
+      resourceId: 'shipyard',
+      requestContext,
+      sendStateSignal: async () => ({ skipped: false }) as never,
+    });
+    await upgraded.memory.settled();
+    const visibleScopeIds = [reconciled.scopes['org:acme']!, reconciled.scopes['resource:shipyard']!];
+    expect(
+      await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scopeIds: visibleScopeIds }),
+    ).toMatchObject({ kind: 'feature' });
+    expect(await upgraded.memory.getThreadById({ threadId: 'kept-thread' })).toMatchObject({ title: 'Kept' });
+  });
 });
