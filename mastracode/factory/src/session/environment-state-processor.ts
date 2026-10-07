@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
-
-import { getFactorySessionCoordinates } from '../rules/binding-context.js';
+import type { RequestContext } from '@mastra/core/request-context';
 
 const STATE_ID = 'factory-environment';
 
@@ -68,6 +67,15 @@ function escapeText(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
+// The session id is the controller's resource id. Unlike factory runs, a user
+// session carries no `factoryProjectId` in its controller state, and the
+// environment is recorded for both, so only the resource id is required.
+function sessionIdFromContext(requestContext: RequestContext | undefined): string | null {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const controller = requestContext.get('controller') as { resourceId?: unknown } | undefined;
+  return typeof controller?.resourceId === 'string' && controller.resourceId ? controller.resourceId : null;
+}
+
 function environmentCacheKey(state: SessionEnvironmentState): string {
   return `environment:${createHash('sha256').update(JSON.stringify(state)).digest('hex').slice(0, 16)}`;
 }
@@ -83,9 +91,9 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
   readonly stateId = STATE_ID;
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
-    const address = getFactorySessionCoordinates(args.requestContext);
-    if (!address) return;
-    const state = environments.get(address.sessionId)?.state;
+    const sessionId = sessionIdFromContext(args.requestContext);
+    if (!sessionId) return;
+    const state = environments.get(sessionId)?.state;
     if (!state) return;
     const cacheKey = environmentCacheKey(state);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;

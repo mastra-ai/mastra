@@ -12,12 +12,12 @@ import type { SessionEnvironmentState } from './environment-state-processor.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-function requestContext(sessionId = 'sess-1') {
+function requestContext(sessionId = 'sess-1', state: Record<string, unknown> = { factoryProjectId: PROJECT_ID }) {
   const context = new RequestContext();
   context.set('controller', {
     resourceId: sessionId,
     threadId: 'thread-1',
-    getState: () => ({ factoryProjectId: PROJECT_ID }),
+    getState: () => state,
   });
   return context;
 }
@@ -64,6 +64,16 @@ describe('FactoryEnvironmentStateProcessor', () => {
   it('emits nothing before the session booted an environment', async () => {
     const processor = new FactoryEnvironmentStateProcessor();
     await expect(processor.computeStateSignal(stateArgs(requestContext()))).resolves.toBeUndefined();
+  });
+
+  it('emits for a user session whose controller state has no factoryProjectId', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+
+    const signal = await processor.computeStateSignal(stateArgs(requestContext('sess-1', {})));
+
+    expect(signal).toMatchObject({ id: 'factory-environment', attributes: { repositories: 2 } });
+    await expect(processor.computeStateSignal(stateArgs(requestContext('other', {})))).resolves.toBeUndefined();
   });
 
   it('describes every booted repository with its directory, branch and setup status', async () => {
