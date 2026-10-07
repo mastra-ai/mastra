@@ -28,6 +28,8 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build:lib --watch",
     "generate-provider": "tsx scripts/generate-provider.ts",
+    "generate:provider-docs": "tsx scripts/generate-provider-docs.ts && pnpm format:provider-docs",
+    "format:provider-docs": "cd ../../docs && pnpm oxfmt-mdx --write src/content/en/reference/connect/providers.mdx",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "list-providers": "tsx scripts/list-providers.ts",
