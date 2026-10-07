@@ -61,4 +61,45 @@ describe('sub-agent background config derivation', () => {
     expect(getChildTools).not.toHaveBeenCalled();
     expect(tools['agent-child']).toMatchObject({ backgroundConfig: { enabled: true } });
   });
+
+  it('propagates background eligibility from nested sub-agents without converting their tools', async () => {
+    const model = new MockLanguageModelV2();
+    const grandchild = new Agent({
+      id: 'grandchild',
+      name: 'grandchild',
+      instructions: 'Do the work.',
+      model,
+      tools: {
+        work: createTool({
+          id: 'work',
+          description: 'Do work.',
+          inputSchema: z.object({}),
+          execute: async () => ({}),
+          background: { enabled: true },
+        }),
+      },
+    });
+    const child = new Agent({
+      id: 'child',
+      name: 'child',
+      instructions: 'Delegate to the grandchild.',
+      model,
+      agents: { grandchild },
+    });
+    const getChildTools = vi.spyOn(child, 'getToolsForExecution');
+    const getGrandchildTools = vi.spyOn(grandchild, 'getToolsForExecution');
+    const parent = new Agent({
+      id: 'parent',
+      name: 'parent',
+      instructions: 'Delegate to the child.',
+      model,
+      agents: { child },
+    });
+
+    const tools = await parent.getToolsForExecution({ backgroundTaskEnabled: true });
+
+    expect(getChildTools).not.toHaveBeenCalled();
+    expect(getGrandchildTools).not.toHaveBeenCalled();
+    expect(tools['agent-child']).toMatchObject({ backgroundConfig: { enabled: true } });
+  });
 });

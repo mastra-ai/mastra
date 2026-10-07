@@ -1358,7 +1358,10 @@ export class Agent<
   private async deriveSubAgentBackgroundConfig(
     subAgent: SubAgent<string, TRequestContext>,
     requestContext: RequestContext,
+    visited: Set<SubAgent<string, TRequestContext>> = new Set(),
   ): Promise<ToolBackgroundConfig | undefined> {
+    if (visited.has(subAgent)) return undefined;
+    visited.add(subAgent);
     try {
       const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
 
@@ -1387,6 +1390,15 @@ export class Agent<
             if (bg?.enabled === true) {
               return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
             }
+          }
+        }
+
+        // 3. Background eligibility propagates up through nested sub-agents.
+        const nestedAgents = await subAgent.listAgents({ requestContext });
+        for (const nested of Object.values(nestedAgents)) {
+          const nestedBg = await this.deriveSubAgentBackgroundConfig(nested, requestContext, visited);
+          if (nestedBg?.enabled === true) {
+            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
           }
         }
       }
