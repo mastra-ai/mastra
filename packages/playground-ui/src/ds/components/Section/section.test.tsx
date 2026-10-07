@@ -2,6 +2,7 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { Input } from '../Input';
 import { Section } from './section';
 
 afterEach(cleanup);
@@ -30,8 +31,8 @@ describe('Section', () => {
     render(
       <Section variant="flat">
         <Section.Content>
-          <Section.Row label="Project name" description="Shown throughout the studio." htmlFor="project-name">
-            <input id="project-name" />
+          <Section.Row label="Project name" description="Shown throughout the studio.">
+            <Input />
           </Section.Row>
           <Section.Divider />
           <Section.Row label="Region" />
@@ -39,8 +40,9 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(screen.getByLabelText('Project name')).toBeTruthy();
-    expect(screen.getByText('Shown throughout the studio.')).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Project name' }).getAttribute('aria-describedby')).toBe(
+      screen.getByText('Shown throughout the studio.').id,
+    );
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 

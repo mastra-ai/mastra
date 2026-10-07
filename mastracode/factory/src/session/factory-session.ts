@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
@@ -306,7 +304,7 @@ export async function ensureFactorySourceSession(
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
-    sessionId: randomUUID(),
+    sessionId: globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     orgId,
     userId,
@@ -333,6 +331,12 @@ export interface HydrateFactorySessionArgs {
   factoryProjectId?: string;
   /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
+  /**
+   * Model whose provider supplies the observational-memory fallback. Defaults
+   * to the factory model, but channel sessions can use the sender's model so OM
+   * resolves against that sender's credentials.
+   */
+  observationalMemoryModelId?: string;
   /**
    * When provided, the factory project's stored memory-settings row is
    * applied. When omitted (or no row exists) the session is reset to the
@@ -364,8 +368,11 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
     // Without a stored row, fall back to the low-cost OM model of the factory
     // default model's provider — a factory connected only to Anthropic should
     // not observe with the (uncredentialed) built-in Google default.
-    const provider = args.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
+    const observationalMemoryModelId = args.observationalMemoryModelId ?? args.defaultModelId;
+    const provider = observationalMemoryModelId?.split('/')[0];
+    const fallbackOmModelId = provider
+      ? resolveProviderOMDefault(provider, observationalMemoryModelId).modelId
+      : undefined;
     await applyStoredMemorySettings(session, record, fallbackOmModelId);
   } catch (error) {
     console.warn('[Factory Start] Failed to apply observational-memory settings', {
@@ -374,12 +381,26 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
   }
   if (args.defaultModelId) {
     try {
-      await session.model.switch({ modelId: args.defaultModelId });
+      await session.model.switch(args.defaultModelId);
     } catch (error) {
       console.warn('[Factory Start] Failed to apply factory default model', {
         modelId: args.defaultModelId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+    // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+    // default), which may name a provider this factory has no credentials for.
+    // Each role is independent, so one failure doesn't strand the others.
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      try {
+        await session.subagents.model.set({ modelId: args.defaultModelId, agentType });
+      } catch (error) {
+        console.warn('[Factory Start] Failed to apply factory default subagent model', {
+          agentType,
+          modelId: args.defaultModelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 }

@@ -1,18 +1,9 @@
-/**
- * Connect / reconnect controls for Platform-managed provider accounts,
- * completed headlessly in the Factory SPA.
- *
- * OAuth providers open the provider's own consent popup; API-key providers
- * collect the key in a dialog and submit it directly — the same UX as Mastra
- * Platform's own settings, with no Nango-branded screens and no Platform
- * round trip.
- */
-
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -48,7 +39,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
   const [apiKey, setApiKey] = useState('');
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && onClose()} pending={pending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -57,7 +48,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
             reaches the browser again.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="flex flex-col gap-3">
+        <DialogBody>
           <Input
             aria-label={`${meta.displayName} API key`}
             type="password"
@@ -67,14 +58,10 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
           />
         </DialogBody>
         <DialogFooter>
-          <ButtonsGroup>
-            <Button variant="ghost" onClick={onClose} disabled={pending}>
-              Cancel
-            </Button>
-            <Button onClick={() => onSubmit(apiKey.trim())} disabled={pending || !apiKey.trim()}>
-              {pending ? 'Connecting…' : 'Connect'}
-            </Button>
-          </ButtonsGroup>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
+            {pending ? 'Connecting…' : 'Connect'}
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -90,6 +77,8 @@ export interface ProviderConnectControlProps {
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
+  /** Layout classes forwarded to the connect button. */
+  className?: string;
   /** Called after the provider confirmed the authorization. */
   onCompleted?: () => void;
 }
@@ -105,6 +94,7 @@ export function ProviderConnectControl({
   size = 'sm',
   variant = 'default',
   icon,
+  className,
   onCompleted,
 }: ProviderConnectControlProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -139,6 +129,7 @@ export function ProviderConnectControl({
         size={size}
         variant={variant}
         icon={icon}
+        className={className}
         disabled={pending}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
@@ -178,7 +169,7 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
               {connectionName(connection)}
             </Txt>
             {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="meta" className="text-red-400">
+              <Txt as="span" variant="meta" className="text-destructive-foreground">
                 Needs reauthorization
               </Txt>
             )}

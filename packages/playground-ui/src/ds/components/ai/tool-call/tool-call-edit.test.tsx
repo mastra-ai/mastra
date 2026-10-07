@@ -17,6 +17,14 @@ describe('ToolCallEdit', () => {
     expect(screen.getByText('… 1 more lines')).toBeTruthy();
   });
 
+  it('keeps every changed line available when reviewing an approval', () => {
+    const newText = Array.from({ length: 205 }, (_, index) => `line ${index}`).join('\n');
+    render(<ToolCallEdit edit={{ path: 'a.ts', oldText: 'old', newText }} showFullContent />);
+
+    expect(screen.getByText('line 204')).toBeTruthy();
+    expect(screen.queryByText(/more lines/)).toBeNull();
+  });
+
   it('colors both sides for the file type once highlighting lands', async () => {
     const { container } = render(
       <ToolCallEdit edit={{ path: 'a.ts', oldText: 'const a = 1', newText: 'const a = 2\nconst b = 3' }} />,

@@ -1,11 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
-import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useMemoryThreadMessages, useObservationalMemory, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -31,7 +30,6 @@ import {
 import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -204,8 +202,8 @@ const ModelSelectionHarness = () => {
  * hooks) so the test can observe whether OM stream events trigger a refetch.
  */
 const PanelQueriesConsumer = ({ agentId, threadId }: { agentId: string; threadId: string }) => {
-  useObservationalMemory(agentId, threadId);
-  useMemoryThreadMessages(threadId);
+  useObservationalMemory({ agentId: agentId, threadId: threadId });
+  useMemoryThreadMessages({ threadId: threadId });
   return null;
 };
 
@@ -226,7 +224,7 @@ describe('ChatProvider', () => {
       'when the transcript uses %s',
       scenario => {
         it.each(['Approve', 'Decline'])(
-          'routes %s independently and keeps decided controls disabled after settling',
+          'routes %s independently and keeps the decision after the run resumes',
           async action => {
             const signals = scenario.startsWith('signals');
             const generate = scenario.startsWith('generate');
@@ -334,16 +332,22 @@ describe('ChatProvider', () => {
               expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
               await act(async () => gates[index].resolve());
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
-              expect(
-                within(cards[index])
-                  .getByRole('button', { name: `Approve ${toolName}` })
-                  .hasAttribute('disabled'),
-              ).toBe(true);
-              expect(
-                within(cards[index])
-                  .getByRole('button', { name: `Decline ${toolName}` })
-                  .hasAttribute('disabled'),
-              ).toBe(true);
+              expect(within(cards[index]).getByRole('status').textContent).toBe(`${action}d`);
+              expect(within(cards[index]).queryByRole('button', { name: /^(Approve|Decline) / })).toBeNull();
+              if (live) {
+                const resumed = {
+                  type: 'tool-call-resumed',
+                  runId: 'parent-run',
+                  from: 'AGENT',
+                  payload: { toolCallId: id, toolName, kind: 'approval' },
+                };
+                await act(async () =>
+                  stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(resumed)}\n\n`)),
+                );
+                const cardAfterResume = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge')[index];
+                expect(cardAfterResume).toBe(cards[index]);
+                expect(within(cardAfterResume).getByRole('status').textContent).toBe(`${action}d`);
+              }
               if (index === 0)
                 expect(
                   within(cards[1])
@@ -987,8 +991,8 @@ describe('ChatProvider', () => {
     );
 
     const SendAfterPanelLoads = () => {
-      const om = useObservationalMemory('agent-1', 'thread-1');
-      const messages = useMemoryThreadMessages('thread-1');
+      const om = useObservationalMemory({ agentId: 'agent-1', threadId: 'thread-1' });
+      const messages = useMemoryThreadMessages({ threadId: 'thread-1' });
       const send = useChatSend();
       return (
         <button disabled={!om.isSuccess || !messages.isSuccess} onClick={() => send({ message: 'just finish' })}>
@@ -1033,7 +1037,7 @@ describe('ChatProvider', () => {
       });
       const Probe = () => {
         const { workingMemoryData } = useWorkingMemory();
-        const { data } = useMemoryConfig('agent-1');
+        const { data } = useMemoryConfig({ agentId: 'agent-1' });
         return (
           <>
             <div data-testid="wm-value">{workingMemoryData}</div>
@@ -1115,7 +1119,7 @@ describe('ChatProvider', () => {
     const Probe = () => {
       const send = useChatSend();
       const { workingMemoryData } = useWorkingMemory();
-      const { data } = useMemoryConfig('agent-1');
+      const { data } = useMemoryConfig({ agentId: 'agent-1' });
       return (
         <>
           <div>{workingMemoryData}</div>

@@ -33,7 +33,7 @@
     "@opentelemetry/resources": "2.10.0",
     "@opentelemetry/sdk-node": "0.221.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "fastify": "5.12.4",
+    "fastify": "5.12.5",
     "fastify-plugin": "5.0.1",
     "fastify-type-provider-zod": "4.0.2",
     "pino": "10.1.1",

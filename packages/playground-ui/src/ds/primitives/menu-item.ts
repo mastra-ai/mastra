@@ -32,7 +32,7 @@ export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' })
 export const menuItemDestructiveClass = cn(
   buttonVariants({ variant: 'destructive-ghost', size: 'md' }),
   MENU_ITEM_OVERRIDES,
-  'data-highlighted:text-destructive',
+  'data-highlighted:text-destructive-foreground',
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
@@ -58,7 +58,7 @@ export const menuPopupClass = cn(
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   cn('rounded-xl p-1 text-foreground/90 outline-none', overlaySurfaceStyle),
   // A destructive row tints the travelling highlight instead of painting its own.
-  '[&:has([data-variant=destructive][data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:bg-destructive/20',
+  '[&:has([data-variant=destructive][data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:bg-destructive-subtle',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );

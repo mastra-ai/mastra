@@ -1,18 +1,18 @@
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
+import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import {
+  hasToolArguments,
   presentTool,
   stringifyToolValue,
   stripSerializedAnsi,
   ToolCallArguments,
   ToolCallOutput,
-  ToolCallPresentedHeader,
 } from '@/ds/components/ai/tool-call';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
@@ -25,7 +25,7 @@ function formatArgs(args: Record<string, unknown> | string): { pretty: string; p
   }
 }
 
-export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
@@ -34,7 +34,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   suspendPayload?: any;
   toolCalled?: boolean;
   withoutArgs?: boolean;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
 }
 
 export const ToolBadge = ({
@@ -52,7 +52,7 @@ export const ToolBadge = ({
   status = 'idle',
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
-  const { icon, label, detail, description } = presentTool(toolName, argsObject);
+  const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
   const resultPretty =
     result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
 
@@ -62,6 +62,13 @@ export const ToolBadge = ({
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
+  const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
+  const hasBody =
+    hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
+    Boolean(suspendPayload) ||
+    Boolean(resultPretty) ||
+    toolOutput.length > 0 ||
+    needsApproval;
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -69,9 +76,20 @@ export const ToolBadge = ({
       : undefined;
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="tool-badge"
-      header={<ToolCallPresentedHeader icon={icon} label={label} detail={detail} description={description} />}
+      icon={<ToolIcon aria-hidden />}
+      title={label}
+      detail={detail}
+      description={description}
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (
@@ -83,46 +101,42 @@ export const ToolBadge = ({
           <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
         ) : null
       }
-      initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
+      initialCollapsed={!(toolApprovalMetadata ?? suspendPayload)}
     >
-      <ToolCallArguments
-        toolName={toolName}
-        args={argsObject}
-        argsText={argsPretty}
-        hideArguments={withoutArgs}
-        data-testid="tool-args"
-      />
+      {hasBody && (
+        <>
+          <ToolCallArguments
+            toolName={toolName}
+            args={argsObject}
+            showFullContent={needsApproval}
+            argsText={argsPretty}
+            hideArguments={withoutArgs}
+            data-testid="tool-args"
+          />
 
-      {suspendPayload !== undefined && suspendPayload && (
-        <div>
-          <SectionLabel>Suspend payload</SectionLabel>
-          {typeof suspendPayload === 'string' ? (
-            <ToolCallOutput text={suspendPayload} />
-          ) : (
-            <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+          {suspendPayload !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Suspend payload</SectionLabel>
+              {typeof suspendPayload === 'string' ? (
+                <ToolCallOutput text={suspendPayload} />
+              ) : (
+                <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
+              )}
+            </div>
           )}
-        </div>
+
+          {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
+
+          {toolOutput.length > 0 && (
+            <div>
+              <SectionLabel>Tool output</SectionLabel>
+              <div className="h-40 overflow-y-auto">
+                <CodeEditor data={toolOutput} data-testid="tool-output" />
+              </div>
+            </div>
+          )}
+        </>
       )}
-
-      {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
-
-      {toolOutput.length > 0 && (
-        <div>
-          <SectionLabel>Tool output</SectionLabel>
-          <div className="h-40 overflow-y-auto">
-            <CodeEditor data={toolOutput} data-testid="tool-output" />
-          </div>
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

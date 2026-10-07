@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SpanType } from '@mastra/core/observability';
 import { describe, expect, it } from 'vitest';
 
 import { formatTraceThreadMessages } from '../format-trace-thread-messages';
@@ -67,6 +68,201 @@ describe('formatTraceThreadMessages', () => {
       expect(
         messages.every(message => message.role === 'user' || message.content.parts[0]?.type === 'tool-invocation'),
       ).toBe(true);
+    });
+  });
+
+  describe('when the agent run is a resume, so its input carries no user message', () => {
+    it('renders no user message but keeps the tool calls and the response', () => {
+      const spans = agentTraceWithTools.spans.map(span =>
+        span.spanId === 'agent-root' ? { ...span, input: { resumeData: { approved: true } } } : span,
+      );
+
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages.map(message => message.role)).toEqual(Array(5).fill('assistant'));
+      expect(messages.at(-1)?.content.parts).toEqual([{ type: 'text', text: 'Your Paris itinerary is ready.' }]);
+    });
+  });
+
+  describe('when the turn calls tools the chat hides', () => {
+    it('renders no message for task and working memory tool calls', () => {
+      const client = agentTraceWithTools.spans.find(span => span.spanId === 'client-tool');
+      if (!client) throw new Error('fixture missing client-tool span');
+      const hidden = ['task_write', 'updateWorkingMemory'].map(name => ({
+        ...client,
+        spanId: `hidden-${name}`,
+        spanType: SpanType.TOOL_CALL,
+        parentSpanId: 'agent-root',
+        name: `tool: '${name}'`,
+        entityName: name,
+        entityId: name,
+        attributes: { ...client.attributes, toolCallId: `call-${name}` },
+      }));
+
+      const messages = formatTraceThreadMessages([...agentTraceWithTools.spans, ...hidden]);
+
+      expect(messages).toHaveLength(6);
+      const toolNames = messages.flatMap(message =>
+        message.content.parts.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolName] : [])),
+      );
+      expect(toolNames).not.toContain('task_write');
+      expect(toolNames).not.toContain('updateWorkingMemory');
+      expect(messages.some(message => message.traceSpanIds.some(id => id.startsWith('hidden-')))).toBe(false);
+    });
+  });
+
+  describe('when a suspended tool call is resumed under the same toolCallId', () => {
+    it('renders one tool message carrying the resumed result and both spans', () => {
+      const client = agentTraceWithTools.spans.find(span => span.spanId === 'client-tool');
+      if (!client) throw new Error('fixture missing client-tool span');
+      const suspended = {
+        ...client,
+        attributes: { ...client.attributes, toolCallId: 'call-plan' },
+        output: null,
+      };
+      const resumed = {
+        ...client,
+        spanId: 'client-tool-resumed',
+        startedAt: new Date(new Date(client.startedAt).getTime() + 1000).toISOString(),
+        attributes: { ...client.attributes, toolCallId: 'call-plan' },
+        output: { approved: true },
+      };
+      const spans = [...agentTraceWithTools.spans.filter(span => span !== client), resumed, suspended];
+
+      const messages = formatTraceThreadMessages(spans);
+      const planMessages = messages.filter(message => message.traceSpanIds.includes('client-tool'));
+
+      expect(planMessages).toHaveLength(1);
+      expect(planMessages[0]?.traceSpanIds).toEqual(['agent-root', 'client-tool', 'client-tool-resumed']);
+      const part = planMessages[0]?.content.parts[0];
+      expect(
+        part?.type === 'tool-invocation' && part.toolInvocation.state === 'result' && part.toolInvocation.result,
+      ).toEqual({
+        approved: true,
+      });
+    });
+  });
+
+  describe('when the agent run suspended and was resumed as a nested agent run', () => {
+    it('renders the resumed run response text', () => {
+      const root = agentTraceWithTools.spans.find(span => span.spanId === 'agent-root');
+      if (!root) throw new Error('fixture missing agent-root span');
+      const spans = [
+        ...agentTraceWithTools.spans.map(span =>
+          span === root ? { ...span, output: { status: 'suspended', toolName: 'submit_plan' } } : span,
+        ),
+        {
+          ...root,
+          spanId: 'resumed-run',
+          parentSpanId: 'agent-root',
+          startedAt: root.endedAt ?? root.startedAt,
+          input: { action: 'approved' },
+          output: { text: 'Le plan a été soumis.' },
+        },
+      ];
+
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages.at(-1)?.content.parts).toEqual([{ type: 'text', text: 'Le plan a été soumis.' }]);
+    });
+  });
+
+  describe('when observational memory observed during the run', () => {
+    it('renders an observation badge part and never uses the observer output as the reply', () => {
+      const root = agentTraceWithTools.spans.find(span => span.spanId === 'agent-root');
+      if (!root) throw new Error('fixture missing agent-root span');
+      const startedAt = root.endedAt ?? root.startedAt;
+      const endedAt = new Date(new Date(startedAt).getTime() + 2000).toISOString();
+      const spans = [
+        ...agentTraceWithTools.spans.map(span => (span === root ? { ...span, output: { status: 'suspended' } } : span)),
+        {
+          ...root,
+          spanId: 'om-observe',
+          parentSpanId: 'agent-root',
+          spanType: SpanType.MEMORY_OPERATION,
+          name: 'memory: observe',
+          startedAt,
+          endedAt,
+          attributes: { operationType: 'observe', inputTokens: 1223 },
+          input: null,
+          output: null,
+        },
+        {
+          ...root,
+          spanId: 'om-observer-run',
+          parentSpanId: 'om-observe',
+          startedAt,
+          endedAt,
+          output: { text: '<observations>\n* User asked for a plan\n</observations>' },
+        },
+        {
+          ...root,
+          spanId: 'om-observer-llm',
+          parentSpanId: 'om-observer-run',
+          spanType: SpanType.MODEL_GENERATION,
+          startedAt,
+          endedAt,
+          output: { text: '<observations>\n* User asked for a plan\n</observations>' },
+        },
+      ];
+
+      const messages = formatTraceThreadMessages(spans);
+      const omMessage = messages.find(message => message.traceSpanIds.includes('om-observe'));
+      const part = omMessage?.content.parts[0];
+
+      expect(part?.type === 'tool-invocation' && part.toolInvocation.toolName).toBe('mastra-memory-om-observation');
+      expect(part?.type === 'tool-invocation' && part.toolInvocation.args).toMatchObject({
+        observations: '* User asked for a plan',
+        tokensObserved: 1223,
+        durationMs: 2000,
+        _state: 'complete',
+      });
+      expect(JSON.stringify(messages.at(-1)?.content.parts)).not.toContain('<observations>');
+    });
+  });
+
+  describe('when observational memory runs inside a processor', () => {
+    const withOmProcessor = (rootOutput: unknown) => {
+      const root = agentTraceWithTools.spans.find(span => span.spanId === 'agent-root');
+      if (!root) throw new Error('fixture missing agent-root span');
+      const startedAt = root.endedAt ?? root.startedAt;
+      return [
+        ...agentTraceWithTools.spans.map(span => (span === root ? { ...span, output: rootOutput } : span)),
+        {
+          ...root,
+          spanId: 'om-processor',
+          parentSpanId: 'agent-root',
+          spanType: SpanType.PROCESSOR_RUN,
+          name: 'input step processor: observational-memory',
+          entityId: 'observational-memory',
+          startedAt,
+          input: null,
+          output: null,
+        },
+        {
+          ...root,
+          spanId: 'om-capture-run',
+          parentSpanId: 'om-processor',
+          entityId: 'observational-memory-observer',
+          entityName: 'observational-memory-observer',
+          startedAt,
+          output: { object: { capture: { nodes: [{ kind: 'issue', name: 'Issue 22014', records: [] }] } } },
+        },
+      ];
+    };
+
+    it('never renders the observer output as the reply', () => {
+      const messages = formatTraceThreadMessages(withOmProcessor({}));
+
+      expect(JSON.stringify(messages)).not.toContain('capture');
+      expect(messages.some(message => message.traceSpanIds.includes('om-processor'))).toBe(false);
+    });
+
+    it('still renders the root agent text response', () => {
+      const messages = formatTraceThreadMessages(withOmProcessor({ text: 'Issue re-triaged.' }));
+
+      expect(messages.at(-1)?.content.parts).toEqual([{ type: 'text', text: 'Issue re-triaged.' }]);
+      expect(JSON.stringify(messages)).not.toContain('capture');
     });
   });
 

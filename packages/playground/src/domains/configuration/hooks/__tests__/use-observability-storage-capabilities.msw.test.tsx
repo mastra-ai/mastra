@@ -1,3 +1,4 @@
+import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -7,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { useObservabilityStorageCapabilities } from '../use-observability-storage-capabilities';
 import {
-  legacyPostgresWithoutCapabilities,
+  inMemoryStorage,
   renamedPostgresWithMetrics,
   storageWithoutMetrics,
 } from './fixtures/observability-storage-capabilities';
@@ -24,8 +25,8 @@ const makeWrapper = () => {
   );
 };
 
-const useSystemPackagesFixture = (fixture: typeof renamedPostgresWithMetrics) => {
-  server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(fixture)));
+const useCapabilitiesFixture = (fixture: GetObservabilityCapabilitiesResponse) => {
+  server.use(http.get(`${BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(fixture)));
 };
 
 afterEach(() => {
@@ -36,17 +37,7 @@ afterEach(() => {
 describe('useObservabilityStorageCapabilities', () => {
   describe('when the server advertises metrics support for a renamed storage class', () => {
     it('reports metrics as available', async () => {
-      useSystemPackagesFixture(renamedPostgresWithMetrics);
-
-      const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
-
-      await waitFor(() => expect(result.current.supportsMetrics).toBe(true));
-    });
-  });
-
-  describe('when an older server only returns a recognized storage class', () => {
-    it('keeps metrics available through the compatibility fallback', async () => {
-      useSystemPackagesFixture(legacyPostgresWithoutCapabilities);
+      useCapabilitiesFixture(renamedPostgresWithMetrics);
 
       const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
 
@@ -56,11 +47,33 @@ describe('useObservabilityStorageCapabilities', () => {
 
   describe('when the server explicitly reports that metrics are unsupported', () => {
     it('does not let the legacy class-name fallback override the capability', async () => {
-      useSystemPackagesFixture(storageWithoutMetrics);
+      useCapabilitiesFixture(storageWithoutMetrics);
 
       const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
 
-      await waitFor(() => expect(result.current.supportsMetrics).toBe(false));
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.supportsMetrics).toBe(false);
+    });
+  });
+
+  describe('when the observability storage is in-memory', () => {
+    it('reports the in-memory storage', async () => {
+      useCapabilitiesFixture(inMemoryStorage);
+
+      const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isInMemory).toBe(true));
+    });
+  });
+
+  describe('when an older server does not expose the capabilities endpoint', () => {
+    it('reports metrics as unavailable', async () => {
+      server.use(http.get(`${BASE_URL}/api/observability/capabilities`, () => new HttpResponse(null, { status: 404 })));
+
+      const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.supportsMetrics).toBe(false);
     });
   });
 
@@ -70,7 +83,7 @@ describe('useObservabilityStorageCapabilities', () => {
     // project's own storage.
     it('reports metrics as available even when storage does not support them', () => {
       window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.cloud';
-      useSystemPackagesFixture(storageWithoutMetrics);
+      useCapabilitiesFixture(storageWithoutMetrics);
 
       const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
 
@@ -80,7 +93,7 @@ describe('useObservabilityStorageCapabilities', () => {
 
     it('does not surface the in-memory warning', async () => {
       window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.cloud';
-      useSystemPackagesFixture({ ...storageWithoutMetrics, observabilityStorageType: 'ObservabilityInMemory' });
+      useCapabilitiesFixture(inMemoryStorage);
 
       const { result } = renderHook(() => useObservabilityStorageCapabilities(), { wrapper: makeWrapper() });
 

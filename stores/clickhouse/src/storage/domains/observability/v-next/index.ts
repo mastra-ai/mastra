@@ -13,6 +13,8 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   ObservabilityStorageStrategy,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -93,8 +95,10 @@ import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
+  TraceAggregateResponse,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -175,9 +179,13 @@ import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
+
+const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
@@ -590,11 +598,12 @@ async function detectDeltaCursorStrategy(
   }
 
   try {
-    await client.query({
+    const result = await client.query({
       query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
       query_params: { counterName: 'mastra_observability_delta_cursor_probe' },
       format: 'JSONEachRow',
     });
+    await result.json();
     return 'serial';
   } catch {
     return 'fallback';
@@ -810,11 +819,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // that the stream skips the value 0 (which carries no row).
       if (this.#deltaCursorStrategy === 'serial') {
         for (const counterName of DELTA_CURSOR_COUNTER_NAMES) {
-          await this.#client.query({
+          const result = await this.#client.query({
             query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
             query_params: { counterName },
             format: 'JSONEachRow',
           });
+          await result.json();
         }
       }
     } catch (error) {
@@ -950,6 +960,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
+        'trace-aggregate',
+        ...spanQueryFeatures,
       ] as const;
     }
 
@@ -969,6 +982,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'trace-query-context-ids',
+      'trace-aggregate',
+      ...spanQueryFeatures,
     ] as const;
   }
 
@@ -1115,6 +1131,28 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    try {
+      return await spanQueryOps.querySpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryCursorError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     try {
       return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs, this.#deltaCursorStrategy);
@@ -1129,6 +1167,27 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    try {
+      return await traceAggregateOps.aggregateTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

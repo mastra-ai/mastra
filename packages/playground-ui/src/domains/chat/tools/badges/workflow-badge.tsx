@@ -1,15 +1,16 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
 
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { LoadingBadge } from '@/domains/chat/components/loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
 import {
   WorkflowGraph,
@@ -21,14 +22,13 @@ import {
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useLinkComponent } from '@/lib/framework';
 
-export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface WorkflowBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   workflowId: string;
   result?: any;
   isStreaming?: boolean;
@@ -50,10 +50,11 @@ export const WorkflowBadge = ({
   toolCalled,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow({
     workflowId,
-    useEntityRequestContext('workflow', workflowId)[0],
-  );
+    requestContext: useEntityRequestContext('workflow', workflowId)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
     metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
@@ -75,10 +76,25 @@ export const WorkflowBadge = ({
 
   if (isWorkflowLoading || !workflow) return <LoadingBadge />;
 
+  const toolCalledOrFinished = toolCalled ?? !!status;
+  const showsRun = isStreaming || Boolean(runId);
+  const hasBody =
+    showsRun ||
+    Boolean(suspendPayload) ||
+    awaitsToolApproval({ toolApprovalMetadata, toolCalled: toolCalledOrFinished });
+
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled: toolCalledOrFinished,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="workflow-badge"
-      icon={<WorkflowIcon className="text-accent3" />}
+      icon={<WorkflowIcon className="text-span-workflow" />}
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={
@@ -92,30 +108,25 @@ export const WorkflowBadge = ({
         ) : null
       }
     >
-      {!isStreaming && runId && (
-        <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
-          <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
-        </PlaygroundWorkflowRunProvider>
+      {hasBody && (
+        <>
+          {!isStreaming && runId && (
+            <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
+              <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />
+            </PlaygroundWorkflowRunProvider>
+          )}
+
+          {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+
+          {suspendPayloadSlot !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Workflow suspend payload</SectionLabel>
+              {suspendPayloadSlot}
+            </div>
+          )}
+        </>
       )}
-
-      {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
-
-      {suspendPayloadSlot !== undefined && suspendPayload && (
-        <div>
-          <SectionLabel>Workflow suspend payload</SectionLabel>
-          {suspendPayloadSlot}
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled ?? !!status}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };
 

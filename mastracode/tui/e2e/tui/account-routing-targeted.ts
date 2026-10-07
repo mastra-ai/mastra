@@ -11,7 +11,7 @@
  * account serving the turn), api.anthropic.com → SSE completion.
  *
  * Asserts:
- *  - the targeted account activates at request start and is announced,
+ *  - the targeted account activates silently at request start,
  *  - its 429 exhausts the route and hops to the fallback pack instead of
  *    rotating onto the sibling subscription — the raw outbound log proves no
  *    request ever carried account A's bearer or device id,
@@ -309,14 +309,9 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
 
     terminal.submit(PROMPT);
 
-    // The target activates first, then its 429 exhausts the route and the pack
-    // hop takes over — no sibling activation is announced.
+    // The target activates silently, then its 429 exhausts the route and the
+    // pack hop takes over. Failover notices remain visible.
     try {
-      await runtime.waitForScreenText(
-        /Switched Kimi account: Kimi Account A → Kimi Account B \(subscription routing\)/i,
-        terminal,
-        30_000,
-      );
       // A12 copy: the pinned account is reported, not the whole pool.
       await runtime.waitForScreenText(/Pinned Kimi account unavailable \(pool exhausted\)/i, terminal, 30_000);
       await runtime.waitForScreenText(
@@ -332,6 +327,7 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
         { cause: error },
       );
     }
+    await runtime.waitForScreenTextAbsent(/Starting on Kimi account:|\(subscription routing\)/i, terminal, 8_000);
     runtime.printScreen('after targeted route hop', terminal);
 
     // The regression: account A is healthy and would answer, but the pinned
@@ -384,6 +380,7 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
       30_000,
     );
     await runtime.waitForScreenText(/Using fallback Anthropic \(target-kimi failed\)/i, terminal, 10_000);
+    await runtime.waitForScreenTextAbsent(/Starting on Kimi account:|\(subscription routing\)/i, terminal, 8_000);
     runtime.printScreen('after restart history reload', terminal);
 
     const requestsBeforeFollowup = outbound.length;

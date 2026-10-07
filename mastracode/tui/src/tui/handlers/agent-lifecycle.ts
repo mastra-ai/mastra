@@ -56,7 +56,13 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   // JudgeDisplayComponent *after* the new streaming text. Without this the
   // reused component stays at the position of the previous turn's evaluation,
   // causing the new turn's text to visually overwrite the old text + judge.
-  state.activeGoalJudge = undefined;
+  // A final goal chunk already clears this reference, so a judge still active
+  // here never got a verdict (e.g. the objective changed mid-evaluation) and
+  // would otherwise stay stuck on "evaluating…".
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
+  }
   state.followUpComponents = [];
   for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
   state.idleCounter?.setThinking(false);
@@ -283,7 +289,11 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
 
   // Mirror the loop's progress into the synchronous adapter view so the status
   // line and modal reflect the latest run count and lifecycle status.
-  state.goalManager.applyEvaluation({ runsUsed: payload.iteration, status: payload.status });
+  state.goalManager.applyEvaluation({
+    runsUsed: payload.iteration,
+    status: payload.status,
+    ...(payload.pausedReason ? { pausedReason: payload.pausedReason } : {}),
+  });
 
   ctx.updateStatusLine();
   flushRender(state);
@@ -293,16 +303,4 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   // continuation creates a fresh display after the next assistant output instead
   // of updating the previous turn's component in place.
   state.activeGoalJudge = undefined;
-
-  if (payload.status === 'done') {
-    const goal = state.goalManager.getGoal();
-    if (goal && goal.id === state.planStartedGoalId) {
-      const goalId = state.planStartedGoalId;
-      state.planStartedGoalId = undefined;
-      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
-        ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
-        state.planStartedGoalId = goalId;
-      });
-    }
-  }
 }

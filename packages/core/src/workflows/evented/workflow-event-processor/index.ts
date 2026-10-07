@@ -2,6 +2,8 @@ import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
+import type { LeaseProvider } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
@@ -20,6 +22,7 @@ import type {
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
+import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -121,6 +124,17 @@ type ForeachStepResult = {
   [key: string]: unknown;
 };
 
+function isResumedRunningRecord(result: unknown): boolean {
+  return (
+    !!result &&
+    typeof result === 'object' &&
+    (result as { status?: string }).status === 'running' &&
+    // resumedAt, not resumePayload: an undefined resumePayload key is dropped
+    // by stores that serialize the record.
+    (result as { resumedAt?: unknown }).resumedAt !== undefined
+  );
+}
+
 function readForeachResult(
   stepResults: Record<string, StepResult<any, any, any, any>>,
   id: string,
@@ -148,6 +162,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
+  static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
   // workflow.fail has already been published. Any subsequent redelivery of
   // the same logical event short-circuits as terminal and does NOT re-run
@@ -516,6 +532,58 @@ export class WorkflowEventProcessor extends EventProcessor {
     return false;
   }
 
+  async #runScheduledDefaultWorkflow(
+    workflow: Workflow,
+    workflowData: Omit<ProcessorArgs, 'workflow'> & { initialState?: Record<string, any> },
+    trigger: ScheduledWorkflowTrigger,
+    currentState: WorkflowRunState | null | undefined,
+  ): Promise<void> {
+    const { runId, resourceId, prevResult, initialState, requestContext } = workflowData;
+    const logger = this.mastra.getLogger();
+
+    // The claim id is the run id and `createRun` persists a snapshot, so an
+    // existing snapshot means this fire was already started (redelivery).
+    if (currentState) {
+      logger?.debug?.('Scheduled workflow run already exists for claim, skipping', {
+        scheduleId: trigger.scheduleId,
+        runId,
+      });
+      return;
+    }
+
+    // Errors before the run exists propagate so the delivery is retried.
+    const run = await workflow.createRun({ runId, resourceId });
+
+    // From here on the run exists and a redelivery would be skipped, so record
+    // the failure instead of rethrowing (which would publish `workflow.fail`
+    // for a run the evented engine does not own).
+    try {
+      await run.start({
+        inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
+        initialState,
+        requestContext: new RequestContext(Object.entries(requestContext ?? {})),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger?.error?.('Scheduled workflow run threw', { scheduleId: trigger.scheduleId, runId, error: err });
+      try {
+        const schedulesStore = await this.mastra.getStorage()?.getStore('schedules');
+        await schedulesStore?.recordTrigger({
+          scheduleId: trigger.scheduleId,
+          runId,
+          scheduledFireAt: trigger.scheduledFireAt,
+          actualFireAt: Date.now(),
+          outcome: 'failed',
+          error: message,
+          triggerKind: trigger.triggerKind,
+        });
+      } catch (recordErr) {
+        // History is diagnostic — never let it turn a handled fire into a retry.
+        logger?.warn?.('Failed to record failed schedule trigger', { runId, error: recordErr });
+      }
+    }
+  }
+
   private async errorWorkflow(
     {
       parentWorkflow,
@@ -629,11 +697,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (shouldPersist) {
       const runningSnapshot: WorkflowRunState = {
-        activePaths: [],
+        activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
         runId,
@@ -699,7 +767,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         actor,
         resumeData,
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         perStep,
         state: initialState,
         outputOptions,
@@ -1451,7 +1519,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
     if (shouldPersistRunning && workflowsStore) {
-      // A resumed step keeps its stored record untouched: its suspendPayload is
+      // A resumed step skips this generic write (it is claimed separately
+      // below, keeping its record fields intact): its suspendPayload is
       // the richer resume artifact (stream state, nested-run ids) and a
       // redelivered step.run must not clobber it. Same for a step timeTravel
       // resumes into. Foreach iterations are also skipped — the aggregate
@@ -1471,8 +1540,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         // alone is NOT proof of a spurious delivery — after a resume, a loop
         // re-entry (dountil around a suspending nested workflow, bug #5650)
         // publishes a fresh non-resume `step.run` while the leaf record still
-        // reads 'suspended' (the resume path deliberately leaves it
-        // untouched). What discriminates the spurious case is the RUN being
+        // reads 'suspended' (e.g. a foreach resume leaves it as-is). What discriminates the spurious case is the RUN being
         // parked too: no legitimate non-resume delivery for a suspended leaf
         // exists while the whole run sits in 'suspended'. Read-then-write
         // narrows the race window rather than closing it — closing it needs
@@ -1497,6 +1565,46 @@ export class WorkflowEventProcessor extends EventProcessor {
           } as any,
           requestContext,
         });
+      } else if ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId && step.type !== 'foreach') {
+        // Foreach is excluded on purpose: its resume fans out one step.run per
+        // iteration against the shared aggregate record, each with its own
+        // resume data, and the aggregate must stay 'suspended' until step-end
+        // collects the iterations. Claiming it here would let the first
+        // iteration flip it to 'running' with a single iteration's payload.
+        // Mark the resumed step running and keep its resume data next to the
+        // suspendPayload, so restart() after a crash mid-resume can re-enter
+        // the step with the same resume data instead of re-suspending it
+        // (#25365). Only a still-suspended record is claimed, so a redelivered
+        // resume after the step finished usually leaves it alone. Like the
+        // guard above, read-then-write narrows the race window rather than
+        // closing it — closing it needs an expectedStatus compare-and-set on
+        // `updateWorkflowResults` across all storage adapters.
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        const storedResult = (snapshot?.context as any)?.[leafId];
+        if (storedResult?.status === 'suspended') {
+          // The nested run's start clears its suspendedPaths before the inner
+          // step claims the resume, so keep them here for restart.
+          const nestedRunId = getEntryWorkflow(leaf) ? storedResult.metadata?.nestedRunId : undefined;
+          const resumedNestedPaths = nestedRunId
+            ? (await workflowsStore.loadWorkflowSnapshot({ workflowName: leafId, runId: nestedRunId }))?.suspendedPaths
+            : undefined;
+          await workflowsStore.updateWorkflowResults({
+            workflowName: workflowId,
+            runId,
+            stepId: leafId,
+            result: {
+              ...storedResult,
+              status: 'running',
+              resumePayload: resumeData,
+              resumedAt: Date.now(),
+              // For a nested workflow step, the inner steps the caller resumed,
+              // so restart can target them instead of guessing.
+              ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
+              ...(resumedNestedPaths ? { resumedNestedPaths } : {}),
+            },
+            requestContext,
+          });
+        }
       }
       // `expectedStatus` makes this a compare-and-set: the row is 'running' on
       // the normal path (written by processWorkflowStart for both start and
@@ -1623,6 +1731,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            forEachIndex,
           },
         });
       } else if (resumeSteps?.length > 1 && resumeSteps[0] === leafId) {
@@ -1697,6 +1806,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            forEachIndex,
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
@@ -1762,10 +1872,74 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
-        const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
+        // The process died mid-resume before the nested run's suspended step
+        // claimed the resume (nested run still suspended, or running with no
+        // step running yet). Restarting it would re-suspend the step and drop
+        // the resume data, so resume it with the data recorded on the parent.
+        const nestedContext = (snapshot.context ?? {}) as Record<string, any>;
+        const recordedNestedSteps = (stepResults[leafId] as any)?.resumedNestedSteps as string[] | undefined;
+        const nestedSuspendedPaths: Record<string, number[]> = {
+          ...((stepResults[leafId] as any)?.resumedNestedPaths ?? {}),
+          ...(snapshot.suspendedPaths ?? {}),
+        };
+        const suspendedNestedStepId = recordedNestedSteps?.length
+          ? nestedContext[recordedNestedSteps[0]!]?.status === 'suspended'
+            ? recordedNestedSteps[0]
+            : undefined
+          : (Object.keys(nestedSuspendedPaths).find(id => nestedContext[id]?.status === 'suspended') ??
+            Object.keys(nestedContext).find(id => nestedContext[id]?.status === 'suspended'));
+        const nestedResumeSteps = recordedNestedSteps?.length ? recordedNestedSteps : [suspendedNestedStepId!];
+        const nestedHasRunningStep = Object.values(nestedContext).some(result => result?.status === 'running');
+        if (
+          isResumedRunningRecord(stepResults[leafId]) &&
+          suspendedNestedStepId &&
+          (snapshot.status === 'suspended' || (snapshot.status === 'running' && !nestedHasRunningStep))
+        ) {
+          const nestedResumeData = (stepResults[leafId] as any).resumePayload;
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.resume',
+            runId,
+            data: {
+              workflowId: leafId,
+              parentWorkflow: {
+                stepId: leafId,
+                workflowId,
+                runId,
+                stepGraph,
+                executionPath,
+                resumeSteps: [leafId, ...nestedResumeSteps],
+                stepResults,
+                input: prevResult,
+                parentWorkflow,
+                activeStepsPath,
+                resumeData: nestedResumeData,
+              },
+              executionPath: (nestedSuspendedPaths[suspendedNestedStepId] ??
+                snapshot.activeStepsPath?.[suspendedNestedStepId]) as any,
+              runId: nestedRunId,
+              resumeSteps: nestedResumeSteps,
+              stepResults: nestedContext,
+              prevResult: {
+                status: 'success',
+                output: nestedContext[suspendedNestedStepId]?.payload ?? (prevResult as any)?.output,
+              },
+              resumeData: nestedResumeData,
+              activeStepsPath,
+              requestContext,
+              actor,
+              perStep,
+              initialState: snapshot.value ?? currentState,
+              state: snapshot.value ?? currentState,
+              outputOptions,
+            },
+          });
+          return;
+        }
 
-        const nestedPrevStepId = getStepId(nestedWorkflow, snapshot.activePaths);
-        const nestedPrevResult = restartParams.stepResults[nestedPrevStepId ?? 'input'];
+        const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
+        const nestedPrevStepId = getStepId(nestedWorkflow, restartParams.activePaths);
+        const nestedPrevResult =
+          restartParams.stepResults[restartParams.isPreFirstStepRestart ? 'input' : (nestedPrevStepId ?? 'input')];
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
@@ -1789,7 +1963,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: restartParams.activePaths,
             runId: nestedRunId,
             stepResults: restartParams.stepResults,
-            prevResult: { status: 'success', output: nestedPrevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: restartParams.isPreFirstStepRestart ? nestedPrevResult : nestedPrevResult?.payload,
+            },
             restart: restartParams,
             activeStepsPath: restartParams.activeStepsPath,
             requestContext,
@@ -1920,6 +2097,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     } else if (resumeSteps?.length > 0 && resumeSteps?.[0] === leafId) {
       resumeDataToUse = resumeData;
+    } else if (restart?.activeStepsPath?.[leafId] && isResumedRunningRecord(stepResults?.[leafId])) {
+      // The process died while this step was running a resume: re-enter it
+      // with the resume data recorded when the resume started.
+      resumeDataToUse = (stepResults[leafId] as any).resumePayload;
     }
 
     // Get the abort controller for this workflow run
@@ -3163,6 +3344,74 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    // Fence step execution so a broker redelivery of a still-running
+    // `workflow.step.run` (e.g. its ack deadline elapsed) is dropped instead of
+    // running the step concurrently (#24589). Redeliveries keep the same event
+    // id, so the id identifies the logical delivery; genuinely new executions
+    // (loop iterations, retries, foreach items) are published as new events.
+    if (event.type !== 'workflow.step.run' || !event.id) {
+      return this.#handle(event);
+    }
+
+    const leaseProvider = this.#getLeaseProvider();
+    const key = `workflow-step-run:${event.runId}:${event.id}`;
+    const owner = globalThis.crypto.randomUUID();
+    const ttl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
+
+    let acquired: boolean;
+    try {
+      ({ acquired } = await leaseProvider.acquireLease(key, owner, ttl));
+    } catch (err) {
+      // Fencing is best-effort; never block execution on a lease backend error.
+      this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });
+      return this.#handle(event);
+    }
+
+    if (!acquired) {
+      this.mastra.getLogger()?.debug('WorkflowEventProcessor.handle: dropping duplicate delivery of running step', {
+        runId: event.runId,
+        eventId: event.id,
+        deliveryAttempt: event.deliveryAttempt,
+      });
+      return { ok: true };
+    }
+
+    const renewal = setInterval(
+      () => {
+        leaseProvider.renewLease(key, owner, ttl).catch(err => {
+          this.mastra
+            .getLogger()
+            ?.warn('WorkflowEventProcessor.handle: failed to renew step fence', { key, error: err });
+        });
+      },
+      Math.max(1, Math.floor(ttl / 3)),
+    );
+
+    let result: { ok: true } | { ok: false; retry: boolean } | undefined;
+    try {
+      result = await this.#handle(event);
+      return result;
+    } finally {
+      clearInterval(renewal);
+      // On success keep the lease until it expires so a late duplicate of the
+      // completed delivery is still dropped. On failure release it so the
+      // transport's retry can run the step.
+      if (!result?.ok) {
+        await leaseProvider.releaseLease(key, owner).catch(() => {});
+      }
+    }
+  }
+
+  #getLeaseProvider(): LeaseProvider {
+    const pubsub = this.mastra.pubsub as unknown;
+    const unwrap = (pubsub as { getLeaseProvider?: () => LeaseProvider | undefined } | undefined)?.getLeaseProvider;
+    if (typeof unwrap === 'function') {
+      return unwrap.call(pubsub) ?? NoopLeaseProvider;
+    }
+    return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
+  }
+
+  async #handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Build a stable retry key once per call. If event.id is missing we fall
     // back to a deterministic composite of type/runId/workflowId/executionPath
     // so the same logical event lands in the same bucket on each redelivery
@@ -3347,6 +3596,21 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (type === 'workflow.start' && workflow && !(await this.#ensureScheduledDefinitionMatches(data, workflow))) {
+      return;
+    }
+
+    // Scheduled fires for default-engine workflows run in-process, the same way
+    // a direct `run.start()` does. This must happen before the watch publish
+    // below: the default engine streams on its own run-scoped pubsub, so an
+    // evented `workflow-start` here would never be followed by a finish event.
+    const scheduleTrigger = (data as { scheduleTrigger?: ScheduledWorkflowTrigger } | undefined)?.scheduleTrigger;
+    if (
+      type === 'workflow.start' &&
+      workflow?.engineType === 'default' &&
+      !workflowData.parentWorkflow &&
+      scheduleTrigger
+    ) {
+      await this.#runScheduledDefaultWorkflow(workflow, workflowData, scheduleTrigger, currentState);
       return;
     }
 

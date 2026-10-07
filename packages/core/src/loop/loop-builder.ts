@@ -1,4 +1,5 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
 import { InternalSpans } from '../observability';
 import { safeEnqueue } from '../stream/base';
@@ -278,6 +279,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }),
     };
 
+    // Set once map-tool-calls has computed the per-call limit for this instance.
+    let emittedConcurrencyResolved = false;
+
     // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
     // excluded because its limit depends on the full set of tools the model ends up
     // calling, which is unknowable while the model is still streaming.
@@ -374,12 +378,35 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
             logger: rest.logger,
           });
+          emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
           return toolCalls;
         },
         { id: 'map-tool-calls' },
       )
-      .foreach(toolCallStep, toolCallForeachOptions)
+      .foreach(toolCallStep, {
+        // On a resume that re-enters the suspended foreach, map-tool-calls already
+        // completed in the snapshot and is skipped, so the limit above was never
+        // recomputed for this instance. Derive it from the persisted tool-call batch
+        // instead of falling back to the conservative construction-time value.
+        concurrency: ({ inputData }) => {
+          if (emittedConcurrencyResolved) {
+            return toolCallForeachOptions.concurrency;
+          }
+          const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
+          return resolveToolCallConcurrency({
+            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
+            tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
+            activeTools:
+              readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??
+              (rest.activeTools as string[] | undefined),
+            configuredConcurrency: configuredToolCallConcurrency,
+            strategy: toolCallConcurrencyStrategy,
+            calledToolNames: toolCalls.flatMap(call => (typeof call?.toolName === 'string' ? [call.toolName] : [])),
+          });
+        },
+      })
       .then(llmMappingStep)
       .then(backgroundTaskCheckStep)
       .then(signalDrainStep)
@@ -524,7 +551,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         policy: { mode: 'default', hasFiniteMaxSteps: !!rt.maxSteps },
         pendingFeedbackStop: state.pendingFeedbackStop,
         llmWantsToContinue: typedInputData.stepResult?.isContinued === true,
-        underMaxSteps: !rt.maxSteps || state.accumulatedSteps.length < rt.maxSteps,
+        // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
+        // Retries stay bounded by maxProcessorRetries.
+        underMaxSteps:
+          !rt.maxSteps ||
+          state.accumulatedSteps.filter(s => (s.finishReason as string) !== 'retry').length < rt.maxSteps,
         steps: state.accumulatedSteps,
         stopWhen: rt.stopWhen,
         consumeDelegationBail: () => {
@@ -548,7 +579,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           toolResults: toolResultParts.map(tr => ({
             id: tr.toolCallId,
             name: tr.toolName,
-            result: unwrapToolResultOutput(tr.output),
+            result: normalizeToolOutput(tr.output).output,
           })),
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
@@ -619,6 +650,12 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return false;
       }
 
+      // A processor tripwire ends the run; the iteration hook cannot resume it.
+      if (reason === 'tripwire') {
+        typedInputData.stepResult!.isContinued = false;
+        return false;
+      }
+
       return typedInputData.stepResult?.isContinued ?? false;
     };
   }
@@ -661,27 +698,5 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     })
       .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
       .commit();
-  }
-}
-
-function unwrapToolResultOutput(output: unknown): unknown {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) {
-    return output;
-  }
-
-  const record = output as Record<string, unknown>;
-  if (!('value' in record)) {
-    return output;
-  }
-
-  switch (record.type) {
-    case 'text':
-    case 'json':
-    case 'error-text':
-    case 'error-json':
-    case 'content':
-      return record.value;
-    default:
-      return output;
   }
 }

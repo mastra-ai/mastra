@@ -22,6 +22,7 @@ import {
   type AuditTimeRange,
 } from '../domains/factory/auditPresentation';
 import { SkeletonRows } from '../ui/SkeletonRows';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 function AuditLogEmptyState({
   hasCategoryFilter,
@@ -144,7 +145,9 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
             <AuditTimeline events={events} bounds={bounds} range={selectedRange} />
           </AuditRangePicker>
         ) : (
-          <p className="text-meta text-placeholder flex h-28 items-center justify-center">Nothing recorded yet</p>
+          <Txt variant="meta" tone="faint" className="flex h-28 items-center justify-center">
+            Nothing recorded yet
+          </Txt>
         )}
         <AuditCategoryFilter
           selectedCategories={selectedCategories}

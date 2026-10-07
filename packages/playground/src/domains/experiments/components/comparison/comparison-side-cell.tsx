@@ -1,8 +1,10 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { ClockIcon } from 'lucide-react';
@@ -32,7 +34,7 @@ function sideDuration(side: ComparisonSide): string | null {
 
 const codeBoxClass = cn(
   raisedSurfaceStyle,
-  'max-h-[30vh] overflow-y-auto rounded-xl p-4 text-body break-all whitespace-pre-wrap text-muted-foreground',
+  'max-h-[30vh] overflow-y-auto rounded-xl p-4 break-all whitespace-pre-wrap',
 );
 
 /**
@@ -52,7 +54,11 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="py-5 text-center text-body text-muted-foreground">Not present in this experiment</p>;
+    return (
+      <Txt tone="muted" className="py-5 text-center">
+        Not present in this experiment
+      </Txt>
+    );
   }
 
   const outputStr = formatValue(data.output);
@@ -63,12 +69,12 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <Tooltip>
           <TooltipTrigger
             render={
-              <p className="flex items-center justify-end gap-1.5 text-body text-muted-foreground [&>svg]:size-3.5">
+              <Txt tone="muted" className="flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
                 <ClockIcon />
                 <Txt as="span" variant="body" font="mono">
                   {duration}
                 </Txt>
-              </p>
+              </Txt>
             }
           />
           <TooltipContent>Run duration</TooltipContent>
@@ -77,13 +83,13 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.error ? (
         <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <p className="rounded-xl border border-negative1/40 bg-negative1/5 p-4 text-body break-words text-muted-foreground">
+          <Txt tone="muted" className="rounded-xl border border-destructive-edge bg-destructive-subtle p-4 break-words">
             {data.error.message}
-          </p>
+          </Txt>
         </ComparisonSection>
       ) : (
         <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <pre className={codeBoxClass}>{outputStr}</pre>
+          <Code className={cn(codeBoxClass, 'font-mono text-body text-muted-foreground')} code={outputStr} />
         </ComparisonSection>
       )}
 
@@ -105,7 +111,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
 
       {data.comment && (
         <ComparisonSection title="Comment" defaultOpen={false}>
-          <p className="text-body text-muted-foreground">{data.comment}</p>
+          <Txt tone="muted">{data.comment}</Txt>
         </ComparisonSection>
       )}
 
@@ -113,12 +119,10 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4 text-body">
-                <dt className="text-muted-foreground">{key}</dt>
-                <dd className="break-all text-foreground">
-                  <Txt as="span" variant="body" font="mono">
-                    {formatValue(value)}
-                  </Txt>
+              <div key={key} className="flex items-start justify-between gap-4">
+                <dt className={textStyle({ tone: 'muted', variant: 'body' })}>{key}</dt>
+                <dd className={cn(textStyle({ tone: 'ink', variant: 'body', font: 'mono' }), 'break-all')}>
+                  {formatValue(value)}
                 </dd>
               </div>
             ))}

@@ -2721,6 +2721,26 @@ describe('Memory', () => {
       expect(result).toHaveProperty('total', 5);
       expect(result).toHaveProperty('hasMore', false);
     });
+
+    it('subscribeToThread withInitialHistory emits the newest page oldest first (#25810)', async () => {
+      const agent = new Agent({
+        id: 'history-order',
+        name: 'History order',
+        instructions: 'test',
+        model: new MockLanguageModelV2(),
+        memory,
+      });
+      const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: { perPage: 3 } });
+      const { value: history } = await subscription.stream[Symbol.asyncIterator]().next();
+      subscription.unsubscribe();
+
+      expect(history).toMatchObject({ type: 'thread-history', payload: { hasMore: true } });
+      expect(history.payload.messages.map((m: MastraDBMessage) => m.id)).toEqual([
+        'msg-page-3',
+        'msg-page-4',
+        'msg-page-5',
+      ]);
+    });
   });
 
   describe('recall signal exclusions', () => {

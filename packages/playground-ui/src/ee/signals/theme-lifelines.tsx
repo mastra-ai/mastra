@@ -8,6 +8,7 @@ import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
+import { Txt } from '@/ds/components/Txt';
 
 /**
  * Lifelines mode: every theme holds a fixed row while landmarks run left to
@@ -74,9 +75,9 @@ export function ThemeLifelines({
         <span aria-hidden="true" className="w-9 shrink-0" />
       </div>
       {snapshots[selectedIndex] ? (
-        <p className="font-mono text-caption text-muted-foreground" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" data-testid="snapshot-summary">
           {snapshotSummaryLabel(snapshots[selectedIndex], flows[selectedIndex])}
-        </p>
+        </Txt>
       ) : null}
       {signalNames.map(signalName => (
         <SignalLifelines

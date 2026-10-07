@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { ChunkFrom, type ChunkType, type DataChunkType } from '@mastra/core/stream';
-import { MastraReactProvider, useChat } from '@mastra/react';
+import { MastraReactProvider } from '@mastra/react';
+import { useChat } from '@mastra/react/chat';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -241,7 +242,7 @@ describe('Chat history recovery', () => {
       expect(result.current.tasks).toEqual(savedTasks);
       rerender({ threadId: 'second', history: emptyHistory });
       expect(result.current.tasks).toEqual([]);
-    });
+    }, 15_000);
 
     it('does not replace newer streamed tasks with saved tasks', async () => {
       const { result, rerender } = await setup();

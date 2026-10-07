@@ -1,5 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
-
 import type { SendAgentNotificationSignalResult, SendAgentSignalAccepted } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -365,8 +363,8 @@ The target must already be saved and freshly advertise the same exact thread end
           resourceId: currentAgent.resourceId,
           threadId: currentAgent.threadId,
         });
-        const messageId = inputMessageId ?? randomUUID();
-        const fingerprint = fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo });
+        const messageId = inputMessageId ?? globalThis.crypto.randomUUID();
+        const fingerprint = await fingerprintAgentSignal({ targetId, summary, priority, expectsReply, replyTo });
         const sentSignals = await readSentAgentSignals(agentContext);
         const previousSend = sentSignals.find(signal => signal.messageId === messageId);
         if (previousSend) {
@@ -630,16 +628,17 @@ function untrustedPeerLabel(target: AgentPeerView): string {
   );
 }
 
-function fingerprintAgentSignal(value: {
+async function fingerprintAgentSignal(value: {
   targetId: string;
   summary: string;
   priority: string;
   expectsReply: boolean;
   replyTo?: string;
-}): string {
-  return createHash('sha256')
-    .update(JSON.stringify(sortJsonValue(value)))
-    .digest('hex');
+}): Promise<string> {
+  const serialized = JSON.stringify(sortJsonValue(value));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized))).toString(
+    'hex',
+  );
 }
 
 function sortJsonValue(value: unknown): unknown {

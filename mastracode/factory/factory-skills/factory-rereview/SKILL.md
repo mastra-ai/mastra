@@ -152,7 +152,7 @@ On any mismatch, stop and record it as a blocking security finding with both val
 
 Compose two artifacts, in order — the **published body** goes on the PR, the **session handoff** goes back into the run's conversation. Don't send either to the conversation yet; both are drafted here, the published body is sent to the PR, the verdict is recorded, and only then is the session handoff posted.
 
-The **published body** (what `gh pr review --body-file` receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
+The **published body** (what `gh pr review --body-file` receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
 
 - **Prior pass disposition** — every substantive item from your previous review, classified: addressed, partially addressed, still open, refuted by the push, or invalidated by the push. Cite the commit or `file:line` proving each addressed/refuted/invalidated call. A prior blocking finding still open is called out plainly at the top of this section.
 - **Findings** — lead with the mechanism of the most consequential finding; new-this-pass findings from the push and from the fresh whole-PR sweep are each labeled as `[push]` or `[fresh]` so the record is honest about where they came from. Distill — this is a handoff, not a transcript.
@@ -172,12 +172,27 @@ The **session handoff** (posted as the final conversation message after the verd
 
 **The head must not have moved.** Immediately before publishing, run `gh pr view <number> --json headRefOid --jq .headRefOid` and compare it with the SHA your verification ran on (`git rev-parse HEAD`). A push can land while you verify or wait on bots, and a verdict on a superseded head misleads the author. If the head moved, do not publish: refresh the checkout to the new head, review the new commits and re-run the verification they affect, revise the handoff, then check again. Name the reviewed head SHA in the handoff.
 
-Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the published body to `.artifacts/factory-rereview/pr-<number>.md` and submit a PR review matching the verdict:
+Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the published body to `.artifacts/factory-rereview/pr-<number>-<headSha>.md`, where `<headSha>` is the full SHA you reviewed. Always write this file fresh in the current pass — never reuse, copy, or edit a body file from an earlier pass, which describes a different head and may carry the opposite verdict.
+
+**Gate the file immediately before posting.** Run these checks against the exact file you are about to pass to `--body-file`, and post nothing if any fails — regenerate the body from this pass's findings instead:
+
+1. `head -n1 <file>` is exactly `Verdict: approve` when you will use `--approve`, or exactly `Verdict: request changes` when you will use `--request-changes`.
+2. The `Reviewed head:` SHA in the file equals `gh pr view <number> --json headRefOid --jq .headRefOid` and the `reviewedHeadSha` you will pass to `factory_record_review_verdict`.
+
+Then submit a PR review matching the verdict:
 
 - approve → `gh pr review <number> --approve --body-file <file>`
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
 
-If GitHub rejects the review submission (e.g. the token authored the PR and cannot approve or request changes on it), fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+**Author-identity misconfiguration must be visible, never silent.** GitHub refuses both approve and request changes from the PR's author, so a review token that authored the PR can never record a verdict in `reviewDecision` or satisfy branch protection. Before submitting, compare the reviewing identity (`gh api user --jq .login`; for an App installation token that call may fail — then treat a submission rejected with GitHub's "Can not approve/request changes on your own pull request" error as the same signal) with the PR's `.author.login`. When they match:
+
+1. Add this line to the published body immediately after the `Reviewed head:` line (the verdict line stays first and `Reviewed head:` stays second): `> ⚠️ **Factory misconfiguration:** the review token is the PR author, so GitHub cannot record this verdict as an approving or changes-requested review (it will not satisfy branch protection or workflows that require an approving or changes-requested review). Configure a separate reviewer token for Factory reviews.`
+2. Publish with `gh pr comment <number> --body-file <file>`. Do not use `gh pr review --comment`: Factory's repair loop only routes a request-changes verdict from a plain PR comment whose first line is the verdict, and ignores `COMMENTED` reviews.
+3. Report the misconfiguration and the publish method under **Verification** and in the **Factory routing** block of the handoff.
+
+If submission fails for any other reason, fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+
+After the body is posted successfully (review or comment fallback), delete the body file so no later pass can post it.
 
 After publishing, reconcile the verdict label: approve adds `status:auto-approved` and removes `status:changes-requested`; request changes adds `status:changes-requested` and removes `status:auto-approved`.
 

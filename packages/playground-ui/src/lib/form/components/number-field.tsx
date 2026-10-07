@@ -2,14 +2,13 @@ import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
 import { Input } from '@/ds/components/Input';
 
-export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, field, id }) => {
+export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) => {
   const { key, ...props } = inputProps;
 
   return (
     <Input
-      id={id}
       type="number"
-      className={error ? 'border-accent2' : ''}
+      step="any"
       {...props}
       defaultValue={field.default !== undefined ? Number(field.default) : undefined}
       onChange={e => {

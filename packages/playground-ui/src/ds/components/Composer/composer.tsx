@@ -33,7 +33,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border-strong/40 transition-colors duration-normal focus-within:border-border-strong',
+        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal focus-within:border-border-strong',
         className,
       )}
       {...props}
@@ -130,10 +130,10 @@ ComposerActions.displayName = 'ComposerActions';
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Dark blur-xl" />
-    <div className="w-full flex-1 bg-accent1 blur-xl" />
-    <div className="w-full flex-1 bg-accent1Darker blur-xl" />
+    <div className="w-full flex-1 bg-brand-green blur-xl" />
+    <div className="w-full flex-1 bg-product-observability blur-xl" />
+    <div className="w-full flex-1 bg-brand-green blur-xl" />
+    <div className="w-full flex-1 bg-product-observability blur-xl" />
   </div>
 );
 

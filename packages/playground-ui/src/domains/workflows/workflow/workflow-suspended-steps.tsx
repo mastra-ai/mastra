@@ -18,7 +18,7 @@ import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
 
-const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning1)' };
+const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };
 
 export interface ResumeStepParams {
   stepId: string | string[];
@@ -69,14 +69,14 @@ export function WorkflowSuspendedSteps({
       aria-label="Step suspended"
     >
       <div className="max-h-[calc(100cqh-64px)] overflow-y-auto overscroll-contain rounded-[inherit]">
-        <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-background px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border bg-background px-5 py-4">
           <Txt as="h2" variant="column" tone="ink" className="flex items-center gap-2">
             <Icon>
               <CirclePause />
             </Icon>
             Step suspended
           </Txt>
-          <Badge variant="orange" emphasis="muted">
+          <Badge variant="orange" emphasis="subtle">
             Needs input
           </Badge>
         </div>
@@ -128,7 +128,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
   };
 
   return (
-    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border/50">
+    <div className="space-y-5 p-5 [&+&]:border-t [&+&]:border-border">
       <div className="space-y-2">
         <Txt as="p" variant="subheading" tone="ink" className="break-words">
           {step.stepId}

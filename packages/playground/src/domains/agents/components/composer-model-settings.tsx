@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Entry } from '@mastra/playground-ui/components/Entry';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { FieldItem, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -10,16 +10,15 @@ import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { useAgent } from '@mastra/react/hooks/agents';
+import { useMemory } from '@mastra/react/hooks/memory';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
 import { useAgentSettings } from '../context/agent-context';
-import { useAgent } from '../hooks/use-agent';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 import { AgentAdvancedSettingsBody } from './agent-advanced-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 export interface ComposerModelSettingsProps {
   agentId: string;
@@ -36,15 +35,10 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
   const itemDisabled = disabled || !isNetworkAvailable;
 
   const radio = (
-    <div className="flex items-center gap-2">
-      <RadioGroupItem value="network" id="network" className="text-foreground" disabled={itemDisabled} />
-      <Label
-        className={cn('text-foreground', !isNetworkAvailable && 'cursor-not-allowed text-muted-foreground!')}
-        htmlFor="network"
-      >
-        Network
-      </Label>
-    </div>
+    <FieldItem disabled={itemDisabled}>
+      <RadioGroupItem value="network" className="text-foreground" />
+      <FieldLabel>Network</FieldLabel>
+    </FieldItem>
   );
 
   if (isNetworkAvailable) {
@@ -78,20 +72,10 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
   const itemDisabled = disabled || !supported;
 
   const radio = (
-    <div className="flex items-center gap-2">
-      <RadioGroupItem
-        value="streamSubscription"
-        id="streamSubscription"
-        className="text-foreground"
-        disabled={itemDisabled}
-      />
-      <Label
-        className={cn('text-foreground', !supported && 'cursor-not-allowed text-muted-foreground!')}
-        htmlFor="streamSubscription"
-      >
-        Stream subscription (default)
-      </Label>
-    </div>
+    <FieldItem disabled={itemDisabled}>
+      <RadioGroupItem value="streamSubscription" className="text-foreground" />
+      <FieldLabel>Stream subscription (default)</FieldLabel>
+    </FieldItem>
   );
 
   if (supported) {
@@ -109,8 +93,16 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
 };
 
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: memory, isLoading: isMemoryLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { settings, setSettings, resetAll } = useAgentSettings();
   const { canEdit } = usePermissions();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -162,10 +154,6 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
       <Popover
         open={popoverOpen}
         onOpenChange={(open, details) => {
-          // While the Advanced Settings dialog is open, ignore every popover
-          // dismissal — outside-press, close button, focus loss, etc. The
-          // dialog owns its own close lifecycle and is the only thing that
-          // can dismiss the popover indirectly (by being closed first).
           if (!open && advancedOpen) {
             details?.cancel?.();
             return;
@@ -209,59 +197,31 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   className="flex flex-col gap-3"
                 >
                   {!isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="generateLegacy"
-                        id="generateLegacy"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="generateLegacy">
-                        Generate (Legacy)
-                      </Label>
-                    </div>
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="generateLegacy" className="text-foreground" />
+                      <FieldLabel>Generate (Legacy)</FieldLabel>
+                    </FieldItem>
                   )}
                   {isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="generate"
-                        id="generate"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="generate">
-                        Generate
-                      </Label>
-                    </div>
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="generate" className="text-foreground" />
+                      <FieldLabel>Generate</FieldLabel>
+                    </FieldItem>
                   )}
                   {!isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="streamLegacy"
-                        id="streamLegacy"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="streamLegacy">
-                        Stream (Legacy)
-                      </Label>
-                    </div>
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="streamLegacy" className="text-foreground" />
+                      <FieldLabel>Stream (Legacy)</FieldLabel>
+                    </FieldItem>
                   )}
                   {isSupportedModel && (
                     <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
                   )}
                   {isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="stream"
-                        id="stream"
-                        className="text-foreground"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-foreground" htmlFor="stream">
-                        Stream
-                      </Label>
-                    </div>
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="stream" className="text-foreground" />
+                      <FieldLabel>Stream</FieldLabel>
+                    </FieldItem>
                   )}
                   {isSupportedModel && (
                     <NetworkRadio hasMemory={hasMemory} hasSubAgents={hasSubAgents} disabled={!canEditSettings} />
@@ -285,15 +245,15 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="flex items-center gap-2 rounded bg-card px-3 py-2 text-caption text-muted-foreground"
                   data-testid="sampling-restriction-banner"
+                  className="flex items-center gap-2 rounded bg-card px-3 py-2 text-muted-foreground"
                 >
                   <Info className="h-3.5 w-3.5 shrink-0" />
-                  <span>
+                  <Txt as="span" variant="caption">
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
                       : 'Claude 4.5+ models only accept Temperature OR Top P. Setting Temperature will clear Top P.'}
-                  </span>
+                  </Txt>
                 </div>
               )}
 
@@ -372,7 +332,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
       </Popover>
 
       <Dialog open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Advanced model settings</DialogTitle>
           </DialogHeader>

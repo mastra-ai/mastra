@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
 import { extractProblemDetail, MastraConnectError } from './errors.js';
+import {
+  describePlatformCall,
+  endPlatformCallSpan,
+  errorPlatformCallSpan,
+  startPlatformCallSpan,
+} from './instrumentation.js';
 
 /**
  * Configuration for talking to the Mastra platform integrations service.
@@ -87,17 +93,24 @@ function redact(message: string, accessToken: string): string {
 }
 
 async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
+  // Single choke point for outbound connect HTTP (platform API + vendor
+  // proxy), so one span here covers every external call this package makes.
+  const span = startPlatformCallSpan(describePlatformCall(init?.method ?? 'GET', path));
   try {
-    return await client.fetch(`${client.baseUrl}${path}`, {
+    const response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
+    endPlatformCallSpan(span, response.status);
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message.includes(client.accessToken)) {
       const redacted = new Error(redact(error.message, client.accessToken));
       redacted.name = error.name;
+      errorPlatformCallSpan(span, redacted);
       throw redacted;
     }
+    errorPlatformCallSpan(span, error);
     throw error;
   }
 }
@@ -207,13 +220,34 @@ const integrationCatalogResponseSchema = z.object({
   integrations: z.array(integrationCatalogEntrySchema),
 });
 
+/**
+ * Secondary access token minted by the vendor alongside the primary oauth2
+ * credential (e.g. `devPortalAccessToken` on Microsoft Teams connections).
+ * Keyed by the vendor's connection-config field name. Treat this like any
+ * other bearer credential — it authenticates second-audience API calls
+ * (Teams Dev Portal, etc.) and must not be logged or forwarded to code that
+ * shouldn't hold connection secrets.
+ */
+export const secondaryAccessTokenSchema = z.object({
+  accessToken: z.string(),
+  expiresAt: z.string().nullable(),
+});
+
+export type SecondaryAccessToken = z.infer<typeof secondaryAccessTokenSchema>;
+
 export const credentialSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('oauth2'),
     accessToken: z.string(),
     expiresAt: z.string().nullable(),
+    secondaryAccessTokens: z.record(z.string(), secondaryAccessTokenSchema).optional(),
   }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
+  z.object({
+    type: z.literal('two_step'),
+    token: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
 ]);
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
@@ -298,6 +332,13 @@ export interface ProxyRequestOptions {
   headers?: Record<string, string>;
   baseUrlOverride?: string;
   body?: unknown;
+  /**
+   * How to decode the response body. Defaults to JSON parsing (with a raw
+   * text fallback when JSON parsing fails). Set to `'arraybuffer'` for
+   * providers that return binary payloads (file exports, downloaded assets):
+   * the response body is returned as an ArrayBuffer and never parsed.
+   */
+  responseType?: 'arraybuffer';
 }
 
 /**
@@ -399,7 +440,17 @@ export async function proxyRequestWithResponse(
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
-  const headers: Record<string, string> = { ...options.headers };
+  // The platform authenticates proxy requests with the project token and
+  // injects the provider credential upstream (same invariant as the MCP
+  // transport). A caller-supplied authorization header would merge with the
+  // platform bearer under a different casing and corrupt platform auth, so it
+  // is dropped here rather than forwarded.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'proxy-authorization') continue;
+    headers[name] = value;
+  }
   if (options.baseUrlOverride !== undefined) {
     assertValidBaseUrlOverride(options.baseUrlOverride);
     headers['base-url-override'] = options.baseUrlOverride;
@@ -456,6 +507,9 @@ export async function proxyRequestWithResponse(
 
   const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
   if (response.status === 204) return { ...metadata, data: null };
+  if (options.responseType === 'arraybuffer') {
+    return { ...metadata, data: await response.arrayBuffer() };
+  }
   const text = await response.text();
   if (!text) return { ...metadata, data: null };
   try {

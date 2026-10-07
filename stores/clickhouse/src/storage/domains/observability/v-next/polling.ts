@@ -42,3 +42,9 @@ export function validateCursorId(cursor: string): string {
     text: 'Invalid observability delta cursor',
   });
 }
+
+/** ANDs `conditions` onto a `WHERE ...` clause, or starts one when `whereClause` is empty. */
+export function appendWhere(whereClause: string, ...conditions: string[]): string {
+  const parts = [whereClause.replace(/^\s*WHERE\s+/i, ''), ...conditions].filter(Boolean);
+  return parts.length > 0 ? `WHERE ${parts.join(' AND ')}` : '';
+}

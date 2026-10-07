@@ -1,6 +1,8 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
+import { normalizedVerdictLine } from '../../review-verdict.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+import { isFactoryApproveVerdict } from './stale-reviews.js';
 
 export type GithubRuleOverrides = Partial<
   Record<FactoryGithubEventName, FactoryRuleHandler<FactoryGithubRuleContext> | null | undefined>
@@ -54,6 +56,22 @@ function createdAfterFactory(createdAt: string | undefined, factoryCreatedAt: st
   return Number.isFinite(sourceCreatedAt) && Number.isFinite(projectCreatedAt) && sourceCreatedAt > projectCreatedAt;
 }
 
+/**
+ * Issue and pull request numbers repeat across repositories, so new cards are
+ * keyed by repository. A card this repository already owns keeps its key —
+ * including canonical `github-issue:N` / `github-pr:N` keys from before
+ * scoping — but only when it is the same kind of source: pull request intake
+ * runs with the authoring issue as `context.item`.
+ */
+function githubSourceKey(
+  context: FactoryGithubRuleContext,
+  source: 'github-issue' | 'github-pr',
+  itemNumber: number,
+): string {
+  if (context.item?.source === source && context.item.sourceKey) return context.item.sourceKey;
+  return `github:${context.repository.id}:${source === 'github-issue' ? 'issue' : 'pull-request'}:${itemNumber}`;
+}
+
 function issueOpened(context: FactoryGithubRuleContext) {
   if (!context.issue) return;
   // Everything arrives on the routed board's initial phase (Work › Intake when
@@ -64,7 +82,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     idempotencyKey: `${context.ingress.id}:issue-intake`,
     board: context.intake?.board ?? 'work',
     source: 'github-issue',
-    sourceKey: `github-issue:${context.issue.number}`,
+    sourceKey: githubSourceKey(context, 'github-issue', context.issue.number),
     title: context.issue.title,
     url: context.issue.url,
     stage: context.intake?.initialPhase ?? 'intake',
@@ -119,7 +137,7 @@ function materializePullRequestIntake(
     idempotencyKey,
     board: 'review',
     source: 'github-pr',
-    sourceKey: `github-pr:${context.pullRequest.number}`,
+    sourceKey: githubSourceKey(context, 'github-pr', context.pullRequest.number),
     title: context.pullRequest.title,
     url: context.pullRequest.url,
     stage,
@@ -246,6 +264,31 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
 }
 
 /**
+ * A Factory approval does not clear a change request left by a different
+ * Factory identity (an earlier reviewer token, say), so GitHub would keep the
+ * pull request blocked. Ask the dispatcher to dismiss those superseded reviews.
+ */
+function dismissStaleFactoryReviews(context: FactoryGithubRuleContext) {
+  const { pullRequest, review, repository } = context;
+  if (!pullRequest || !review || !review.author || !repository.installationId) return;
+  if (review.state.toLowerCase() !== 'approved' || !isFactoryApproveVerdict(review.body)) return;
+  if (!pullRequest.factoryAuthored || pullRequest.state !== 'open' || pullRequest.merged) return;
+  return {
+    type: 'dismissStaleReviews',
+    idempotencyKey: `${context.ingress.id}:dismiss-stale-reviews`,
+    installationId: repository.installationId,
+    repository: repository.fullName,
+    pullRequestNumber: pullRequest.number,
+    approvingReviewId: String(review.id),
+    approvingAuthor: review.author,
+  } as const;
+}
+
+function pullRequestReviewSubmitted(context: FactoryGithubRuleContext) {
+  return addressReviewFeedback(context) ?? dismissStaleFactoryReviews(context);
+}
+
+/**
  * Detects the `factory-review` handoff verdict in a comment body.
  *
  * GitHub forbids an app from reviewing a pull request it authored, so on
@@ -256,16 +299,9 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
  * inspected — a verdict quoted later in the findings must not count.
  */
 function requestsChangesVerdict(body: string | undefined): boolean {
-  const firstLine = body
-    ?.split('\n')
-    .map(line => line.trim())
-    .find(line => line.length > 0);
-  if (!firstLine) return false;
   // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
-  const normalized = firstLine
-    .replaceAll(/[*_`#>\s]+/g, ' ')
-    .trim()
-    .toLowerCase();
+  const normalized = normalizedVerdictLine(body);
+  if (!normalized) return false;
   // Match the verdict exactly so negated phrasings ("Verdict: do not request
   // changes") cannot wake the author.
   return /^verdict: ?(request changes|changes requested)$/.test(normalized);
@@ -396,7 +432,7 @@ export const defaultGithubRules = Object.freeze({
   pullRequestUpdated: reReviewUpdatedPullRequest,
   pullRequestCommentCreated: addressPullRequestComment,
   pullRequestReviewRequested: reReviewRequestedPullRequest,
-  pullRequestReviewSubmitted: addressReviewFeedback,
+  pullRequestReviewSubmitted: pullRequestReviewSubmitted,
   pullRequestMerged: pullRequestMerged,
   pullRequestClosed: pullRequestClosed,
 } satisfies GithubEventRules);

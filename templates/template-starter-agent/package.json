@@ -1,0 +1,35 @@
+{
+  "name": "template-starter-agent",
+  "version": "1.0.0",
+  "description": "A general-purpose Mastra agent harness whose tools and chat channels come from your Mastra platform integration connections via @mastra/connect, with a platform-backed workspace, Studio editing (agents and workflows), and Postgres storage.",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/connect": "latest",
+    "@mastra/core": "latest",
+    "@mastra/editor": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/platform-workspace": "latest",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}

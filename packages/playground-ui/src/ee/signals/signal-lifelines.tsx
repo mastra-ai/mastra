@@ -2,14 +2,14 @@ import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { LifelineRow } from './lifeline-row';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { signalDescription, signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { buildThemeLifelines } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 export function SignalLifelines({
   signalName,
@@ -27,12 +27,12 @@ export function SignalLifelines({
   const { signalCatalog } = useTraceIntelligence();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const rows = buildThemeLifelines(flows, signalName);
-  const hue = getSignalHue(signalName);
+  const color = getSignalColor(signalName);
   const label = signalLabel(signalCatalog, signalName);
 
   return (
     <section aria-label={`${label} lifelines`} className="min-w-0">
-      <h3 className="font-mono text-column tracking-widest uppercase" style={{ color: nodeColor(hue) }}>
+      <h3 className="flex" style={{ color }}>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -49,13 +49,17 @@ export function SignalLifelines({
               aria-hidden="true"
               className={`size-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
             />
-            {label}
+            <Txt as="span" variant="eyebrow">
+              {label}
+            </Txt>
           </TooltipTrigger>
           <TooltipContent>{signalDescription(signalCatalog, signalName)}</TooltipContent>
         </Tooltip>
       </h3>
       {isCollapsed ? undefined : rows.length === 0 ? (
-        <p className="mt-2 text-caption text-muted-foreground">No themes in these landmarks.</p>
+        <Txt variant="caption" tone="muted" className="mt-2">
+          No themes in these landmarks.
+        </Txt>
       ) : (
         <ul className="mt-2 space-y-0.5">
           {rows.map(row => (
@@ -65,7 +69,6 @@ export function SignalLifelines({
               signalName={signalName}
               snapshots={snapshots}
               positions={positions}
-              hue={hue}
               onThemeSelect={onThemeSelect}
             />
           ))}

@@ -7,8 +7,10 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { AgentThreadSubscription } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
+import { isLeaseProvider } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -21,7 +23,7 @@ import {
   getDisplayTransform,
   getUsageNumber,
 } from './stream-content';
-import type { TokenUsage } from './types';
+import type { ActiveSubagentState, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -51,6 +53,7 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'raw'>
   | StreamPayloadChunk<'step-start'>
   | StreamPayloadChunk<'tool-output'>
+  | StreamPayloadChunk<'tool-call-resumed'>
   | StreamPayloadChunk<'step-output'>
   | StreamPayloadChunk<'watch'>
   | StreamPayloadChunk<'tripwire'>
@@ -439,6 +442,13 @@ export class SessionRunEngine {
       state.toolPartById.set(toolCallId, partIndex);
     }
     this.emitMessagePart(state, partIndex);
+    // The built-in subagent tool emits its own `subagent_end`; only close `agent-<key>` delegations here.
+    if (toolName.startsWith('agent-')) {
+      const subagent = this.#session.displayState.get().activeSubagents.get(toolCallId);
+      if (subagent) {
+        this.endDelegatedSubagent(toolCallId, subagent, result, isError);
+      }
+    }
     this.#session.emit({
       type: 'tool_end',
       threadId: state.threadId,
@@ -446,6 +456,38 @@ export class SessionRunEngine {
       result,
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
+    });
+  }
+
+  /** Open an `agent-<key>` delegation in `activeSubagents`, taking its task from the tool call's prompt. */
+  private startDelegatedSubagent(state: StreamState, toolCallId: string, toolName: string): void {
+    const toolIndex = state.toolPartById.get(toolCallId);
+    const toolPart = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const args = toolPart?.type === 'tool-invocation' ? toolPart.toolInvocation.args : undefined;
+    this.#session.emit({
+      type: 'subagent_start',
+      toolCallId,
+      agentType: toolName.slice('agent-'.length),
+      task: getString(getRecord(args)?.prompt) ?? '',
+      modelId: '',
+    });
+  }
+
+  /** Close an `agent-<key>` delegation once its tool call settles. */
+  private endDelegatedSubagent(
+    toolCallId: string,
+    subagent: ActiveSubagentState,
+    result: unknown,
+    isError: boolean,
+  ): void {
+    this.#session.emit({
+      type: 'subagent_end',
+      toolCallId,
+      agentType: subagent.agentType,
+      result:
+        getString(getRecord(result)?.text) ?? (typeof result === 'string' ? result : (JSON.stringify(result) ?? '')),
+      isError,
+      durationMs: subagent.startedAt !== undefined ? Date.now() - subagent.startedAt : 0,
     });
   }
 
@@ -734,6 +776,54 @@ export class SessionRunEngine {
         break;
       }
 
+      case 'tool-output': {
+        // Chunks streamed by a subagent delegated through `Agent.agents` (the `agent-<key>` tools).
+        // Mirror the built-in subagent tool so the delegation shows up in `activeSubagents`.
+        const toolOutput = getPayload(chunk);
+        const toolCallId = getString(toolOutput.toolCallId) ?? '';
+        const toolName = getString(toolOutput.toolName) ?? '';
+        const output = getRecord(toolOutput.output);
+        if (output?.from !== 'AGENT' || !toolName.startsWith('agent-')) break;
+
+        const agentType = toolName.slice('agent-'.length);
+        if (!this.#session.displayState.get().activeSubagents.has(toolCallId)) {
+          this.startDelegatedSubagent(state, toolCallId, toolName);
+        }
+
+        const nested = getRecord(output.payload) ?? {};
+        switch (output.type) {
+          case 'text-delta':
+            this.#session.emit({
+              type: 'subagent_text_delta',
+              toolCallId,
+              agentType,
+              textDelta: getString(nested.text) ?? '',
+            });
+            break;
+          case 'tool-call':
+            this.#session.emit({
+              type: 'subagent_tool_start',
+              toolCallId,
+              agentType,
+              subToolName: getString(nested.toolName) ?? '',
+              subToolArgs: nested.args,
+            });
+            break;
+          case 'tool-result':
+          case 'tool-error':
+            this.#session.emit({
+              type: 'subagent_tool_end',
+              toolCallId,
+              agentType,
+              subToolName: getString(nested.toolName) ?? '',
+              subToolResult: output.type === 'tool-error' ? nested.error : nested.result,
+              isError: output.type === 'tool-error' || getBoolean(nested.isError, false),
+            });
+            break;
+        }
+        break;
+      }
+
       case 'tool-output-denied': {
         const payload = getPayload(chunk);
         const toolCallId = getString(payload.toolCallId) ?? '';
@@ -806,6 +896,53 @@ export class SessionRunEngine {
           agent,
           abortSignal: this.#session.run.getAbortSignal(),
         };
+
+        // A retained approval prompt can be replayed after this run has already
+        // advanced to a generic tool suspension. Ignore that obsolete prompt and
+        // let the matching `tool-call-suspended` chunk restore the current gate.
+        const currentRunId = binding.runId;
+        const currentThreadId = binding.threadId;
+        const pubsub = typeof agent.getPubSub === 'function' ? agent.getPubSub() : undefined;
+        const getLeaseProvider = (pubsub as { getLeaseProvider?: () => unknown } | undefined)?.getLeaseProvider;
+        const hasPersistentLease = getLeaseProvider
+          ? getLeaseProvider.call(pubsub) !== undefined
+          : isLeaseProvider(pubsub);
+        const currentSuspension =
+          currentRunId && currentThreadId && hasPersistentLease
+            ? agentThreadStreamRuntime.getResumableThreadRunSuspension(
+                {
+                  threadId: currentThreadId,
+                  resourceId: binding.resourceId,
+                  runId: currentRunId,
+                  toolCallId,
+                },
+                pubsub,
+              )
+            : undefined;
+        let currentSuspensionRequiresApproval = currentSuspension ? currentSuspension.kind === 'approval' : undefined;
+        if (
+          currentRunId &&
+          hasPersistentLease &&
+          currentSuspensionRequiresApproval === undefined &&
+          typeof agent.listSuspendedRuns === 'function'
+        ) {
+          try {
+            const result = await agent.listSuspendedRuns({
+              threadId: currentThreadId,
+              resourceId: binding.resourceId,
+            });
+            currentSuspensionRequiresApproval = result?.runs
+              .find(run => run.runId === currentRunId)
+              ?.toolCalls.find(toolCall => toolCall.toolCallId === toolCallId)?.requiresApproval;
+          } catch (error) {
+            if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+              throw error;
+            }
+          }
+        }
+        if (currentSuspensionRequiresApproval === false) {
+          break;
+        }
 
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });
@@ -951,10 +1088,12 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
-        this.retractFailedRunSuspensions({
-          runId: chunk.runId ?? this.#session.run.getRunId(),
-          reason: streamError.message,
-        });
+        if (!(streamError instanceof AgentThreadLeaseLostError)) {
+          this.retractFailedRunSuspensions({
+            runId: chunk.runId ?? this.#session.run.getRunId(),
+            reason: streamError.message,
+          });
+        }
         break;
       }
 
@@ -1183,11 +1322,15 @@ export class SessionRunEngine {
             });
           }
 
+          // A retrying marker reports one failed attempt of a cycle OM is still working on;
+          // only the cycle's final failure may stop the run.
+          const retrying = Object.hasOwn(payload, 'retrying') && payload.retrying === true;
           if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+            !retrying &&
+            (!Object.hasOwn(payload, 'failurePolicy') ||
+              !Object.hasOwn(payload, 'failureKind') ||
+              payload.failurePolicy !== 'continue' ||
+              payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model'))
           ) {
             this.abortForOmFailure({ operationType, stage: 'run', error });
             return { message: state.currentMessage };
@@ -1557,7 +1700,9 @@ export class SessionRunEngine {
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
-      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      if (!(streamError instanceof AgentThreadLeaseLostError)) {
+        this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      }
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();

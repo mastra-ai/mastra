@@ -1,12 +1,13 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { useDataset } from '@mastra/playground-ui/domains/datasets';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useDataset } from '@mastra/react/hooks/datasets';
 import type { ReactNode } from 'react';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
@@ -56,8 +57,14 @@ function Stage({
         {!isLast && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
-        <div className="flex min-h-5 items-center text-caption text-foreground">{subject}</div>
-        <p className="text-meta text-placeholder">{description}</p>
+        <div className="flex min-h-5 items-center">
+          <Txt tone="ink" as="span" variant="caption" className="block">
+            {subject}
+          </Txt>
+        </div>
+        <Txt variant="meta" tone="faint">
+          {description}
+        </Txt>
       </div>
     </li>
   );
@@ -74,7 +81,10 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const { Link: LinkComponent, paths } = useLinkComponent();
   const registries = useTargetRegistries();
   const { scorers } = registries;
-  const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
+  const { data: dataset, isLoading: isDatasetLoading } = useDataset({
+    datasetId: experiment.datasetId ?? '',
+    queryOptions: { enabled: Boolean(experiment.datasetId) },
+  });
   const scorerIds = useExperimentScorerIds(experiment);
 
   const targetType = experiment.targetType;

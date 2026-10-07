@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.7.0-alpha.8",
+  "version": "1.8.0-alpha.8",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -36,6 +36,27 @@
         "default": "./dist/ui/index.cjs"
       }
     },
+    "./chat": {
+      "import": {
+        "types": "./dist/chat/index.d.ts",
+        "default": "./dist/chat/index.js"
+      },
+      "require": {
+        "types": "./dist/chat/index.d.ts",
+        "default": "./dist/chat/index.cjs"
+      }
+    },
+    "./hooks/shared": null,
+    "./hooks/*": {
+      "import": {
+        "types": "./dist/hooks/*/index.d.ts",
+        "default": "./dist/hooks/*/index.js"
+      },
+      "require": {
+        "types": "./dist/hooks/*/index.d.ts",
+        "default": "./dist/hooks/*/index.cjs"
+      }
+    },
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
@@ -64,6 +85,7 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.67.0-0 <2.0.0-0",
+    "@tanstack/react-query": "^5.90.21",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "zod": "^3.25.0 || ^4.0.0"
@@ -75,6 +97,7 @@
     "@storybook/react-vite": "^9.1.20",
     "@tailwindcss/cli": "^4.3.3",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -83,7 +106,8 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
     "eslint-plugin-storybook": "^10.6.0",
-    "jsdom": "^26.1.0",
+    "jsdom": "^30.1.1",
+    "msw": "^2.12.11",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "storybook": "^9.1.20",
@@ -101,5 +125,10 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    }
   }
 }
