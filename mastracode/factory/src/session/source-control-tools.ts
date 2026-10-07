@@ -369,8 +369,8 @@ export async function createSourceControlTools({
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
-          // Opening a change request pushes nothing: the branch only seeds a
-          // row that no push wrote yet, so `pushedAt` stays with the push.
+          // Opening a change request pushes nothing: an existing row keeps its
+          // `pushedAt`; the branch only seeds a row no push wrote yet.
           fallbackBranch: target.session.branch,
           changeRequestId: changeRequestId(created.id),
           changeRequestUrl: created.url,

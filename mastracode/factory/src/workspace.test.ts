@@ -3389,7 +3389,7 @@ describe('factory environment sandbox context', () => {
       expect(warn).toHaveBeenCalledExactlyOnceWith(
         '[Mastra Factory] GH_TOKEN covers the session repository only',
         expect.objectContaining({
-          reason: 'provider failed to mint one token for this repository set: installation cannot grant octocat/docs',
+          reason: 'provider failed to mint one token for this repository set (Error)',
         }),
       );
       expect(peekSessionEnvironment('session-a')?.note).toBe(

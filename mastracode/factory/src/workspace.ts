@@ -881,8 +881,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             reason = 'provider cannot mint one token for this repository set';
           } catch (error) {
             // A sibling repository the provider cannot grant must not stop the
-            // session: its own token still boots it.
-            reason = `provider failed to mint one token for this repository set: ${error instanceof Error ? error.message : String(error)}`;
+            // session: its own token still boots it. The provider logs the
+            // failure itself; only the error name travels here.
+            reason = `provider failed to mint one token for this repository set (${error instanceof Error ? error.name : 'error'})`;
           }
         }
         if (wide?.authorization?.token) {
