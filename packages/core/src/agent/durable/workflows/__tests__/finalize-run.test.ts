@@ -4,6 +4,12 @@ import { globalRunRegistry } from '../../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../../types';
 
 const resolveRuntimeDependencies = vi.fn();
+const authorizeDurableMemory = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../../memory-fga', () => ({
+  authorizeDurableMemory: (...args: any[]) => authorizeDurableMemory(...args),
+  getDurableMemoryAuthorizationChecks: vi.fn(() => new Map()),
+}));
 
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveRuntimeDependencies: (...args: any[]) => resolveRuntimeDependencies(...args),
@@ -30,6 +36,7 @@ function makeMessageListState() {
 describe('runDurableFinishSideEffects', () => {
   beforeEach(() => {
     resolveRuntimeDependencies.mockReset();
+    authorizeDurableMemory.mockReset().mockResolvedValue(undefined);
     globalRunRegistry.delete('run-1');
   });
 
@@ -61,6 +68,59 @@ describe('runDurableFinishSideEffects', () => {
     });
 
     expect(flushMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('denies before durable finish persistence writes', async () => {
+    const denial = new Error('memory write denied');
+    authorizeDurableMemory.mockRejectedValueOnce(denial);
+    const flushMessages = vi.fn();
+    const createThread = vi.fn();
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      saveQueueManager: { flushMessages },
+      memory: { createThread },
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: false }),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(denial);
+
+    expect(authorizeDurableMemory).toHaveBeenCalledWith(
+      expect.any(Map),
+      expect.objectContaining({ permission: 'memory:write' }),
+    );
+    expect(createThread).not.toHaveBeenCalled();
+    expect(flushMessages).not.toHaveBeenCalled();
+  });
+
+  it('denies before durable title generation', async () => {
+    const denial = new Error('memory read denied');
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      if (input.permission === 'memory:read') throw denial;
+    });
+    const generateThreadTitle = vi.fn();
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(denial);
+
+    expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
   it('skips title generation for an observational-memory run, matching the persistence guard', async () => {
