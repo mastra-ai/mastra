@@ -66,6 +66,8 @@ type AgentStreamOptionsBase = {
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  /** When true (default), the run's trace id is sent as `traceId` in the `start` chunk's message metadata. */
+  sendTraceId?: boolean;
   /** When true, sub-agent runs are emitted as data-tool-agent parts with ancestry metadata. */
   includeSubAgentMetadata?: boolean;
   /** Experimental transforms applied to Mastra chunks before AI SDK UI conversion. */
@@ -166,6 +168,7 @@ export function toAISdkV5Stream(
       sendFinish: options.sendFinish,
       sendReasoning: options.sendReasoning,
       sendSources: options.sendSources,
+      sendTraceId: options.sendTraceId,
       messageMetadata: options.messageMetadata,
       onError: options.onError,
       includeSubAgentMetadata: options.includeSubAgentMetadata,
@@ -295,6 +298,7 @@ export function toAISdkStream(
         sendFinish: options.sendFinish,
         sendReasoning: options.sendReasoning,
         sendSources: options.sendSources,
+        sendTraceId: options.sendTraceId,
         messageMetadata: options.messageMetadata as UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'],
         onError: options.onError as UIMessageStreamOptionsV6<UIMessageV6>['onError'],
         includeSubAgentMetadata: options.includeSubAgentMetadata,
@@ -335,6 +339,7 @@ export function toAISdkStream(
       sendFinish: options.sendFinish,
       sendReasoning: options.sendReasoning,
       sendSources: options.sendSources,
+      sendTraceId: options.sendTraceId,
       messageMetadata: options.messageMetadata,
       onError: options.onError,
       includeSubAgentMetadata: options.includeSubAgentMetadata,

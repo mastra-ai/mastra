@@ -393,6 +393,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     sendFinish = true,
     sendReasoning,
     sendSources,
+    sendTraceId = true,
     messageMetadata,
     onError,
     includeSubAgentMetadata = false,
@@ -402,6 +403,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
+    sendTraceId?: boolean;
     messageMetadata?: (args: { part: any }) => unknown;
     onError?: (error: unknown) => string;
     includeSubAgentMetadata?: boolean;
@@ -439,11 +441,15 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
 
     const enqueueTransformedPart = (p: any) => {
+      let messageMetadataValue = p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined;
+      if (sendTraceId && p?.type === 'start' && chunk.traceId) {
+        messageMetadataValue = withTraceIdMetadata(messageMetadataValue, chunk.traceId);
+      }
       const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
         part: p as any,
         sendReasoning,
         sendSources,
-        messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
+        messageMetadataValue,
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
@@ -573,6 +579,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   sendFinish = true,
   sendReasoning,
   sendSources,
+  sendTraceId = true,
   messageMetadata,
   onError,
   includeSubAgentMetadata = false,
@@ -582,6 +589,8 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  /** When true (default), the run's trace id is sent as `traceId` in the `start` chunk's message metadata. */
+  sendTraceId?: boolean;
   messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
   onError?: UIMessageStreamOptions<UIMessage>['onError'];
   includeSubAgentMetadata?: boolean;
@@ -592,6 +601,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
     sendFinish,
     sendReasoning,
     sendSources,
+    sendTraceId,
     messageMetadata,
     onError,
     includeSubAgentMetadata,
@@ -604,6 +614,7 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   sendFinish = true,
   sendReasoning,
   sendSources,
+  sendTraceId = true,
   messageMetadata,
   onError,
   includeSubAgentMetadata = false,
@@ -613,6 +624,8 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  /** When true (default), the run's trace id is sent as `traceId` in the `start` chunk's message metadata. */
+  sendTraceId?: boolean;
   messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
   includeSubAgentMetadata?: boolean;
@@ -623,10 +636,22 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
     sendFinish,
     sendReasoning,
     sendSources,
+    sendTraceId,
     messageMetadata,
     onError,
     includeSubAgentMetadata,
   });
+}
+
+/**
+ * Adds the run's trace id to `start` message metadata so AI SDK clients can link a live message to its trace
+ * (e.g. for feedback). Object metadata from the user's `messageMetadata` callback is merged and wins on conflicts;
+ * non-object metadata is left untouched.
+ */
+function withTraceIdMetadata(metadata: unknown, traceId: string): unknown {
+  if (metadata == null) return { traceId };
+  if (typeof metadata === 'object' && !Array.isArray(metadata)) return { traceId, ...metadata };
+  return metadata;
 }
 
 function ensureAgentRunState(bufferedSteps: Map<string, any>, runId: string) {

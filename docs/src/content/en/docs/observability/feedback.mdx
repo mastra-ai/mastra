@@ -59,6 +59,19 @@ const traceId = message?.content.metadata?.traceId
 
 The value is the same trace the run reports as `traceId` on its result, so feedback collected at generation time and feedback collected later against a stored message anchor to the same trace. Messages produced while tracing is disabled have no `traceId`.
 
+### Read the trace ID in `useChat`
+
+[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) send the run's `traceId` as message metadata when the response starts streaming, so the client has it on the live message without a server lookup:
+
+```tsx title="app/chat.tsx"
+const { messages } = useChat<UIMessage<{ traceId?: string }>>()
+
+const lastMessage = messages.at(-1)
+const traceId = lastMessage?.role === 'assistant' ? lastMessage.metadata?.traceId : undefined
+```
+
+Send the `traceId` with the user's vote to your own route, then call `addFeedback()` there. Check that the caller owns a message with that `traceId` before adding feedback, because the value comes from the client. Set `sendTraceId: false` to stop sending trace IDs to the browser.
+
 ## Create feedback
 
 Every `createFeedback()` requires `feedbackType` and `value`. Add `traceId` or `spanId` when the feedback should be anchored to a trace or a specific span. Use `feedbackSource` as optional string metadata, such as `user`, `qa`, `studio`, or `system`.

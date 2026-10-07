@@ -1,6 +1,6 @@
 import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it, vi } from 'vitest';
-import { toAISdkV5Stream } from '../convert-streams';
+import { toAISdkStream, toAISdkV5Stream } from '../convert-streams';
 
 describe('messageMetadata', () => {
   it('should call messageMetadata function with the correct part for start chunk', async () => {
@@ -313,5 +313,66 @@ describe('messageMetadata', () => {
     const callArgs = messageMetadataFn.mock.calls[0][0];
     expect(callArgs).toHaveProperty('part');
     expect(callArgs.part).toHaveProperty('type');
+  });
+
+  describe('traceId', () => {
+    const TRACE_ID = '1bab40c69a008d5ef27cd10666986d72';
+
+    const createTracedStream = () =>
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            traceId: TRACE_ID,
+            payload: { id: 'test-id', messageId: 'msg-1' },
+          });
+          controller.enqueue({
+            type: 'finish',
+            runId: 'test-run-id',
+            traceId: TRACE_ID,
+            payload: { stepResult: { reason: 'stop' }, output: { usage: {} } },
+          });
+          controller.close();
+        },
+      });
+
+    const collect = async (stream: ReadableStream<any>) => {
+      const chunks: any[] = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      return chunks;
+    };
+
+    it.each(['v5', 'v6'] as const)('sends the run traceId as start message metadata (%s)', async version => {
+      const chunks = await collect(
+        toAISdkStream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent', version } as any),
+      );
+
+      expect(chunks.find(c => c.type === 'start')).toEqual({
+        type: 'start',
+        messageId: 'msg-1',
+        messageMetadata: { traceId: TRACE_ID },
+      });
+      expect(chunks.find(c => c.type === 'finish').messageMetadata).toBeUndefined();
+    });
+
+    it('merges traceId with user messageMetadata, letting user fields win', async () => {
+      const chunks = await collect(
+        toAISdkV5Stream(createTracedStream() as unknown as MastraModelOutput, {
+          from: 'agent',
+          messageMetadata: ({ part }) => (part.type === 'start' ? { userId: 'u1', traceId: 'override' } : undefined),
+        }),
+      );
+
+      expect(chunks.find(c => c.type === 'start').messageMetadata).toEqual({ userId: 'u1', traceId: 'override' });
+    });
+
+    it('omits traceId when sendTraceId is false', async () => {
+      const chunks = await collect(
+        toAISdkV5Stream(createTracedStream() as unknown as MastraModelOutput, { from: 'agent', sendTraceId: false }),
+      );
+
+      expect(chunks.find(c => c.type === 'start')).toEqual({ type: 'start', messageId: 'msg-1' });
+    });
   });
 });

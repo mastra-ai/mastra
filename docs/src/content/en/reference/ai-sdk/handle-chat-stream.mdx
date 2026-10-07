@@ -171,6 +171,14 @@ return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
     defaultValue: 'false',
   },
   {
+    name: 'sendTraceId',
+    type: 'boolean',
+    description:
+      "Whether to send the run's trace ID as `traceId` in the `start` chunk's message metadata. The value is merged with object metadata returned by `messageMetadata`, which wins on conflicts. Omitted when tracing is disabled.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'onError',
     type: '(error: unknown) => string',
     description:

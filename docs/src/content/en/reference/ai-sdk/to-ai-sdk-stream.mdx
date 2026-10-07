@@ -130,6 +130,14 @@ The second parameter is an options object:
     defaultValue: 'false',
   },
   {
+    name: 'sendTraceId',
+    type: 'boolean',
+    description:
+      "(Agent only) Whether to send the run's trace ID as `traceId` in the `start` chunk's message metadata. The value is merged with object metadata returned by `messageMetadata`, which wins on conflicts. Omitted when tracing is disabled.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'includeTextStreamParts',
     type: 'boolean',
     description: '(Workflow only) Whether to include text stream parts in the output.',
