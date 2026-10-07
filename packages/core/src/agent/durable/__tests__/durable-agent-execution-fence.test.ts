@@ -1227,6 +1227,69 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await stream.stop();
       result.cleanup();
     });
+
+    it('EventedAgent: the finish published by an execution that lost its run does not end the execution that recovered it', async () => {
+      const storage = createStorage(backend);
+      const memory = new MockMemory({ storage });
+      const originalCall = gate();
+      const recoveryCall = gate();
+      const { model, prompts } = recordingModel([originalCall.opened, recoveryCall.opened]);
+      const eventedAgent = createEventedAgent({
+        agent: new Agent({
+          id: 'fence-agent',
+          name: 'Fence Agent',
+          instructions: 'You are a helpful agent.',
+          model: model as LanguageModelV2,
+          memory,
+        }),
+      });
+      new Mastra({
+        agents: { 'fence-agent': eventedAgent as any },
+        logger: false,
+        storage,
+        pubsub,
+        recovery: { durableAgents: 'auto' },
+      });
+      const finishes: string[] = [];
+      const publish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === 'workflows-finish' && event.runId) finishes.push(`${event.runId}:${event.type}`);
+        return publish(topic, event, options);
+      });
+
+      const started = await eventedAgent.stream('What is the answer?', {
+        memory: { thread: THREAD, resource: RESOURCE },
+      });
+      const { runId } = started;
+      const original = collect(started.fullStream);
+      await vi.waitFor(() => expect(prompts).toHaveLength(1));
+      await waitForCheckpoint(storage, runId);
+
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      await foreignOwnership(backend, storage, eventedAgent.pubsub).vanish(fence);
+      await expect(fence.verify()).rejects.toBeInstanceOf(DurableExecutionFenceError);
+
+      const recovered = await eventedAgent.recover(runId, { force: true });
+      const recovery = ExecutionFence.getLocalActive(runId)!;
+      expect(recovery).not.toBe(fence);
+      await vi.waitFor(() => expect(prompts).toHaveLength(2));
+
+      originalCall.open();
+      await fence.whenSettled;
+      await vi.waitFor(() => expect(finishes).toContain(`${runId}:workflow.fail`));
+      recoveryCall.open();
+
+      const chunks = await drain(recovered.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+      expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+      await vi.waitFor(async () => expect(await assistantText(memory)).toContain('answer 2'));
+      // recover() is done only once its workflow settles; the next test recovers the same runId.
+      await recovery.whenSettled;
+
+      await original.stop();
+      recovered.cleanup();
+      started.cleanup();
+    });
   },
 );
 
@@ -1322,7 +1385,8 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     expect(claims.map(claim => claim.generation)).toEqual([1, 2]);
     // The fence reaches the evented engine's writes through the async context
     // of the publish, so the events that drive the run must not leave this
-    // process. `workflows-finish` may: it drives no writes.
+    // process. `workflows-finish` may: it drives no writes, and a waiter
+    // ignores another execution's finish.
     expect(pubsub.workflowEvents.filter(event => event.topic === 'workflows' && !event.localOnly)).toEqual([]);
 
     resumed.cleanup();

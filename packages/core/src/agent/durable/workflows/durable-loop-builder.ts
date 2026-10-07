@@ -18,7 +18,7 @@ import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
-import { isExecutionFenceError, withExecutionFence } from '../execution-fence';
+import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
@@ -412,6 +412,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // A superseded execution must leave the stored run to its new owner
           // (the evented engine otherwise merges, marks failed, or deletes it).
           isOwnershipLostError: isExecutionFenceError,
+          isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
@@ -812,6 +813,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // be de-duplicated.
           allowUnclaimedResumes: true,
           isOwnershipLostError: isExecutionFenceError,
+          isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).

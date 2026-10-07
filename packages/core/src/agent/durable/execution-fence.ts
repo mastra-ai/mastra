@@ -191,6 +191,25 @@ export function getExecutionClaim(
   };
 }
 
+/**
+ * Whether a serialized request context (as carried on evented run events)
+ * holds a claim on a run that `requestContext` also claims, under a different
+ * execution. Missing claims on either side count as the same execution.
+ */
+export function isForeignExecutionContext(eventRequestContext: unknown, requestContext: RequestContext): boolean {
+  const own = requestContext.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY);
+  const theirs =
+    eventRequestContext && typeof eventRequestContext === 'object'
+      ? (eventRequestContext as Record<string, unknown>)[MASTRA_DURABLE_EXECUTIONS_KEY]
+      : undefined;
+  if (!own || typeof own !== 'object' || !theirs || typeof theirs !== 'object') return false;
+  return Object.entries(own).some(([runId, claim]) => {
+    const other = (theirs as Record<string, { executionId?: unknown } | undefined>)[runId]?.executionId;
+    const mine = (claim as { executionId?: unknown } | undefined)?.executionId;
+    return typeof other === 'string' && typeof mine === 'string' && other !== mine;
+  });
+}
+
 export function setExecutionClaim(requestContext: RequestContext, runId: string, claim: DurableExecutionClaim): void {
   const current = requestContext.getRaw(MASTRA_DURABLE_EXECUTIONS_KEY);
   requestContext.setRaw(MASTRA_DURABLE_EXECUTIONS_KEY, {
