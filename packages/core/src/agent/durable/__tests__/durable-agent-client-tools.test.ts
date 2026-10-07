@@ -143,9 +143,8 @@ function createClientToolModel() {
   const call = toolCallTape('askClient', { question: 'colour?' });
   return new MockLanguageModelV2({
     doStream: async () => ({
-      stream: convertArrayToReadableStream(call),
+      stream: convertArrayToReadableStream(call as any[]),
       rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
     }),
     doGenerate: async () => ({
       content: [
@@ -166,7 +165,8 @@ function createClientToolModel() {
 /** The generate variant: the helper only streams, so drive it per engine. */
 async function driveGenerate(engine: ParityEngine) {
   const model = createClientToolModel();
-  const agent = new Agent({
+  // Typed wide so both wrappers stay assignable, as the parity helper does.
+  const agent: Agent<any, any, any> = new Agent({
     id: 't33-agent',
     name: 'T33 Agent',
     instructions: 'Follow the script.',
@@ -195,9 +195,10 @@ async function driveGenerate(engine: ParityEngine) {
     engine,
     finishReason: output.finishReason ?? null,
     // Mirrors the harness: the name sits on the call or on its chunk payload.
-    toolCallNames: (output.toolCalls ?? []).map(
-      call => call.toolName ?? (call as { payload?: { toolName?: string } }).payload?.toolName,
-    ),
+    toolCallNames: (output.toolCalls ?? []).map(call => {
+      const named = call as { toolName?: string; payload?: { toolName?: string } };
+      return named.toolName ?? named.payload?.toolName;
+    }),
     text: output.text ?? null,
   };
 }
