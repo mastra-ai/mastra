@@ -84,7 +84,7 @@ async function updateSleepTimers({
     throw new Error(`Workflow snapshot not found for runId ${runId}`);
   }
 
-  await workflowsStore.updateWorkflowState({
+  const updated = await workflowsStore.updateWorkflowState({
     workflowName: workflowId,
     runId,
     opts: {
@@ -94,6 +94,8 @@ async function updateSleepTimers({
       expectedStatus: snapshot.status,
     },
   });
+
+  return updated !== undefined;
 }
 
 async function persistSleepTimer(args: {
@@ -103,7 +105,7 @@ async function persistSleepTimer(args: {
   timer: WorkflowSleepTimer;
   requestContext: Record<string, any>;
 }) {
-  await updateSleepTimers({
+  return updateSleepTimers({
     ...args,
     update: sleepTimers => ({ ...sleepTimers, [args.timer.id]: args.timer }),
   });
@@ -131,18 +133,23 @@ export function schedulePersistedSleepTimer({
   workflowId,
   runId,
   timer,
+  onError,
 }: {
   pubsub: PubSub;
   workflowsStore: WorkflowsStorage;
   workflowId: string;
   runId: string;
   timer: WorkflowSleepTimer;
+  onError?: (error: unknown) => void;
 }) {
   const callback = async () => {
     const { continuation } = timer;
     const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
     if (!snapshot || typeof snapshot === 'string') {
       throw new Error(`Workflow snapshot not found for runId ${runId}`);
+    }
+    if (snapshot.status !== 'running' || !snapshot.sleepTimers?.[timer.id]) {
+      return;
     }
     const output = continuation.prevResult.status === 'success' ? continuation.prevResult.output : undefined;
 
@@ -193,7 +200,13 @@ export function schedulePersistedSleepTimer({
     await removeSleepTimer({ workflowsStore, workflowId, runId, timerId: timer.id });
   };
 
-  setTimeout(() => void callback().catch(() => {}), Math.max(0, timer.dueAt - Date.now()));
+  setTimeout(
+    () =>
+      void callback().catch(error => {
+        onError?.(error);
+      }),
+    Math.max(0, timer.dueAt - Date.now()),
+  );
 }
 
 async function processSleep(
@@ -203,11 +216,13 @@ async function processSleep(
     stepExecutor,
     step,
     workflowsStore,
+    onError,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>;
     workflowsStore: WorkflowsStorage;
+    onError?: (error: unknown) => void;
   },
 ) {
   const {
@@ -281,14 +296,17 @@ async function processSleep(
     },
   };
 
-  await persistSleepTimer({
+  const persisted = await persistSleepTimer({
     workflowsStore,
     workflowId,
     runId,
     timer,
     requestContext: sanitizeRequestContext(requestContext),
   });
-  schedulePersistedSleepTimer({ pubsub, workflowsStore, workflowId, runId, timer });
+  if (!persisted) {
+    return;
+  }
+  schedulePersistedSleepTimer({ pubsub, workflowsStore, workflowId, runId, timer, onError });
 }
 
 export async function processWorkflowSleep(
@@ -298,6 +316,7 @@ export async function processWorkflowSleep(
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
     workflowsStore: WorkflowsStorage;
+    onError?: (error: unknown) => void;
   },
 ) {
   return processSleep(args, dependencies);
@@ -310,6 +329,7 @@ export async function processWorkflowSleepUntil(
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
     workflowsStore: WorkflowsStorage;
+    onError?: (error: unknown) => void;
   },
 ) {
   return processSleep(args, dependencies);

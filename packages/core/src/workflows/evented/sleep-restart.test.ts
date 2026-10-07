@@ -56,10 +56,11 @@ async function startRunAndReplaceRuntime({
   workflow: ReturnType<ReturnType<typeof createWorkflow>['commit']>;
   runId: string;
 }) {
+  const firstPubsub = new EventEmitterPubSub();
   const firstRuntime = new Mastra({
     logger: false,
     storage,
-    pubsub: new EventEmitterPubSub(),
+    pubsub: firstPubsub,
     workflows: { [workflow.id]: workflow },
   });
   await firstRuntime.startWorkers();
@@ -67,6 +68,13 @@ async function startRunAndReplaceRuntime({
   const run = await workflow.createRun({ runId });
   void run.start({ inputData: { value: 'persist me' } });
   const workflowsStore = await waitForPersistedTimer(storage, workflow.id, run.runId);
+  const publish = firstPubsub.publish.bind(firstPubsub);
+  vi.spyOn(firstPubsub, 'publish').mockImplementation(async (topic, event) => {
+    if (topic === 'workflows') {
+      throw new Error('original runtime unavailable');
+    }
+    return publish(topic, event);
+  });
   await firstRuntime.stopWorkers();
 
   const replacementRuntime = new Mastra({
@@ -202,6 +210,7 @@ describe('evented workflow durable sleep recovery', () => {
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
     const timer = Object.values(snapshot?.sleepTimers ?? {})[0]!;
     const unhandled = vi.fn();
+    const onError = vi.fn();
     process.on('unhandledRejection', unhandled);
 
     schedulePersistedSleepTimer({
@@ -210,11 +219,13 @@ describe('evented workflow durable sleep recovery', () => {
       workflowId: workflow.id,
       runId: run.runId,
       timer: { ...timer, dueAt: Date.now() },
+      onError,
     });
     await delay(50);
 
     const retained = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
     expect(retained?.sleepTimers?.[timer.id]).toBeDefined();
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'publication failed' }));
     expect(unhandled).not.toHaveBeenCalled();
     process.off('unhandledRejection', unhandled);
   });
@@ -238,7 +249,12 @@ describe('evented workflow durable sleep recovery', () => {
         }),
       )
       .commit();
-    const firstRuntime = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { workflow } });
+    const firstRuntime = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { workflow },
+    });
     await firstRuntime.startWorkers();
     const run = await workflow.createRun({ runId: 'disabled-sleep-restart-run' });
     void run.start({ inputData: { value: 'persist me' } });
@@ -251,7 +267,12 @@ describe('evented workflow durable sleep recovery', () => {
       runId: run.runId,
       opts: { status: 'running', sleepTimers: { [timerKey]: { ...timer, dueAt: Date.now() - 100 } } },
     });
-    const replacementRuntime = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { workflow } });
+    const replacementRuntime = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { workflow },
+    });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
     await delay(100);
@@ -260,6 +281,75 @@ describe('evented workflow durable sleep recovery', () => {
     const retained = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
     expect(retained?.sleepTimers?.[timerKey]).toBeDefined();
     await replacementRuntime.stopWorkers();
+  });
+
+  it('does not schedule a local timer when persistence loses the running-status guard', async () => {
+    const storage = new MockStore();
+    const afterSleep = vi.fn(async ({ inputData }: { inputData: { value: string } }) => inputData);
+    const workflow = createSleepingWorkflow({ id: 'failed-persistence-sleep-workflow', duration: 0, afterSleep });
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { workflow },
+    });
+    await mastra.startWorkers();
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const updateWorkflowState = workflowsStore.updateWorkflowState.bind(workflowsStore);
+    vi.spyOn(workflowsStore, 'updateWorkflowState').mockImplementation(async args => {
+      if (args.opts.sleepTimers) {
+        return undefined;
+      }
+      return updateWorkflowState(args);
+    });
+
+    const run = await workflow.createRun({ runId: 'failed-persistence-sleep-run' });
+    void run.start({ inputData: { value: 'persist me' } });
+    await delay(100);
+
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    expect(snapshot?.sleepTimers).toEqual({});
+    expect(afterSleep).not.toHaveBeenCalled();
+    await mastra.stopWorkers();
+  });
+
+  it('does not publish a stale timer after the run stops or the timer is removed', async () => {
+    const storage = new MockStore();
+    const workflow = createSleepingWorkflow({
+      id: 'stale-callback-sleep-workflow',
+      duration: 5_000,
+      afterSleep: vi.fn(async ({ inputData }) => inputData),
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { workflow },
+    });
+    await mastra.startWorkers();
+    const run = await workflow.createRun({ runId: 'stale-callback-sleep-run' });
+    void run.start({ inputData: { value: 'persist me' } });
+    const workflowsStore = (await waitForPersistedTimer(storage, workflow.id, run.runId))!;
+    await mastra.stopWorkers();
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    const timer = Object.values(snapshot?.sleepTimers ?? {})[0]!;
+    await workflowsStore.updateWorkflowState({
+      workflowName: workflow.id,
+      runId: run.runId,
+      opts: { status: 'failed', sleepTimers: {} },
+    });
+    const publish = vi.fn();
+
+    schedulePersistedSleepTimer({
+      pubsub: { publish } as any,
+      workflowsStore,
+      workflowId: workflow.id,
+      runId: run.runId,
+      timer: { ...timer, dueAt: Date.now() },
+    });
+    await delay(50);
+
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('does not duplicate the Mastra bearer token in persisted timer data', async () => {

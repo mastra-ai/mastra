@@ -4164,7 +4164,11 @@ export class Mastra<
     const workflowsStore = await this.#storage?.getStore('workflows');
     if (!workflowsStore) return;
 
-    const timers: Array<{ workflowId: string; runId: string; timer: NonNullable<WorkflowRunState['sleepTimers']>[string] }> = [];
+    const timers: Array<{
+      workflowId: string;
+      runId: string;
+      timer: NonNullable<WorkflowRunState['sleepTimers']>[string];
+    }> = [];
     const eventedWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'evented');
 
     for (const workflow of eventedWorkflows) {
@@ -4184,7 +4188,20 @@ export class Mastra<
 
     await this.__ensureExecutionWorkersStarted();
     for (const { workflowId, runId, timer } of timers) {
-      schedulePersistedSleepTimer({ pubsub: this.pubsub, workflowsStore, workflowId, runId, timer });
+      schedulePersistedSleepTimer({
+        pubsub: this.pubsub,
+        workflowsStore,
+        workflowId,
+        runId,
+        timer,
+        onError: error =>
+          this.#logger?.warn('Failed to continue restored workflow sleep', {
+            workflowId,
+            runId,
+            timerId: timer.id,
+            error,
+          }),
+      });
     }
   }
 
