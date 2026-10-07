@@ -158,11 +158,12 @@ describe('AgentController: ask_user native suspension', () => {
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
-  it('preserves the answer when a second controller resumes a durable ask_user suspension', async () => {
+  it('preserves the active run when a second controller resumes another thread suspension', async () => {
     const storage = new InMemoryStore();
     const cache = new InMemoryServerCache();
     const memory = new MockMemory({ storage });
     const modelPrompts: unknown[] = [];
+    const activeStream = Promise.withResolvers<ReadableStreamDefaultController>();
     let modelCalls = 0;
     let pubsub = new LeasePubSub();
     pubsub.retain = true;
@@ -176,12 +177,26 @@ describe('AgentController: ask_user native suspension', () => {
           doStream: async ({ prompt }) => {
             modelCalls++;
             modelPrompts.push(prompt);
-            return {
-              stream:
-                modelCalls === 1
-                  ? createAskUserToolCallStream(JSON.stringify({ question: 'Which hotel?' }))
-                  : createTextStream(),
-            };
+            if (modelCalls === 1) {
+              return { stream: createAskUserToolCallStream(JSON.stringify({ question: 'Which hotel?' })) };
+            }
+            if (modelCalls === 2) {
+              return {
+                stream: new ReadableStream({
+                  start(controller) {
+                    controller.enqueue({ type: 'stream-start', warnings: [] });
+                    controller.enqueue({
+                      type: 'response-metadata',
+                      id: 'active-run',
+                      modelId: 'mock',
+                      timestamp: new Date(0),
+                    });
+                    activeStream.resolve(controller);
+                  },
+                }),
+              };
+            }
+            return { stream: createTextStream() };
           },
         }),
         tools: { ask_user: askUserTool },
@@ -251,15 +266,31 @@ describe('AgentController: ask_user native suspension', () => {
     expect(claim).toMatchObject({ accepted: true, toolCallId: 'call-1' });
     if (!claim.accepted) throw new Error('Expected suspension claim to succeed');
     const successorThread = await secondSession.thread.create({ id: 'successor-thread' });
+    const activeRun = secondSession.sendMessage({ content: 'Keep this successor run active.' });
+    const activeStreamController = await activeStream.promise;
+    await vi.waitFor(() => expect(secondSession.getCurrentRunId()).not.toBeNull());
+    const activeRunId = secondSession.getCurrentRunId();
+    const cleanupActiveSubscription = vi.spyOn(secondSession.stream, 'cleanup');
+
     await secondSession.respondToToolSuspension({ address: claim.address, resumeData: 'Hilton' });
 
-    await vi.waitFor(() => expect(modelCalls).toBe(2));
+    await vi.waitFor(() => expect(modelCalls).toBe(3));
+    expect(cleanupActiveSubscription).not.toHaveBeenCalled();
+    expect(secondSession.getCurrentRunId()).toBe(activeRunId);
     expect(secondSession.thread.getId()).toBe(successorThread.id);
-    const resumedPrompt = JSON.stringify(modelPrompts[1]);
+    const resumedPrompt = JSON.stringify(modelPrompts[2]);
     expect(resumedPrompt).toContain('User answered: Hilton');
     expect(resumedPrompt).not.toContain('Tool input validation failed');
     expect(resumedPrompt).not.toContain('"approved":true');
     expect(secondEvents.filter(event => event.type === 'error')).toEqual([]);
+
+    activeStreamController.enqueue({
+      type: 'finish',
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    });
+    activeStreamController.close();
+    await activeRun;
   });
 
   it('emits the resumed reply with its persisted message ID (#23150)', async () => {
