@@ -20,7 +20,7 @@ export function useBoardRuns({
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
-  const repositorySlugFor = useCardRepositorySlug();
+  const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
   const [repositorySelection, setRepositorySelection] = useState<{
     item: WorkItem;
