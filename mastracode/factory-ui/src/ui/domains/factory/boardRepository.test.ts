@@ -4,7 +4,14 @@ import type { LinkedRepositoryPayload } from '../workspaces/services/github';
 import { cardRepositorySlug } from './boardRepository';
 
 function repository(provider: 'github' | 'gitlab', externalId: string, slug: string): LinkedRepositoryPayload {
-  return { projectRepositoryId: slug, provider, externalId, slug, gitBranch: 'main', sandboxWorkdir: `/sandbox/${slug}` };
+  return {
+    projectRepositoryId: slug,
+    provider,
+    externalId,
+    slug,
+    gitBranch: 'main',
+    sandboxWorkdir: `/sandbox/${slug}`,
+  };
 }
 
 describe('cardRepositorySlug', () => {
