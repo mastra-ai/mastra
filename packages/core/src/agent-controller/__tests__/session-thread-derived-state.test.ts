@@ -381,6 +381,24 @@ describe('AgentController thread-derived session state', () => {
     expect(session.thread.getId()).toBe(thread.id);
   });
 
+  it('does not tear down the current subscription when a stale restore is rejected', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'stale-subscription-restore');
+    const session = await controller.createSession({
+      id: 'stale-subscription-restore-session',
+      resourceId: 'stale-subscription-restore-resource',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+    await session.thread.create({ id: 'current-thread' });
+    const cleanupSubscription = vi.spyOn(session.thread, 'cleanupSubscription');
+
+    await session.thread.ensureSubscription('stale-thread', undefined, undefined, 'stale-resource', () => false);
+
+    expect(cleanupSubscription).not.toHaveBeenCalled();
+    expect(session.thread.getId()).toBe('current-thread');
+  });
+
   it('serializes metadata hydration across concurrent switches', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'switch-race');
@@ -652,9 +670,10 @@ describe('AgentController thread-derived session state', () => {
     expect(threadLock.release).toHaveBeenCalledWith('resource-release-failure-thread');
   });
 
-  it('scopes suspension cleanup by thread and exposes none without an active thread', () => {
+  it('scopes suspension cleanup by resource and thread and exposes none without an active thread', () => {
+    let activeResourceId = 'resource';
     let activeThreadId: string | null = 'thread-a';
-    const suspensions = new SessionSuspensions(() => activeThreadId);
+    const suspensions = new SessionSuspensions(() => ({ resourceId: activeResourceId, threadId: activeThreadId }));
     suspensions.register({
       toolCallId: 'call-a',
       runId: 'shared-run',
@@ -669,10 +688,31 @@ describe('AgentController thread-derived session state', () => {
       threadId: 'thread-b',
       resourceId: 'resource',
     });
+    suspensions.register({
+      toolCallId: 'call-other-resource',
+      runId: 'shared-run',
+      toolName: 'ask_user',
+      threadId: 'thread-a',
+      resourceId: 'other-resource',
+    });
 
-    expect(suspensions.deleteForRun({ threadId: 'thread-a', runId: 'shared-run' })).toEqual([
-      { toolCallId: 'call-a', toolName: 'ask_user' },
+    expect(suspensions.deleteForRun({ resourceId: 'resource', threadId: 'thread-a', runId: 'shared-run' })).toEqual([
+      {
+        resourceId: 'resource',
+        threadId: 'thread-a',
+        runId: 'shared-run',
+        toolCallId: 'call-a',
+        toolName: 'ask_user',
+      },
     ]);
+    expect(
+      suspensions.has({
+        resourceId: 'other-resource',
+        threadId: 'thread-a',
+        runId: 'shared-run',
+        toolCallId: 'call-other-resource',
+      }),
+    ).toBe(true);
     activeThreadId = 'thread-b';
     expect(suspensions.hasPending()).toBe(true);
     activeThreadId = null;
@@ -695,15 +735,27 @@ describe('AgentController thread-derived session state', () => {
       events.push(event);
     });
     await session.sendMessage({ content: 'Ask me a question.' });
-    await vi.waitFor(() => expect(session.displayState.get().pendingSuspensions.has('call-1')).toBe(true));
+    await vi.waitFor(() =>
+      expect(
+        [...session.displayState.get().pendingSuspensions.values()].some(
+          suspension => suspension.toolCallId === 'call-1',
+        ),
+      ).toBe(true),
+    );
 
     await session.thread.create({ id: 'thread-b' });
     expect(session.suspensions.hasPending()).toBe(false);
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
 
     await session.thread.switch({ threadId: threadA.id });
-    await vi.waitFor(() => expect(session.displayState.get().pendingSuspensions.has('call-1')).toBe(true));
-    expect(session.claimToolSuspension('call-1')).toEqual({ accepted: true, toolCallId: 'call-1' });
+    await vi.waitFor(() =>
+      expect(
+        [...session.displayState.get().pendingSuspensions.values()].some(
+          suspension => suspension.toolCallId === 'call-1',
+        ),
+      ).toBe(true),
+    );
+    expect(session.claimToolSuspension('call-1')).toMatchObject({ accepted: true, toolCallId: 'call-1' });
     await session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Production' });
     await vi.waitFor(() => expect(fixture.getModelCalls()).toBe(2));
     expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
@@ -745,7 +797,13 @@ describe('AgentController thread-derived session state', () => {
     const durableThread = await firstSession.thread.create({ id: 'durable-thread' });
     await firstSession.permissions.setForTool({ toolName: 'ask_user', policy: 'allow' });
     await firstSession.sendMessage({ content: 'Ask me a question.' });
-    await vi.waitFor(() => expect(firstSession.displayState.get().pendingSuspensions.has('call-1')).toBe(true));
+    await vi.waitFor(() =>
+      expect(
+        [...firstSession.displayState.get().pendingSuspensions.values()].some(
+          suspension => suspension.toolCallId === 'call-1',
+        ),
+      ).toBe(true),
+    );
     await firstSession.thread.detachFromCurrent();
 
     fixture.restartRuntime();
@@ -762,7 +820,13 @@ describe('AgentController thread-derived session state', () => {
     });
     await secondSession.thread.switch({ threadId: durableThread.id });
 
-    await vi.waitFor(() => expect(secondSession.displayState.get().pendingSuspensions.has('call-1')).toBe(true));
+    await vi.waitFor(() =>
+      expect(
+        [...secondSession.displayState.get().pendingSuspensions.values()].some(
+          suspension => suspension.toolCallId === 'call-1',
+        ),
+      ).toBe(true),
+    );
     expect(fixture.getModelCalls()).toBe(1);
     await secondSession.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Staging' });
     await vi.waitFor(() => expect(fixture.getModelCalls()).toBe(2));

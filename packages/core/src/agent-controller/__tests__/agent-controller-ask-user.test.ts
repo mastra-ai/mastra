@@ -126,8 +126,11 @@ describe('AgentController: ask_user native suspension', () => {
     expect(suspendEvent.suspendPayload.selectionMode).toBe('single_select');
 
     // Display state should reflect the pending suspension.
-    expect(session.displayState.get().pendingSuspensions.get('call-1')?.toolCallId).toBe('call-1');
-    expect(session.displayState.get().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
+    const pending = [...session.displayState.get().pendingSuspensions.values()].find(
+      suspension => suspension.toolCallId === 'call-1',
+    );
+    expect(pending?.toolCallId).toBe('call-1');
+    expect(pending?.toolName).toBe('ask_user');
   });
 
   it('resumes the suspended ask_user tool with the answer via respondToToolSuspension', async () => {
@@ -236,19 +239,27 @@ describe('AgentController: ask_user native suspension', () => {
     await secondSession.thread.switch({ threadId });
 
     await vi.waitFor(() => {
-      expect(secondSession.displayState.get().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
+      expect(
+        [...secondSession.displayState.get().pendingSuspensions.values()].find(
+          suspension => suspension.toolCallId === 'call-1',
+        )?.toolName,
+      ).toBe('ask_user');
     });
     expect(secondEvents.some(event => event.type === 'tool_approval_required')).toBe(false);
     expect(modelCalls).toBe(1);
-    expect(secondSession.claimToolSuspension('call-1')).toEqual({ accepted: true, toolCallId: 'call-1' });
-    await secondSession.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Hilton' });
+    const claim = secondSession.claimToolSuspension('call-1');
+    expect(claim).toMatchObject({ accepted: true, toolCallId: 'call-1' });
+    if (!claim.accepted) throw new Error('Expected suspension claim to succeed');
+    const successorThread = await secondSession.thread.create({ id: 'successor-thread' });
+    await secondSession.respondToToolSuspension({ address: claim.address, resumeData: 'Hilton' });
 
     await vi.waitFor(() => expect(modelCalls).toBe(2));
+    expect(secondSession.thread.getId()).toBe(successorThread.id);
     const resumedPrompt = JSON.stringify(modelPrompts[1]);
     expect(resumedPrompt).toContain('User answered: Hilton');
     expect(resumedPrompt).not.toContain('Tool input validation failed');
     expect(resumedPrompt).not.toContain('"approved":true');
-    expect(secondEvents.some(event => event.type === 'error')).toBe(false);
+    expect(secondEvents.filter(event => event.type === 'error')).toEqual([]);
   });
 
   it('emits the resumed reply with its persisted message ID (#23150)', async () => {
@@ -307,9 +318,9 @@ describe('AgentController: ask_user native suspension', () => {
     const { session } = await buildController('concurrent', JSON.stringify({ question: 'First?' }));
 
     const resumed: string[] = [];
-    (session as any).resumeToolCall = async ({ toolCallId }: { toolCallId: string }) => {
-      resumed.push(toolCallId);
-      session.suspensions.delete({ toolCallId });
+    (session as any).resumeToolCall = async ({ address }: { address: { toolCallId: string } }) => {
+      resumed.push(address.toolCallId);
+      session.suspensions.delete(address as any);
     };
 
     const pending = session.suspensions;
@@ -330,13 +341,50 @@ describe('AgentController: ask_user native suspension', () => {
     expect(pending.hasPending()).toBe(false);
   });
 
+  it('carries the claimed suspension address across a thread switch', async () => {
+    const { session } = await buildController('switch-after-claim', JSON.stringify({ question: 'Old thread?' }));
+    const originalThreadId = session.thread.requireId();
+    const resourceId = session.identity.getResourceId();
+    session.suspensions.register({
+      toolCallId: 'call-shared',
+      runId: 'run-old',
+      toolName: 'ask_user',
+      threadId: originalThreadId,
+      resourceId,
+    });
+
+    const resumed: unknown[] = [];
+    (session as any).resumeToolCall = async ({ address }: { address: unknown }) => {
+      resumed.push(address);
+      session.suspensions.delete(address as any);
+    };
+
+    const claim = session.claimToolSuspension('call-shared');
+    expect(claim).toMatchObject({ accepted: true });
+    if (!claim.accepted) throw new Error('Expected suspension claim to succeed');
+
+    await session.thread.create({ id: 'new-active-thread' });
+    await session.respondToToolSuspension({ address: claim.address, resumeData: 'answer' });
+
+    expect(resumed).toEqual([
+      {
+        threadId: originalThreadId,
+        resourceId,
+        runId: 'run-old',
+        toolCallId: 'call-shared',
+      },
+    ]);
+    expect(session.thread.getId()).toBe('new-active-thread');
+    expect(session.suspensions.get(claim.address)).toBeUndefined();
+  });
+
   it('resolves the sole pending suspension when toolCallId is omitted', async () => {
     const { session } = await buildController('sole', JSON.stringify({ question: 'Only?' }));
 
     const resumed: string[] = [];
-    (session as any).resumeToolCall = async ({ toolCallId }: { toolCallId: string }) => {
-      resumed.push(toolCallId);
-      session.suspensions.delete({ toolCallId });
+    (session as any).resumeToolCall = async ({ address }: { address: { toolCallId: string } }) => {
+      resumed.push(address.toolCallId);
+      session.suspensions.delete(address as any);
     };
 
     const pending = session.suspensions;

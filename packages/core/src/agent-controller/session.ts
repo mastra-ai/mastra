@@ -418,7 +418,10 @@ export interface SessionMachinery {
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
   /** Resolve the effective request context for a run, layering controller defaults. */
-  buildRequestContext(requestContext?: RequestContext): Promise<RequestContext>;
+  buildRequestContext(
+    requestContext?: RequestContext,
+    scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
+  ): Promise<RequestContext>;
   /** Authorize an actor-driven operation before it changes session state. */
   authorizeExecute?(requestContext?: RequestContext): Promise<void>;
   /** Persist the session's running token usage to thread metadata. */
@@ -805,18 +808,24 @@ export class SessionThread {
     threadId: string,
     agent = this.#owner.machinery.getAgent(),
     requestContext?: RequestContext,
+    resourceId = this.#getResourceId(),
+    shouldAttach?: () => boolean,
   ): Promise<void> {
     const session = this.#owner;
-    const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
     if (session.stream.matches({ key })) {
       session.ensureFollowUpBinding(agent, resourceId, threadId);
       return;
     }
+    if (shouldAttach && !shouldAttach()) return;
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId, requestContext });
-    session.stream.attach({ subscription, agent, key });
+    if (shouldAttach && !shouldAttach()) {
+      subscription.unsubscribe();
+      return;
+    }
+    session.stream.attach({ subscription, agent, key, resourceId, threadId });
     session.ensureFollowUpBinding(agent, resourceId, threadId);
     session.stream.trackConsumer(subscription, session.processSubscribedThreadStream(subscription));
   }
@@ -1335,6 +1344,8 @@ export class SessionStream {
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
+  /** Durable binding owned by the open subscription. */
+  #binding: { resourceId: string; threadId: string } | null = null;
   readonly #teardownWaiters = new Set<() => void>();
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
@@ -1411,20 +1422,33 @@ export class SessionStream {
     subscription,
     agent,
     key,
+    resourceId,
+    threadId,
   }: {
     subscription: AgentThreadSubscription<any, true>;
     agent?: Agent;
     key: string;
+    resourceId: string;
+    threadId: string;
   }): void {
     this.#subscription = subscription;
     this.#agent = agent ?? null;
     this.#key = key;
+    this.#binding = { resourceId, threadId };
     this.#consumerFailure = null;
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
   getAgent({ subscription }: { subscription: AgentThreadSubscription<any, true> }): Agent | null {
     return this.#subscription === subscription ? this.#agent : null;
+  }
+
+  /** Durable binding owned by `subscription`, when it is the live subscription. */
+  getBinding({ subscription }: { subscription: AgentThreadSubscription<any, true> }): {
+    resourceId: string;
+    threadId: string;
+  } | null {
+    return this.#subscription === subscription ? this.#binding : null;
   }
 
   /** Whether a subscription is currently open. */
@@ -1464,6 +1488,7 @@ export class SessionStream {
     this.#subscription = null;
     this.#agent = null;
     this.#key = null;
+    this.#binding = null;
     this.#notifyTeardown();
   }
 
@@ -1478,20 +1503,31 @@ export class SessionStream {
     this.#subscription = null;
     this.#agent = null;
     this.#key = null;
+    this.#binding = null;
     this.#notifyTeardown();
   }
 }
 
-/** A tool call parked awaiting a resume, keyed in {@link SessionSuspensions}. */
-export interface PendingSuspension {
-  /** The run id to resume when this tool call is answered. */
-  runId: string;
-  /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
-  toolName: string;
+/** Immutable identity of a tool call parked awaiting a resume. */
+export interface SuspensionAddress {
   /** The thread the suspended invocation was persisted under. */
   threadId: string;
   /** The memory resource the suspended invocation was persisted under. */
   resourceId: string;
+  /** The run id to resume when this tool call is answered. */
+  runId: string;
+  /** The suspended tool call id. */
+  toolCallId: string;
+}
+
+/** A tool call parked awaiting a resume, keyed in {@link SessionSuspensions}. */
+export interface PendingSuspension extends SuspensionAddress {
+  /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
+  toolName: string;
+}
+
+export function getSuspensionAddressKey({ resourceId, threadId, runId, toolCallId }: SuspensionAddress): string {
+  return JSON.stringify([resourceId, threadId, runId, toolCallId]);
 }
 
 /**
@@ -1509,21 +1545,19 @@ export interface PendingSuspension {
 export class SessionSuspensions {
   /** Parked tool calls awaiting a resume, keyed by `(threadId, runId, toolCallId)`. */
   readonly #pending = new Map<string, { toolCallId: string } & PendingSuspension>();
-  readonly #getActiveThreadId: (() => string | null) | undefined;
+  readonly #getActiveBinding: (() => { resourceId: string; threadId: string | null }) | undefined;
 
-  constructor(getActiveThreadId?: () => string | null) {
-    this.#getActiveThreadId = getActiveThreadId;
-  }
-
-  #key({ threadId, runId, toolCallId }: { threadId: string; runId: string; toolCallId: string }): string {
-    return `${threadId}\u0000${runId}\u0000${toolCallId}`;
+  constructor(getActiveBinding?: () => { resourceId: string; threadId: string | null }) {
+    this.#getActiveBinding = getActiveBinding;
   }
 
   #activeEntries(): Array<[string, { toolCallId: string } & PendingSuspension]> {
-    if (!this.#getActiveThreadId) return [...this.#pending];
-    const activeThreadId = this.#getActiveThreadId();
-    if (activeThreadId === null) return [];
-    return [...this.#pending].filter(([, suspension]) => suspension.threadId === activeThreadId);
+    if (!this.#getActiveBinding) return [...this.#pending];
+    const { resourceId, threadId } = this.#getActiveBinding();
+    if (threadId === null) return [];
+    return [...this.#pending].filter(
+      ([, suspension]) => suspension.resourceId === resourceId && suspension.threadId === threadId,
+    );
   }
 
   /**
@@ -1546,7 +1580,7 @@ export class SessionSuspensions {
     threadId: string;
     resourceId: string;
   }): void {
-    const key = this.#key({ threadId, runId, toolCallId });
+    const key = getSuspensionAddressKey({ resourceId, threadId, runId, toolCallId });
     const existing = this.#pending.get(key);
     if (existing) {
       this.#pending.set(key, { ...existing, toolName });
@@ -1555,21 +1589,30 @@ export class SessionSuspensions {
     this.#pending.set(key, { toolCallId, runId, toolName, threadId, resourceId });
   }
 
-  /** The active thread's parked suspension for `toolCallId`, or undefined when none. */
-  get({ toolCallId }: { toolCallId: string }): PendingSuspension | undefined {
-    return this.#activeEntries().find(([, suspension]) => suspension.toolCallId === toolCallId)?.[1];
+  /** Resolve one active-thread suspension, rejecting ambiguous partial addresses. */
+  resolve({ toolCallId, runId }: { toolCallId?: string; runId?: string } = {}): PendingSuspension | undefined {
+    const matches = this.#activeEntries()
+      .map(([, suspension]) => suspension)
+      .filter(suspension => toolCallId === undefined || suspension.toolCallId === toolCallId)
+      .filter(suspension => runId === undefined || suspension.runId === runId);
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
-  /** Whether `toolCallId` is currently parked on the active thread. */
-  has({ toolCallId }: { toolCallId: string }): boolean {
-    return this.get({ toolCallId }) !== undefined;
+  /** Read a suspension by exact address, or by an unambiguous active-thread selector. */
+  get(address: SuspensionAddress | { toolCallId: string; runId?: string }): PendingSuspension | undefined {
+    if ('threadId' in address) return this.#pending.get(getSuspensionAddressKey(address));
+    return this.resolve(address);
   }
 
-  /** Drop `toolCallId` from the active thread's parked set (e.g. once resumed). */
-  delete({ toolCallId }: { toolCallId: string }): void {
-    for (const [key, suspension] of this.#activeEntries()) {
-      if (suspension.toolCallId === toolCallId) this.#pending.delete(key);
-    }
+  /** Whether an exact or unambiguous suspension is currently parked. */
+  has(address: SuspensionAddress | { toolCallId: string; runId?: string }): boolean {
+    return this.get(address) !== undefined;
+  }
+
+  /** Drop exactly one parked suspension; ambiguous partial addresses are ignored. */
+  delete(address: SuspensionAddress | { toolCallId: string; runId?: string }): void {
+    const resolved = 'threadId' in address ? address : this.resolveAddress(address);
+    if (resolved) this.#pending.delete(getSuspensionAddressKey(resolved));
   }
 
   /**
@@ -1581,17 +1624,19 @@ export class SessionSuspensions {
    * Suspensions parked on other runs are left intact.
    */
   deleteForRun({
+    resourceId,
     threadId,
     runId,
   }: {
+    resourceId: string;
     threadId: string;
     runId: string;
-  }): Array<{ toolCallId: string; toolName: string }> {
-    const dropped: Array<{ toolCallId: string; toolName: string }> = [];
+  }): PendingSuspension[] {
+    const dropped: PendingSuspension[] = [];
     for (const [key, suspension] of this.#pending) {
-      if (suspension.threadId === threadId && suspension.runId === runId) {
+      if (suspension.resourceId === resourceId && suspension.threadId === threadId && suspension.runId === runId) {
         this.#pending.delete(key);
-        dropped.push({ toolCallId: suspension.toolCallId, toolName: suspension.toolName });
+        dropped.push({ ...suspension });
       }
     }
     return dropped;
@@ -1621,16 +1666,19 @@ export class SessionSuspensions {
   }
 
   /**
-   * Resolve which active-thread suspension to act on. With an explicit
-   * `toolCallId` it must match a parked suspension; without one it returns the
-   * single parked suspension (or undefined when there are zero or several).
+   * Resolve which active-thread suspension to act on. A partial address only
+   * succeeds when it identifies exactly one parked suspension.
    */
+  resolveAddress({ toolCallId, runId }: { toolCallId?: string; runId?: string } = {}): SuspensionAddress | undefined {
+    const suspension = this.resolve({ toolCallId, runId });
+    if (!suspension) return undefined;
+    const { threadId, resourceId, runId: resolvedRunId, toolCallId: resolvedToolCallId } = suspension;
+    return { threadId, resourceId, runId: resolvedRunId, toolCallId: resolvedToolCallId };
+  }
+
+  /** @deprecated Use {@link resolveAddress} to retain the complete suspension identity. */
   resolveToolCallId(toolCallId?: string): string | undefined {
-    const active = this.#activeEntries().map(([, suspension]) => suspension.toolCallId);
-    if (toolCallId !== undefined) {
-      return active.includes(toolCallId) ? toolCallId : undefined;
-    }
-    return active.length === 1 ? active[0] : undefined;
+    return this.resolveAddress({ toolCallId })?.toolCallId;
   }
 }
 
@@ -3059,13 +3107,39 @@ export class SessionDisplayState {
     this.#state.modifiedFiles.clear();
   }
 
+  /** Add or update one suspension without conflating duplicate tool-call ids across runs. */
+  #setPendingSuspension(
+    suspension: AgentControllerDisplayState['pendingSuspensions'] extends Map<string, infer T> ? T : never,
+  ): void {
+    const pending = this.#state.pendingSuspensions;
+    const hasAddress =
+      suspension.resourceId !== undefined && suspension.threadId !== undefined && suspension.runId !== undefined;
+    if (!hasAddress) {
+      pending.set(suspension.toolCallId, suspension);
+      return;
+    }
+
+    const address = suspension as typeof suspension &
+      Required<Pick<typeof suspension, 'resourceId' | 'threadId' | 'runId'>>;
+    pending.set(getSuspensionAddressKey(address), suspension);
+  }
+
   /**
-   * Drop the display mirror of a single parked tool suspension once it has been
-   * resumed, so the UI stops rendering only the resolved prompt while any other
-   * parked suspensions stay visible.
+   * Drop the display mirror of exactly one parked tool suspension once it has
+   * resumed, preserving a sibling that reused the same tool-call id.
    */
-  deletePendingSuspension(toolCallId: string): void {
-    this.#state.pendingSuspensions.delete(toolCallId);
+  deletePendingSuspension(address: SuspensionAddress): void {
+    const pending = this.#state.pendingSuspensions;
+    for (const [key, entry] of pending) {
+      if (
+        entry.toolCallId === address.toolCallId &&
+        entry.resourceId === address.resourceId &&
+        entry.threadId === address.threadId &&
+        entry.runId === address.runId
+      ) {
+        pending.delete(key);
+      }
+    }
   }
 
   /**
@@ -3305,17 +3379,29 @@ export class SessionDisplayState {
         break;
 
       case 'tool_suspended':
-        ds.pendingSuspensions.set(event.toolCallId, {
+        this.#setPendingSuspension({
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
           suspendPayload: event.suspendPayload,
           resumeSchema: event.resumeSchema,
+          resourceId: event.resourceId,
+          threadId: event.threadId,
+          runId: event.runId,
         });
         break;
 
       case 'tool_suspension_cancelled':
-        ds.pendingSuspensions.delete(event.toolCallId);
+        if (event.resourceId && event.threadId && event.runId) {
+          this.deletePendingSuspension({
+            resourceId: event.resourceId,
+            threadId: event.threadId,
+            runId: event.runId,
+            toolCallId: event.toolCallId,
+          });
+        } else {
+          ds.pendingSuspensions.delete(event.toolCallId);
+        }
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
@@ -3779,7 +3865,10 @@ export class Session<TState = unknown> {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
-    this.suspensions = new SessionSuspensions(() => this.thread.getId());
+    this.suspensions = new SessionSuspensions(() => ({
+      resourceId: this.identity.getResourceId(),
+      threadId: this.thread.getId(),
+    }));
     this.displayState = new SessionDisplayState({
       getTokenUsage: () => this.getTokenUsage(),
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
@@ -4102,8 +4191,16 @@ export class Session<TState = unknown> {
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
     const suspendedToolCalls = this.suspensions.clear();
-    for (const { toolCallId, toolName } of suspendedToolCalls) {
-      this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
+    for (const suspension of suspendedToolCalls) {
+      this.emit({
+        type: 'tool_suspension_cancelled',
+        resourceId: suspension.resourceId,
+        threadId: suspension.threadId,
+        runId: suspension.runId,
+        toolCallId: suspension.toolCallId,
+        toolName: suspension.toolName,
+        reason: ABORTED_BY_USER_REASON,
+      });
     }
 
     // The teardown may be deferred (below), so remember whether this abort should
@@ -5036,11 +5133,15 @@ export class Session<TState = unknown> {
    */
   claimToolSuspension(
     toolCallId?: string,
-  ): { accepted: true; toolCallId: string } | Extract<SessionCommandResult, { accepted: false }> {
-    const resolved = this.suspensions.resolveToolCallId(toolCallId);
-    if (!resolved) return { accepted: false, reason: 'no_pending_suspension' };
-    if (!this.claimToolResponse(resolved)) return { accepted: false, reason: 'not_pending' };
-    return { accepted: true, toolCallId: resolved };
+    runId?: string,
+  ):
+    | { accepted: true; toolCallId: string; address: SuspensionAddress; claimKey: string }
+    | Extract<SessionCommandResult, { accepted: false }> {
+    const address = this.suspensions.resolveAddress({ toolCallId, runId });
+    if (!address) return { accepted: false, reason: 'no_pending_suspension' };
+    const claimKey = getSuspensionAddressKey(address);
+    if (!this.claimToolResponse(claimKey)) return { accepted: false, reason: 'not_pending' };
+    return { accepted: true, toolCallId: address.toolCallId, address, claimKey };
   }
 
   /**
@@ -5053,32 +5154,33 @@ export class Session<TState = unknown> {
   async respondToToolSuspension({
     resumeData,
     toolCallId,
+    runId,
+    address: inputAddress,
     requestContext,
   }: {
     resumeData: any;
     toolCallId?: string;
+    runId?: string;
+    address?: SuspensionAddress;
     requestContext?: RequestContext;
   }): Promise<void> {
-    const resolvedToolCallId = this.suspensions.resolveToolCallId(toolCallId);
-    if (!resolvedToolCallId) return;
+    const address = inputAddress ?? this.suspensions.resolveAddress({ toolCallId, runId });
+    if (!address) return;
 
-    const suspension = this.suspensions.get({ toolCallId: resolvedToolCallId });
+    const suspension = this.suspensions.get(address);
+    if (!suspension) return;
 
     try {
-      if (suspension?.toolName === 'submit_plan') {
+      if (suspension.toolName === 'submit_plan') {
         await this.handlePlanApprovalResume({
-          toolCallId: resolvedToolCallId,
+          address,
           response: resumeData as SubmitPlanResumeData,
           requestContext,
         });
         return;
       }
 
-      await this.resumeToolCall({
-        resumeData,
-        toolCallId: resolvedToolCallId,
-        requestContext,
-      });
+      await this.resumeToolCall({ resumeData, address, requestContext });
     } catch (error) {
       const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
@@ -5093,11 +5195,11 @@ export class Session<TState = unknown> {
    * and the model continues naturally in the target mode.
    */
   private async handlePlanApprovalResume({
-    toolCallId,
+    address,
     response,
     requestContext,
   }: {
-    toolCallId: string;
+    address: SuspensionAddress;
     response: SubmitPlanResumeData;
     requestContext?: RequestContext;
   }): Promise<void> {
@@ -5106,7 +5208,7 @@ export class Session<TState = unknown> {
       // the run to terminate here would prevent that abort from ever being sent.
       await this.resumeToolCall({
         resumeData: response,
-        toolCallId,
+        address,
         requestContext,
         resolveOnToolEnd: true,
       });
@@ -5119,7 +5221,7 @@ export class Session<TState = unknown> {
       await this.mode.switch({ modeId: transitionModeId });
     }
 
-    await this.resumeToolCall({ resumeData: response, toolCallId, requestContext });
+    await this.resumeToolCall({ resumeData: response, address, requestContext });
   }
 
   /**
@@ -5291,19 +5393,20 @@ export class Session<TState = unknown> {
    */
   async resumeToolCall({
     resumeData,
-    toolCallId,
+    address,
     requestContext: requestContextInput,
     resolveOnToolEnd = false,
   }: {
     resumeData: any;
-    toolCallId: string;
+    address: SuspensionAddress;
     requestContext?: RequestContext;
     resolveOnToolEnd?: boolean;
   }): Promise<void> {
-    const suspension = this.suspensions.get({ toolCallId });
+    const suspension = this.suspensions.get(address);
     if (!suspension) {
       throw new Error('No active suspension to resume');
     }
+    const { toolCallId, threadId, resourceId } = address;
 
     // Resume through the agent that suspended the run. A `submit_plan` approval
     // switches modes before resuming, but suspended snapshots are owned by their
@@ -5316,20 +5419,15 @@ export class Session<TState = unknown> {
     // re-register the same toolCallId without being clobbered by this cleanup.
     // Drop the matching display-state entry too so the UI stops rendering the
     // resolved prompt while any other parked suspensions stay visible.
-    this.suspensions.delete({ toolCallId });
-    this.displayState.deletePendingSuspension(toolCallId);
+    this.suspensions.delete(address);
+    this.displayState.deletePendingSuspension(address);
 
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
-    const threadId = this.thread.getId();
-    if (!threadId) {
-      throw new Error('Cannot resume a suspended tool without a current thread');
-    }
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput, { threadId, resourceId });
 
-    await this.thread.ensureSubscription(threadId, agent, requestContext);
+    await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId);
     const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
 
     try {
-      const resourceId = this.identity.getResourceId();
       const sharedOptions = this.machinery.buildSharedRunOptions();
       // Interactive builtins suspend to collect user input, not for approval.
       // The resume data is the user's answer (a bare string), which the approval
@@ -5356,7 +5454,21 @@ export class Session<TState = unknown> {
       await resumedSubscriptionBoundary.promise;
     } finally {
       resumedSubscriptionBoundary.cancel();
-      await this.thread.ensureSubscription(threadId, undefined, requestContext);
+      const activeThreadId = this.thread.getId();
+      if (activeThreadId) {
+        const activeResourceId = this.identity.getResourceId();
+        const activeRequestContext = await this.machinery.buildRequestContext(requestContextInput, {
+          threadId: activeThreadId,
+          resourceId: activeResourceId,
+        });
+        await this.thread.ensureSubscription(
+          activeThreadId,
+          undefined,
+          activeRequestContext,
+          activeResourceId,
+          () => this.thread.getId() === activeThreadId && this.identity.getResourceId() === activeResourceId,
+        );
+      }
     }
   }
 

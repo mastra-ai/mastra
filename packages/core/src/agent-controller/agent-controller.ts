@@ -429,7 +429,7 @@ export class AgentController<TState = {}> {
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
-      buildRequestContext: requestContext => this.buildRequestContext(session, requestContext),
+      buildRequestContext: (requestContext, scope) => this.buildRequestContext(session, requestContext, scope),
       authorizeExecute: requestContext =>
         this.requireAgentControllerFGA({
           permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
