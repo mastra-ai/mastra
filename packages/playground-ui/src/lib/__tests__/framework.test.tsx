@@ -28,7 +28,7 @@ const paths: LinkComponentPaths = {
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: scorerId => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/agent-builder/agents/create',
-  cmsAgentEditLink: agentId => `/agent-builder/agents/${agentId}/edit/edit`,
+  cmsAgentEditLink: agentId => `/agent-builder/agents/${agentId}/edit`,
   promptBlockLink: promptBlockId => `/prompts/${promptBlockId}`,
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
@@ -104,6 +104,39 @@ describe('useLinkComponent', () => {
       render(<AgentEntry />);
 
       expect(screen.queryByRole('link', { name: 'Agent a1' })).toBeNull();
+    });
+  });
+  describe('when a host provides only the legacy agent links', () => {
+    it('keeps create and edit navigation available through the canonical names', () => {
+      const { result } = renderHook(() => useLinkComponent(), {
+        wrapper: ({ children }) => (
+          <LinkComponentProvider Link={RouterLink} navigate={vi.fn()} paths={paths}>
+            {children}
+          </LinkComponentProvider>
+        ),
+      });
+
+      expect(result.current.paths.agentCreateLink()).toBe('/agent-builder/agents/create');
+      expect(result.current.paths.agentEditLink('a1')).toBe('/agent-builder/agents/a1/edit');
+    });
+  });
+
+  describe('when a host provides canonical agent links', () => {
+    it('uses them for create and edit navigation', () => {
+      const { result } = renderHook(() => useLinkComponent(), {
+        wrapper: ({ children }) => (
+          <LinkComponentProvider
+            Link={RouterLink}
+            navigate={vi.fn()}
+            paths={{ ...paths, agentCreateLink: () => '/custom/create', agentEditLink: id => `/custom/${id}/edit` }}
+          >
+            {children}
+          </LinkComponentProvider>
+        ),
+      });
+
+      expect(result.current.paths.agentCreateLink()).toBe('/custom/create');
+      expect(result.current.paths.agentEditLink('a1')).toBe('/custom/a1/edit');
     });
   });
 });

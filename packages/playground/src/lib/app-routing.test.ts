@@ -5,13 +5,13 @@ import { paths } from './app-routing';
 describe('agent editor links', () => {
   describe('when creating a stored agent', () => {
     it('opens Agent Builder', () => {
-      expect(paths.cmsAgentCreateLink()).toBe('/agent-builder/agents/create');
+      expect(paths.agentCreateLink()).toBe('/agent-builder/agents/create');
     });
   });
 
   describe('when editing a stored agent', () => {
     it('opens the Agent Builder editor', () => {
-      expect(paths.cmsAgentEditLink('agent-1')).toBe('/agent-builder/agents/agent-1/edit');
+      expect(paths.agentEditLink('agent-1')).toBe('/agent-builder/agents/agent-1/edit');
     });
   });
 });

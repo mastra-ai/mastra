@@ -1,10 +1,8 @@
 import type { AnchorHTMLAttributes, ForwardRefExoticComponent, RefAttributes } from 'react';
 import { createContext, forwardRef, useContext } from 'react';
 
-// Define the props type for your Link component
 export type LinkComponentProps = AnchorHTMLAttributes<HTMLAnchorElement>;
 
-// Define the actual component type with ref attributes
 export type LinkComponent = ForwardRefExoticComponent<LinkComponentProps & RefAttributes<HTMLAnchorElement>>;
 
 export type LinkComponentPaths = {
@@ -28,7 +26,11 @@ export type LinkComponentPaths = {
   cmsScorersCreateLink: () => string;
   cmsScorerEditLink: (scorerId: string) => string;
 
+  agentCreateLink?: () => string;
+  agentEditLink?: (agentId: string) => string;
+  /** @deprecated Use agentCreateLink. */
   cmsAgentCreateLink: () => string;
+  /** @deprecated Use agentEditLink. */
   cmsAgentEditLink: (agentId: string) => string;
 
   promptBlockLink: (promptBlockId: string) => string;
@@ -56,10 +58,13 @@ export type LinkComponentPaths = {
   traceLink: (traceId: string, spanId?: string) => string;
 };
 
+type ResolvedLinkComponentPaths = LinkComponentPaths &
+  Required<Pick<LinkComponentPaths, 'agentCreateLink' | 'agentEditLink'>>;
+
 const LinkComponentContext = createContext<{
   Link: LinkComponent;
   navigate: (path: string) => void;
-  paths: LinkComponentPaths;
+  paths: ResolvedLinkComponentPaths;
 }>({
   Link: forwardRef<HTMLAnchorElement, LinkComponentProps>(function DefaultLink(_props, _ref) {
     return null;
@@ -82,6 +87,8 @@ const LinkComponentContext = createContext<{
     scorerLink: () => '',
     cmsScorersCreateLink: () => '',
     cmsScorerEditLink: () => '',
+    agentCreateLink: () => '',
+    agentEditLink: () => '',
     cmsAgentCreateLink: () => '',
     cmsAgentEditLink: () => '',
     promptBlockLink: () => '',
@@ -114,7 +121,16 @@ export interface LinkComponentProviderProps {
 }
 
 export const LinkComponentProvider = ({ children, Link, navigate, paths }: LinkComponentProviderProps) => {
-  return <LinkComponentContext.Provider value={{ Link, navigate, paths }}>{children}</LinkComponentContext.Provider>;
+  const resolvedPaths: ResolvedLinkComponentPaths = {
+    ...paths,
+    agentCreateLink: paths.agentCreateLink ?? paths.cmsAgentCreateLink,
+    agentEditLink: paths.agentEditLink ?? paths.cmsAgentEditLink,
+  };
+  return (
+    <LinkComponentContext.Provider value={{ Link, navigate, paths: resolvedPaths }}>
+      {children}
+    </LinkComponentContext.Provider>
+  );
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
