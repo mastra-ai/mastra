@@ -102,6 +102,28 @@ describe('LanceVectorStore table maintenance', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the recorded index identity so createIndex does not rebuild after optimizing updates', async () => {
+    const indexName = 'optimize_uuid';
+    await createIndexedTable(indexName);
+    const uuidOf = async () => {
+      const client = (store as unknown as { lanceClient: Connection }).lanceClient;
+      return (await (await client.openTable(indexName)).listIndices())[0]!.indexUuid;
+    };
+    const original = await uuidOf();
+
+    await store.upsert({
+      indexName,
+      vectors: Array.from({ length: 50 }, randomVector),
+      ids: Array.from({ length: 50 }, (_, i) => `base-${i}`),
+    });
+    await store.optimize({ indexName });
+    expect(await uuidOf()).not.toBe(original);
+
+    const createSpy = vi.spyOn(await tablePrototype(indexName), 'createIndex');
+    await store.createIndex({ indexName, dimension: DIMENSION });
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
   it('coalesces a call that arrives while the first is still resolving the table', async () => {
     const indexName = 'optimize_slow_lookup';
     await createIndexedTable(indexName);

@@ -57,6 +57,9 @@ interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
+const LANCE_INDEX_FINGERPRINT_KEY = 'mastra.index.fingerprint';
+const LANCE_INDEX_UUID_KEY = 'mastra.index.uuid';
+
 export interface LanceTableTargetParams {
   tableName?: string;
   /** Used as the table name when `tableName` is omitted, matching `upsert` and `query`. */
@@ -719,6 +722,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       );
     }
 
+    if (indexConfig.type === 'ivfflat' && indexConfig.numSubVectors !== undefined) {
+      this.logger.warn(
+        `numSubVectors is ignored for 'ivfflat' indexes. Use type 'ivfpq' for product-quantized IVF indexes.`,
+      );
+    }
+
     try {
       const tables = await this.lanceClient.tableNames();
       let table: Table;
@@ -765,24 +774,58 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         return;
       }
 
+      const numPartitions = indexConfig.numPartitions || 128;
+      const buildParams =
+        indexConfig.type === 'ivfflat'
+          ? { numPartitions }
+          : indexConfig.type === 'ivfpq'
+            ? { numPartitions, numSubVectors: indexConfig.numSubVectors || 16 }
+            : { m: indexConfig?.hnsw?.m || 16, efConstruction: indexConfig?.hnsw?.efConstruction || 100 };
+      const fingerprintType =
+        indexConfig.type === 'ivfflat' ? 'ivf_flat' : indexConfig.type === 'ivfpq' ? 'ivf_pq' : 'hnsw_pq';
+      const fingerprint = JSON.stringify({ type: fingerprintType, metric: metricType, ...buildParams });
+
+      // Skip the rebuild when the index on this column is the one we last built with identical settings.
+      // LanceDB index stats don't expose build params, so the fingerprint and index UUID are persisted on
+      // the column's field metadata. Missing, mismatched, or externally replaced indexes are rebuilt.
+      const existingIndex = (await table.listIndices()).find(index => index.columns.includes(columnToIndex));
+      if (existingIndex?.indexUuid) {
+        const field = (await table.schema()).fields.find(f => f.name === columnToIndex);
+        if (
+          field?.metadata.get(LANCE_INDEX_FINGERPRINT_KEY) === fingerprint &&
+          field.metadata.get(LANCE_INDEX_UUID_KEY) === existingIndex.indexUuid
+        ) {
+          this.logger.debug(`Index ${existingIndex.name} on ${resolvedTableName} is unchanged. Skipping rebuild.`);
+          return;
+        }
+      }
+
       if (indexConfig.type === 'ivfflat') {
         await table.createIndex(columnToIndex, {
-          config: Index.ivfPq({
-            numPartitions: indexConfig.numPartitions || 128,
-            numSubVectors: indexConfig.numSubVectors || 16,
-            distanceType: metricType,
-          }),
+          config: Index.ivfFlat({ numPartitions, distanceType: metricType }),
+        });
+      } else if (indexConfig.type === 'ivfpq') {
+        await table.createIndex(columnToIndex, {
+          config: Index.ivfPq({ ...buildParams, distanceType: metricType }),
         });
       } else {
         // Default to HNSW PQ index
         this.logger.debug('Creating HNSW PQ index with config:', indexConfig);
         await table.createIndex(columnToIndex, {
-          config: Index.hnswPq({
-            m: indexConfig?.hnsw?.m || 16,
-            efConstruction: indexConfig?.hnsw?.efConstruction || 100,
-            distanceType: metricType,
-          }),
+          config: Index.hnswPq({ ...buildParams, distanceType: metricType }),
         });
+      }
+
+      // Only record the fingerprint for an index this call actually produced. If the index is replaced after
+      // this write, the UUID check above no longer matches and the next call rebuilds.
+      const builtUuid = (await table.listIndices()).find(index => index.columns.includes(columnToIndex))?.indexUuid;
+      if (builtUuid && builtUuid !== existingIndex?.indexUuid) {
+        await table.updateFieldMetadata([
+          {
+            path: columnToIndex,
+            metadata: { [LANCE_INDEX_FINGERPRINT_KEY]: fingerprint, [LANCE_INDEX_UUID_KEY]: builtUuid },
+          },
+        ]);
       }
     } catch (error: any) {
       throw new MastraError(
@@ -1010,10 +1053,33 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       try {
         const { table, resolvedTableName } = await this.openExistingTable(params, 'OPTIMIZE');
         try {
-          return await table.optimize({
+          // Indexes whose UUID matches the one createIndex() recorded; optimize may assign new UUIDs
+          // without retraining, so carry the record forward instead of forcing a rebuild later.
+          const schema = await table.schema();
+          const tracked = (await table.listIndices()).filter(index =>
+            index.columns.some(
+              column =>
+                schema.fields.find(f => f.name === column)?.metadata.get(LANCE_INDEX_UUID_KEY) === index.indexUuid,
+            ),
+          );
+
+          const stats = await table.optimize({
             ...(params.cleanupOlderThan ? { cleanupOlderThan: params.cleanupOlderThan } : {}),
             deleteUnverified: params.deleteUnverified ?? false,
           });
+
+          if (tracked.length) {
+            const after = await table.listIndices();
+            const updates = tracked.flatMap(before => {
+              const current = after.find(index => index.name === before.name);
+              return current?.indexUuid && current.indexUuid !== before.indexUuid
+                ? before.columns.map(path => ({ path, metadata: { [LANCE_INDEX_UUID_KEY]: current.indexUuid! } }))
+                : [];
+            });
+            if (updates.length) await table.updateFieldMetadata(updates);
+          }
+
+          return stats;
         } catch (error) {
           throw new MastraError(
             {

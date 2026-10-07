@@ -52,6 +52,8 @@
     "fireworks_ai/accounts/fireworks/models/inkling",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Step-3.7-Flash",
+    "google/deep-research-max-preview-04-2026",
+    "google/deep-research-preview-04-2026",
     "google/gemini-2.5-flash-image",
     "google/gemini-3-flash-preview",
     "google/gemini-3-pro-image",
