@@ -361,6 +361,26 @@ describe('AgentController Resource', () => {
     );
   });
 
+  it('recognizes thread owner changes as typed controller events', () => {
+    const event: AgentControllerEvent = {
+      type: 'thread_owner_changed',
+      threadId: 'thread-1',
+      fromOwnerId: 'owner-a',
+      toOwnerId: 'owner-b',
+    };
+
+    expect(isKnownAgentControllerEvent(event)).toBe(true);
+    if (!isKnownAgentControllerEvent(event) || event.type !== 'thread_owner_changed') {
+      throw new Error('missing thread_owner_changed');
+    }
+    expect(event).toEqual({
+      type: 'thread_owner_changed',
+      threadId: 'thread-1',
+      fromOwnerId: 'owner-a',
+      toOwnerId: 'owner-b',
+    });
+  });
+
   it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {
     const createdAt = '2026-01-01T00:00:00.000Z';
     const message = {

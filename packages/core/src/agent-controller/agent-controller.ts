@@ -2096,6 +2096,7 @@ export class AgentController<TState = {}> {
     }
     const resourceId = session.identity.getResourceId();
     const modeId = session.mode.get();
+    const threadOwnerId = await session.thread.getOwner({ threadId: runThreadId });
 
     if (!abortSignal) {
       session.run.clearAbortRequested();
@@ -2110,6 +2111,7 @@ export class AgentController<TState = {}> {
       abortSignal,
       resourceId,
       threadId: runThreadId,
+      threadOwnerId,
       modeId,
       execution: true,
     });
@@ -2471,11 +2473,15 @@ export class AgentController<TState = {}> {
       abortSignal?: AbortSignal;
       resourceId?: string;
       threadId?: string;
+      threadOwnerId?: string;
       modeId?: string;
       runId?: string;
       execution?: boolean;
     },
   ): Promise<RequestContext> {
+    const inheritedControllerContext = requestContext?.get('controller') as
+      | AgentControllerRequestContext<TState>
+      | undefined;
     requestContext = new RequestContext(requestContext?.entries());
     const inheritedContext = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
     const inherited = inheritedContext && this.#executionViews.get(inheritedContext);
@@ -2542,6 +2548,7 @@ export class AgentController<TState = {}> {
       setThreadSetting: persistSetting,
       isThreadActive: () => session.thread.getId() === threadId && session.identity.getResourceId() === resourceId,
       threadId,
+      threadOwnerId: scope?.threadOwnerId ?? inheritedControllerContext?.threadOwnerId,
       resourceId,
       scope: this.#sessionScopes.get(session),
       session: {
