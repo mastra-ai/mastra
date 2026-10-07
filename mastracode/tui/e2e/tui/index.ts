@@ -1,4 +1,5 @@
 import { abortFollowupScenario } from './abort-followup.js';
+import { abortQueuedFollowupScenario } from './abort-queued-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
@@ -94,6 +95,7 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
@@ -239,6 +241,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
+  'abort-queued-followup': abortQueuedFollowupScenario,
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
@@ -418,6 +421,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
   'settings-api-keys-navigation': settingsApiKeysNavigationScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
+  'legacy-thread-model-restore': legacyThreadModelRestoreScenario,
+  'saved-thread-model-restore': savedThreadModelRestoreScenario,
   'shell-passthrough-during-run': shellPassthroughDuringRunScenario,
   'shell-passthrough-configured-settings': shellPassthroughConfiguredSettingsScenario,
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,

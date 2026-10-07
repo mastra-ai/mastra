@@ -1,0 +1,72 @@
+/* Utilities can override this default with absolute/fixed positioning. */
+@layer components {
+  [data-grain-tone] {
+    position: relative;
+  }
+}
+
+[data-grain-tone='warning'] {
+  --grain-ink: var(--warning-indicator);
+  --grain-surface: var(--warning-subtle);
+}
+
+[data-grain-tone='destructive'] {
+  --grain-ink: var(--destructive-indicator);
+  --grain-surface: var(--destructive-subtle);
+}
+
+[data-grain-tone='info'] {
+  --grain-ink: var(--info-indicator);
+  --grain-surface: var(--info-subtle);
+}
+
+[data-grain-tone='success'] {
+  --grain-ink: var(--success-indicator);
+  --grain-surface: var(--success-subtle);
+}
+
+[data-grain-tone='color'] {
+  --grain-surface: color-mix(in oklab, var(--grain-ink) 22%, var(--card));
+}
+
+[data-grain-tone] {
+  --grain-back: color-mix(in oklab, var(--grain-ink) 16%, var(--grain-surface));
+  --grain-blend: soft-light;
+
+  pointer-events: none;
+}
+
+/* A shared, static SVG generates fine white flecks over the CSS tint. Its
+ * seeded fractal noise has three octaves; the color matrix keeps only the
+ * light peaks, leaving clean colored grains between them. No image download,
+ * drawing API, effects, or animation is needed. Keep this layer square: its
+ * owner clips the background, grain, and content together. */
+[data-grain-tone]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--grain-back);
+  /* Tint the flecks in dark mode; light mode keeps the white highlights. */
+  background-blend-mode: var(--grain-blend);
+  background-image: url('data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22464%22%20height%3D%22200%22%3E%3Cfilter%20id%3D%22g%22%20x%3D%220%22%20y%3D%220%22%20width%3D%22100%25%22%20height%3D%22100%25%22%20color-interpolation-filters%3D%22sRGB%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%22.85%22%20numOctaves%3D%223%22%20seed%3D%227%22%2F%3E%3CfeColorMatrix%20values%3D%220%200%200%200%201%200%200%200%200%201%200%200%200%200%201%200%200%200%201.6%20-.85%22%2F%3E%3C%2Ffilter%3E%3Cpath%20d%3D%22M0%200h464v200H0z%22%20filter%3D%22url%28%23g%29%22%2F%3E%3C%2Fsvg%3E');
+  background-size: var(--grain-width) max(var(--grain-height), 100%);
+  background-repeat: no-repeat;
+  mask-image: radial-gradient(
+    ellipse 120% 160% at -20% 65%,
+    var(--color-white) 0%,
+    color-mix(in srgb, var(--color-white) 60%, transparent) 28%,
+    color-mix(in srgb, var(--color-white) 13%, transparent) 60%,
+    transparent 85%
+  );
+  mask-size: var(--grain-width) max(var(--grain-height), 100%);
+  mask-repeat: no-repeat;
+}
+
+html.light [data-grain-tone] {
+  --grain-back: color-mix(in oklab, var(--grain-ink) 18%, var(--grain-surface));
+  --grain-blend: normal;
+}
+
+html.light [data-grain-tone='color'] {
+  --grain-surface: color-mix(in oklab, var(--grain-ink) 18%, var(--card));
+}

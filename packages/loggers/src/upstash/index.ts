@@ -130,7 +130,7 @@ export class UpstashTransport extends LoggerTransport {
 
     // Final flush
     if (this.logBuffer.length > 0) {
-      this._flush()
+      this.drainBuffer()
         .then(() => cb(err))
         .catch(flushErr => {
           console.error('Error in final flush:', flushErr);
@@ -139,6 +139,50 @@ export class UpstashTransport extends LoggerTransport {
     } else {
       cb(err);
     }
+  }
+
+  private async drainBuffer(): Promise<void> {
+    while (this.logBuffer.length > 0) {
+      await this._flush();
+    }
+  }
+
+  private parseLogs(logs: unknown): BaseLogMessage[] {
+    if (!Array.isArray(logs)) return [];
+
+    return logs.flatMap((log: string) => {
+      try {
+        const parsedLog = JSON.parse(log);
+        return parsedLog !== null && typeof parsedLog === 'object' ? [parsedLog] : [];
+      } catch {
+        return [{} as BaseLogMessage];
+      }
+    });
+  }
+
+  private matchesLog(
+    log: BaseLogMessage,
+    {
+      fromDate,
+      toDate,
+      logLevel,
+      filters,
+      runId,
+    }: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      runId?: string;
+    },
+  ): boolean {
+    if (runId !== undefined && log.runId !== runId) return false;
+    if (logLevel && log.level !== logLevel) return false;
+    const logTime = new Date(log.time).getTime();
+    if (fromDate && !(logTime >= fromDate.getTime())) return false;
+    if (toDate && !(logTime <= toDate.getTime())) return false;
+
+    return !filters || Object.entries(filters).every(([key, value]) => log[key as keyof BaseLogMessage] === value);
   }
 
   async listLogs(params?: {
@@ -157,22 +201,6 @@ export class UpstashTransport extends LoggerTransport {
     hasMore: boolean;
   }> {
     try {
-      // Get all logs from the list
-      const command = ['LRANGE', this.listName, 0, -1];
-      const response = await this.executeUpstashCommands([command]);
-
-      const logs =
-        (response?.[0]?.result?.map((log: string) => {
-          try {
-            // Parse the logs from JSON strings back to objects
-            return JSON.parse(log);
-          } catch {
-            return {};
-          }
-        }) as BaseLogMessage[]) || [];
-
-      let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
-
       const {
         fromDate,
         toDate,
@@ -184,26 +212,33 @@ export class UpstashTransport extends LoggerTransport {
       } = params || {};
 
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput ?? 100;
+      const perPage = perPageInput || 100;
       const returnPaginationResults = returnPaginationResultsInput ?? true;
+      const hasFilters = Boolean(fromDate || toDate || logLevel || (filters && Object.keys(filters).length > 0));
 
-      if (filters) {
-        filteredLogs = filteredLogs.filter(log =>
-          Object.entries(filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
-        );
+      if (returnPaginationResults && !hasFilters) {
+        const start = (page - 1) * perPage;
+        const end = start + perPage;
+        const response = await this.executeUpstashCommands([
+          ['LLEN', this.listName],
+          ['LRANGE', this.listName, start, end - 1],
+        ]);
+        const total = Number(response?.[0]?.result) || 0;
+        const logs = this.parseLogs(response?.[1]?.result);
+
+        return {
+          logs,
+          total,
+          page,
+          perPage,
+          hasMore: end < total,
+        };
       }
 
-      if (logLevel) {
-        filteredLogs = filteredLogs.filter(log => log.level === logLevel);
-      }
-
-      if (fromDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= fromDate!.getTime());
-      }
-
-      if (toDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= toDate!.getTime());
-      }
+      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, -1]]);
+      const filteredLogs = this.parseLogs(response?.[0]?.result).filter(log =>
+        this.matchesLog(log, { fromDate, toDate, logLevel, filters }),
+      );
 
       if (!returnPaginationResults) {
         return {
@@ -216,18 +251,15 @@ export class UpstashTransport extends LoggerTransport {
       }
 
       const total = filteredLogs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = filteredLogs.slice(start, end);
-      const hasMore = end < total;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
 
       return {
-        logs: paginatedLogs,
+        logs: filteredLogs.slice(start, end),
         total,
         page,
-        perPage: resolvedPerPage,
-        hasMore,
+        perPage,
+        hasMore: end < total,
       };
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
@@ -266,22 +298,20 @@ export class UpstashTransport extends LoggerTransport {
   }> {
     try {
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput ?? 100;
+      const perPage = perPageInput || 100;
+
       const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
-      const logs = (allLogs?.logs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
+      const logs = allLogs.logs.filter(log => this.matchesLog(log, { runId }));
       const total = logs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = logs.slice(start, end);
-      const hasMore = end < total;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
 
       return {
-        logs: paginatedLogs,
+        logs: logs.slice(start, end),
         total,
         page,
-        perPage: resolvedPerPage,
-        hasMore,
+        perPage,
+        hasMore: end < total,
       };
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);

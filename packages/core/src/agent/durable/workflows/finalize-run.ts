@@ -10,6 +10,7 @@ import { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { TripWire } from '../../trip-wire';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -32,6 +33,13 @@ export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
   outputText: string;
   titleGeneration?: Promise<void>;
+  /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
+  tripwire?: {
+    reason: string;
+    processorId?: string;
+    retry?: boolean;
+    metadata?: unknown;
+  };
 }
 
 function restoreRequestContext(
@@ -161,6 +169,19 @@ export async function runDurableFinishSideEffects({
         outputResult,
       );
     } catch (error) {
+      if (error instanceof TripWire) {
+        // Match Agent: a tripwire rejects the answer, so skip persistence and title generation.
+        return {
+          messageListState: messageList.serialize(),
+          outputText: resolveOutputText(messageList),
+          tripwire: {
+            reason: error.message,
+            processorId: error.processorId,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+          },
+        };
+      }
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
     }
   }

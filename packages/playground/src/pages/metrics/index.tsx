@@ -1,11 +1,21 @@
+import { EntityType } from '@mastra/core/observability';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import {
+  AgentRunsCard,
+  FailureRateCard,
+  LatencyCard,
+  MetricsGrid,
+  MetricsKpis,
+  ScoresCard,
+  TokenUsageCard,
+  TraceVolumeCard,
+  UsageCard,
+} from '@mastra/playground-ui/domains/metrics/components';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
@@ -23,21 +33,9 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { LatencyCard } from '@/domains/metrics/components/latency-card';
-import { MemoryCard } from '@/domains/metrics/components/memory-card';
-import {
-  ActiveResourcesKpiCard,
-  ActiveThreadsKpiCard,
-  AgentRunsKpiCard,
-  ModelCostKpiCard,
-  TotalTokensKpiCard,
-} from '@/domains/metrics/components/metrics-kpi-cards';
 import { MetricsPageLayout } from '@/domains/metrics/components/metrics-page-layout';
 import { MetricsStorageGate } from '@/domains/metrics/components/metrics-storage-gate';
-import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
-import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
-import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
-import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+import { useMetricsDrilldownNavigation } from '@/domains/metrics/hooks/use-metrics-drilldown-navigation';
 import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
@@ -239,7 +237,7 @@ function MetricsContent() {
 
   return (
     <MetricsPageLayout filterFields={filterFields} isLoading={isMetricsLoading}>
-      <div className="grid content-start gap-4 pb-6">
+      <div className="grid content-start gap-4">
         {isInMemory && (
           <Notice variant="info" title="Metrics are not persisted">
             <Notice.Message>
@@ -249,23 +247,55 @@ function MetricsContent() {
           </Notice>
         )}
 
-        <MetricsCardGroup>
-          <AgentRunsKpiCard />
-          <ModelCostKpiCard />
-          <TotalTokensKpiCard />
-          <ActiveThreadsKpiCard />
-          <ActiveResourcesKpiCard />
-        </MetricsCardGroup>
-
-        <MetricsFlexGrid>
-          <ModelUsageCostCard />
-          <TokenUsageByAgentCard />
-          <TokenUsageTimelineCard />
-          <MemoryCard />
-          <TracesVolumeCard />
-          <LatencyCard />
-        </MetricsFlexGrid>
+        <MetricsCards />
       </div>
     </MetricsPageLayout>
+  );
+}
+
+function MetricsCards() {
+  const { openTraces, openLogs } = useMetricsDrilldownNavigation();
+  const agent = EntityType.AGENT;
+
+  return (
+    <div className="grid content-start gap-4 pb-6">
+      <MetricsKpis />
+      <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
+      <MetricsGrid columns={3}>
+        <MetricsGrid.Item>
+          <AgentRunsCard onTimeRangeClick={range => openTraces({ rootEntityType: agent, window: range })} />
+        </MetricsGrid.Item>
+        <MetricsGrid.Item>
+          <FailureRateCard
+            onViewErrors={() => openLogs({ rootEntityType: agent, status: 'error' })}
+            onTimeRangeClick={range => openTraces({ rootEntityType: agent, status: 'error', window: range })}
+          />
+        </MetricsGrid.Item>
+        <MetricsGrid.Item span={2} className="@7xl:col-span-1">
+          <LatencyCard
+            onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+            onTimeRangeClick={range => openTraces({ window: range })}
+          />
+        </MetricsGrid.Item>
+      </MetricsGrid>
+      <MetricsGrid columns={2}>
+        <MetricsGrid.Item>
+          <TraceVolumeCard
+            onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+            onViewErrors={rootEntityType => openLogs({ rootEntityType, status: 'error' })}
+            onEntityClick={(rootEntityType, entityName) => openTraces({ rootEntityType, entityName })}
+          />
+        </MetricsGrid.Item>
+        <MetricsGrid.Item>
+          <UsageCard
+            onViewTraces={() => openTraces()}
+            onAgentClick={entityName => openTraces({ rootEntityType: agent, entityName })}
+            onModelClick={model => openTraces({ model })}
+            onThreadClick={threadId => openTraces({ threadId })}
+          />
+        </MetricsGrid.Item>
+      </MetricsGrid>
+      <ScoresCard />
+    </div>
   );
 }

@@ -20,7 +20,7 @@ test.describe('code-mode agent override', () => {
       // Local code mode exposes a filesystem write, plus Download JSON. Platform
       // Open PR is only shown when a platform/GitHub App endpoint is configured.
       const downloadButton = page.getByRole('button', { name: /Download JSON/i });
-      const saveToFilesystemButton = page.getByRole('button', { name: /Save to filesystem/i });
+      const saveToFilesystemButton = page.getByRole('button', { name: /Save to filesystem/i }).first();
       await expect(downloadButton).toBeVisible();
       await expect(saveToFilesystemButton).toBeVisible();
       await expect(page.getByRole('button', { name: /Open PR/i })).toHaveCount(0);
