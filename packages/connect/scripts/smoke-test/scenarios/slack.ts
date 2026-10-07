@@ -252,6 +252,24 @@ export const slackScenario: Scenario = {
         steps.push(makeStep('list files', 'slack_list_files', 'fail', errorMessage(error)));
       }
     }
+    if (tools['slack_search_channels']) {
+      try {
+        const found = await call<{ conversations: Array<{ id: string }> }>('slack_search_channels', {
+          query: channelName,
+        });
+        const hit = found.conversations.some(conversation => conversation.id === channelId);
+        steps.push(
+          makeStep(
+            'search channels',
+            'slack_search_channels',
+            hit ? 'pass' : 'fail',
+            hit ? channelId : 'created channel missing from search results',
+          ),
+        );
+      } catch (error) {
+        steps.push(makeStep('search channels', 'slack_search_channels', 'fail', errorMessage(error)));
+      }
+    }
     if (tools['slack_search_files']) {
       try {
         await call('slack_search_files', { query: runId, count: 1 });
