@@ -11,6 +11,7 @@ import { bucketPlan, bucketWindow, intervalHours } from '../lib/metrics-buckets'
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
@@ -51,16 +52,11 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
   const series = seriesFor(entity);
   const peak = Math.max(0, ...data.map(b => b[`${entity}P95`] ?? 0));
 
-  return (
-    <ChartCard
-      title="Latency"
-      description="Duration percentiles."
-      summary={{ value: peak > 0 ? formatDuration(peak) : '—', label: 'peak P95' }}
-      actions={onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />}
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-      isError={isError}
-    >
+  const layout = {
+    title: 'Latency',
+    description: 'Duration percentiles.',
+    actions: onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />,
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
         <MetricsCard.Tabs<LatencyEntity> value={entity} onValueChange={setEntity}>
@@ -69,11 +65,26 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
           <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
         </MetricsCard.Tabs>
       </MetricsCard.Toolbar>
-      <ChartArea
-        isError={isError}
-        isEmpty={!isLoading && peak === 0}
-        emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}
-      >
+    ),
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={
+        <MetricsCard.Summary value={peak > 0 ? formatDuration(peak) : '—'} label="peak P95" isLoading={isLoading} />
+      }
+      isUpdating={isPlaceholderData}
+    >
+      <ChartArea isEmpty={!isLoading && peak === 0} emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}>
         <MetricsLineChart
           data={data}
           series={series}

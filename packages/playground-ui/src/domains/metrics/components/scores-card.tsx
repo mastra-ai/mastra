@@ -4,6 +4,8 @@ import { BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 
@@ -34,20 +36,33 @@ export function ScoresCard() {
   const { data, isLoading, isError, isPlaceholderData } = useMetricsScores();
   const scorers = data?.scorers ?? [];
 
+  const layout = { title: 'Scores', description: 'Average scorer result, 0 to 1.' };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
   return (
     <ChartCard
-      title="Scores"
-      description="Average scorer result, 0 to 1."
-      summary={{ value: String(scorers.length), label: scorers.length === 1 ? 'scorer' : 'scorers' }}
-      isLoading={isLoading}
+      {...layout}
+      summary={
+        <MetricsCard.Summary
+          value={String(scorers.length)}
+          label={scorers.length === 1 ? 'scorer' : 'scorers'}
+          isLoading={isLoading}
+        />
+      }
       isUpdating={isPlaceholderData}
-      isError={isError}
     >
-      <ChartArea isError={isError} isEmpty={!isLoading && scorers.length === 0} emptyMessage="No scores in this range.">
+      <ChartArea isEmpty={!isLoading && scorers.length === 0} emptyMessage="No scores in this range.">
         <MetricsLineChart
           data={data?.buckets ?? []}
           series={scorerSeries(scorers)}
-          height={200}
+          height="fill"
           showYAxis={false}
           yDomain={[0, 1]}
           valueFormatter={formatScore}

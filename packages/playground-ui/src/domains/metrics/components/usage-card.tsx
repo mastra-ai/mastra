@@ -9,6 +9,7 @@ import { formatCount, formatUsd } from '../lib/chart-format';
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
 import { MetricsShareList } from '@/ds/components/MetricsShareList';
@@ -120,16 +121,11 @@ function UsageFrame({
     onClick: r.onClick,
   }));
 
-  return (
-    <ChartCard
-      title="Usage"
-      description="Who is spending: cost share, with tokens."
-      summary={{ value: formatUsd(rows.reduce((sum, r) => sum + r.cost, 0)), label: 'cost' }}
-      actions={onViewTraces && <OpenInTracesButton onClick={onViewTraces} />}
-      isLoading={isLoading}
-      isUpdating={isUpdating}
-      isError={isError}
-    >
+  const layout = {
+    title: 'Usage',
+    description: 'Who is spending: cost share, with tokens.',
+    actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsCard.Tabs<View> value={view} onValueChange={onViewChange}>
           <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
@@ -138,7 +134,30 @@ function UsageFrame({
         </MetricsCard.Tabs>
         <MetricsShareList.Header columns={COLUMNS} valueLabel="Cost" />
       </MetricsCard.Toolbar>
-      <ChartArea isError={isError}>
+    ),
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={
+        <MetricsCard.Summary
+          value={formatUsd(rows.reduce((sum, r) => sum + r.cost, 0))}
+          label="cost"
+          isLoading={isLoading}
+        />
+      }
+      isUpdating={isUpdating}
+    >
+      <ChartArea>
         <MetricsShareList
           rows={shareRows}
           columns={COLUMNS}

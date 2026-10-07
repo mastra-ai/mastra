@@ -8,6 +8,8 @@ import { formatCount } from '../lib/chart-format';
 import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
 
 const SERIES = [
@@ -27,16 +29,23 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
   const total = data.reduce((sum, b) => sum + b.completed + b.failed, 0);
 
+  const layout = { title: 'Agent runs', description: 'Completed and failed runs.' };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
   return (
     <ChartCard
-      title="Agent runs"
-      description="Completed and failed runs."
-      summary={{ value: formatCount(total), label: 'runs' }}
-      isLoading={isLoading}
+      {...layout}
+      summary={<MetricsCard.Summary value={formatCount(total)} label="runs" isLoading={isLoading} />}
       isUpdating={isPlaceholderData}
-      isError={isError}
     >
-      <ChartArea isError={isError} isEmpty={!isLoading && total === 0} emptyMessage="No agent runs in this range.">
+      <ChartArea isEmpty={!isLoading && total === 0} emptyMessage="No agent runs in this range.">
         <MetricsStackedBarChart
           data={data}
           series={SERIES}

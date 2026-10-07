@@ -9,6 +9,7 @@ import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
@@ -43,16 +44,11 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
   const isTokens = view === 'tokens';
   const series = isTokens ? TOKEN_SERIES : COST_SERIES;
 
-  return (
-    <ChartCard
-      title="Token usage"
-      description={isTokens ? 'Input, cache reads and output.' : 'Estimated model spend.'}
-      summary={isTokens ? { value: formatCount(tokens), label: 'tokens' } : { value: formatUsd(cost), label: 'cost' }}
-      actions={onViewTraces && <OpenInTracesButton onClick={onViewTraces} />}
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-      isError={isError}
-    >
+  const layout = {
+    title: 'Token usage',
+    description: isTokens ? 'Input, cache reads and output.' : 'Estimated model spend.',
+    actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
         <MetricsCard.Tabs<View> value={view} onValueChange={setView}>
@@ -60,15 +56,34 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
           <MetricsCard.Tab value="cost">Cost</MetricsCard.Tab>
         </MetricsCard.Tabs>
       </MetricsCard.Toolbar>
-      <ChartArea
-        isError={isError}
-        isEmpty={!isLoading && tokens === 0 && cost === 0}
-        emptyMessage="No model calls in this range."
-      >
+    ),
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={
+        <MetricsCard.Summary
+          value={isTokens ? formatCount(tokens) : formatUsd(cost)}
+          label={isTokens ? 'tokens' : 'cost'}
+          isLoading={isLoading}
+        />
+      }
+      isUpdating={isPlaceholderData}
+    >
+      <ChartArea isEmpty={!isLoading && tokens === 0 && cost === 0} emptyMessage="No model calls in this range.">
         <MetricsStackedBarChart
           data={data}
           series={series}
-          height={240}
+          height="fill"
           showLegend={false}
           showYAxis={false}
           valueFormatter={isTokens ? formatCount : formatUsd}

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MetricsProvider } from '../../hooks/use-metrics';
 import { AgentRunsCard } from '../agent-runs-card';
@@ -11,96 +10,8 @@ import { ScoresCard } from '../scores-card';
 import { TokenUsageCard } from '../token-usage-card';
 import { TraceVolumeCard } from '../trace-volume-card';
 import { UsageCard } from '../usage-card';
-import {
-  agentLatencyFixture,
-  agentRunSeriesFixture,
-  agentRunsAggregateFixture,
-  agentVolumeBreakdownFixture,
-  emptyAggregateFixture,
-  emptyBreakdownFixture,
-  emptyPercentilesFixture,
-  emptyScoresFixture,
-  emptySeriesFixture,
-  metricsErrorFixture,
-  recentScoresFixture,
-  scoreAggregateFixture,
-  scoreSeriesFixture,
-  threadSpendBreakdownFixture,
-  tokenSeriesFixture,
-} from './fixtures/metrics';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
-
-const API = `${TEST_BASE_URL}/api/observability/metrics`;
-const SCORES_API = `${TEST_BASE_URL}/api/observability/scores`;
-
-/** The metric a request asks for, and what it groups by. */
-async function readMetricRequest(request: Request) {
-  const body: unknown = await request.json();
-  if (typeof body !== 'object' || body === null) return { name: '', groupBy: [], aggregation: '' };
-  // Most queries take a list of metric names; percentiles take one.
-  const names = 'name' in body ? [body.name].flat() : [];
-  const name = typeof names[0] === 'string' ? names[0] : '';
-  const groupBy = 'groupBy' in body && Array.isArray(body.groupBy) ? body.groupBy.map(String) : [];
-  const aggregation = 'aggregation' in body ? String(body.aggregation) : '';
-  return { name, groupBy, aggregation };
-}
-
-/** Seeded data: agent runs, tokens, one agent's volume and latency, and one scorer's results. */
-function useSeededMetrics() {
-  server.use(
-    http.post(`${API}/aggregate`, async ({ request }) => {
-      // Agent runs count; threads (a distinct count of the same metric) stay empty.
-      const { name, aggregation } = await readMetricRequest(request);
-      const isAgentRuns = name === 'mastra_agent_duration_ms' && aggregation === 'count';
-      return HttpResponse.json(isAgentRuns ? agentRunsAggregateFixture : emptyAggregateFixture);
-    }),
-    http.post(`${API}/breakdown`, async ({ request }) => {
-      const { name, groupBy } = await readMetricRequest(request);
-      if (name === 'mastra_agent_duration_ms' && groupBy.includes('status')) {
-        return HttpResponse.json(agentVolumeBreakdownFixture);
-      }
-      if (groupBy.includes('threadId')) return HttpResponse.json(threadSpendBreakdownFixture);
-      return HttpResponse.json(emptyBreakdownFixture);
-    }),
-    http.post(`${API}/timeseries`, async ({ request }) => {
-      const { name } = await readMetricRequest(request);
-      if (name === 'mastra_agent_duration_ms') return HttpResponse.json(agentRunSeriesFixture());
-      if (name === 'mastra_model_total_input_tokens') return HttpResponse.json(tokenSeriesFixture(900, 0.5));
-      if (name === 'mastra_model_input_cache_read_tokens') return HttpResponse.json(tokenSeriesFixture(300, 0));
-      if (name === 'mastra_model_total_output_tokens') return HttpResponse.json(tokenSeriesFixture(400, 0.25));
-      return HttpResponse.json(emptySeriesFixture);
-    }),
-    http.post(`${API}/percentiles`, async ({ request }) => {
-      const { name } = await readMetricRequest(request);
-      return HttpResponse.json(name === 'mastra_agent_duration_ms' ? agentLatencyFixture() : emptyPercentilesFixture);
-    }),
-    http.get(SCORES_API, () => HttpResponse.json(recentScoresFixture())),
-    http.post(`${SCORES_API}/aggregate`, () => HttpResponse.json(scoreAggregateFixture)),
-    http.post(`${SCORES_API}/timeseries`, () => HttpResponse.json(scoreSeriesFixture())),
-  );
-}
-
-function useEmptyMetrics() {
-  server.use(
-    http.post(`${API}/aggregate`, () => HttpResponse.json(emptyAggregateFixture)),
-    http.post(`${API}/breakdown`, () => HttpResponse.json(emptyBreakdownFixture)),
-    http.post(`${API}/timeseries`, () => HttpResponse.json(emptySeriesFixture)),
-    http.post(`${API}/percentiles`, () => HttpResponse.json(emptyPercentilesFixture)),
-    http.get(SCORES_API, () => HttpResponse.json(emptyScoresFixture)),
-  );
-}
-
-function useFailingMetrics() {
-  const fail = () => HttpResponse.json(metricsErrorFixture, { status: 500 });
-  server.use(
-    http.post(`${API}/aggregate`, fail),
-    http.post(`${API}/breakdown`, fail),
-    http.post(`${API}/timeseries`, fail),
-    http.post(`${API}/percentiles`, fail),
-    http.get(SCORES_API, fail),
-  );
-}
+import { emptyMetrics, failingMetrics, seedMetrics } from './metrics-msw';
+import { renderWithProviders } from '@/test/render';
 
 const onEntityClick = vi.fn();
 const onThreadClick = vi.fn();
@@ -125,7 +36,7 @@ function renderDashboard() {
 describe('Metrics cards', () => {
   describe('when the range has data', () => {
     beforeEach(() => {
-      useSeededMetrics();
+      seedMetrics();
       renderDashboard();
     });
 
@@ -187,7 +98,7 @@ describe('Metrics cards', () => {
 
   describe('when the range is empty', () => {
     it('says so in every card', async () => {
-      useEmptyMetrics();
+      emptyMetrics();
       renderDashboard();
 
       expect(await screen.findByText('No model calls in this range.')).toBeDefined();
@@ -200,7 +111,7 @@ describe('Metrics cards', () => {
 
   describe('when the metrics API fails', () => {
     beforeEach(() => {
-      useFailingMetrics();
+      failingMetrics();
       renderDashboard();
     });
 

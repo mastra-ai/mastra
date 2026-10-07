@@ -8,6 +8,7 @@ import { formatCount, formatPercent } from '../lib/chart-format';
 import { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
 import { MetricsShareList } from '@/ds/components/MetricsShareList';
@@ -60,21 +61,16 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
     0,
   );
 
-  return (
-    <ChartCard
-      title="Trace volume"
-      description="Runs and calls, with error rate."
-      summary={{ value: formatCount(total), label: 'runs and calls' }}
-      actions={
-        <>
-          {onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(rootEntityType)} />}
-          {onViewErrors && <OpenErrorsInLogsButton onClick={() => onViewErrors(rootEntityType)} />}
-        </>
-      }
-      isLoading={volume.isLoading}
-      isUpdating={volume.isPlaceholderData}
-      isError={volume.isError}
-    >
+  const layout = {
+    title: 'Trace volume',
+    description: 'Runs and calls, with error rate.',
+    actions: (onViewTraces || onViewErrors) && (
+      <>
+        {onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(rootEntityType)} />}
+        {onViewErrors && <OpenErrorsInLogsButton onClick={() => onViewErrors(rootEntityType)} />}
+      </>
+    ),
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsCard.Tabs<Entity> value={entity} onValueChange={setEntity}>
           <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
@@ -83,7 +79,24 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
         </MetricsCard.Tabs>
         <MetricsShareList.Header columns={COLUMNS} valueLabel="Runs" />
       </MetricsCard.Toolbar>
-      <ChartArea isError={volume.isError}>
+    ),
+  };
+
+  if (volume.isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={<MetricsCard.Summary value={formatCount(total)} label="runs and calls" isLoading={volume.isLoading} />}
+      isUpdating={volume.isPlaceholderData}
+    >
+      <ChartArea>
         <MetricsShareList
           key={entity}
           rows={rows}

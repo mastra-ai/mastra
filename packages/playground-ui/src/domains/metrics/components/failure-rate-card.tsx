@@ -9,6 +9,8 @@ import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenErrorsInLogsButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 
 const SERIES = [{ dataKey: 'failureRate', label: 'Failed runs', color: CHART_COLORS.error }];
@@ -30,17 +32,29 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
   const runs = data.reduce((sum, b) => sum + b.completed + b.failed, 0);
   const failed = data.reduce((sum, b) => sum + b.failed, 0);
 
+  const layout = {
+    title: 'Failure rate',
+    description: 'Share of agent runs that failed.',
+    actions: onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />,
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
   return (
     <ChartCard
-      title="Failure rate"
-      description="Share of agent runs that failed."
-      summary={{ value: formatPercent(runs > 0 ? failed / runs : 0), label: 'failed' }}
-      actions={onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />}
-      isLoading={isLoading}
+      {...layout}
+      summary={
+        <MetricsCard.Summary value={formatPercent(runs > 0 ? failed / runs : 0)} label="failed" isLoading={isLoading} />
+      }
       isUpdating={isPlaceholderData}
-      isError={isError}
     >
-      <ChartArea isError={isError} isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">
+      <ChartArea isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">
         <MetricsLineChart
           data={data}
           series={SERIES}
