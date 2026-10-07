@@ -71,12 +71,12 @@ with known inputs and expected outputs under `tests/`.
 For broader database querying, document retrieval, or file ingestion, adapt the relevant tools and
 workflows from these templates:
 
-| Template                                                                             | What to reuse                                                                                                         |
-| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| [Chat with Database](https://github.com/mastra-ai/template-text-to-sql)              | Database schema discovery and natural-language SQL queries.                                                           |
-| [Chat with PDF](https://github.com/mastra-ai/template-chat-with-pdf)                 | PDF indexing, retrieval, and answers with page citations.                                                             |
-| [CSV to Questions Generator](https://github.com/mastra-ai/template-csv-to-questions) | Reading CSV files, summarizing their contents, and generating exploration questions.                                  |
-| [Organization Intelligence](https://mastra.ai/templates/organization-intelligence)   | Cited answers from local files, Google Drive, and S3-compatible storage, including Markdown, PDF, and DOCX documents. |
+| Template                                                                           | What to reuse                                                                                                         |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| [Chat with Database](https://mastra.ai/templates/text-to-sql)                      | Database schema discovery and natural-language SQL queries.                                                           |
+| [Chat with PDF](https://mastra.ai/templates/chat-with-pdf)                         | PDF indexing, retrieval, and answers with page citations.                                                             |
+| [CSV to Questions Generator](https://mastra.ai/templates/csv-to-questions)         | Reading CSV files, summarizing their contents, and generating exploration questions.                                  |
+| [Organization Intelligence](https://mastra.ai/templates/organization-intelligence) | Cited answers from local files, Google Drive, and S3-compatible storage, including Markdown, PDF, and DOCX documents. |
 
 These are integration starting points, not preinstalled connectors. For structured analytics, adapt
 their results to the `DataSource` contract so this template can validate and render them. Document
