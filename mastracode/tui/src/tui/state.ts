@@ -295,10 +295,6 @@ export interface TUIState {
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** Previous plan snapshot (keyed by plan file path) for diff display on resubmission */
   previousPlanSnapshot?: { path: string; plan: string };
-  /** User-message follow-ups queued while the agent is running */
-  pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
-  /** FIFO ordering across queued follow-up messages and slash commands */
-  pendingQueuedActions: Array<'message' | 'slash'>;
   /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
   /** Pending signal messages waiting for the stream echo */
@@ -363,11 +359,6 @@ export interface TUIState {
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
-
-  // ── Dedup ────────────────────────────────────────────────────────────
-  /** Texts of queued messages that were locally rendered and fired — used to
-   *  suppress the subscription echo that would otherwise create a duplicate. */
-  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
@@ -474,8 +465,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
-    pendingFollowUpMessages: [],
-    pendingQueuedActions: [],
     followUpComponents: [],
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],

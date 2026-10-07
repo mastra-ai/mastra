@@ -637,7 +637,6 @@ export class MastraTUI {
       const messageId = `queued-slash-${Date.now()}-${this.state.pendingSlashCommands.length}`;
       this.state.pendingSlashCommands.push(text);
       this.state.pendingSlashCommandMessageIds.push(messageId);
-      this.state.pendingQueuedActions.push('slash');
       addPendingUserMessage(this.state, messageId, text);
       updateStatusLine(this.state);
       return;
@@ -646,8 +645,13 @@ export class MastraTUI {
     const { content, images } = consumePendingImages(text, this.state.pendingImages);
     this.state.pendingImages = [];
 
-    this.state.pendingFollowUpMessages.push({ content, images });
-    this.state.pendingQueuedActions.push('message');
+    const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
+    // The Agent runtime owns queued-message ordering, including across aborts.
+    const queue = () => this.state.session.queueMessage({ content, files });
+    const pendingThread = this.createPendingNewThread();
+    (pendingThread ? pendingThread.then(queue) : queue()).catch((error: unknown) => {
+      showSessionError(this.state, error);
+    });
     updateStatusLine(this.state);
     flushRender(this.state);
   }
