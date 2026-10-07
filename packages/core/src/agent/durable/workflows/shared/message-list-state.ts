@@ -116,6 +116,21 @@ async function dehydrate(params: TranscriptParams, messageListState: SerializedM
   return run.refs.dehydrate(messageListState);
 }
 
+/**
+ * Loads the recalled messages a persisted run stores as refs before it resumes
+ * or recovers, dropping any this process verified earlier so the run picks up
+ * edits or deletions made in memory meanwhile. Called before anything runs, so
+ * a memory storage failure leaves the run as it was; the steps then restore the
+ * transcript from the rows loaded here.
+ */
+export async function loadMessageListStateForResume(params: TranscriptParams): Promise<void> {
+  releaseMessageListState(params);
+  const stored = (params.state as StoredMessageListStateCarrier | undefined)?.messageListState;
+  if (stored === undefined) return;
+  const run = runTranscriptRefs(params);
+  await run.refs.hydrate(stored, run.load, run);
+}
+
 /** Frees this process's verified rows once the run has read its transcript for the last time. */
 export function releaseMessageListState(params: TranscriptParams): void {
   const { runId } = (params.getInitData() ?? {}) as RunIdentity;

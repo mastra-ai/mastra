@@ -14,6 +14,7 @@ import { DurableStepIds } from '../constants';
 
 const threadId = 'refs-thread';
 const resourceId = 'refs-resource';
+const memoryOption = { thread: threadId, resource: resourceId };
 const historyText = (i: number) => `history turn ${i}: ${'h'.repeat(500)}`;
 const history = (): MastraDBMessage[] =>
   Array.from({ length: 4 }, (_, i) => ({
@@ -75,6 +76,7 @@ async function startProcess(messages: MastraDBMessage[], { requireApproval = fal
   await memory.saveMessages({ messages });
 
   const prompts: string[] = [];
+  let toolExecutions = 0;
   const agent = new Agent({
     id: 'refs-agent',
     name: 'refs-agent',
@@ -87,7 +89,10 @@ async function startProcess(messages: MastraDBMessage[], { requireApproval = fal
         description: 'Looks something up',
         inputSchema: z.object({ query: z.string() }),
         requireApproval,
-        execute: async () => ({ found: true }),
+        execute: async () => {
+          toolExecutions++;
+          return { found: true };
+        },
       },
     },
   });
@@ -99,7 +104,58 @@ async function startProcess(messages: MastraDBMessage[], { requireApproval = fal
     recovery: { durableAgents: 'auto' },
   });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { durableAgent, workflows, prompts, storage };
+  return { durableAgent, workflows, prompts, storage, toolExecutions: () => toolExecutions };
+}
+
+// Runs to completion, copying the workflow store after every write, and returns
+// the copies a crashed process could recover from with the transcript stored as
+// refs. Earlier copies restart from the run input, which carries its own copy.
+// Skips the nested start race excluded in durable-agent-crash-recovery.test.ts.
+async function recoverableCheckpoints() {
+  const original = await startProcess(history());
+  const rows = new Map<string, SnapshotRow>();
+  const checkpoints: SnapshotRow[][] = [];
+  const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
+  original.workflows.persistWorkflowSnapshot = async args => {
+    rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+    checkpoints.push([...rows.values()].map(row => structuredClone(row)));
+    return persist(args);
+  };
+  const result = await original.durableAgent.stream('Look it up', { memory: memoryOption });
+  expect(await collectText(result)).toBe('done');
+
+  const recoverable = checkpoints.filter(checkpoint => {
+    const outer = checkpoint.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot;
+    const innerSaved = checkpoint.some(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP);
+    const nestedStartRace = DurableStepIds.AGENTIC_EXECUTION in (outer?.activeStepsPath ?? {}) && !innerSaved;
+    return outer?.status === 'running' && !nestedStartRace && checkpoint.some(row => refIds(row.snapshot).length > 0);
+  });
+  expect(recoverable.length).toBeGreaterThan(0);
+  return { runId: result.runId, recoverable };
+}
+
+async function streamUntilApproval(
+  durableAgent: Awaited<ReturnType<typeof startProcess>>['durableAgent'],
+  workflows: Awaited<ReturnType<typeof startProcess>>['workflows'],
+) {
+  const result = await durableAgent.stream('Look it up', { memory: memoryOption });
+  let toolCallId: string | undefined;
+  for await (const chunk of result.fullStream as AsyncIterable<any>) {
+    if (chunk.type === 'tool-call-approval') {
+      toolCallId = chunk.payload.toolCallId;
+      break;
+    }
+  }
+  expect(toolCallId).toBe('call-1');
+  await vi.waitFor(async () => {
+    expect(await outerSnapshot(workflows, result.runId)).toMatchObject({ status: 'suspended' });
+  });
+  return { runId: result.runId, toolCallId: toolCallId! };
+}
+
+async function outerSnapshot(workflows: Awaited<ReturnType<typeof startProcess>>['workflows'], runId: string) {
+  const run = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+  return run?.snapshot;
 }
 
 const refIds = (snapshot: WorkflowRunState | undefined) =>
@@ -126,7 +182,7 @@ describe('memory-recalled messages in durable runs', () => {
       return persist(args);
     };
 
-    const result = await durableAgent.stream('Look it up', { memory: { thread: threadId, resource: resourceId } });
+    const result = await durableAgent.stream('Look it up', { memory: memoryOption });
     expect(await collectText(result)).toBe('done');
 
     const withTranscript = persisted.filter(row => (row.snapshot.value as any)?.messageListState);
@@ -143,32 +199,8 @@ describe('memory-recalled messages in durable runs', () => {
   });
 
   it('recovers in a fresh process with the stored version of recalled messages edited or deleted meanwhile', async () => {
-    // Run to completion, copying the workflow store after every write.
-    const original = await startProcess(history());
-    const rows = new Map<string, SnapshotRow>();
-    const checkpoints: SnapshotRow[][] = [];
-    const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
-    original.workflows.persistWorkflowSnapshot = async args => {
-      rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
-      checkpoints.push([...rows.values()].map(row => structuredClone(row)));
-      return persist(args);
-    };
-    const result = await original.durableAgent.stream('Look it up', {
-      memory: { thread: threadId, resource: resourceId },
-    });
-    expect(await collectText(result)).toBe('done');
-
-    // Recover from every checkpoint that already stores the transcript as
-    // refs, after history-0 was edited and history-1 deleted. Earlier
-    // checkpoints restart from the run input, which carries its own copy.
-    // Skips the nested start race excluded in durable-agent-crash-recovery.test.ts.
-    const recoverable = checkpoints.filter(checkpoint => {
-      const outer = checkpoint.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot;
-      const innerSaved = checkpoint.some(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP);
-      const nestedStartRace = DurableStepIds.AGENTIC_EXECUTION in (outer?.activeStepsPath ?? {}) && !innerSaved;
-      return outer?.status === 'running' && !nestedStartRace && checkpoint.some(row => refIds(row.snapshot).length > 0);
-    });
-    expect(recoverable.length).toBeGreaterThan(0);
+    // Recover from every checkpoint after history-0 was edited and history-1 deleted.
+    const { runId, recoverable } = await recoverableCheckpoints();
 
     const [first, , ...rest] = history();
     const edited = {
@@ -180,7 +212,7 @@ describe('memory-recalled messages in durable runs', () => {
       const recovering = await startProcess([edited, ...rest]);
       for (const row of checkpoint) await recovering.workflows.persistWorkflowSnapshot(row);
 
-      const recovered = await recovering.durableAgent.recover(result.runId);
+      const recovered = await recovering.durableAgent.recover(runId);
       expect(await collectText(recovered)).toBe('done');
 
       modelCalls.push(recovering.prompts.length);
@@ -199,33 +231,19 @@ describe('memory-recalled messages in durable runs', () => {
 
   it('resumes an approval in the same process with the stored version of recalled messages edited or deleted while suspended', async () => {
     const { durableAgent, workflows, prompts, storage } = await startProcess(history(), { requireApproval: true });
-    const memoryOption = { thread: threadId, resource: resourceId };
-
-    const result = await durableAgent.stream('Look it up', { memory: memoryOption });
-    let toolCallId: string | undefined;
-    for await (const chunk of result.fullStream as AsyncIterable<any>) {
-      if (chunk.type === 'tool-call-approval') {
-        toolCallId = chunk.payload.toolCallId;
-        break;
-      }
-    }
-    expect(toolCallId).toBe('call-1');
-    await vi.waitFor(async () => {
-      const run = await workflows.getWorkflowRunById({
-        runId: result.runId,
-        workflowName: DurableStepIds.AGENTIC_LOOP,
-      });
-      expect(run?.snapshot).toMatchObject({ status: 'suspended' });
-    });
+    const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
 
     const memoryStore = (await storage.getStore('memory'))!;
     await memoryStore.updateMessages({
       messages: [{ id: 'history-0', content: { format: 2, parts: [{ type: 'text', text: 'edited meanwhile' }] } }],
     });
     await memoryStore.deleteMessages(['history-1']);
+    const listMessagesById = vi.spyOn(memoryStore, 'listMessagesById');
 
-    const resumed = await durableAgent.approveToolCall({ runId: result.runId, toolCallId, memory: memoryOption });
+    const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption });
     expect(await collectText(resumed)).toBe('done');
+    // Loaded once before the resume runs anything; the steps never read storage.
+    expect(listMessagesById).toHaveBeenCalledTimes(1);
 
     expect(prompts).toHaveLength(2);
     const afterResume = prompts[1]!;
@@ -235,4 +253,52 @@ describe('memory-recalled messages in durable runs', () => {
     expect(afterResume).toContain(historyText(2));
     expect(afterResume).toContain(historyText(3));
   });
+
+  it('keeps an approval suspended for a retry when memory storage cannot load the recalled messages', async () => {
+    const { durableAgent, workflows, prompts, storage, toolExecutions } = await startProcess(history(), {
+      requireApproval: true,
+    });
+    const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
+
+    const memoryStore = (await storage.getStore('memory'))!;
+    const listMessagesById = vi
+      .spyOn(memoryStore, 'listMessagesById')
+      .mockRejectedValueOnce(new Error('memory storage temporarily unavailable'));
+
+    await expect(durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption })).rejects.toThrow(
+      'memory storage temporarily unavailable',
+    );
+    expect(listMessagesById).toHaveBeenCalledTimes(1);
+    expect(toolExecutions()).toBe(0);
+    expect(await outerSnapshot(workflows, runId)).toMatchObject({ status: 'suspended' });
+
+    const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption });
+    expect(await collectText(resumed)).toBe('done');
+    expect(listMessagesById).toHaveBeenCalledTimes(2);
+    expect(toolExecutions()).toBe(1);
+    expect(prompts).toHaveLength(2);
+    for (let i = 0; i < 4; i++) expect(prompts[1]).toContain(historyText(i));
+  });
+
+  it('leaves a crashed run for the next recovery when memory storage cannot load the recalled messages', async () => {
+    const { runId, recoverable } = await recoverableCheckpoints();
+    const recovering = await startProcess(history());
+    for (const row of recoverable[0]!) await recovering.workflows.persistWorkflowSnapshot(row);
+
+    const memoryStore = (await recovering.storage.getStore('memory'))!;
+    const listMessagesById = vi
+      .spyOn(memoryStore, 'listMessagesById')
+      .mockRejectedValueOnce(new Error('memory storage temporarily unavailable'));
+
+    await expect(recovering.durableAgent.recover(runId)).rejects.toThrow('memory storage temporarily unavailable');
+    expect(listMessagesById).toHaveBeenCalledTimes(1);
+    expect(await outerSnapshot(recovering.workflows, runId)).toMatchObject({ status: 'running' });
+
+    const recovered = await recovering.durableAgent.recover(runId);
+    expect(await collectText(recovered)).toBe('done');
+    expect(listMessagesById).toHaveBeenCalledTimes(2);
+    for (const prompt of recovering.prompts) {
+      for (let i = 0; i < 4; i++) expect(prompt).toContain(historyText(i));
+    }
+  }, 30_000);
 });
