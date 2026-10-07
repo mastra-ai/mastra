@@ -440,7 +440,7 @@ export class AgentController<TState = {}> {
         }),
       persistTokenUsage: () => this.persistTokenUsage(session),
       generateId: () => this.generateId(),
-      resolveTransitionModeId: () => this.resolveTransitionModeId(session),
+      resolveTransitionModeId: modeId => this.resolveTransitionModeId(session, modeId),
       saveSystemReminder: input => this.saveSystemReminder(input),
     });
 
@@ -2244,14 +2244,14 @@ export class AgentController<TState = {}> {
 
   /**
    * Resolve the mode the session transitions to when a plan is approved: the
-   * current mode's `transitionsTo`, else the configured default mode. The mode
+   * source mode's `transitionsTo`, else the configured default mode. The mode
    * catalog is AgentController config, so this is host-owned. Returns `undefined` when
    * no default mode is configured.
    */
-  private resolveTransitionModeId(session: Session<TState>): string | undefined {
-    const currentMode = session.mode.resolve();
+  private resolveTransitionModeId(session: Session<TState>, modeId: string): string | undefined {
+    const sourceMode = session.mode.resolveId(modeId);
     const transitionModeId =
-      currentMode.transitionsTo ??
+      sourceMode.transitionsTo ??
       this.config.defaultModeId ??
       this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
       this.config.modes[0]?.id;

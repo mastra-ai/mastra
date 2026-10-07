@@ -93,7 +93,13 @@ async function createSettingsController(
     initialState: { thinkingLevel: 'low', yolo: true },
     modes: [
       { id: 'build', name: 'Build', default: true, defaultModelId: 'openai/gpt-5.5', agent },
-      { id: 'plan', name: 'Plan', defaultModelId: 'openai/gpt-5.2-codex', agent },
+      {
+        id: 'plan',
+        name: 'Plan',
+        defaultModelId: 'openai/gpt-5.2-codex',
+        transitionsTo: 'build',
+        agent,
+      },
     ],
   });
   await controller.init();
@@ -833,6 +839,45 @@ describe('AgentController thread-derived session state', () => {
     await expect(controller.getSessionByResource('resource-release-failure-old')).resolves.toBeUndefined();
     await expect(controller.getSessionByResource('resource-release-failure-new')).resolves.toBe(session);
     expect(threadLock.release).toHaveBeenCalledWith('resource-release-failure-thread');
+  });
+
+  it('persists a cross-thread plan transition without changing the active thread mode', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'cross-thread-plan');
+    const session = await controller.createSession({
+      id: 'cross-thread-plan-session',
+      resourceId: 'cross-thread-plan-resource',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+    const sourceThread = await session.thread.create({ id: 'cross-thread-plan-source' });
+    await session.mode.switch({ modeId: 'plan' });
+    const address = {
+      toolCallId: 'cross-thread-plan-call',
+      runId: 'cross-thread-plan-run',
+      threadId: sourceThread.id,
+      resourceId: 'cross-thread-plan-resource',
+    };
+    session.suspensions.register({ ...address, toolName: 'submit_plan' });
+    const activeThread = await session.thread.create({ id: 'cross-thread-plan-active' });
+    await session.mode.switch({ modeId: 'plan' });
+    const resumeToolCall = vi.spyOn(session, 'resumeToolCall').mockResolvedValue();
+
+    await session.respondToToolSuspension({ address, resumeData: { action: 'approved' } });
+
+    expect(session.thread.getId()).toBe(activeThread.id);
+    expect(session.mode.get()).toBe('plan');
+    await expect(session.thread.getSettingOn({ threadId: sourceThread.id, key: 'currentModeId' })).resolves.toBe(
+      'build',
+    );
+    await expect(session.thread.getSettingOn({ threadId: activeThread.id, key: 'currentModeId' })).resolves.toBe(
+      'plan',
+    );
+    expect(resumeToolCall).toHaveBeenCalledWith({
+      address,
+      requestContext: undefined,
+      resumeData: { action: 'approved' },
+    });
   });
 
   it('scopes suspension cleanup by resource and thread and exposes none without an active thread', () => {

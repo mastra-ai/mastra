@@ -430,11 +430,11 @@ export interface SessionMachinery {
   generateId(): string;
   /**
    * Resolve the mode the session transitions to when a plan is approved: the
-   * current mode's `transitionsTo`, else the host's default mode. Returns
+   * supplied mode's `transitionsTo`, else the host's default mode. Returns
    * `undefined` when the host has no default mode. The mode catalog is AgentController
    * config, so this is genuinely host-owned.
    */
-  resolveTransitionModeId(): string | undefined;
+  resolveTransitionModeId(modeId: string): string | undefined;
   /**
    * Persist a system-reminder message to a thread, returning the saved message
    * (or `null` when no storage is configured). Pure host-owned persistence
@@ -5244,10 +5244,18 @@ export class Session<TState = unknown> {
       return;
     }
 
-    const transitionModeId = this.machinery.resolveTransitionModeId();
-    if (transitionModeId && transitionModeId !== this.mode.get()) {
-      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.mode.switch({ modeId: transitionModeId });
+    const savedModeId = await this.thread.getSettingOn({ threadId: address.threadId, key: MODE_ID_KEY });
+    const sourceModeId = typeof savedModeId === 'string' ? savedModeId : this.mode.getDefault();
+    const transitionModeId = this.machinery.resolveTransitionModeId(sourceModeId);
+    if (transitionModeId && transitionModeId !== sourceModeId) {
+      const isActiveBinding =
+        address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
+      if (isActiveBinding) {
+        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+        await this.mode.switch({ modeId: transitionModeId });
+      } else {
+        await this.thread.setSettingOn({ threadId: address.threadId, key: MODE_ID_KEY, value: transitionModeId });
+      }
     }
 
     await this.resumeToolCall({ resumeData: response, address, requestContext });
