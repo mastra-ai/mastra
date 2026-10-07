@@ -108,6 +108,18 @@ const backLink = (
 );
 
 export const TopBarSpacingComparison: Story = {
+  tags: ['autodocs'],
+  parameters: {
+    docs: {
+      description: {
+        story: [
+          'The first three panels intentionally align their page titles: a real bar with default spacing, a bar-less header with `spacing="breathing"`, and the same opt-in header with an eyebrow inside its reserved 40px band.',
+          'Choose breathing spacing only when a specific bar-less page should match the title position of related pages with a bar. The fourth panel shows an equally valid choice: no bar and unchanged default spacing. Missing a bar does not automatically mean a page needs more space.',
+          'Keep default spacing when breadcrumbs or header actions render the PageLayout bar, in compact action rows, or when another layout already supplies the gap. Breathing spacing is an explicit PageHeader choice; PageLayout does not enable or suppress it.',
+        ].join('\n\n'),
+      },
+    },
+  },
   render: () => (
     <div className="grid grid-cols-4">
       <div>
