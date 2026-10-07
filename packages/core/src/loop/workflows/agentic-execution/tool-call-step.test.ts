@@ -2163,6 +2163,40 @@ describe('createToolCallStep delegated agent tool metadata', () => {
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 
+  it('persists the same resume schema it streams for an in-execution approval', async () => {
+    const assistantMessage = createAssistantMessage('assistant-target', 'parent-tool-call-id', 'agent-subAgent', {
+      prompt: 'do thing',
+    });
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const executePromise = startDelegatedTool({ messageList, requireApproval: true });
+    await settleToolSuspension();
+
+    const approvalChunk = controller.enqueue.mock.calls
+      .map(([chunk]: [any]) => chunk)
+      .find((chunk: any) => chunk?.type === 'tool-call-approval');
+    expect(approvalChunk).toBeDefined();
+
+    // A client that reloads a pending approval reads this persisted copy, not the streamed
+    // chunk, so both must publish the same schema.
+    const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals?.[
+      'parent-tool-call-id'
+    ];
+    expect(pending.resumeSchema).toBe(approvalChunk.payload.resumeSchema);
+    expect(JSON.parse(pending.resumeSchema)).toMatchObject({
+      additionalProperties: false,
+      required: ['approved'],
+    });
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
   it('preserves explicitly transformed null payloads in approval and suspension metadata', async () => {
     const toolPayloadTransform = {
       targets: ['transcript'],

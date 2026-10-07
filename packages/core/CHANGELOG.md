@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 1.75.0-alpha.8
+
+### Patch Changes
+
+- Fixed three cases where a durable agent's stream, or a regular agent's saved approval metadata, did not match what the stream reported. ([#26006](https://github.com/mastra-ai/mastra/pull/26006))
+
+  - Tool result chunks now include `providerExecuted`, which tells the caller whether the tool ran on the provider's side. It was missing on durable runs, so clients received `undefined` where regular agents report the value.
+  - Approval requests on durable agents now publish the same `resumeSchema` as regular agents, including `$schema`, `additionalProperties: false` and the field descriptions. The accepted resume data is unchanged.
+  - Approval metadata saved by regular agents now carries the same `resumeSchema` as the live approval request, including the optional `reason` field the saved copy was missing. The accepted resume data is unchanged.
+
+- Fixed `fetchWithRetry` ignoring cancellation. An already-aborted `signal` now rejects immediately, and aborting during a request or backoff delay stops further retries instead of waiting through the remaining delays. Retries for non-aborted requests are unchanged. ([#26164](https://github.com/mastra-ai/mastra/pull/26164))
+
+- Fixed pausing, clearing, or replacing a goal while its judge is running being silently undone. The judge's verdict is now discarded when the objective changed during evaluation, so the agent stops instead of continuing a goal you already stopped. ([#26093](https://github.com/mastra-ai/mastra/pull/26093))
+
+- Fixed `goal.scorer` so a string resolves a registered scorer by its id, as documented. Previously it was looked up by registration key, so a scorer registered as `scorers: { testsPass }` with id `tests-pass` failed with "Scorer with tests-pass not found" and paused the goal. Registration keys still work as a fallback. ([#26154](https://github.com/mastra-ai/mastra/pull/26154))
+
+- Fixed evented agents hanging forever when workflow workers run in a separate process (for example, an API server started with `MASTRA_WORKERS=false` plus a dedicated worker deployment). Runs now reach the worker process and stream back to the caller. Values used in more than one place in a workflow now keep their data when sent between processes instead of arriving as `null`. A process without workers now logs a warning instead of silently dropping a workflow it can only run locally. ([#26036](https://github.com/mastra-ai/mastra/pull/26036))
+
+- Fixed agents running out of memory when `untilIdle` is set in `defaultOptions`. `agent.stream()` and `agent.resumeStream()` now wait for background tasks once instead of looping endlessly before calling the model. Fixes [#26043](https://github.com/mastra-ai/mastra/issues/26043). ([#26125](https://github.com/mastra-ai/mastra/pull/26125))
+
+- Fixed agent runs stopping with "Interrupted" when an Observational Memory reflection didn't compress enough on its first try. The reflector retries at a stronger compression level, but each retry was reported as a failure, and the agent controller cancelled the run before the retry could finish. Retry attempts are now marked as retrying, so only a final failure stops the run. ([#26105](https://github.com/mastra-ai/mastra/pull/26105))
+
+- Fixed `ResponseCache` sharing cached responses between users who are identified only through `memory: { resource }`. When no `scope` is set, the cache now falls back to the memory resource ID after the auth resource ID, so each user gets their own cache entries. Set `scope: null` to keep sharing responses across users. ([#26192](https://github.com/mastra-ai/mastra/pull/26192))
+
+- Fixed `processToolResult` aborts in output processors so they end the run at the first aborted tool result. Previously, aborting with parallel tool calls crashed the run with `Controller is already closed`, and aborting a single tool call made an extra model call after the stream had ended. ([#26157](https://github.com/mastra-ai/mastra/pull/26157))
+
+- Fixed two restart problems on durable runs. ([#26035](https://github.com/mastra-ai/mastra/pull/26035))
+
+  **Recovering a suspended durable agent run** now fails immediately with a clear message pointing at `resume()`. Previously it resolved, then emitted a lone "This workflow run was not active" error. Continue a run that is suspended on a tool call or an approval with `resume(runId, ...)`.
+
+  **Restarting an evented workflow in a process that has not started its workers** now starts them before the restart is published. Previously the restart was published to no one, so the run stalled forever with no error, and starting the workers later could not revive it. This does not change instances configured with `workers: false` (or `MASTRA_WORKERS=false`). Those still publish the restart to the broker, so the run completes only if another worker consumes it.
+
+- Fixed Workspace search indexing creating an extra chunk at the end of large files that only repeated content from the previous chunk. ([#26166](https://github.com/mastra-ai/mastra/pull/26166))
+
 ## 1.75.0-alpha.7
 
 ### Minor Changes
