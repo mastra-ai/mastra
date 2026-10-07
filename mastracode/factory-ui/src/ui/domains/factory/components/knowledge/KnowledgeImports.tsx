@@ -67,7 +67,10 @@ function ImportRunDetail({
 }) {
   const detail = useKnowledgeImportRun(factoryProjectId, importerId, runId, threadId);
   if (detail.isPending) return <SkeletonRows label="Loading import run" rows={5} />;
-  if (detail.isError) return <Notice variant="destructive">{detail.error.message}</Notice>;
+  if (detail.isError) {
+    const forbidden = detail.error instanceof RequestError && detail.error.status === 403;
+    return <Notice variant={forbidden ? 'info' : 'destructive'}>{detail.error.message}</Notice>;
+  }
 
   const run = detail.data.pages[0]!.run;
   const transcript = detail.data.pages[0]?.transcript;

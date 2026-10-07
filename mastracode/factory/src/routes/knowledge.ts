@@ -61,7 +61,8 @@ export interface KnowledgeAccessProfile {
   intakeScopes?: MaterializeKnowledgeScopeInput[];
   /**
    * Host-operator trust for import status, runs, and transcripts, which reflect the importer's
-   * authority rather than the viewer's. Defaults to organization administrators.
+   * authority rather than the viewer's. When unset, every caller is an operator if auth is disabled;
+   * otherwise only organization administrators are.
    */
   importOperator?: boolean;
 }
