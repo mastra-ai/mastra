@@ -4,7 +4,6 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureScope,
 } from '../storage/domains/knowledge';
-import { assertKnowledgeDescriptionWithinBound } from '../storage/domains/knowledge/base';
 
 export interface KnowledgeScopeAccessConfig {
   principal: 'self' | 'parent' | string;
@@ -54,11 +53,11 @@ export function validateKnowledgeScopeTypes(
 ): KnowledgeScopeTypesConfig {
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
   for (const [pattern, config] of Object.entries(types)) {
-    assertKnowledgeDescriptionWithinBound(config?.description);
+    assertScopeDescriptionWithinBound(config?.description);
     for (const child of config?.children ?? []) {
       if (!child.address.trim()) throw new Error(`Knowledge child scope template in ${pattern} must have an address`);
       if (!child.name.trim()) throw new Error(`Knowledge child scope ${child.address} in ${pattern} must have a name`);
-      assertKnowledgeDescriptionWithinBound(child.description);
+      assertScopeDescriptionWithinBound(child.description);
       for (const access of child.access ?? []) {
         if (access.role === 'mirror' && access.canSuggest !== undefined) {
           throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
@@ -83,12 +82,23 @@ export function validateKnowledgeScopeTypes(
   return types;
 }
 
+/** Scope descriptions share the node description bound, counted in UTF-16 code units. */
+const MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH = 400;
+
+function assertScopeDescriptionWithinBound(description: unknown): void {
+  if (typeof description === 'string' && description.length > MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+    );
+  }
+}
+
 export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): KnowledgeStructurePlan {
   const addresses = new Set<string>();
   for (const scope of plan.scopes) {
     assertAddress(scope.address);
     if (!scope.name.trim()) throw new Error(`Knowledge scope ${scope.address} must have a name`);
-    assertKnowledgeDescriptionWithinBound(scope.description);
+    assertScopeDescriptionWithinBound(scope.metadata?.description);
     if (addresses.has(scope.address)) throw new Error(`Duplicate Knowledge scope address: ${scope.address}`);
     addresses.add(scope.address);
     const parents = new Set<string>();
@@ -188,7 +198,6 @@ export function materializeKnowledgeScopePlan(
       },
       ...children,
     ],
-    retrofit: false,
   });
 }
 
