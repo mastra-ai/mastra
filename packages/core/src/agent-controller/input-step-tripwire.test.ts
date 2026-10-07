@@ -100,4 +100,40 @@ describe('AgentController processor tripwire', () => {
     expect(events.filter(e => e.type === 'agent_end').map(e => (e as { reason?: string }).reason)).toEqual(['error']);
     expect(session.run.isRunning()).toBe(false);
   });
+
+  it('cancels suspensions still registered to the run it ends', async () => {
+    let registerSibling = () => {};
+    const session = await createSession({
+      id: 'step-guard',
+      processInputStep: async ({ stepNumber, abort }) => {
+        if (stepNumber >= 1) {
+          registerSibling();
+          abort('database is locked');
+        }
+        return {};
+      },
+    });
+    // A sibling tool call from this run, still parked when the tripwire ends it.
+    registerSibling = () =>
+      session.suspensions.register({
+        toolCallId: 'sibling-call',
+        runId: session.run.getRunId()!,
+        toolName: 'lookup',
+        threadId: session.thread.requireId(),
+        resourceId: session.identity.getResourceId(),
+      });
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+
+    expect(await settleWithin(session.sendMessage({ content: 'hello' }))).not.toBe(TIMED_OUT);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_suspension_cancelled',
+        toolCallId: 'sibling-call',
+        reason: expect.stringContaining('database is locked'),
+      }),
+    );
+    expect(session.suspensions.hasPending()).toBe(false);
+  });
 });
