@@ -89,10 +89,20 @@ export function analyticalWorkflow() {
         workflowId: "grounded-analysis",
         workflowRunId: session.workflowRunId!,
       });
+      const capability = session.descriptor.capabilities.find(
+        (entry) => entry.metric === inputData.metric,
+      );
+      // Saved opportunity filters must not leak into unrelated subscription metrics.
+      // Explicit tool filters remain intact so unsupported requests still fail validation.
+      const inheritedFilters = Object.fromEntries(
+        Object.entries(session.filters ?? {}).filter(
+          ([field]) => capability?.fields.includes("filters") && capability.filters.includes(field),
+        ),
+      );
       const plan = {
         ...inputData,
-        ...(session.filters && Object.keys(session.filters).length
-          ? { filters: { ...inputData.filters, ...session.filters } }
+        ...(Object.keys(inheritedFilters).length
+          ? { filters: { ...inputData.filters, ...inheritedFilters } }
           : {}),
       };
       try {
