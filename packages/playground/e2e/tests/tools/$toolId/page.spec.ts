@@ -8,25 +8,28 @@ test.describe('Tool detail page', () => {
 
   test.describe('when a tool is executed from its detail page', () => {
     test('returns the tool output for the submitted input', async ({ page }) => {
-      await page.goto('/tools/simpleMcpTool');
+      await page.goto('/tools?tool=simpleMcpTool');
 
-      await expect(page.locator('h2')).toHaveText('simpleMcpTool');
-      await expect(page.locator('[data-language="json"]')).toHaveText('{}');
+      await expect(page.getByRole('heading', { name: 'simpleMcpTool' })).toBeVisible();
+      await page.getByRole('tab', { name: 'Playground' }).click();
+      await expect(page.getByText('No response yet')).toBeVisible();
 
       await page.getByLabel('The name of the person').fill('John Doe');
-      await page.getByRole('button', { name: 'Submit' }).click();
+      await page.getByRole('button', { name: 'Run' }).click();
 
-      await expect(page.locator('[data-language="json"]')).toHaveText('{  "hello": "world",  "thisIsA": "fixture"}');
+      await expect(page.getByText('Success')).toBeVisible();
+      await expect(page.locator('pre')).toContainText('"hello": "world"');
+      await expect(page.locator('pre')).toContainText('"thisIsA": "fixture"');
     });
   });
 
-  test.describe('when a standalone tool route is opened', () => {
-    test('exposes breadcrumb navigation back to the tools list', async ({ page }) => {
-      await page.goto('/tools/simpleMcpTool');
+  test.describe('when the drawer is closed', () => {
+    test('leaves the Tools list', async ({ page }) => {
+      await page.goto('/tools?tool=simpleMcpTool');
+      await page.getByRole('button', { name: 'Close Panel' }).click();
 
-      const breadcrumb = page.locator('header nav').first();
-      await expect(breadcrumb.getByRole('link', { name: 'Tools' })).toHaveAttribute('href', '/tools');
-      await expect(breadcrumb.locator('[aria-current="page"]')).toContainText('simpleMcpTool');
+      await expect(page).toHaveURL(/\/tools$/);
+      await expect(page.getByRole('heading', { name: 'simpleMcpTool' })).toBeHidden();
     });
   });
 });
