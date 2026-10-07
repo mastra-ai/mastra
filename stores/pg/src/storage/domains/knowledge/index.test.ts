@@ -228,6 +228,59 @@ describe('KnowledgePG published v1 layout', () => {
     expect(nodeColumns.rows.map(row => row.column_name)).toContain('isScope');
   });
 
+  it('rolls back the empty published layout if canonical creation fails and permits a retry', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_rollback');
+    const before = await knowledgeObjects(schemaName);
+    const client = new RoutingDbClient(new PoolAdapter(pool));
+    const tx = client.tx.bind(client);
+    const spy = vi.spyOn(client, 'tx').mockImplementation(callback =>
+      tx(async t => {
+        const none = t.none.bind(t);
+        t.none = async (query, values) => {
+          if (query.trimStart().startsWith('CREATE TABLE') && query.includes(TABLE_KNOWLEDGE_SCHEMA)) {
+            throw new Error('injected schema creation failure');
+          }
+          return none(query, values);
+        };
+        return callback(t);
+      }),
+    );
+
+    await expect(new KnowledgePG({ client, schemaName }).init()).rejects.toThrow('injected schema creation failure');
+    spy.mockRestore();
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
+
+    await new KnowledgePG({ client, schemaName }).init();
+    const marker = await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
+    expect(marker.rows).toEqual([{ version: 1 }]);
+  });
+
+  it.each(['an empty schema', 'the empty published layout'])(
+    'lets concurrent first boots on %s all succeed with one initialization',
+    async layout => {
+      const schemaName =
+        layout === 'an empty schema'
+          ? `knowledge_concurrent_empty_${process.pid}_${schemaCounter++}`
+          : await createSchemaWithPublishedKnowledgeV1('knowledge_concurrent_published');
+      if (layout === 'an empty schema') {
+        schemas.push(schemaName);
+        await pool.query(`CREATE SCHEMA "${schemaName}"`);
+      }
+      const pools = Array.from({ length: 4 }, () => new Pool({ connectionString }));
+      try {
+        const results = await Promise.allSettled(pools.map(p => new KnowledgePG({ pool: p, schemaName }).init()));
+        expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled', 'fulfilled', 'fulfilled']);
+      } finally {
+        await Promise.all(pools.map(p => p.end()));
+      }
+      const marker = await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
+      expect(marker.rows).toEqual([{ version: 1 }]);
+      const accessState = await pool.query(`SELECT epoch FROM "${schemaName}".mastra_knowledge_access_state`);
+      expect(accessState.rows).toHaveLength(1);
+      expect(await knowledgeObjects(schemaName)).not.toContain('table:mastra_knowledge_cursors');
+    },
+  );
+
   it('rejects a populated published layout without mutation and names the reset call', async () => {
     const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_rows');
     await pool.query(
