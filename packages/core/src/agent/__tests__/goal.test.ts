@@ -465,6 +465,48 @@ describe('in-loop goal scoring', () => {
     expect(record?.runsUsed).toBe(1);
   });
 
+  describe('string goal.scorer resolution', () => {
+    async function runWithRegisteredScorer(scorerRef: string, scorers: Record<string, any>) {
+      const agent = new Agent({
+        id: 'goal-agent',
+        name: 'goal-agent',
+        instructions: 'You work toward goals.',
+        model: singleStepModel(),
+        memory: new MockMemory(),
+        goal: { judge: 'mock-model-id', scorer: scorerRef },
+      });
+      new Mastra({ agents: { 'goal-agent': agent }, scorers, storage: new InMemoryStore(), logger: false });
+      await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+      const stream = await agent.stream('go', { memory: { resource: RESOURCE, thread: { id: THREAD } }, maxSteps: 3 });
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+      return agent.getObjective({ threadId: THREAD });
+    }
+
+    it('resolves a scorer by its id when registered under a different key', async () => {
+      const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('tests-pass', { testsPass: scorer });
+      expect(scorer.run).toHaveBeenCalled();
+      expect(record?.status).toBe('done');
+    });
+
+    it('still resolves a scorer by its registration key', async () => {
+      const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('testsPass', { testsPass: scorer });
+      expect(scorer.run).toHaveBeenCalled();
+      expect(record?.status).toBe('done');
+    });
+
+    it('pauses with a not-found reason for an unknown scorer', async () => {
+      const scorer = { ...passingScorer(), id: 'tests-pass', name: 'Tests Pass', __registerMastra: vi.fn() };
+      const record = await runWithRegisteredScorer('missing-scorer', { testsPass: scorer });
+      expect(scorer.run).not.toHaveBeenCalled();
+      expect(record?.status).toBe('paused');
+      expect(record?.pausedReason).toContain('not found');
+    });
+  });
+
   it('direct agent goal loop completes with built-in scorer without manual continuation', async () => {
     const agent = makeAgent({
       judge: goalJudgeModel([
