@@ -1,6 +1,21 @@
+@keyframes notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--spacing) * -2));
+  }
+}
+
 @layer components {
   [data-slot='notice'] {
     box-shadow: var(--elevation-lip), var(--elevation-raised);
+  }
+
+  /* Play on mount without relying on @starting-style support. Backwards fill
+   * leaves no animation transform or opacity override after the entrance. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='notice'] {
+      animation: notice-enter var(--duration-normal) var(--ease-out-custom) backwards;
+    }
   }
 
   /* This highlight belongs to the frame, not the square background layers.
