@@ -279,7 +279,7 @@ auth: {
 
 When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies. The server-derived value is used instead and always takes precedence over a client-provided value. If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
 
-To let some users act on a resource other than their mapped one (for example, a shared session they've been invited to), add `authorizeUserResource`. The server calls it when a request names a different resource in `resourceId`, `resource_id` or `memory.resource`. Return `true` and the request runs under the requested resource; any other result is rejected with a 403. The callback can be async. Without it, the mapped resource always wins.
+To let some users act on a resource other than their mapped one (for example, a shared session they've been invited to), add `authorizeUserResource`. The server calls it when a request names a different resource in `resourceId`, `resource_id` or `memory.resource`. Return `true` and the request runs under the requested resource. Any other result is rejected with a 403. The callback can be async. Without it, the mapped resource always wins.
 
 ```typescript oxfmt:false
 auth: {
