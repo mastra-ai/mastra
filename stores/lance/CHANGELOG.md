@@ -1,5 +1,48 @@
 # @mastra/lance
 
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Fixed `indexConfig.type: 'ivfflat'` creating a product-quantized (IVF PQ) index instead of an IVF Flat index. `ivfflat` now creates a native LanceDB IVF Flat index, and the new `ivfpq` type creates the IVF PQ index that `ivfflat` previously produced. ([#26121](https://github.com/mastra-ai/mastra/pull/26121))
+
+  Indexes created before this release keep their IVF PQ type. Rebuild an index for a type change to take effect.
+
+  To keep IVF PQ, change `ivfflat` to `ivfpq`:
+
+  ```ts
+  // Before
+  indexConfig: { type: 'ivfflat', numPartitions: 128, numSubVectors: 16 }
+
+  // After
+  indexConfig: { type: 'ivfpq', numPartitions: 128, numSubVectors: 16 }
+  ```
+
+  To switch to IVF Flat, keep `ivfflat`, remove `numSubVectors`, and rebuild the index:
+
+  ```ts
+  indexConfig: { type: 'ivfflat', numPartitions: 128 }
+  ```
+
+- Added `optimize()` and `getIndexCoverage()` to `LanceVectorStore` so you can keep vector indexes up to date. Rows written after an index is built stay outside the index and slow down queries until the table is optimized. Mastra never optimizes automatically, so you choose when to run it. ([#26155](https://github.com/mastra-ai/mastra/pull/26155))
+
+  ```ts
+  const [coverage] = await store.getIndexCoverage({ indexName: 'docs' });
+
+  if (coverage.numUnindexedRows >= 1_000) {
+    await store.optimize({ indexName: 'docs' });
+  }
+  ```
+
+  Concurrent `optimize()` calls for the same table share one run. `deleteUnverified` defaults to `false`. See [#26100](https://github.com/mastra-ai/mastra/issues/26100).
+
+### Patch Changes
+
+- Fixed `LanceVectorStore.createIndex()` rebuilding an existing vector index on every call. Calling it again with the same column, index type, distance metric and build settings now reuses the existing index; changed settings or indexes replaced outside Mastra still trigger a rebuild. ([#26122](https://github.com/mastra-ai/mastra/pull/26122))
+
+- Updated dependencies [[`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936)]:
+  - @mastra/core@1.75.0-alpha.8
+
 ## 1.4.0
 
 ### Minor Changes
