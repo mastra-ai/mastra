@@ -1,5 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
-import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
+import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
 import type { AskUserAnswer, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -7,6 +7,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
+import { AskUserPromptAnswers } from './AskUserPromptAnswers';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 const promptCardSuspension =
@@ -161,26 +162,27 @@ function AskUserCard({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: AskUserAnswer, promptId: string) => void;
 }) {
-  const askUserPayload: AskUserPayload = {
-    question: payload.question ?? 'The agent has a question',
-    options: payload.options,
-    selectionMode: payload.selectionMode,
-  };
+  const options = payload.options ?? [];
+  const selectionMode = options.length > 0 ? payload.selectionMode : 'single_select';
 
   const handleAnswerSubmit = (answer: AskUserAnswer) => {
     onRespond(prompt.toolCallId, answer, prompt.id);
   };
 
   return (
-    <AskUser
+    <AskUser.Root
       key={prompt.id}
-      role="group"
-      aria-label="Question from the agent"
       className="my-2"
-      payload={askUserPayload}
-      isSubmitting={isSubmitting}
+      selectionMode={selectionMode}
+      disabled={isSubmitting}
       onSubmit={handleAnswerSubmit}
-    />
+    >
+      <AskUser.Body>
+        <AskUser.Question>{payload.question ?? 'The agent has a question'}</AskUser.Question>
+        <AskUserPromptAnswers options={options} selectionMode={selectionMode} />
+        {isSubmitting ? <AskUser.Pending className="mt-3 block" /> : null}
+      </AskUser.Body>
+    </AskUser.Root>
   );
 }
 

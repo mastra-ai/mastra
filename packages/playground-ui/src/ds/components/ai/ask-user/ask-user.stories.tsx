@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import * as AskUserPrimitive from './ask-user';
 import { AskUser } from './ask-user';
+import type { AskUserProps } from './ask-user';
 
 const meta: Meta<typeof AskUser> = {
   title: 'AI/Ask User',
@@ -82,6 +84,39 @@ export const MultiSelectCustomAnswer: Story = {
     await expect(args.onSubmit).toHaveBeenCalledTimes(1);
     await expect(args.onSubmit).toHaveBeenCalledWith(['Typecheck', 'Check the customer environment.']);
   },
+};
+
+function ComposedQuestionStory({ payload, isSubmitting, onSubmit }: AskUserProps) {
+  const isMultiSelect = payload.selectionMode === 'multi_select';
+
+  return (
+    <AskUserPrimitive.Root selectionMode={payload.selectionMode} disabled={isSubmitting} onSubmit={onSubmit}>
+      <AskUserPrimitive.Body>
+        <AskUserPrimitive.Question>{payload.question}</AskUserPrimitive.Question>
+        <AskUserPrimitive.Options>
+          {payload.options?.map(option => (
+            <AskUserPrimitive.Option key={option.label} value={option.label} description={option.description}>
+              {option.label}
+            </AskUserPrimitive.Option>
+          ))}
+          <AskUserPrimitive.CustomAnswer />
+        </AskUserPrimitive.Options>
+        <div className="mt-3 flex justify-end">
+          <AskUserPrimitive.Submit when={isMultiSelect ? 'always' : 'custom-answer'} />
+        </div>
+      </AskUserPrimitive.Body>
+    </AskUserPrimitive.Root>
+  );
+}
+
+export const ComposedSingleSelect: Story = {
+  ...SingleSelectCustomAnswer,
+  render: args => <ComposedQuestionStory {...args} />,
+};
+
+export const ComposedMultiSelect: Story = {
+  ...MultiSelectCustomAnswer,
+  render: args => <ComposedQuestionStory {...args} />,
 };
 
 export const Submitting: Story = {
