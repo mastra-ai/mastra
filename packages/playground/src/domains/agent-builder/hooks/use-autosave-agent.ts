@@ -1,4 +1,4 @@
-import type { StoredSkillResponse } from '@mastra/client-js';
+import type { StoredAgentResponse, StoredSkillResponse } from '@mastra/client-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import { useDebouncedCallback } from 'use-debounce';
@@ -9,7 +9,7 @@ import { useSaveAgent } from './use-save-agent';
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface UseAutosaveAgentArgs {
-  agentId: string;
+  storedAgent: StoredAgentResponse;
   availableAgentTools?: AgentTool[];
   availableSkills?: StoredSkillResponse[];
   debounceMs?: number;
@@ -20,14 +20,14 @@ const DEFAULT_DEBOUNCE_MS = 600;
 const DEFAULT_SAVED_DISPLAY_MS = 2000;
 
 export function useAutosaveAgent({
-  agentId,
+  storedAgent,
   availableAgentTools = [],
   availableSkills = [],
   debounceMs = DEFAULT_DEBOUNCE_MS,
   savedDisplayMs = DEFAULT_SAVED_DISPLAY_MS,
 }: UseAutosaveAgentArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { save } = useSaveAgent({ agentId, availableAgentTools, availableSkills, silent: true });
+  const { save } = useSaveAgent({ storedAgent, availableAgentTools, availableSkills, silent: true });
 
   const [status, setStatus] = useState<AutosaveStatus>('idle');
   const [lastError, setLastError] = useState<Error | null>(null);
@@ -51,7 +51,6 @@ export function useAutosaveAgent({
     setLastError(null);
     try {
       await save(values);
-      // Ignore stale completions when a newer save was started.
       /* v8 ignore if */
       if (seq !== requestSeqRef.current) return;
       setStatus('saved');
@@ -71,12 +70,9 @@ export function useAutosaveAgent({
     void performSave();
   }, debounceMs);
 
-  // Subscribe to form changes. RHF's watch callback fires only when
-  // form values change (not on subscribe). Integration tool loading
-  // does NOT modify form values, so it won't trigger this callback.
   useEffect(() => {
-    const subscription = formMethods.watch(values => {
-      latestValuesRef.current = values as AgentBuilderEditFormValues;
+    const subscription = formMethods.watch(() => {
+      latestValuesRef.current = formMethods.getValues();
       debouncedSave();
     });
     return () => {
@@ -84,7 +80,6 @@ export function useAutosaveAgent({
     };
   }, [formMethods, debouncedSave]);
 
-  // Flush any pending save on unmount so a fast navigation doesn't lose edits.
   useEffect(() => {
     return () => {
       debouncedSave.flush();

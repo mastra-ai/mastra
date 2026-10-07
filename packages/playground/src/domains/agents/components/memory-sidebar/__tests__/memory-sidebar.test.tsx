@@ -40,9 +40,6 @@ const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'real-thread';
 
-// The capabilities footer always renders, so it fetches the agent details and the
-// system packages (CMS availability). Keep CMS disabled so the editor capability
-// stays gated and the versions query never fires.
 const capabilityAgent: GetAgentResponse = {
   ...v2Agent,
   id: AGENT_ID,
@@ -74,8 +71,8 @@ const paths = {
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}`,
+  cmsAgentCreateLink: () => '/agent-builder/agents/create',
+  cmsAgentEditLink: (agentId: string) => `/agent-builder/agents/${agentId}/edit`,
   promptBlockLink: (promptBlockId: string) => `/prompt-blocks/${promptBlockId}`,
   promptBlocksLink: () => '/prompt-blocks',
   cmsPromptBlockCreateLink: () => '/cms/prompt-blocks/create',
@@ -116,7 +113,6 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  // MemorySidebar derives memory state from useMemory, so drive it via the wire.
   server.use(
     http.get(`${BASE_URL}/api/memory/status`, () =>
       HttpResponse.json(hasMemory ? memoryEnabledStatus : memoryDisabledStatus),
@@ -141,8 +137,6 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
   );
 }
 
-// Exposes the OM context's `signalObservationsUpdated` so a test can simulate a
-// stream-finish freshness signal, mirroring how the chat provider pokes the panel.
 let signalObservationsUpdated: () => void = () => {};
 function SignalProbe() {
   const ctx = useObservationalMemoryContext();
@@ -150,9 +144,6 @@ function SignalProbe() {
   return null;
 }
 
-// Exposes the memory-timeline open/close controls so a test can drive the OM
-// detail panel the same way the surviving "Analyze Observations" CTA does,
-// without depending on a sidebar-local toggle button.
 let openPanel: () => void = () => {};
 function TimelineProbe() {
   const ctx = useMemoryTimeline();
@@ -235,12 +226,10 @@ describe('MemorySidebar', () => {
   it('renders the Memory card as an overlay above the thread list by default', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // Threads view is the default: the thread list (with New Thread) is visible.
     const newChat = await screen.findByText('New Thread');
     expect(newChat).not.toBeNull();
     expect(await screen.findByText('My first chat')).not.toBeNull();
 
-    // No header row or tabs: a top card is the entry point to the memory view.
     const card = screen.getByTestId('memory-sidebar-card');
     expect(card.textContent).toMatch(/memory/i);
     expect(card.getAttribute('aria-pressed')).toBe('false');
@@ -252,7 +241,6 @@ describe('MemorySidebar', () => {
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
-    // Threads and memory share one panel shell, with no nested panel.
     const panels = container.querySelectorAll('[data-slot="sidebar-panel"]');
     expect(panels.length).toBe(1);
     expect(panels[0]?.contains(card)).toBe(true);
@@ -262,13 +250,11 @@ describe('MemorySidebar', () => {
   it('renders the capabilities footer and reveals capability details on expand', async () => {
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // Collapsed by default: only the capability chips and the enabled/total counter.
     const footer = await screen.findByTestId('agent-capabilities-footer');
     expect(footer.getAttribute('aria-expanded')).toBe('false');
     expect(footer.textContent).toMatch(/\/6/);
     expect(screen.queryByRole('link', { name: /^Tools:/ })).toBeNull();
 
-    // Expanding reveals the per-capability detail rows (links to the docs).
     fireEvent.click(footer);
     expect(footer.getAttribute('aria-expanded')).toBe('true');
     const toolsRow = await screen.findByRole('link', { name: /^Tools:/ });
@@ -279,14 +265,11 @@ describe('MemorySidebar', () => {
   it('replaces the panel with an empty state and docs CTA when memory is disabled', async () => {
     renderSidebar([], false);
 
-    // The empty state explains memory is required; the thread list / New Thread is not rendered.
     expect(await screen.findByText('Memory not enabled')).not.toBeNull();
     expect(screen.queryByText('New Thread')).toBeNull();
 
-    // The memory card is hidden entirely when memory is off.
     expect(screen.queryByTestId('memory-sidebar-card')).toBeNull();
 
-    // An outline CTA links to the Agent Memory docs.
     const cta = screen.getByRole('link', { name: /documentation/i });
     expect(cta.getAttribute('href')).toBe('https://mastra.ai/docs/memory/overview');
   });
@@ -296,24 +279,16 @@ describe('MemorySidebar', () => {
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
 
-    // AgentMemory renders a "Clone Thread" section whenever a real thread is present.
     const cloneSection = await screen.findByText('Clone Thread');
 
-    // The card reflects the active view.
     expect(screen.getByTestId('memory-sidebar-card').getAttribute('aria-pressed')).toBe('true');
 
-    // The static memory configuration (AgentMemoryConfig with its "General"
-    // section) and the collapsed card's setup badges are not shown in the panel.
     expect(screen.queryByText('General')).toBeNull();
     expect(screen.queryByTestId('memory-config-badges')).toBeNull();
 
-    // The expanded content retains the recent-message configuration that is
-    // summarized by the collapsed card's count badge.
     expect(screen.getByRole('heading', { name: 'Recent Messages' })).not.toBeNull();
     expect(screen.getByText('Includes the last 10 messages in context.')).not.toBeNull();
 
-    // The whole Memory view scrolls on Y, and AgentMemory's root must not trap
-    // scrolling with its own h-full/overflow-hidden.
     const panel = cloneSection.closest('.overflow-y-auto');
     expect(panel).not.toBeNull();
 
@@ -345,19 +320,12 @@ describe('MemorySidebar', () => {
       fireEvent.click(memoryCard);
     });
 
-    // Given the Memory view is open: the regular memory content ("Clone Thread")
-    // is visible, the OM subpanel is absent, and the expensive thread-messages
-    // query stays gated. The OM record itself is fetched because the collapsed
-    // memory bar reads its token counts from the record.
     await screen.findByText('Clone Thread');
     expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Back to memory' })).toBeNull();
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onMessages).not.toHaveBeenCalled();
 
-    // When the OM detail is opened (as the "Analyze Observations" CTA does): the
-    // OM detail replaces the regular memory content (fills the panel), so
-    // "Clone Thread" is gone and the OM subpanel + Back button are shown.
     act(() => openPanel());
 
     const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
@@ -367,8 +335,6 @@ describe('MemorySidebar', () => {
     await waitFor(() => expect(onOM).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(1));
 
-    // When Back is clicked: the OM subpanel is removed and the regular memory
-    // content returns.
     fireEvent.click(screen.getByRole('button', { name: 'Back to memory' }));
 
     await waitFor(() => expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull());
@@ -397,13 +363,10 @@ describe('MemorySidebar', () => {
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
     act(() => openPanel());
 
-    // Initial open fetches each query exactly once.
     await screen.findByTestId('memory-sidebar-om-detail-subpanel');
     await waitFor(() => expect(onOM).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(1));
 
-    // Simulating a stream-finish freshness signal must refetch both queries so the
-    // panel reflects new observations without remounting, like the left OM sidebar.
     await act(async () => {
       signalObservationsUpdated();
     });
@@ -426,12 +389,6 @@ describe('MemorySidebar', () => {
 
     await screen.findByTestId('memory-sidebar-om-detail-subpanel');
 
-    // The panel's Messages bar must show the record-derived counter:
-    // pendingMessageTokens 14200 over the message threshold 30000 (14.2/30k).
-    // The thread messages are plain text with no OM status markers, so a
-    // marker-derived panel would show 0 here. The observation/memory readout
-    // (observationTokenCount 4500 over the observation threshold 6000 → 4.5/6k)
-    // is lifted into the panel header beside the "Observational memory" title.
     expect(await screen.findByText('14.2/30k')).not.toBeNull();
     expect(await screen.findByText('4.5/6k')).not.toBeNull();
   });
@@ -450,10 +407,6 @@ describe('MemorySidebar', () => {
 
     const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
 
-    // The OM detail panel shows two progress bars matching the collapsed sidebar:
-    // a Messages bar and an Observations bar, each with record-derived readouts.
-    // (Other "Messages" text can appear in the panel, so assert at least one of
-    // each bar label is present, plus the exact record-derived readouts.)
     expect((await within(subpanel).findAllByText('Messages')).length).toBeGreaterThan(0);
     expect((await within(subpanel).findAllByText('Observations')).length).toBeGreaterThan(0);
     expect(await within(subpanel).findByText('14.2/30k')).not.toBeNull();
@@ -461,8 +414,6 @@ describe('MemorySidebar', () => {
   });
 
   it('filters the observation list to the selected zoom range', async () => {
-    // Recharts' ResponsiveContainer needs a measurable size in jsdom so the
-    // FlameGraph (and its zoom track) renders.
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120);
 
@@ -479,13 +430,9 @@ describe('MemorySidebar', () => {
 
     await screen.findByTestId('memory-sidebar-om-detail-subpanel');
 
-    // Both records are visible by default: the body defaults to the latest record
-    // (om-late at 10:05 → "User reported a blocking bug").
     const bodyBefore = await screen.findByTestId('observation-detail-body');
     expect(within(bodyBefore).getByText(/User reported a blocking bug/)).toBeTruthy();
 
-    // Collapse the range by dragging the right zoom handle to ~40% of the track
-    // (~10:02), which keeps om-early (10:01) and drops om-late (10:05).
     const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
     expect(track).toBeTruthy();
     track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
@@ -493,15 +440,12 @@ describe('MemorySidebar', () => {
     fireEvent.mouseMove(window, { clientX: 40 });
     fireEvent.mouseUp(window);
 
-    // Now only om-early is in range: its observation text shows and the
-    // out-of-range om-late observation is gone from the list.
     await waitFor(() => {
       const bodyAfter = screen.getByTestId('observation-detail-body');
       expect(within(bodyAfter).getByText(/User asked about onboarding/)).toBeTruthy();
       expect(within(bodyAfter).queryByText(/User reported a blocking bug/)).toBeNull();
     });
 
-    // Reset zoom restores the full list.
     fireEvent.click(screen.getByLabelText('Reset zoom'));
     await waitFor(() => {
       expect(screen.getByText(/User reported a blocking bug/)).toBeTruthy();
@@ -529,8 +473,6 @@ describe('MemorySidebar', () => {
   });
 
   it('fills the collapsed memory bar from the OM record when no status part was streamed', async () => {
-    // Status parts stream but are no longer persisted, so a reload starts with no live
-    // progress. The bar must come from the durable record instead of staying empty.
     server.use(
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
       http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
@@ -538,7 +480,6 @@ describe('MemorySidebar', () => {
 
     renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // pendingMessageTokens 14200 / messageTokens threshold 30000 => 47%
     await waitFor(() => {
       expect(screen.getByTestId('memory-card-observation-bar').getAttribute('data-percent')).toBe('47');
     });
@@ -549,7 +490,6 @@ describe('MemorySidebar', () => {
 
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // Falls back to the thread list instead of an unknown view value.
     expect(await screen.findByText('New Thread')).not.toBeNull();
   });
 });
