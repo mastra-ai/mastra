@@ -568,6 +568,18 @@ export async function syncEnvironmentRepository(
   );
   if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
   if (remoteHeads.stdout.trim()) {
+    // A local session branch may hold commits the remote never saw; switch
+    // to it instead of resetting it onto the remote tip.
+    const local = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+    if (local.exitCode === 0) {
+      const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
+        timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+        phase: 'environment branch checkout',
+      });
+      if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+      if (isBlockedByLocalWork(checkout)) return kept;
+      throw classifyGitFailure(checkout, 'pull-failed');
+    }
     const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
       env: authEnv,
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,

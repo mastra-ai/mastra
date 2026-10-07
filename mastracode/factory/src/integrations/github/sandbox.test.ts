@@ -684,6 +684,7 @@ describe('syncEnvironmentRepository', () => {
   it('resumes the session branch from the remote when the remote has it, authenticated with the repo token', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return OK; // detached template pin
+      if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' }; // no local branch yet
       if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
       return OK;
     });
@@ -702,6 +703,23 @@ describe('syncEnvironmentRepository', () => {
       `Authorization: Basic ${Buffer.from('x-access-token:tok-secret').toString('base64')}`,
     );
     expect(authEnvOf(sandbox, 'fetch origin factory/issue-7')).toEqual(env);
+  });
+
+  it('switches to an existing local session branch instead of resetting it onto the remote tip', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      return OK; // rev-parse --verify succeeds: the branch exists locally
+    });
+
+    await expect(syncEnvironmentRepository(sandbox, '/workspace/docs', opts)).resolves.toEqual({
+      outcome: 'resumed',
+      branch: 'factory/issue-7',
+    });
+
+    expect(sandbox.calls).toContain('git -C /workspace/docs checkout factory/issue-7');
+    // Local-only commits on the branch survive: no fetch, no forced reset.
+    expect(sandbox.calls.join('\n')).not.toMatch(/fetch origin|checkout -B/);
   });
 
   it('moves only a detached HEAD to the default tip when the remote lacks the branch', async () => {
@@ -752,6 +770,7 @@ describe('syncEnvironmentRepository', () => {
   it('keeps local work when the resume checkout is blocked by uncommitted changes', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'scratch\n', stderr: '' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' };
       if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
       if (script.includes('checkout -B')) {
         return {
