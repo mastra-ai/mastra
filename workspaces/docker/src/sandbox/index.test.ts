@@ -1467,7 +1467,36 @@ describe('DockerSandbox', () => {
       }
     });
 
-    it('should not warn when the helper exits non-zero because the command already exited naturally', async () => {
+    it('should still warn when group termination is unconfirmed even though the leader exec has stopped', async () => {
+      // KILL_SCRIPT exits 1 when its verify loop cannot confirm the group is
+      // gone (timeout or EPERM). The wrapper leader was already SIGKILLed, so
+      // the command's exec reports stopped, but descendants may survive.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+
+      const killStream = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(killStream),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+      });
+      mockExec.inspect.mockResolvedValue({ Running: false, ExitCode: 137, Pid: 42 });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        expect(await handle.kill()).toBe(false);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('failed unexpectedly'),
+          expect.objectContaining({ message: 'kill helper exited with code 1' }),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('should not warn when the helper exits non-zero because no PGID was recorded and the command already exited', async () => {
       // The spawn wrapper removes the PGID file when the command exits on its
       // own, so a kill racing a natural exit makes the helper exit 1. The
       // command's exec has stopped, so there is nothing to kill.
@@ -1480,7 +1509,8 @@ describe('DockerSandbox', () => {
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: vi.fn().mockResolvedValue(killStream),
-        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+        // Exit 3: no PGID file was readable.
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 3 }),
       });
       mockExec.inspect.mockResolvedValue({ Running: false, ExitCode: 0, Pid: 42 });
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

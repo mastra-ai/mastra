@@ -65,6 +65,9 @@ rm -f "$1" 2>/dev/null
 exit $ret
 `;
 
+/** KILL_SCRIPT exit code when no PGID file was readable or it was empty. */
+const NO_PGID_EXIT_CODE = 3;
+
 /**
  * Kill script: read the recorded PGID and SIGKILL the whole process group.
  * A negative PID targets the kernel-owned process group, so descendants that
@@ -80,11 +83,12 @@ i=0
 while [ ! -r "$f" ] && [ "$i" -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
 # If the PGID was never recorded (file absent/unreadable after the wait, or
 # empty), we have no group to signal or verify — report failure rather than
-# falsely claiming the tree was terminated.
-[ -r "$f" ] || exit 1
+# falsely claiming the tree was terminated. Exit code 3 marks this case so
+# kill() can tell it apart from a failed termination (exit 1).
+[ -r "$f" ] || exit 3
 pgid=$(cat "$f" 2>/dev/null)
 rm -f "$f" 2>/dev/null
-[ -n "$pgid" ] || exit 1
+[ -n "$pgid" ] || exit 3
 kill -STOP -"$pgid" 2>/dev/null
 kill -KILL -"$pgid" 2>/dev/null
 # Fallback for images without setsid: the leader is not a group leader, so also
@@ -309,12 +313,15 @@ class DockerProcessHandle extends ProcessHandle {
           killInfo = await killExec.inspect();
         }
         if (killInfo.ExitCode !== 0) {
-          // The spawn wrapper removes the PGID file when the command exits on its
-          // own, so a kill racing a natural exit finds nothing to read. If the
-          // command's exec has already stopped there is nothing to kill: report
-          // false quietly and let the natural exit result stand.
-          const selfInfo = await this._exec.inspect().catch(() => undefined);
-          if (selfInfo && !selfInfo.Running) return false;
+          // Exit 3 means no PGID was recorded. The spawn wrapper removes the file
+          // when the command exits on its own, so a kill racing a natural exit
+          // lands here. If the command's exec has stopped there is nothing to
+          // kill: report false quietly and let the natural exit result stand.
+          // Every other non-zero exit (e.g. unconfirmed group termination) stays loud.
+          if (killInfo.ExitCode === NO_PGID_EXIT_CODE) {
+            const selfInfo = await this._exec.inspect().catch(() => undefined);
+            if (selfInfo && !selfInfo.Running) return false;
+          }
           throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
         }
 
