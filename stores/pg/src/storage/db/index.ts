@@ -1653,6 +1653,36 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Drops NOT NULL from `columns` on `tableName` where it is still set. Answered
+   * from the init snapshot when one is installed, so a converged schema issues
+   * no query and never takes the ACCESS EXCLUSIVE lock.
+   */
+  async dropNotNull({ tableName, columns }: { tableName: TABLE_NAMES; columns: string[] }): Promise<void> {
+    const parsedColumns = columns.map(c => parseSqlIdentifier(c, 'column name'));
+    const snapshot = this.schemaSnapshot;
+    let toAlter: string[];
+    if (snapshot) {
+      const notNull = snapshot.notNullColumns.get(tableName);
+      toAlter = parsedColumns.filter(c => notNull?.has(c));
+    } else {
+      const rows = await this.client.any<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = $1 AND table_name = $2 AND column_name = ANY($3) AND is_nullable = 'NO'`,
+        [this.schemaName || 'public', tableName, parsedColumns],
+      );
+      toAlter = rows.map(r => r.column_name);
+    }
+    if (toAlter.length === 0) return;
+
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    await this.client.none(
+      `ALTER TABLE ${fullTableName} ${toAlter.map(c => `ALTER COLUMN "${c}" DROP NOT NULL`).join(', ')}`,
+    );
+    const notNull = snapshot?.notNullColumns.get(tableName);
+    for (const c of toAlter) notNull?.delete(c);
+  }
+
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
       const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
