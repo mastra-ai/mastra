@@ -15,7 +15,7 @@ Navigation is now handler-based. Cards call `onX` handlers with a drilldown scop
 <LatencyCardView data={data} isLoading={isLoading} isError={isError} actions={<OpenInTracesButton href={href} LinkComponent={Link} />} />
 
 // After
-<MetricsGrid minItemWidth="md">
+<MetricsGrid>
   <LatencyCard
     onOpenTraces={scope => navigate(buildTracesDrilldownUrl({ preset, customRange, dashboardFilter, scope, tracesBasePath: "/observe/traces" }))}
   />

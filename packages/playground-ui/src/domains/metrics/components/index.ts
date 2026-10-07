@@ -8,7 +8,7 @@ export {
   type MetricsGridProps,
   type MetricsGridItemProps,
   type MetricsGridItemSpan,
-  type MetricsGridMinItemWidth,
+  type MetricsGridColumns,
 } from './metrics-grid/metrics-grid';
 export { ScoresCardView, type ScoresCardViewProps } from './scores-card-view';
 

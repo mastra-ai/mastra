@@ -171,7 +171,7 @@ describe('Metrics storage support', () => {
       await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByText('Agent runs')).toBeTruthy();
+      expect(screen.getByText('Agent Runs')).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -208,7 +208,7 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByText('Agent runs')).toBeTruthy();
+      expect(screen.getByText('Agent Runs')).toBeTruthy();
     });
   });
 

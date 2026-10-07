@@ -14,8 +14,8 @@ describe('ModelCostKpiCard', () => {
       server.use(metricsPending('aggregate'));
       renderWithMetrics(<ModelCostKpiCard />);
 
-      expect(screen.getByText('Model cost')).toBeTruthy();
-      expect(screen.getByRole('status', { name: 'Loading Model cost' })).toBeTruthy();
+      expect(screen.getByText('Model Cost')).toBeTruthy();
+      expect(screen.getByRole('status', { name: 'Loading Model Cost' })).toBeTruthy();
     });
   });
 

@@ -9,7 +9,7 @@ import { KpiCardValue } from './kpi-card-value';
 import { hasKpiChange } from './kpi-card.utils';
 import { formatFullNumber } from '@/lib/cost';
 
-const LABEL = 'Model cost';
+const LABEL = 'Model Cost';
 
 export function ModelCostKpiCard() {
   const { data, isLoading, isError } = useModelCostKpiMetrics(useMetricsFilters());

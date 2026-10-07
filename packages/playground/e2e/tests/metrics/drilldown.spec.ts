@@ -57,11 +57,11 @@ test.describe('Metrics dashboard drilldown links', () => {
     });
   });
 
-  test.describe('when the Trace Volume card is shown', () => {
+  test.describe('when the Trace volume card is shown', () => {
     test('exposes both traces and logs drilldown buttons', async ({ page }) => {
       await gotoMetricsOrSkip(page);
 
-      const card = cardByTitle(page, 'Trace Volume');
+      const card = cardByTitle(page, 'Trace volume');
 
       const tracesLink = card.getByRole('link', { name: 'View in Traces' });
       const logsLink = card.getByRole('link', { name: 'View errors in Logs' });
@@ -101,7 +101,7 @@ test.describe('Metrics dashboard drilldown links', () => {
       await gotoMetricsOrSkip(page);
 
       await expect(
-        cardByTitle(page, 'Model Usage & Cost').getByRole('link', { name: 'View in Traces' }),
+        cardByTitle(page, 'Model usage & cost').getByRole('link', { name: 'View in Traces' }),
       ).toBeAttached();
     });
   });

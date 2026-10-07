@@ -33,7 +33,7 @@ export const modelUsageBreakdown = ({ name }: MetricsRequest): GetMetricBreakdow
   return emptyBreakdown;
 };
 
-// Token usage by agent: input and output breakdowns grouped by entityName.
+// Token Usage by Agent: input and output breakdowns grouped by entityName.
 export const tokenUsageByAgentBreakdown = ({ name }: MetricsRequest): GetMetricBreakdownResponse => {
   if (name[0] === 'mastra_model_total_input_tokens') {
     return {
@@ -70,7 +70,7 @@ export const memoryBreakdown = ({ name, groupBy }: MetricsRequest): GetMetricBre
   return emptyBreakdown;
 };
 
-// Trace volume: one breakdown per entity type, grouped by entityName and status.
+// Trace Volume: one breakdown per entity type, grouped by entityName and status.
 export const traceVolumeBreakdown = ({ name }: MetricsRequest): GetMetricBreakdownResponse => {
   if (name[0] === 'mastra_agent_duration_ms') {
     return {

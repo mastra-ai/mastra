@@ -259,7 +259,7 @@ function MetricsContent() {
           <ActiveResourcesKpiCard />
         </MetricsCardGroup>
 
-        <MetricsGrid minItemWidth="md">
+        <MetricsGrid>
           <ModelUsageCostCard onOpenTraces={openTraces} onRowClick={openTraces} />
           <TokenUsageByAgentCard onOpenTraces={openTraces} onRowClick={openTraces} />
           <TokenUsageTimelineCard onOpenTraces={openTraces} />

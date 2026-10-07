@@ -1,43 +1,36 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export type MetricsGridMinItemWidth = 'sm' | 'md' | 'lg';
+export type MetricsGridColumns = 2 | 3;
 export type MetricsGridItemSpan = 1 | 2 | 'full';
 
-const minItemWidthClasses: Record<MetricsGridMinItemWidth, string> = {
-  sm: '[--metrics-grid-min:18rem]',
-  md: '[--metrics-grid-min:24rem]',
-  lg: '[--metrics-grid-min:32rem]',
+/**
+ * Breakpoints follow the grid's own width (container queries), not the viewport,
+ * so the sidebar or any surrounding layout doesn't skew the column count.
+ */
+const columnClasses: Record<MetricsGridColumns, string> = {
+  2: '@3xl:grid-cols-2',
+  3: '@3xl:grid-cols-2 @7xl:grid-cols-3',
 };
 
-/** `2` only applies from `lg`, where the grid is guaranteed to have room for two columns. */
 const spanClasses: Record<MetricsGridItemSpan, string> = {
   1: '',
-  2: 'lg:col-span-2',
+  2: '@3xl:col-span-2',
   full: 'col-span-full',
 };
 
 export type MetricsGridProps = {
   children: ReactNode;
-  /** Narrowest a card may get before the grid wraps it to a new row. */
-  minItemWidth?: MetricsGridMinItemWidth;
+  /** Maximum number of columns on wide containers. Pick a divisor of the card count to avoid a ragged last row. */
+  columns?: MetricsGridColumns;
   className?: string;
 };
 
-/**
- * Responsive grid of metrics cards. Fits as many columns as the container allows
- * without any card shrinking under `minItemWidth`, and never overflows on mobile.
- */
-export function MetricsGrid({ children, minItemWidth = 'md', className }: MetricsGridProps) {
+/** Responsive grid of metrics cards: one column on narrow containers, up to `columns` on wide ones. */
+export function MetricsGrid({ children, columns = 3, className }: MetricsGridProps) {
   return (
-    <div
-      className={cn(
-        'grid grid-cols-[repeat(auto-fill,minmax(min(100%,var(--metrics-grid-min)),1fr))] gap-4',
-        minItemWidthClasses[minItemWidth],
-        className,
-      )}
-    >
-      {children}
+    <div className={cn('@container', className)}>
+      <div className={cn('grid gap-4', columnClasses[columns])}>{children}</div>
     </div>
   );
 }

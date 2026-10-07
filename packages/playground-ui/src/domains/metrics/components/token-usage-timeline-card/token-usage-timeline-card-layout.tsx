@@ -12,7 +12,7 @@ export function TokenUsageTimelineCardLayout({ description, actions, children }:
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title="Token usage over time" description={description} />
+        <MetricsCard.TitleAndDescription title="Token Usage over Time" description={description} />
         {actions && <MetricsCard.Actions>{actions}</MetricsCard.Actions>}
       </MetricsCard.TopBar>
       <div className="min-h-72 min-w-0">{children}</div>

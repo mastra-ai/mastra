@@ -14,7 +14,7 @@ describe('TokenUsageTimelineCard', () => {
       server.use(metricsPending('timeseries'));
       renderWithMetrics(<TokenUsageTimelineCard />);
 
-      expect(screen.getByText('Token usage over time')).toBeTruthy();
+      expect(screen.getByText('Token Usage over Time')).toBeTruthy();
       expect(screen.getByRole('status', { name: 'Loading token usage timeline' })).toBeTruthy();
     });
   });

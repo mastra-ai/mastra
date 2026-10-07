@@ -14,8 +14,8 @@ describe('AgentRunsKpiCard', () => {
       server.use(metricsPending('aggregate'));
       renderWithMetrics(<AgentRunsKpiCard />);
 
-      expect(screen.getByText('Agent runs')).toBeTruthy();
-      expect(screen.getByRole('status', { name: 'Loading Agent runs' })).toBeTruthy();
+      expect(screen.getByText('Agent Runs')).toBeTruthy();
+      expect(screen.getByRole('status', { name: 'Loading Agent Runs' })).toBeTruthy();
     });
   });
 

@@ -8,7 +8,7 @@ describe('MetricsGrid', () => {
   describe('when given several cards', () => {
     it('renders them in the order they were passed', () => {
       render(
-        <MetricsGrid minItemWidth="md">
+        <MetricsGrid>
           <MetricsGrid.Item>First</MetricsGrid.Item>
           <MetricsGrid.Item span={2}>Second</MetricsGrid.Item>
           <MetricsGrid.Item span="full">Third</MetricsGrid.Item>

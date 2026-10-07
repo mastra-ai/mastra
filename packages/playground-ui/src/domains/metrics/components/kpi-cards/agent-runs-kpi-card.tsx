@@ -9,7 +9,7 @@ import { KpiCardValue } from './kpi-card-value';
 import { hasKpiChange } from './kpi-card.utils';
 import { formatFullNumber } from '@/lib/cost';
 
-const LABEL = 'Agent runs';
+const LABEL = 'Agent Runs';
 
 export function AgentRunsKpiCard() {
   const { data, isLoading, isError } = useAgentRunsKpiMetrics(useMetricsFilters());
