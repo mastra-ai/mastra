@@ -204,4 +204,30 @@ describe('sub-agent background config derivation', () => {
     expect(getChildTools).not.toHaveBeenCalled();
     expect((tools['agent-child'] as any).backgroundConfig).toEqual(expected);
   });
+
+  it('ignores background config for workspace tools the workspace cannot provide', async () => {
+    const model = new MockLanguageModelV2();
+    const child = new Agent({
+      id: 'child',
+      name: 'child',
+      instructions: 'Help the parent.',
+      model,
+      workspace: new Workspace({
+        id: 'child-workspace',
+        filesystem: new LocalFilesystem({ basePath: tmpdir() }),
+        tools: { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { background: { enabled: true } } },
+      }),
+    });
+    const parent = new Agent({
+      id: 'parent',
+      name: 'parent',
+      instructions: 'Delegate to the child.',
+      model,
+      agents: { child },
+    });
+
+    const tools = await parent.getToolsForExecution({ backgroundTaskEnabled: true });
+
+    expect((tools['agent-child'] as any).backgroundConfig).toBeUndefined();
+  });
 });

@@ -150,7 +150,7 @@ import {
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace, WorkspaceToolName } from '../workspace';
-import { WORKSPACE_TOOLS, createWorkspaceTools, resolveToolConfig } from '../workspace';
+import { WORKSPACE_TOOLS, createWorkspaceTools, isWorkspaceToolGroupAvailable, resolveToolConfig } from '../workspace';
 import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
@@ -1396,7 +1396,8 @@ export class Agent<
         const workspaceToolsConfig = workspace?.getToolsConfig();
         if (workspace && workspaceToolsConfig) {
           const configContext = { requestContext: Object.fromEntries(requestContext.entries()), workspace };
-          for (const group of Object.values(WORKSPACE_TOOLS)) {
+          for (const [groupKey, group] of Object.entries(WORKSPACE_TOOLS)) {
+            if (!isWorkspaceToolGroupAvailable(workspace, groupKey as keyof typeof WORKSPACE_TOOLS)) continue;
             for (const name of Object.values(group) as WorkspaceToolName[]) {
               if (!workspaceToolsConfig[name]) continue;
               const config = await resolveToolConfig(workspaceToolsConfig, name, configContext);

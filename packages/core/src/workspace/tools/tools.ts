@@ -108,6 +108,27 @@ function hasSandboxConfig(workspace: Workspace): boolean {
 }
 
 /**
+ * Whether createWorkspaceTools would expose any tool from the given group for this workspace.
+ * Mirrors the capability gates in createWorkspaceTools without building tools.
+ */
+export function isWorkspaceToolGroupAvailable(workspace: Workspace, group: keyof typeof WORKSPACE_TOOLS): boolean {
+  switch (group) {
+    case 'FILESYSTEM':
+      return hasFilesystemConfig(workspace);
+    case 'SEARCH':
+      return !!(workspace.canBM25 || workspace.canVector);
+    case 'SANDBOX':
+      return !!workspace.sandbox || hasSandboxConfig(workspace);
+    case 'COMPUTER':
+      return !!workspace.sandbox && supportsComputer(workspace.sandbox);
+    case 'LSP':
+      return !!workspace.lsp;
+    default:
+      return false;
+  }
+}
+
+/**
  * Normalize a requestContext value to a plain Record.
  * Callers may pass a Map-like RequestContext (with `.entries()`) or a plain
  * object.  Dynamic config functions always receive a plain object so that
