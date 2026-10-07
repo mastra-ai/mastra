@@ -197,15 +197,21 @@ describe('runDurableFinishSideEffects', () => {
       updatedAt: new Date(),
     };
 
-    async function runFinish(memoryConfig: Record<string, unknown>) {
+    async function runFinish(memoryConfig: Record<string, unknown>, requestContext = new RequestContext()) {
       const saveMessages = vi.fn().mockResolvedValue({ messages: [] });
       const storage = { saveMessages, getThreadById: vi.fn().mockResolvedValue(storedThread) };
-      const getThreadById = vi.fn().mockResolvedValue(storedThread);
+      let seenMemoryContext: unknown;
+      const recorder = {
+        id: 'recorder',
+        processOutputResult: ({ messageList, requestContext }: any) => {
+          seenMemoryContext = requestContext?.get('MastraMemory');
+          return messageList;
+        },
+      };
 
       globalRunRegistry.set('run-1', {
         isPlaceholder: false,
-        outputProcessors: [new MessageHistory({ storage: storage as any })],
-        memory: { getThreadById, createThread: vi.fn() },
+        outputProcessors: [recorder, new MessageHistory({ storage: storage as any })],
       } as unknown as RunRegistryEntry);
 
       await runDurableFinishSideEffects({
@@ -215,14 +221,19 @@ describe('runDurableFinishSideEffects', () => {
           requestContextEntries: { userTier: 'pro' },
         } as DurableAgenticWorkflowInput,
         messageListState: makeMessageListState(),
-        requestContext: new RequestContext(),
+        requestContext,
       });
 
-      return { saveMessages, getThreadById };
+      return { saveMessages, seenMemoryContext };
     }
 
     it('does not persist the turn when memory is readOnly', async () => {
-      const { saveMessages } = await runFinish({ readOnly: true });
+      const { saveMessages, seenMemoryContext } = await runFinish({ readOnly: true });
+      expect(seenMemoryContext).toEqual({
+        thread: { id: 'thread-1' },
+        resourceId: 'resource-1',
+        memoryConfig: { readOnly: true },
+      });
       expect(saveMessages).not.toHaveBeenCalled();
     });
 
@@ -232,18 +243,6 @@ describe('runDurableFinishSideEffects', () => {
     });
 
     it('keeps a MastraMemory entry that is already present', async () => {
-      const saveMessages = vi.fn().mockResolvedValue({ messages: [] });
-      const getThreadById = vi.fn().mockResolvedValue(storedThread);
-      globalRunRegistry.set('run-1', {
-        isPlaceholder: false,
-        outputProcessors: [
-          new MessageHistory({
-            storage: { saveMessages, getThreadById: vi.fn().mockResolvedValue(storedThread) } as any,
-          }),
-        ],
-        memory: { getThreadById, createThread: vi.fn() },
-      } as unknown as RunRegistryEntry);
-
       const requestContext = new RequestContext();
       const existingMemoryContext = {
         thread: storedThread,
@@ -252,19 +251,9 @@ describe('runDurableFinishSideEffects', () => {
       };
       requestContext.set('MastraMemory', existingMemoryContext);
 
-      await runDurableFinishSideEffects({
-        runId: 'run-1',
-        initData: makeInitData({
-          threadId: 'thread-1',
-          resourceId: 'resource-1',
-          threadExists: true,
-          memoryConfig: {},
-        }),
-        messageListState: makeMessageListState(),
-        requestContext,
-      });
+      const { saveMessages, seenMemoryContext } = await runFinish({}, requestContext);
 
-      expect(getThreadById).not.toHaveBeenCalled();
+      expect(seenMemoryContext).toEqual(existingMemoryContext);
       expect(saveMessages).not.toHaveBeenCalled();
     });
   });
