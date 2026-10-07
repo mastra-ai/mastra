@@ -2039,6 +2039,7 @@ export class AgentThreadStreamRuntime {
       if (
         typedPart.type === 'error' ||
         typedPart.type === 'abort' ||
+        typedPart.type === 'tripwire' ||
         (typedPart.type === 'finish' && finishReason !== 'tool-calls')
       ) {
         publishedTerminal = true;
@@ -4730,6 +4731,7 @@ export class AgentThreadStreamRuntime {
                 const terminalBoundary =
                   typedPart.type === 'error' ||
                   typedPart.type === 'abort' ||
+                  typedPart.type === 'tripwire' ||
                   (typedPart.type === 'finish' && finishReason !== 'tool-calls');
                 if (terminalBoundary) {
                   // After a final terminal chunk, drain any non-visible trailing

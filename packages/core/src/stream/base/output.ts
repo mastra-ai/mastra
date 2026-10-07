@@ -976,6 +976,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 processorId: chunk.payload?.processorId,
               };
               self.#finishReason = 'other';
+              // The tripwire terminates the stream without a `finish` chunk, so settle the
+              // status here; otherwise the run stays 'running' forever.
+              if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                self.#status = 'tripwire';
+              }
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 
@@ -1222,19 +1227,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // aggregate stream text because pre-approval text is part of the resumed run.
                   // Durable agents set resolveFinalPromises to force resolution even when
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
-                  // Durable runs output processors in its workflow, so a blocked final step gets
-                  // its text back here, as the output processor pass above does for the main loop.
-                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  if (
-                    self.#options.resolveFinalPromises &&
-                    lastStep?.finishReason === 'tripwire' &&
-                    lastStep.toolCalls.length === 0
-                  ) {
-                    lastStep.text = lastStep.content
-                      .filter(part => part.type === 'text')
-                      .map(part => part.text)
-                      .join('');
-                  }
+                  // A step rejected by a tripwire keeps its empty text, so durable runs don't
+                  // return a rejected reply (#26048).
                   this.resolvePromises({
                     text: self.#producedText(),
                     finishReason: self.#finishReason,

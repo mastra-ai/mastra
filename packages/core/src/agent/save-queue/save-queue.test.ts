@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../message-list';
+import { createSignal } from '../signals';
 import type { MastraDBMessage } from '../types';
 import { SaveQueueManager } from './index';
 
@@ -7,7 +8,7 @@ function makeTestMessage(id: string, threadId: string, role: 'user' | 'assistant
   return {
     id,
     role,
-    content: { content, parts: [], format: 2 },
+    content: { content, parts: [{ type: 'text', text: content }], format: 2 },
     createdAt: new Date(),
     threadId,
   };
@@ -119,5 +120,53 @@ describe('SaveQueueManager', () => {
 
     expect(savedMessages.length).toBe(3);
     expect(list.drainUnsavedMessages().length).toBe(0);
+  });
+
+  it('filters internal working-memory and transient signal messages before saving', async () => {
+    const threadId = 'thread-filter';
+    const list = new MessageList({ threadId });
+    const transientSignal = createSignal({
+      id: 'signal-transient',
+      type: 'reactive',
+      contents: 'Delivery only',
+      transient: true,
+    }).toDBMessage({ threadId });
+    const workingMemoryMessage: MastraDBMessage = {
+      id: 'wm-message',
+      role: 'assistant',
+      createdAt: new Date(),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'wm-call',
+              toolName: 'updateWorkingMemory',
+              args: { memory: '# Profile\n- Name: Ada' },
+              result: { success: true },
+            },
+          },
+        ],
+      },
+    };
+
+    list.add(transientSignal, 'response');
+    list.add(workingMemoryMessage, 'response');
+    list.add(makeTestMessage('visible-message', threadId, 'assistant', 'Saved your profile.'), 'response');
+
+    await manager.flushMessages(list, threadId);
+
+    expect(mockMemory.saveMessages).toHaveBeenCalledOnce();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].role).toBe('assistant');
+    expect(saved[0].content.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Saved your profile.' })]),
+    );
+    expect(saved[0].content.parts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'tool-invocation' })]),
+    );
   });
 });

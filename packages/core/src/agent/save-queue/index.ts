@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../logger';
 import type { MemoryConfigInternal } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
+import { filterMessagesForPersistence } from '../filter-messages-for-persistence';
 import type { MessageList } from '../message-list';
 import { noteThreadMessagesSaved } from '../thread-saves';
 
@@ -98,7 +99,7 @@ export class SaveQueueManager {
     messageList: MessageList,
     memoryConfig?: MemoryConfigInternal,
   ) {
-    const newMessages = messageList.drainUnsavedMessages();
+    const newMessages = filterMessagesForPersistence(messageList.drainUnsavedMessages());
     if (newMessages.length > 0 && this.memory) {
       const savedAt = Date.now();
       await this.memory.saveMessages({

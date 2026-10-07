@@ -356,7 +356,7 @@ export function BoardContent({
     <div className="flex min-h-0 flex-1 flex-col">
       {runs.repositorySelection && (
         <RepositoryPickerDialog
-          repositories={runs.repositories}
+          repositories={runs.repositoryChoices}
           onClose={runs.closeRepositorySelection}
           onSelect={runs.selectRepository}
         />

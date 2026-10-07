@@ -73,7 +73,7 @@ export const loginPreservesModelPackScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
-    await runtime.waitForScreenText(/▐build▌login-preserve-e2e\/build-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bbuild · login-preserve-e2e\/build-model/i, terminal, 8_000);
 
     terminal.submit('/login');
     await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
@@ -93,7 +93,7 @@ export const loginPreservesModelPackScenario = {
 
     // The active model pack must survive login: the status line still shows the
     // custom build model, and the login never switched to the provider default.
-    await runtime.waitForScreenText(/▐build▌login-preserve-e2e\/build-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bbuild · login-preserve-e2e\/build-model/i, terminal, 8_000);
     await runtime.waitForScreenTextAbsent(/claude-fable-5/i, terminal, 4_000);
     await runtime.waitForScreenTextAbsent(/switched to anthropic/i, terminal, 4_000);
 
