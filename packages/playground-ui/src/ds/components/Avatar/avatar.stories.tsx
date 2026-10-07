@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Avatar } from './Avatar';
+import { CompositeAvatar } from './composite-avatar';
 
 const meta: Meta<typeof Avatar> = {
   title: 'Elements/Avatar',
@@ -10,7 +11,7 @@ const meta: Meta<typeof Avatar> = {
   argTypes: {
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'lg'],
+      options: ['xs', 'sm', 'md', 'lg', 'rail'],
     },
   },
 };
@@ -61,5 +62,39 @@ export const AllSizes: Story = {
       <Avatar name="Medium" size="md" />
       <Avatar name="Large" size="lg" />
     </div>
+  ),
+};
+
+export const CompositeDark: Story = {
+  globals: { theme: 'dark' },
+  render: () => (
+    <CompositeAvatar badge={<Avatar name="Mastra" size="xs" />}>
+      <Avatar name="Justin Levine" size="sm" />
+    </CompositeAvatar>
+  ),
+};
+
+export const CompositeLight: Story = {
+  ...CompositeDark,
+  globals: { theme: 'light' },
+};
+
+export const CompositeWithImages: Story = {
+  render: () => (
+    <CompositeAvatar
+      badge={
+        <Avatar
+          name="Mastra"
+          size="xs"
+          src="https://app.paper.design/file-assets/01M3ZEJQE1FBY8QS12PDAP7EAD/2HJ0BRDHF4SC53J60Z9SPYRCWJ.svg"
+        />
+      }
+    >
+      <Avatar
+        name="Justin Levine"
+        size="sm"
+        src="https://app.paper.design/file-assets/01M3ZEJQE1FBY8QS12PDAP7EAD/1BJ2ESN9ZCN5BC6T2NEBFW90AE.png"
+      />
+    </CompositeAvatar>
   ),
 };

@@ -19,5 +19,23 @@ export default defineConfig({
     env: { TZ: 'UTC' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**'],
+    projects: [
+      {
+        extends: true,
+        test: { name: 'unit:playground-ui', exclude: ['**/node_modules/**', '**/*.dom.test.tsx'] },
+      },
+      {
+        plugins: [react()],
+        resolve: { alias: { '@': resolve(__dirname, './src') } },
+        test: {
+          name: 'dom:playground-ui',
+          environment: 'jsdom',
+          include: ['src/**/*.dom.test.tsx'],
+          setupFiles: ['./src/test/jsdom-polyfills.ts', './src/test/vitest-setup.ts'],
+          testTimeout: 15000,
+          env: { TZ: 'UTC' },
+        },
+      },
+    ],
   },
 });

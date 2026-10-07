@@ -1,10 +1,10 @@
 import { useState } from 'react';
 
-import { Txt } from '../Txt';
+import { Txt } from '../Txt/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export type AvatarSize = 'sm' | 'md' | 'lg';
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'rail';
 
 export type AvatarProps = {
   src?: string;
@@ -16,6 +16,8 @@ export type AvatarProps = {
 };
 
 const sizeClasses: Record<AvatarSize, string> = {
+  xs: 'size-icon-xs',
+  rail: 'h-control-md w-control-md',
   sm: 'h-avatar-sm w-avatar-sm',
   md: 'h-avatar-md w-avatar-md',
   lg: 'h-avatar-lg w-avatar-lg',
@@ -42,7 +44,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
         <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
       ) : (
         <Txt
-          variant="body"
+          variant={size === 'xs' ? 'meta' : 'body'}
           tone={showFallbackTint ? undefined : 'muted'}
           className="text-center"
           style={showFallbackTint && textColor ? { color: textColor } : undefined}
