@@ -1173,8 +1173,9 @@ export class MastraTUI {
     const metadata = resolvedThread?.metadata as Record<string, unknown> | undefined;
     if (!ownsUpdate()) return;
     const hasThreadPack = typeof metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] === 'string';
+    const hasPersistedModel = typeof metadata?.currentModelId === 'string' && metadata.currentModelId.length > 0;
     const resolvedPackId =
-      this.state.options.initialModelOverride && !hasThreadPack
+      (this.state.options.initialModelOverride || hasPersistedModel) && !hasThreadPack
         ? null
         : resolveThreadActiveModelPackId(settings, packs, metadata);
     const fallbackStatus = fallbackStatusFromMetadata(metadata);
