@@ -11,8 +11,9 @@
  * fields, so the checks below assert the contract on every engine and additionally pin the recorded
  * hook sequence per engine. The tail of that sequence differs between engines (`finish` reaches the
  * output processors after `step-finish`/`processOutputResult` on durable and evented, before them on
- * plain) — the same class of undeclared ordering difference flagged for T47, and the reason the
- * sequence is pinned per engine rather than compared across engines.
+ * plain) — COR-1390 (chunk order/content): it is the same trailing-`finish` divergence tracked on the
+ * stream, and it is not a `ParitySnapshot` field, so it is pinned per engine rather than compared
+ * across engines. The pins go stale when COR-1390 lands.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -137,7 +138,15 @@ const SHARED_HOOKS = [
   'out-c:processOutputStream:text-end',
 ];
 
-/** Recorded tail per engine: where the final `finish` chunk reaches the output processors. */
+/**
+ * Recorded tail per engine: where the final `finish` chunk reaches the output processors.
+ *
+ * COR-1390 (chunk order/content): plain hands the final `finish` chunk to the output processors
+ * before `step-finish`/`processOutputResult`, while durable and evented emit it after both. That is
+ * the same trailing-`finish` divergence COR-1390 tracks on the stream — the hook order simply makes
+ * it visible. It is not a `ParitySnapshot` field, so it cannot be declared through `differences`;
+ * each engine is pinned at its current tail instead, and these pins go stale when COR-1390 lands.
+ */
 const FINAL_HOOKS: Record<(typeof ENGINES)[number], string[]> = {
   plain: [
     'out-a:processOutputStream:finish',
