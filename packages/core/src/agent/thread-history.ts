@@ -30,7 +30,9 @@ type ThreadHistoryIndex = {
   /**
    * Tool calls still waiting on the user (approval or suspension). Only the
    * latest assistant message can still be owed an answer: a suspended run
-   * writes nothing after it, and resolved entries stay in older metadata.
+   * writes nothing after it. Resuming removes the entry, but calls that were
+   * never answered (a stopped run, or a run abandoned when a later message
+   * started a new run) stay in older metadata and must not be replayed.
    */
   pendingToolCallIds: Set<string>;
 };
