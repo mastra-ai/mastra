@@ -572,7 +572,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContext) {
-      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      const bridgeContextSpan = this.isInternal || this.isExcluded ? this.getParentSpan(false) : this;
       return bridge.executeInContext(bridgeContextSpan?.id ?? this.id, fn);
     }
 
@@ -587,7 +587,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContextSync) {
-      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      const bridgeContextSpan = this.isInternal || this.isExcluded ? this.getParentSpan(false) : this;
       return bridge.executeInContextSync(bridgeContextSpan?.id ?? this.id, fn);
     }
 
