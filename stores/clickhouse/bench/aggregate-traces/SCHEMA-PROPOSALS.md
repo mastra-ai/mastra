@@ -8,15 +8,16 @@ complexity unless it is researched and testable ahead of time.
 
 ## Summary
 
-| Tier | Change                                                                                              | Write path      | Correctness risk                                            | Evidence               | Recommendation            |
-| ---- | --------------------------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------- | ---------------------- | ------------------------- |
-| 0    | Compiler rewrites that keep every dedupe (`safe`) + `filesystem_prefetches_limit = 8` for small–p90 | none            | none (0 mismatches / 2,880)                                 | prod warm + cold       | **ship**                  |
-| 1    | Span-name index `(org, project, name, traceId)`                                                     | 1 MV, no sums   | none found: span names never change between copies          | prod facts, lab memory | **research + shadow**     |
-| 1    | Narrow token rows ordered by trace (ReplacingMergeTree, read with `FINAL`)                          | 1 MV, no sums   | none: same dedupe key as today                              | lab memory             | **research + shadow**     |
-| 2    | Hourly token/cost rollup                                                                            | 2 MVs with sums | retries double-count; roots are rewritten; hour attribution | prod facts, lab memory | **later, after Tier 1**   |
-| 2    | Per-trace token/cost rollup (sums)                                                                  | 1 MV with sums  | retries double-count                                        | lab memory             | superseded by narrow rows |
-| 3    | Drop query-time root dedupe                                                                         | writer change   | **roots are rewritten today**                               | prod facts             | **no**                    |
-| 3    | Token/cost totals on the root row                                                                   | writer change   | 4% of token rows land after the root ends                   | prod facts             | **no**                    |
+| Tier | Change                                                                                              | Write path                           | Correctness risk                                                 | Evidence               | Recommendation            |
+| ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------- | ---------------------- | ------------------------- |
+| 0    | Compiler rewrites that keep every dedupe (`safe`) + `filesystem_prefetches_limit = 8` for small–p90 | none                                 | none (0 mismatches / 2,880)                                      | prod warm + cold       | **ship**                  |
+| 1    | Span-name index `(org, project, name, traceId)`                                                     | 1 MV, no sums                        | none found: span names never change between copies               | prod facts, lab memory | **research + shadow**     |
+| 1    | One token/cost row per model call (ReplacingMergeTree, latest wins)                                 | writer emits 1 row per call, no sums | none found: 1 token row per (call, type) today; latest copy wins | prod facts, lab memory | **research + shadow**     |
+| 1    | Narrow token rows ordered by trace (ReplacingMergeTree, read with `FINAL`)                          | 1 MV, no sums                        | none: same dedupe key as today                                   | lab memory             | fallback to per-call rows |
+| 2    | Hourly token/cost rollup                                                                            | 2 MVs with sums                      | retries double-count; roots are rewritten; hour attribution      | prod facts, lab memory | **later, after Tier 1**   |
+| 2    | Per-trace token/cost rollup (sums)                                                                  | 1 MV with sums                       | retries double-count                                             | lab memory             | superseded by narrow rows |
+| 3    | Drop query-time root dedupe                                                                         | writer change                        | **roots are rewritten today**                                    | prod facts             | **no**                    |
+| 3    | Token/cost totals on the root row                                                                   | writer change                        | 4% of token rows land after the root ends                        | prod facts             | **no**                    |
 
 ## Realistic spread: Tier 0 only (prod, 30 days, peak MiB, warm median)
 
@@ -111,6 +112,30 @@ query uses today). Still over 256 MiB on the largest project; cuts the token-joi
 **Open.** `FINAL` cost on Cloud with many unmerged parts (lab tables were fully merged); p99 numbers; write cost.
 A projection on `mastra_metric_events` with this order would avoid the MV, but ClickHouse didn't choose it, and
 sorting alone didn't make the dedupe stream (X32): the gain comes from the narrow, hash-keyed table plus `FINAL`.
+
+## Tier 1: one token/cost row per model call
+
+**What.** `mastra_model_usage (organizationId, projectId, traceId, spanId)` ReplacingMergeTree holding the four token
+totals, cost and pricing flags for one model call. The exporter writes it when a model span ends, from the same usage
+it already prices for token metrics (including rolled-up internal usage). Queries dedupe per call (`argMax` by
+timestamp) and sum per trace, instead of deduping ~6 token rows per trace.
+
+**Buys (lab, X35).** p99 E4/T1/T3 187 → 72 MiB; largest 818 → 338 MiB. With `safe` + limit 8, p99 would land near
+~100–150 MiB on prod (estimate). The largest project stays over 256 MiB: pair it with window caps or per-day splits
+there.
+
+**Why low risk.** No sums at write time, so retries can't double-count; a retried or rewritten call collapses to its
+latest copy, the same rule the query uses for spans. Prod facts: exactly one token row per (call, token type) today,
+and 99.3% of token rows sit on model spans.
+
+**Can go wrong.** A model span rewritten with _less_ final usage than an earlier copy (latest wins, so the earlier,
+larger value is dropped; 14 of 14 rewritten model spans had different usage); the 0.6% of usage on `processor_run`
+spans must be written too; a call whose usage is never finalized. Keep writing token metric rows: metrics dashboards
+use them, and they are the reconciliation source.
+
+**Test.** Daily reconciliation per tenant: per-trace sums from `mastra_model_usage` vs deduped token rows (must
+match). Replay with rewritten spans carrying different usage. An MV from token rows with `argMaxIf` states per token
+type would avoid the writer change and stays idempotent, but is untested.
 
 ## Tier 2: hourly token/cost rollup
 

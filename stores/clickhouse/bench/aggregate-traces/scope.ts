@@ -112,9 +112,17 @@ export type Variant =
   | 'arch3'
   | 'sk'
   | 'srio'
-  | 'safe';
+  | 'safe'
+  | 'hkd'
+  | 'mcall'
+  | 'mcallf'
+  | 'spanu';
 
 /** Lab-only tables created by `lab.ts derive` (memory track 3); see `ROLLUP_DDL`. */
+/** One row per model call (trace, span) holding that call's token/cost totals. */
+export const MODEL_USAGE_TABLE = 'mastra_model_usage';
+/** Span rows (payload columns empty) with the call's token/cost totals as typed columns. */
+export const SPAN_USAGE_TABLE = 'mastra_span_events_u';
 export const USAGE_ROLLUP_TABLE = 'mastra_trace_usage';
 export const SPAN_NAME_INDEX_TABLE = 'mastra_trace_span_names';
 /** Rollup column holding the per-trace sum of each usage metric, by name. */
@@ -273,6 +281,22 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
       return readInOrderDedupe(applyVariant(compiled, 'sk'));
     case 'safe':
       return hashedKeys(applyVariant(compiled, 'srio'));
+    // Token/cost from one row per model call instead of one row per metric, deduped per call (latest wins).
+    case 'mcall':
+      return perCallUsage(applyVariant(compiled, 'safe'), MODEL_USAGE_TABLE, 'timestamp', '');
+    // Same table read with FINAL: the engine dedupes (trace, span) in sort order instead of a hash table.
+    case 'mcallf':
+      return perCallUsage(applyVariant(compiled, 'safe'), MODEL_USAGE_TABLE, 'timestamp', '', true);
+    case 'spanu':
+      return perCallUsage(applyVariant(compiled, 'safe'), SPAN_USAGE_TABLE, 'endedAt', '\n        AND hasUsage = 1');
+    // `safe` with the token retry dedupe keyed by integers: same rows kept, smaller hash table.
+    case 'hkd':
+      return rewriteEach(applyVariant(compiled, 'safe'), 'hkd', [
+        [/(usage AS \(\n\s+SELECT )cityHash64\(traceId\) AS traceHash,/g, '$1th AS traceHash,'],
+        [/(\n\s+)SELECT traceId,(\n\s+latest\.1 AS name)/g, '$1SELECT th,$2'],
+        [/(\n\s+)SELECT traceId,(\n\s+argMax\()/g, '$1SELECT cityHash64(traceId) AS th,$2'],
+        [/GROUP BY traceId, metricId/g, 'GROUP BY th, cityHash64(metricId)'],
+      ]);
     case 'w1': {
       const tenantParam = /AND organizationId = (\{trace_query_\d+:String\}) AND projectId/.exec(compiled.query)?.[1];
       if (!tenantParam) throw new RewriteError('Variant w1: query is not project-scoped');
@@ -604,4 +628,59 @@ function usageOnRoot(compiled: CompiledClickHouseTraceQuery): CompiledClickHouse
   function fail(alias: string): never {
     throw new RewriteError(`Variant arch3: unknown usage alias ${alias}`);
   }
+}
+
+/** Replaces the `safe` usage CTE with a read of per-call usage rows (`lab.ts derive`), deduped per (trace, span). */
+function perCallUsage(
+  compiled: CompiledClickHouseTraceQuery,
+  table: string,
+  timeColumn: string,
+  extraWhere: string,
+  final = false,
+): CompiledClickHouseTraceQuery {
+  const q = compiled.query;
+  const start = q.indexOf('usage AS (');
+  const endMarker = '\n    GROUP BY traceHash\n  ),';
+  const end = q.indexOf(endMarker, start);
+  if (start < 0 || end < 0) throw new RewriteError(`Per-call usage (${table}): expected the safe usage CTE`);
+  const block = q.slice(start, end + endMarker.length);
+  const fields = [...USAGE_ROLLUP_COLUMNS.map(c => c.column), 'cost', 'pricedRows', 'failedRows', 'unitMin', 'unitMax'];
+  const at = (field: string) => `l.${fields.indexOf(field) + 1}`;
+  const sums = [...block.matchAll(/sumIf\(value, name = (\{trace_query_\d+:String\})\) AS (t\d+)/g)].map(
+    ([, p, alias]) => {
+      const col = USAGE_ROLLUP_COLUMNS.find(c => c.name === paramValue(compiled, p!));
+      if (!col)
+        throw new RewriteError(`Per-call usage: metric ${String(paramValue(compiled, p!))} not stored per call`);
+      return `sum(${at(col.column)}) AS ${alias}`;
+    },
+  );
+  if (sums.length === 0) throw new RewriteError('Per-call usage: no usage sums');
+  const costParams =
+    /name IN \((\{trace_query_\d+:String\}), (\{trace_query_\d+:String\})\) AND isNotNull\(estimatedCost\)/.exec(block);
+  const costNames = costParams ? [paramValue(compiled, costParams[1]!), paramValue(compiled, costParams[2]!)] : [];
+  if (costNames.length !== USAGE_COST_NAMES.length || costNames.some(n => !USAGE_COST_NAMES.includes(String(n)))) {
+    throw new RewriteError('Per-call usage: cost metric names differ');
+  }
+  const ts = /timestamp >= (\{trace_query_\d+:DateTime64\(3, 'UTC'\)\})/.exec(block)?.[1];
+  if (!ts) throw new RewriteError('Per-call usage: no timestamp bound');
+  const replacement = `usage AS (
+    SELECT th AS traceHash,
+      toUInt8(1) AS hasUsage,
+      ${sums.join(',\n      ')},
+      sum(${at('cost')}) AS cost,
+      toUInt8(sum(${at('pricedRows')}) > 0) AS priced,
+      toUInt8(sum(${at('failedRows')}) > 0) AS pricingFailure,
+      ifNull(min(${at('unitMin')}), '') AS unitMin,
+      ifNull(max(${at('unitMax')}), '') AS unitMax
+    FROM (
+      SELECT cityHash64(traceId) AS th,
+        ${final ? `tuple(${fields.join(', ')})` : `argMax(tuple(${fields.join(', ')}), ${timeColumn})`} AS l
+      FROM ${table}${final ? ' FINAL' : ''}
+      WHERE cityHash64(traceId) IN (SELECT cityHash64(traceId) FROM candidates)
+        AND organizationId = ${tenantParam(block)} AND projectId = {${PROJECT_PARAM}:String}
+        AND ${timeColumn} >= ${ts}${extraWhere}${final ? '' : '\n      GROUP BY th, cityHash64(spanId)'}
+    )
+    GROUP BY th
+  ),`;
+  return { ...compiled, query: q.slice(0, start) + replacement + q.slice(end + endMarker.length) };
 }

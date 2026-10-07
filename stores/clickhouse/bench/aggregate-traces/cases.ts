@@ -578,6 +578,10 @@ export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>([
   'sk',
   'srio',
   'safe',
+  'hkd',
+  'mcall',
+  'mcallf',
+  'spanu',
 ]);
 
 export interface ProjectScope {

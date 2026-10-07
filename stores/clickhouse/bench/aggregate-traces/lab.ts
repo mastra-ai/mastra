@@ -36,6 +36,8 @@ import {
   HOURLY_DIMENSIONS,
   HOURLY_TABLE,
   ROOTS_USAGE_TABLE,
+  MODEL_USAGE_TABLE,
+  SPAN_USAGE_TABLE,
 } from './scope';
 import type { Variant } from './scope';
 
@@ -940,6 +942,8 @@ const COST_IN = `name IN (${USAGE_COST_NAMES.map(q).join(', ')})`;
  */
 /** Payload columns no aggregate reads; left empty in the usage-on-root copy to keep the backfill small. */
 const ROOT_PAYLOAD = ['input', 'output', 'attributes', 'requestContext'];
+const SPAN_PAYLOAD = ['input', 'output', 'attributes', 'requestContext', 'metadataRaw', 'scope', 'links'];
+const PAYLOAD: Record<string, string[]> = { [ROOTS_USAGE_TABLE]: ROOT_PAYLOAD, [SPAN_USAGE_TABLE]: SPAN_PAYLOAD };
 
 export const ROLLUP_DDL = {
   [USAGE_ROLLUP_TABLE]: `CREATE TABLE ${LAB.database}.${USAGE_ROLLUP_TABLE} (
@@ -952,6 +956,19 @@ export const ROLLUP_DDL = {
     unitMin SimpleAggregateFunction(min, Nullable(String)),
     unitMax SimpleAggregateFunction(max, Nullable(String))
   ) ENGINE = AggregatingMergeTree ORDER BY (organizationId, projectId, traceId)`,
+  [MODEL_USAGE_TABLE]: `CREATE TABLE ${LAB.database}.${MODEL_USAGE_TABLE} (
+    organizationId String, projectId String, traceId String, spanId String, timestamp DateTime64(3, 'UTC'),
+    ${USAGE_ROLLUP_COLUMNS.map(c => `${c.column} Float64`).join(', ')}, cost Float64,
+    pricedRows UInt64, failedRows UInt64, unitMin Nullable(String), unitMax Nullable(String)
+  ) ENGINE = ReplacingMergeTree PARTITION BY toDate(timestamp) ORDER BY (organizationId, projectId, traceId, spanId)`,
+  // Span rows with the call's usage as typed columns, as if the writer stored it on the span at span end.
+  [SPAN_USAGE_TABLE]: [
+    `CREATE TABLE ${LAB.database}.${SPAN_USAGE_TABLE} AS ${LAB.database}.mastra_span_events`,
+    `ALTER TABLE ${LAB.database}.${SPAN_USAGE_TABLE} ADD COLUMN hasUsage UInt8,
+      ${USAGE_ROLLUP_COLUMNS.map(c => `ADD COLUMN ${c.column} Float64`).join(', ')}, ADD COLUMN cost Float64,
+      ADD COLUMN pricedRows UInt64, ADD COLUMN failedRows UInt64,
+      ADD COLUMN unitMin Nullable(String), ADD COLUMN unitMax Nullable(String)`,
+  ],
   [SPAN_NAME_INDEX_TABLE]: `CREATE TABLE ${LAB.database}.${SPAN_NAME_INDEX_TABLE} (
     organizationId String, projectId String, name String, traceId String, endedAt DateTime64(3, 'UTC')
   ) ENGINE = ReplacingMergeTree PARTITION BY toDate(endedAt) ORDER BY (organizationId, projectId, name, traceId)`,
@@ -990,6 +1007,29 @@ export const ROLLUP_SELECT = {
       WHERE isNotNull(traceId) AND name IN (${USAGE_ROLLUP_COLUMNS.map(c => q(c.name)).join(', ')})
         AND toDate(timestamp) = {d:Date})
     GROUP BY organizationId, projectId, traceId`,
+  [MODEL_USAGE_TABLE]: `SELECT ifNull(organizationId, '') AS organizationId, ifNull(projectId, '') AS projectId,
+      assumeNotNull(traceId) AS traceId, assumeNotNull(spanId) AS spanId, max(timestamp) AS timestamp,
+      ${USAGE_ROLLUP_COLUMNS.map(c => `sumIf(value, name = ${q(c.name)}) AS ${c.column}`).join(', ')},
+      sumIf(assumeNotNull(estimatedCost), priced) AS cost, countIf(priced) AS pricedRows, countIf(failed) AS failedRows,
+      minIf(costUnit, priced) AS unitMin, maxIf(costUnit, priced) AS unitMax
+    FROM (
+      SELECT *, ${COST_IN} AND ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0) AS hasErr,
+        ${COST_IN} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasErr AS priced,
+        ${COST_IN} AND (hasErr OR (isNotNull(estimatedCost) AND isNull(costUnit))) AS failed
+      FROM ${LAB.database}.mastra_metric_events
+      WHERE isNotNull(traceId) AND name IN (${USAGE_ROLLUP_COLUMNS.map(c => q(c.name)).join(', ')})
+        AND toDate(timestamp) = {d:Date})
+    GROUP BY organizationId, projectId, traceId, spanId`,
+  [SPAN_USAGE_TABLE]: `SELECT s.* EXCEPT (${SPAN_PAYLOAD.join(', ')}), toUInt8(u.spanId != ''),
+      ${USAGE_ROLLUP_COLUMNS.map(c => `ifNull(u.${c.column}, 0)`).join(', ')}, ifNull(u.cost, 0),
+      ifNull(u.pricedRows, 0), ifNull(u.failedRows, 0), u.unitMin, u.unitMax
+    FROM ${LAB.database}.mastra_span_events s
+    LEFT JOIN (
+      SELECT * FROM ${LAB.database}.${MODEL_USAGE_TABLE}
+      WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM ${LAB.database}.mastra_span_events WHERE toDate(endedAt) = {d:Date})
+    ) u ON u.organizationId = ifNull(s.organizationId, '') AND u.projectId = ifNull(s.projectId, '')
+       AND u.traceId = s.traceId AND u.spanId = s.spanId
+    WHERE toDate(s.endedAt) = {d:Date}`,
   [SPAN_NAME_INDEX_TABLE]: `SELECT ifNull(organizationId, '') AS organizationId, ifNull(projectId, '') AS projectId,
       name, assumeNotNull(traceId) AS traceId, max(endedAt) AS lastEndedAt
     FROM ${LAB.database}.mastra_span_events
@@ -1038,6 +1078,8 @@ const DERIVED_SOURCE = {
   [USAGE_ROLLUP_TABLE]: ['mastra_metric_events', 'timestamp'],
   [SPAN_NAME_INDEX_TABLE]: ['mastra_span_events', 'endedAt'],
   [ROOTS_USAGE_TABLE]: ['mastra_trace_roots', 'startedAt'],
+  [MODEL_USAGE_TABLE]: ['mastra_metric_events', 'timestamp'],
+  [SPAN_USAGE_TABLE]: ['mastra_span_events', 'endedAt'],
   [HOURLY_TABLE]: ['mastra_trace_roots', 'startedAt'],
 } as const;
 
@@ -1070,7 +1112,7 @@ async function derive(only?: string[]): Promise<void> {
       const started = performance.now();
       for (const { d } of days) {
         await admin.command({
-          query: `INSERT INTO ${db}.${table}${table === ROOTS_USAGE_TABLE ? ` (* EXCEPT (${ROOT_PAYLOAD.join(', ')}))` : ''} ${ROLLUP_SELECT[table as keyof typeof ROLLUP_SELECT]} SETTINGS max_threads = 2, max_block_size = 1024, min_insert_block_size_rows = 8192, min_insert_block_size_bytes = 67108864, max_insert_threads = 1`,
+          query: `INSERT INTO ${db}.${table}${PAYLOAD[table] ? ` (* EXCEPT (${PAYLOAD[table].join(', ')}))` : ''} ${ROLLUP_SELECT[table as keyof typeof ROLLUP_SELECT]} SETTINGS max_threads = 2, max_block_size = 1024, min_insert_block_size_rows = 8192, min_insert_block_size_bytes = 67108864, max_insert_threads = 1`,
           query_params: { d },
         });
       }

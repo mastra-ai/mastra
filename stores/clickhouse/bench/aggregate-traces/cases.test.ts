@@ -219,6 +219,23 @@ describe('query-shape variants', () => {
     expect(compile('F0', 'safe').query).toContain('cityHash64(traceId) IN');
   });
 
+  it('hkd keys the token dedupe by integers; per-call variants read one usage row per call', () => {
+    expect(compile('E4', 'hkd').query).toContain('cityHash64(metricId)');
+    expect(compile('E4', 'hkd').query).not.toContain('GROUP BY traceId, metricId');
+    for (const [v, table] of [
+      ['mcall', 'mastra_model_usage'],
+      ['spanu', 'mastra_span_events_u'],
+    ] as const) {
+      const q = compile('E4', v).query;
+      expect(q).toContain(`FROM ${table}\n`);
+      expect(q).toContain('GROUP BY th, cityHash64(spanId)');
+      expect(q).not.toContain('mastra_metric_events');
+      expect(q).toContain('LIMIT 1 BY traceId');
+    }
+    expect(compile('E4', 'mcallf').query).toContain('FROM mastra_model_usage FINAL');
+    expect(() => compile('F0', 'mcall')).toThrow(RewriteError);
+  });
+
   it('stageQuery ends the WITH chain at the named CTE', () => {
     const q = compile('E4', 'base').query;
     expect(stageQuery(q, 'usage')).toMatch(/\nSELECT count\(\) AS n, sum\(cityHash64\(\*\)\) AS h FROM usage$/);

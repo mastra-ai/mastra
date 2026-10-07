@@ -334,6 +334,24 @@ export const PROBES: Probe[] = [
       },
     ]),
   ),
+  // Token retry dedupe keyed by integers (`hkd`), alone and with the prefetch limit.
+  ...['E4', 'T1', 'T3', 'T4'].flatMap((caseId): Probe[] => [
+    ...(caseId === 'T4' ? [{ id: 'T4-safe', note: 'T4 30d, variant safe', sql: compiled('T4', 30, 'safe') }] : []),
+    { id: `${caseId}-hkd`, note: `${caseId} 30d, variant hkd`, sql: compiled(caseId, 30, 'hkd') },
+    ...(['mcall', 'mcallf', 'spanu'] as const).map(
+      (v): Probe => ({
+        id: `${caseId}-${v}`,
+        note: `${caseId} 30d, variant ${v}`,
+        sql: compiled(caseId, 30, v),
+      }),
+    ),
+    {
+      id: `${caseId}-hkd-pf8`,
+      note: `${caseId} 30d, variant hkd + prefetch limit 8`,
+      sql: compiled(caseId, 30, 'hkd'),
+      settings: { filesystem_prefetches_limit: 8 },
+    },
+  ]),
   // Token rows read through a trace-ordered projection on mastra_metric_events (lab: `usage_by_trace`).
   ...['E4', 'T1', 'T3', 'T4'].flatMap((caseId): Probe[] =>
     (['sk', 'srio', 'safe'] as const).flatMap((v): Probe[] => [

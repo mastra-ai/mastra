@@ -116,6 +116,53 @@ const CHECKS: Array<{ id: string; question: string; sql: string }> = [
            WHERE endedAt >= {from:DateTime64(3)} AND endedAt < {to:DateTime64(3)}
            GROUP BY organizationId, projectId, name, cityHash64(traceId))) AS spanNameRows`,
   },
+  {
+    id: 'token-per-span',
+    question: 'Does each span carry at most one token row per metric name (needed for one row per model call)?',
+    sql: `
+      SELECT count() AS spanNames, countIf(ids > 1) AS spanNamesWithSeveralMetricIds, max(ids) AS maxIds,
+             uniqExact(span) AS spans, sum(rows) AS rows, countIf(nullSpan) AS nullSpanId
+      FROM (
+        SELECT cityHash64(organizationId, traceId, spanId) AS span, name, uniqExact(metricId) AS ids, count() AS rows,
+               any(isNull(spanId)) AS nullSpan
+        FROM mastra_metric_events
+        WHERE timestamp >= {from:DateTime64(3)} AND timestamp < {to:DateTime64(3)} AND name IN {names:Array(String)}
+        GROUP BY span, name
+      )`,
+  },
+  {
+    id: 'token-span-type',
+    question: 'Which span types carry the token rows (model calls vs ancestors with rolled-up internal usage)?',
+    sql: `
+      SELECT ifNull(s.spanType, 'no span') AS spanType, count() AS tokenRows
+      FROM (
+        SELECT cityHash64(organizationId, traceId, spanId) AS k
+        FROM mastra_metric_events
+        WHERE timestamp >= {from:DateTime64(3)} AND timestamp < {to:DateTime64(3)} AND name IN {names:Array(String)}
+      ) AS m
+      LEFT JOIN (
+        SELECT cityHash64(organizationId, traceId, spanId) AS k, any(toString(spanType)) AS spanType
+        FROM mastra_span_events
+        WHERE endedAt >= {from:DateTime64(3)} - INTERVAL 1 HOUR AND endedAt < {to:DateTime64(3)} + INTERVAL 1 HOUR
+        GROUP BY k
+      ) AS s ON s.k = m.k
+      GROUP BY spanType ORDER BY tokenRows DESC
+      SETTINGS join_use_nulls = 1`,
+  },
+  {
+    id: 'model-span-usage',
+    question: 'Do copies of a model span carry the same usage?',
+    sql: `
+      SELECT count() AS dupModelSpans, countIf(usages > 1) AS withDifferentUsage
+      FROM (
+        SELECT cityHash64(organizationId, traceId, spanId) AS k, count() AS c,
+               uniqExact(cityHash64(JSONExtractRaw(ifNull(attributes, '{}'), 'usage'))) AS usages
+        FROM mastra_span_events
+        WHERE endedAt >= {from:DateTime64(3)} AND endedAt < {to:DateTime64(3)} AND spanType = 'model_generation'
+        GROUP BY k
+        HAVING c > 1
+      )`,
+  },
 ];
 
 async function main() {
