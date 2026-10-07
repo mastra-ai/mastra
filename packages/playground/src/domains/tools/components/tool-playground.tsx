@@ -36,7 +36,7 @@ export function ToolPlayground({
   const isRunning = execution.status === 'pending';
 
   return (
-    <div className="grid content-start gap-6">
+    <div className="grid h-full grid-rows-[auto_1fr] gap-6">
       <ToolRequest
         zodInputSchema={zodInputSchema}
         isRunning={isRunning}

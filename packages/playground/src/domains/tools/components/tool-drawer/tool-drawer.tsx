@@ -28,7 +28,7 @@ export function ToolDrawer({ children }: ToolDrawerProps) {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       {/* `px-3` matches the header (its `px-2` plus the heading's `px-1`), so title and body share a left edge. */}
-      <DataPanel.Content className="grid content-start gap-4 px-3">
+      <DataPanel.Content className="flex flex-col gap-4 px-3">
         {/* Keyed by tool, so switching tools starts the body fresh: new queries, empty form and response. */}
         {toolId && (
           <OpenToolProvider key={toolId} value={toolId}>

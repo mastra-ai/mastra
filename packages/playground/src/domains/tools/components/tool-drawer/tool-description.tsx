@@ -1,18 +1,17 @@
-import { ClampedText } from '@mastra/playground-ui/components/ClampedText';
+import { CollapsibleBox, useCollapsibleBox } from '@mastra/playground-ui/components/CollapsibleBox';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 
 export interface ToolDescriptionProps {
   description: string;
 }
 
-/** The tool's description, up to five lines, with "Read more" when it runs longer. */
+/** The tool's description as markdown, clipped with a fade and an expand button when it runs long. */
 export function ToolDescription({ description }: ToolDescriptionProps) {
+  const box = useCollapsibleBox({ collapsedHeight: 140 });
+
   return (
-    // A block wrapper: as a direct grid item the clamped paragraph collapses to zero height.
-    <div>
-      <ClampedText lines={5} variant="body-sm" tone="muted" className="whitespace-pre-line">
-        {/* Blank lines would spend the clamp on empty rows, so paragraph gaps collapse to single breaks. */}
-        {description.trim().replace(/\n{2,}/g, '\n')}
-      </ClampedText>
-    </div>
+    <CollapsibleBox state={box} expandLabel="Read more">
+      <MarkdownRenderer>{description}</MarkdownRenderer>
+    </CollapsibleBox>
   );
 }

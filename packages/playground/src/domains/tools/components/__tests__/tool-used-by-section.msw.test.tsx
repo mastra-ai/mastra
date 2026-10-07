@@ -33,8 +33,9 @@ describe('ToolUsedBySection', () => {
       serveAgents(agentsWithRefundUser);
       renderUsedBy();
 
-      const links = await screen.findAllByRole('link', { name: 'Open' });
+      const links = await screen.findAllByRole('link');
       expect(links.map(link => link.getAttribute('href'))).toEqual(['/agents/billing-agent', '/agents/support-agent']);
+      expect(links.map(link => link.textContent)).toEqual(['Billing Agent', 'Support Agent']);
     });
   });
 
@@ -45,8 +46,8 @@ describe('ToolUsedBySection', () => {
 
       expect(await screen.findByText('Current')).not.toBeNull();
       expect(screen.getByText('Billing Agent')).not.toBeNull();
-      // Only the other agent gets an Open link.
-      expect(screen.getAllByRole('link', { name: 'Open' })).toHaveLength(1);
+      // Only the other agent's row is a link.
+      expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual(['Support Agent']);
     });
   });
 

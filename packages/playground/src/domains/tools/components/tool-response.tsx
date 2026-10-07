@@ -11,11 +11,11 @@ export interface ToolResponseProps {
 
 export function ToolResponse({ isRunning, lastRun }: ToolResponseProps) {
   return (
-    <SettingsGroup>
+    <SettingsGroup className="h-full">
       <ToolSectionHeader action={!isRunning && lastRun && <ToolRunStatus run={lastRun} />}>
         <SettingsTitle>Response</SettingsTitle>
       </ToolSectionHeader>
-      <SettingsContainer>
+      <SettingsContainer className="grid min-h-48 flex-1 content-center">
         <ToolResponseBody isRunning={isRunning} lastRun={lastRun} />
       </SettingsContainer>
     </SettingsGroup>

@@ -1,4 +1,4 @@
-import { SettingsContainer, SettingsGroup, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { SettingsGroup, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import { ToolSectionHeader } from '../tool-section-header';
 import { ToolUsedByRows } from './tool-used-by-rows';
 
@@ -13,9 +13,7 @@ export function ToolUsedBySection(props: ToolUsedBySectionProps) {
       <ToolSectionHeader>
         <SettingsTitle>Used by</SettingsTitle>
       </ToolSectionHeader>
-      <SettingsContainer>
-        <ToolUsedByRows {...props} />
-      </SettingsContainer>
+      <ToolUsedByRows {...props} />
     </SettingsGroup>
   );
 }

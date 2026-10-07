@@ -1,3 +1,4 @@
+import { Card } from '@mastra/playground-ui/components/Card';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import type { ReactNode } from 'react';
 import { ToolDescription } from './tool-description';
@@ -16,19 +17,23 @@ export interface ToolDrawerContentProps {
 export function ToolDrawerContent({ description, overview, playground, canRun }: ToolDrawerContentProps) {
   return (
     <>
-      {description && <ToolDescription description={description} />}
-      <Tabs<ToolDrawerTab> defaultTab="overview" className="grid gap-4 overflow-visible">
+      <Tabs<ToolDrawerTab> defaultTab="overview" className="grid flex-1 grid-rows-[auto_1fr] gap-4 overflow-visible">
         <TabList variant="pill" size="sm">
           <Tab value="overview">Overview</Tab>
           <Tab value="playground" disabled={!canRun} disabledTooltip="You don't have permission to execute tools.">
             Playground
           </Tab>
         </TabList>
-        <TabContent value="overview" flush>
+        <TabContent value="overview" flush className="content-start gap-6">
+          {description && (
+            <Card className="p-4">
+              <ToolDescription description={description} />
+            </Card>
+          )}
           {overview}
         </TabContent>
         {/* Kept mounted so the form input and last response survive a trip to Overview. */}
-        <TabContent value="playground" flush keepMounted>
+        <TabContent value="playground" flush keepMounted className="h-full">
           {canRun && playground}
         </TabContent>
       </Tabs>
