@@ -34,6 +34,7 @@ export function ComposerAttachment({
 }: ComposerAttachmentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
+  const menuOpenerRef = useRef<HTMLElement | undefined>(undefined);
   const actionSelected = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement>();
@@ -46,6 +47,12 @@ export function ComposerAttachment({
   }
 
   function openMenu(anchor?: HTMLElement) {
+    const focused = triggerRef.current?.ownerDocument.activeElement;
+    // Pointer menus keep their cursor position while remembering keyboard focus.
+    menuOpenerRef.current = anchor;
+    if (!anchor && focused instanceof HTMLElement && triggerRef.current?.contains(focused)) {
+      menuOpenerRef.current = focused;
+    }
     actionSelected.current = false;
     setMenuAnchor(anchor);
     setHasPreview(Boolean(onPreview || previewControl()));
@@ -69,7 +76,7 @@ export function ComposerAttachment({
 
   function returnFocus() {
     if (actionSelected.current) return false;
-    return menuAnchor ?? previewControl() ?? triggerRef.current;
+    return menuOpenerRef.current ?? previewControl() ?? triggerRef.current;
   }
 
   return (

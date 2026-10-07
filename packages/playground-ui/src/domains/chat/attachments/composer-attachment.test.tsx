@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileChipEntry, TxtEntry } from './attachment-preview-dialog';
@@ -8,6 +8,24 @@ import { ComposerAttachment } from './composer-attachment';
 afterEach(cleanup);
 
 describe('ComposerAttachment', () => {
+  describe('when a focused action opens the context menu with a right click', () => {
+    it.each(['Remove', 'Edit'])('returns focus to %s on dismissal', async actionName => {
+      render(
+        <ComposerAttachment name="notes.txt" onRemove={() => {}} onEdit={() => {}}>
+          <TxtEntry name="notes.txt" data="Attached notes" />
+        </ComposerAttachment>,
+      );
+      const action = screen.getByRole('button', { name: `${actionName} notes.txt` });
+      action.focus();
+      fireEvent.contextMenu(action);
+      const menu = await screen.findByRole('menu');
+      menu.focus();
+      fireEvent.keyDown(menu, { key: 'Escape' });
+
+      await waitFor(() => expect(document.activeElement).toBe(action));
+    });
+  });
+
   describe('when the actions menu opens a preview', () => {
     it('shows the existing preview content without activating the file on menu open', async () => {
       render(
