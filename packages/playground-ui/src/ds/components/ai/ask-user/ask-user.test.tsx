@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AskUser } from './ask-user';
@@ -17,6 +18,51 @@ afterEach(cleanup);
 // implement. Polyfill it with the available MouseEvent constructor.
 
 describe('AskUser', () => {
+  describe.each(['single_select', 'multi_select'] as const)('when a %s custom answer loses focus', selectionMode => {
+    const payload: AskUserPayload = {
+      question: 'Pick a fruit',
+      options: [{ label: 'Apple' }, { label: 'Banana' }],
+      selectionMode,
+    };
+    const selectionControlRole = selectionMode === 'multi_select' ? 'checkbox' : 'radio';
+
+    it.each(['', ' \t  '])('unselects Other when the draft is %j without submitting', answerText => {
+      const { onSubmit } = renderAskUser(payload);
+      const customAnswerChoice = screen.getByRole(selectionControlRole, { name: 'Other…' });
+      fireEvent.click(customAnswerChoice);
+      const input = screen.getByRole('textbox', { name: 'Your answer' });
+      fireEvent.change(input, { target: { value: answerText } });
+      fireEvent.blur(input);
+
+      expect(customAnswerChoice.getAttribute('aria-checked')).toBe('false');
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('keeps a non-empty custom answer selected without submitting', () => {
+      const { onSubmit } = renderAskUser(payload);
+      fireEvent.click(screen.getByRole(selectionControlRole, { name: 'Other…' }));
+      const input = screen.getByRole<HTMLInputElement>('textbox', { name: 'Your answer' });
+      fireEvent.change(input, { target: { value: '  Pear  ' } });
+      fireEvent.blur(input);
+
+      expect(screen.getByRole(selectionControlRole, { name: 'Other…' }).getAttribute('aria-checked')).toBe('true');
+      expect(input.value).toBe('  Pear  ');
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('unselects an empty custom answer when keyboard focus moves away', async () => {
+      const { onSubmit } = renderAskUser(payload);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole(selectionControlRole, { name: 'Other…' }));
+      await user.tab({ shift: true });
+
+      expect(screen.getByRole(selectionControlRole, { name: 'Other…' }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when Other is selected for a single-select question', () => {
     const payload: AskUserPayload = { question: 'Pick a fruit', options: [{ label: 'Apple' }, { label: 'Banana' }] };
 
@@ -140,6 +186,33 @@ describe('AskUser', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
 
       expect(onSubmit).toHaveBeenCalledExactlyOnceWith(['Roasted peppers']);
+    });
+
+    it('preserves suggested selections and allows submission after an empty custom answer loses focus', async () => {
+      const { onSubmit } = renderAskUser(payload);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('checkbox', { name: 'Cheese' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Other…' }));
+      await user.type(screen.getByRole('textbox', { name: 'Your answer' }), '   ');
+      await user.click(screen.getByText('Pick toppings'));
+
+      expect(screen.getByRole('checkbox', { name: 'Cheese' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('checkbox', { name: 'Other…' }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.queryByRole('textbox')).toBeNull();
+      await user.click(screen.getByRole('button', { name: 'Submit answer' }));
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith(['Cheese']);
+    });
+
+    it('stays unchecked when the user clicks the checkbox while the custom answer is empty', async () => {
+      const { onSubmit } = renderAskUser(payload);
+      const user = userEvent.setup();
+      const customAnswerCheckbox = screen.getByRole('checkbox', { name: 'Other…' });
+      await user.click(customAnswerCheckbox);
+      await user.click(customAnswerCheckbox);
+
+      expect(customAnswerCheckbox.getAttribute('aria-checked')).toBe('false');
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(onSubmit).not.toHaveBeenCalled();
     });
 
     it('requires custom text when Other is checked even if an option is selected', () => {

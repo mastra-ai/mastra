@@ -55,8 +55,19 @@ export const AskUserBody = ({ className, ...props }: ComponentProps<'div'>) => (
   <div data-slot="ask-user-body" className={cn('px-4 pt-1 pb-4', className)} {...props} />
 );
 
-export const AskUserQuestion = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="p" variant="subheading" tone="ink" {...props} className={cn('mb-3', className)} />
+const AskUserQuestionTitle = ({ children }: { children: ReactNode }) => (
+  <span className="flex items-start gap-2">
+    <Icon size="xs" className="mt-1 shrink-0 text-muted-foreground" aria-hidden>
+      <MessageCircleQuestion />
+    </Icon>
+    <span className="min-w-0">{children}</span>
+  </span>
+);
+
+export const AskUserQuestion = ({ children, className, ...props }: ComponentProps<typeof Txt>) => (
+  <Txt as="p" variant="subheading" tone="ink" {...props} className={cn('mb-3', className)}>
+    <AskUserQuestionTitle>{children}</AskUserQuestionTitle>
+  </Txt>
 );
 
 export interface AskUserOptionRowProps extends Omit<FieldLabelProps, 'children'> {
@@ -192,7 +203,7 @@ function getAnswerToSubmit({
 
 interface AskUserCustomOptionRowProps extends Pick<
   ComponentProps<typeof Input>,
-  'value' | 'onChange' | 'onKeyDown' | 'disabled'
+  'value' | 'onChange' | 'onKeyDown' | 'onBlur' | 'disabled'
 > {
   control: ReactNode;
   isSelected: boolean;
@@ -204,6 +215,7 @@ const AskUserCustomOptionRow = ({
   value,
   onChange,
   onKeyDown,
+  onBlur,
   disabled,
 }: AskUserCustomOptionRowProps) => {
   const handleRowClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -225,7 +237,6 @@ const AskUserCustomOptionRow = ({
       className={cn(
         'items-start gap-2.5 rounded-lg bg-fill px-3 py-2 data-disabled:opacity-50',
         !isSelected && 'state-layer',
-        isSelected && 'border border-border focus-within:border-border-focus',
       )}
     >
       {control}
@@ -236,6 +247,7 @@ const AskUserCustomOptionRow = ({
           value={value}
           onChange={onChange}
           onKeyDown={onKeyDown}
+          onBlur={onBlur}
           placeholder="Other…"
           disabled={disabled}
           variant="unstyled"
@@ -293,6 +305,11 @@ const AskUserInput = ({
     setAnswerText(event.target.value);
   };
 
+  const handleCustomAnswerBlur = () => {
+    if (isSubmitting || answerText.trim()) return;
+    setIsCustomAnswerSelected(false);
+  };
+
   const handleAnswerTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
       event.preventDefault();
@@ -308,6 +325,11 @@ const AskUserInput = ({
   const handleCustomAnswerCheckedChange = (checked: boolean) => {
     if (isSubmitting) return;
     setIsCustomAnswerSelected(checked);
+  };
+
+  const handleCustomAnswerControlMouseDown = (event: MouseEvent<HTMLSpanElement>) => {
+    // Let the checkbox click unselect it before blur resets its controlled value.
+    if (isCustomAnswerSelected && !answerText.trim()) event.preventDefault();
   };
 
   const handleSingleSelectChange = (radioValue: unknown) => {
@@ -329,7 +351,9 @@ const AskUserInput = ({
     return (
       <>
         <Field>
-          <FieldLabel className="text-subheading">{payload.question}</FieldLabel>
+          <FieldLabel className="text-subheading">
+            <AskUserQuestionTitle>{payload.question}</AskUserQuestionTitle>
+          </FieldLabel>
           <div className="flex items-center gap-2">
             <Input
               value={answerText}
@@ -360,7 +384,9 @@ const AskUserInput = ({
     <>
       {isMultiSelect ? (
         <Fieldset className="gap-2">
-          <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
+          <FieldsetLegend className="mb-1 text-subheading">
+            <AskUserQuestionTitle>{payload.question}</AskUserQuestionTitle>
+          </FieldsetLegend>
           {options.map(option => (
             <AskUserOptionRow
               key={option.label}
@@ -382,6 +408,7 @@ const AskUserInput = ({
             value={answerText}
             onChange={handleAnswerTextChange}
             onKeyDown={handleAnswerTextKeyDown}
+            onBlur={handleCustomAnswerBlur}
             disabled={isSubmitting}
             control={
               <Checkbox
@@ -389,6 +416,7 @@ const AskUserInput = ({
                 aria-label="Other…"
                 disabled={isSubmitting}
                 checked={isCustomAnswerSelected}
+                onMouseDown={handleCustomAnswerControlMouseDown}
                 onCheckedChange={handleCustomAnswerCheckedChange}
               />
             }
@@ -404,7 +432,9 @@ const AskUserInput = ({
             <RadioGroup disabled={isSubmitting} value={selectedRadioValue} onValueChange={handleSingleSelectChange} />
           }
         >
-          <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
+          <FieldsetLegend className="mb-1 text-subheading">
+            <AskUserQuestionTitle>{payload.question}</AskUserQuestionTitle>
+          </FieldsetLegend>
           {options.map(option => (
             <AskUserOptionRow
               key={option.label}
@@ -419,6 +449,7 @@ const AskUserInput = ({
             value={answerText}
             onChange={handleAnswerTextChange}
             onKeyDown={handleAnswerTextKeyDown}
+            onBlur={handleCustomAnswerBlur}
             disabled={isSubmitting}
             control={<RadioGroupItem aria-label="Other…" className="mt-0.5" value={customAnswerValue} />}
           />
@@ -441,8 +472,7 @@ export const AskUser = ({ payload, result, isAnswered, isSubmitting, onSubmit, f
 
   return (
     <AskUserContainer data-testid="ask-user" {...props}>
-      <AskUserLabel />
-      <AskUserBody>
+      <AskUserBody className="pt-4">
         <AskUserInput
           key={payloadKey}
           payload={payload}
