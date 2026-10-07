@@ -18,6 +18,7 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { queryTraces } from '../../src/storage/domains/observability/v-next/trace-query';
 import { isLimitCategory, TIERS } from '../shared/client';
 import type { BenchClient, ErrorCategory, QueryOutcome, Tier } from '../shared/client';
 import { installOutputRedaction, loadCredentials } from '../shared/env';
@@ -52,10 +53,9 @@ import { discoverSidecar, literalsFor, loadSidecar, publicSidecar, saveSidecar }
 import type { Sidecar } from './discover';
 import {
   captureSpanHydration,
+  captureTraceQuery,
   deltaHead,
   KeyQueryFailed,
-  pageKeys,
-  payloadStatement,
   recentWatermark,
   scopedSpanHydration,
   spanCursor,
@@ -64,7 +64,7 @@ import {
   traceCursorRows,
   walkCursor,
 } from './stages';
-import type { KeyRunner, PageKey, SpanHydration, Statement } from './stages';
+import type { KeyRunner, SpanHydration, Statement, TraceStatements } from './stages';
 
 export const RESULTS_DIR = join(import.meta.dirname, 'results');
 export const files = (dir = RESULTS_DIR) => ({
@@ -360,6 +360,7 @@ export async function runUnit(ctx: TqContext, unit: Planned, slot: Slot, options
             tier: ctx.tier,
             logComment: comment(ctx, def.id, step, window.id, project.bucket, project.hash),
             sharedSnapshot: statement.sharedSnapshot,
+            settings: statement.settings,
           }),
         { exclusive },
       )
@@ -397,7 +398,7 @@ export async function runUnit(ctx: TqContext, unit: Planned, slot: Slot, options
   }
 
   const { plan, compiled } = compileCase(def, variant, literals, timeRange, project, { cursor, deltaHead: head });
-  let keys: PageKey[] | undefined;
+  let traced: TraceStatements | undefined;
   let hydration: SpanHydration | undefined | null;
   let scopedHydration: SpanHydration | undefined;
 
@@ -406,13 +407,14 @@ export async function runUnit(ctx: TqContext, unit: Planned, slot: Slot, options
     if (options.done?.has(key)) continue;
     let statement: Statement = compiled;
     try {
-      if (stage === 'payload' || stage === 'payload-scoped') {
-        keys ??= await pageKeys(runKey, compiled);
-        if (keys.length === 0) {
-          skip(`${stage}: empty page`);
+      if (plan.api === 'traces' || plan.api === 'page' || plan.api === 'groups' || plan.api === 'delta') {
+        traced ??= await captureTraceQuery(queryTraces, plan.plan, project, def.relations, runKey, head);
+        const captured = traced[stage as 'main' | 'list' | 'payload'];
+        if (!captured) {
+          skip(`${stage}: not issued${traced.keyFailure ? ` (${traced.keyFailure})` : ''}`);
           continue;
         }
-        statement = payloadStatement(keys, project, stage === 'payload-scoped');
+        statement = captured;
       } else if (stage.startsWith('span-')) {
         if (plan.api !== 'spans') throw new Error(`Case ${def.id}: span stage on ${plan.api}`);
         if (hydration === undefined) {
@@ -450,6 +452,7 @@ export async function runUnit(ctx: TqContext, unit: Planned, slot: Slot, options
             logComment,
             cold,
             sharedSnapshot: statement.sharedSnapshot,
+            settings: statement.settings,
           }),
         { exclusive: alone },
       );

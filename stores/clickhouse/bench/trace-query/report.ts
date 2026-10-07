@@ -97,8 +97,8 @@ const caseIndex = (id: string) => {
 };
 const STAGE_ORDER: Stage[] = [
   'main',
+  'list',
   'payload',
-  'payload-scoped',
   'span-payload',
   'span-metrics',
   'span-payload-scoped',

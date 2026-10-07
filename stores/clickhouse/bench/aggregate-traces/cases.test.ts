@@ -23,7 +23,10 @@ describe('case catalogue', () => {
     (_label, { def, window, variant }) => {
       const compiled = compileCase(def, variant, LITERALS, timeRangeFor(window, TO), SCOPE);
       // Every tenant-scoped scan also carries the project, and the project is a bound parameter.
-      const expected = 2 + def.relations.length + (variant === 'w1' ? 1 : 0);
+      // queryTraces() baselines also scope their current-root key re-read,
+      // ...and seed span existence checks with the window's roots.
+      const keyed = def.kind === 'traces' ? 1 + (def.relations.includes('spans') ? 1 : 0) : 0;
+      const expected = 2 + keyed + def.relations.length + (variant === 'w1' ? 1 : 0);
       expect(scopedCount(compiled.query)).toBe(expected);
       expect(compiled.query).not.toContain('proj-test');
       expect(compiled.query).not.toContain('org-test');

@@ -58,15 +58,17 @@ export const SIDECAR_KEYS: readonly SidecarKey[] = ['metadataValue', 'tag', 'mod
 export type Api = 'traces' | 'page' | 'groups' | 'delta' | 'delta-head' | 'threads' | 'spans' | 'fields' | 'values';
 export type Variant = 'base' | 'w1';
 /**
- * - `main`: the list/select/discovery statement itself.
- * - `payload` / `payload-scoped`: page-mode root payloads, as compiled / with org+project scope.
+ * - `main`: the list/select/discovery statement itself; for queryTraces(), the first statement the
+ *   store issues (total-and-bound for keyset / page, the delta list, the groups list).
+ * - `list`: queryTraces() keyset / page: the bounded list.
+ * - `payload`: queryTraces(): `metadata` / `input` for the returned rows.
  * - `span-payload` / `span-metrics`: querySpans() hydration, exactly as the store issues it.
  * - `span-payload-scoped` / `span-metrics-scoped`: the same with org/project (+ partition) scope.
  */
 export type Stage =
   | 'main'
+  | 'list'
   | 'payload'
-  | 'payload-scoped'
   | 'span-payload'
   | 'span-metrics'
   | 'span-payload-scoped'
@@ -137,7 +139,8 @@ const base = {
   hc: false,
 };
 const traceStages: Stage[] = ['main'];
-const pageStages: Stage[] = ['main', 'payload', 'payload-scoped'];
+const listStages: Stage[] = ['main', 'list', 'payload'];
+const deltaStages: Stage[] = ['main', 'payload'];
 const spanStages: Stage[] = ['main', 'span-payload', 'span-metrics'];
 const keyset = (extra: Json = {}): Json => ({ page: { limit: 100 }, ...extra });
 
@@ -149,8 +152,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'no where',
     kind: 'none',
-    stages: traceStages,
-    variants: ['base', 'w1'],
+    stages: listStages,
     core: true,
     cost: 10,
     request: () => keyset(),
@@ -161,8 +163,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'environment eq',
     kind: 'seeded-prefix',
-    stages: traceStages,
-    variants: ['base', 'w1'],
+    stages: listStages,
     core: true,
     cost: 11,
     request: l => keyset({ where: envEq(l) }),
@@ -173,7 +174,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'entityType eq AND entityName eq',
     kind: 'seeded-expr',
-    stages: traceStages,
+    stages: listStages,
     cost: 12,
     needs: ['entityName'],
     request: l =>
@@ -185,7 +186,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'status eq error',
     kind: 'seeded-expr',
-    stages: traceStages,
+    stages: listStages,
     cost: 13,
     request: l => keyset({ where: eq('status', ERROR_STATUS) }),
   },
@@ -195,7 +196,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'metadata.<key> eq <top value>',
     kind: 'seeded-expr',
-    stages: traceStages,
+    stages: listStages,
     cost: 14,
     needs: ['metadataValue'],
     request: l => keyset({ where: eq(`metadata.${l.metadataKey}`, must(l.metadataValue, 'metadataValue')) }),
@@ -206,7 +207,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'tags includes <top tag>',
     kind: 'seeded-expr',
-    stages: traceStages,
+    stages: listStages,
     cost: 15,
     needs: ['tag'],
     request: l => keyset({ where: includes('tags', must(l.tag, 'tag')) }),
@@ -217,7 +218,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: `durationMs gt ${SLOW_MS}`,
     kind: 'seeded-expr',
-    stages: traceStages,
+    stages: listStages,
     cost: 16,
     request: l => keyset({ where: gt('durationMs', SLOW_MS) }),
   },
@@ -228,8 +229,7 @@ export const CASES: CaseDef[] = [
     title: 'spans.some(name eq tool)',
     kind: 'unseeded',
     relations: ['spans'],
-    stages: traceStages,
-    variants: ['base', 'w1'],
+    stages: listStages,
     core: true,
     cost: 40,
     request: l => keyset({ where: toolCalled(l) }),
@@ -241,7 +241,7 @@ export const CASES: CaseDef[] = [
     title: 'spans.some(spanType eq model_generation AND status eq error)',
     kind: 'unseeded',
     relations: ['spans'],
-    stages: traceStages,
+    stages: listStages,
     cost: 41,
     request: l => keyset({ where: spansSome(and(eq('spanType', SPAN_TYPE), eq('status', ERROR_STATUS))) }),
   },
@@ -252,7 +252,7 @@ export const CASES: CaseDef[] = [
     title: 'spans.none(status eq error)',
     kind: 'unseeded',
     relations: ['spans'],
-    stages: traceStages,
+    stages: listStages,
     cost: 42,
     request: l => keyset({ where: spansNone(eq('status', ERROR_STATUS)) }),
   },
@@ -263,7 +263,7 @@ export const CASES: CaseDef[] = [
     title: 'environment eq OR spans.some(name eq tool)',
     kind: 'unseeded',
     relations: ['spans'],
-    stages: traceStages,
+    stages: listStages,
     cost: 43,
     request: l => keyset({ where: or(envEq(l), toolCalled(l)) }),
   },
@@ -274,7 +274,7 @@ export const CASES: CaseDef[] = [
     title: 'feedback.some(feedbackType eq top)',
     kind: 'unseeded',
     relations: ['feedback'],
-    stages: traceStages,
+    stages: listStages,
     cost: 30,
     needs: ['feedbackType'],
     request: l => keyset({ where: feedbackSome(eq('feedbackType', must(l.feedbackType, 'feedbackType'))) }),
@@ -286,7 +286,7 @@ export const CASES: CaseDef[] = [
     title: 'environment eq AND spans.some(model eq top)',
     kind: 'partial',
     relations: ['spans'],
-    stages: traceStages,
+    stages: listStages,
     cost: 44,
     needs: ['model'],
     request: l => keyset({ where: and(envEq(l), spansSome(eq('model', must(l.model, 'model')))) }),
@@ -297,7 +297,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'orderBy startedAt asc',
     kind: 'sort',
-    stages: traceStages,
+    stages: listStages,
     cost: 17,
     request: l => keyset({ orderBy: [{ field: 'startedAt', direction: 'asc' }] }),
   },
@@ -307,7 +307,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'orderBy endedAt desc',
     kind: 'sort',
-    stages: traceStages,
+    stages: listStages,
     cost: 18,
     request: l => keyset({ orderBy: [{ field: 'endedAt', direction: 'desc' }] }),
   },
@@ -317,7 +317,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'orderBy endedAt asc',
     kind: 'sort',
-    stages: traceStages,
+    stages: listStages,
     cost: 19,
     request: l => keyset({ orderBy: [{ field: 'endedAt', direction: 'asc' }] }),
   },
@@ -327,7 +327,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'limit 1000',
     kind: 'page',
-    stages: traceStages,
+    stages: listStages,
     hc: true,
     cost: 20,
     request: () => ({ page: { limit: 1000 } }),
@@ -338,7 +338,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'cursor at row 1000',
     kind: 'page',
-    stages: traceStages,
+    stages: listStages,
     hc: true,
     cost: 21,
     depth: 1_000,
@@ -350,7 +350,7 @@ export const CASES: CaseDef[] = [
     api: 'traces',
     title: 'cursor at row 10000',
     kind: 'page',
-    stages: traceStages,
+    stages: listStages,
     hc: true,
     cost: 22,
     depth: 10_000,
@@ -364,7 +364,7 @@ export const CASES: CaseDef[] = [
     api: 'page',
     title: 'page 0, perPage 25',
     kind: 'none',
-    stages: pageStages,
+    stages: listStages,
     core: true,
     cost: 25,
     request: () => ({ pagination: { page: 0, perPage: 25 } }),
@@ -375,7 +375,7 @@ export const CASES: CaseDef[] = [
     api: 'page',
     title: 'page 40 (offset 1000)',
     kind: 'page',
-    stages: pageStages,
+    stages: listStages,
     cost: 26,
     request: () => ({ pagination: { page: 40, perPage: 25 } }),
   },
@@ -385,7 +385,7 @@ export const CASES: CaseDef[] = [
     api: 'page',
     title: 'page 400 (offset 10000)',
     kind: 'page',
-    stages: pageStages,
+    stages: listStages,
     hc: true,
     cost: 27,
     request: () => ({ pagination: { page: 400, perPage: 25 } }),
@@ -396,7 +396,7 @@ export const CASES: CaseDef[] = [
     api: 'page',
     title: 'environment eq, page 0',
     kind: 'seeded-prefix',
-    stages: pageStages,
+    stages: listStages,
     cost: 28,
     request: l => ({ where: envEq(l), pagination: { page: 0, perPage: 25 } }),
   },
@@ -427,7 +427,7 @@ export const CASES: CaseDef[] = [
     api: 'delta',
     title: 'delta from watermark 0, limit 100',
     kind: 'none',
-    stages: traceStages,
+    stages: deltaStages,
     delta: true,
     cost: 31,
     request: () => ({ mode: 'delta', limit: 100 }),
@@ -438,7 +438,7 @@ export const CASES: CaseDef[] = [
     api: 'delta',
     title: 'delta from a recent watermark, limit 100',
     kind: 'none',
-    stages: traceStages,
+    stages: deltaStages,
     delta: true,
     cost: 32,
     depth: 10_000,

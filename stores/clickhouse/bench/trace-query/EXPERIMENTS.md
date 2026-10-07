@@ -8,9 +8,12 @@ benchmark; this file tracks what we tried, where, and what it showed. Structure 
 
 **Method**
 
-- Tool: `experiments.ts` (`ab`, `equiv`, `census`, `explain`, `summary`), variants in `variants.ts`. Each variant is
-  a settings overlay or a fail-closed rewrite of the project-scoped compiled SQL (anchor must match exactly once);
-  variants compose with `+`.
+- Tool (QX01–QX09): `experiments.ts` (`ab`, `equiv`, `census`, `explain`, `summary`), variants in `variants.ts`.
+  Each variant is a settings overlay or a fail-closed rewrite of the project-scoped compiled SQL (anchor must match
+  exactly once); variants compose with `+`. Both files are at commit `c677e6a9280`; they were removed once the
+  compiler changed (QX10), since their anchors match the old SQL only.
+- Tool (QX10): `experiments.ts ship` / `equiv` with `--legacy`: the old and the new compiler, each run as the store
+  runs it (every statement it issues, captured and project-scoped), interleaved per rep.
 - `ab` runs base and every variant interleaved per rep (order reversed on odd reps), sequentially, 3 s apart, Tier 1
   limits (30 s / 4 GiB / 4 threads), on the replica. Numbers are warm medians from the same session; we never
   compare against an earlier session.
@@ -26,17 +29,20 @@ benchmark; this file tracks what we tried, where, and what it showed. Structure 
 
 ## Improvements
 
-Prod numbers are warm medians; cold is filesystem cache off. All proposed, none implemented in `trace-query.ts` yet.
+Prod numbers are warm medians; cold is filesystem cache off. I1–I7 are shipped in `trace-query.ts` (QX10) in an
+exact form: the variants skipped the current-root dedupe, which only held because production has no traces with
+more than one root key (QX00). The shipped compiler keeps ClickHouse's current-root rule (lowest `dedupeKey` per
+trace), so its numbers are QX10's, not the variants'.
 
 | #   | Improvement                                                                                                                          | Kind     | Evidence            | Effect                                                                                                           | Status    |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- | --------- |
-| I1  | Keyset: narrow list, then a second scoped query for the winners' `input` / `metadataRaw` (`nh2`)                                     | compiler | QX03, QX05b         | Removes the blob sort: p99 2.9 GiB → ~200 MiB on its own, every 4 GiB failure succeeds                           | proposed  |
-| I2  | Keyset: find the page boundary from `(startedAt, traceId)` only, then read roots inside it (`topn2`)                                 | compiler | QX04/05, QX09       | Memory no longer grows with the window: with I1 + I6, p99 35 / 43 MiB, largest 7d 65 / 52; cold faster than base | proposed  |
-| I3  | Page: `uniqExact` total + boundary page instead of window functions over the window (`pg`)                                           | compiler | QX06, QX09          | Largest 30d 503 → 92 MiB; p99 38 MiB; cold faster than base                                                      | proposed  |
-| I4  | Delta: limit the delta page first, scoped to the project's roots, then re-read only those traces scoped and time-bounded (`dtop+rs`) | compiler | QX06/07, QX08, QX09 | p99 2.9 GiB → 53 MiB; heavy p99 and largest 7d go from ✗ to 55 / 91 MiB; cold faster                             | proposed  |
-| I5  | Groups: distinct threads straight from the window's matching roots (`g2`)                                                            | compiler | QX08, QX09          | Largest 30d 285 → 29 MiB, cold 26 s → 9 s                                                                        | proposed  |
-| I6  | `filesystem_prefetches_limit = 8` on these queries (`pf8`), at the Tier 1 default of 4 threads                                       | setting  | QX01, QX09          | Removes most of the ~150 MiB floor without the cold penalty of turning prefetch off or of fewer threads          | proposed  |
-| I7  | Relation filters: no span dedupe for existence checks, spans seeded from window roots and `endedAt`-bounded (`sp`)                   | compiler | QX08, QX09          | T7/T9/T10 p99 2.7–3.3 GiB (or ✗) → 26–44 MiB                                                                     | proposed  |
+| I1  | Keyset: narrow list, then a second scoped query for the winners' `input` / `metadataRaw` (`nh2`)                                     | compiler | QX03, QX05b         | Removes the blob sort: p99 2.9 GiB → ~200 MiB on its own, every 4 GiB failure succeeds                           | shipped   |
+| I2  | Keyset: find the page boundary from `(startedAt, traceId)` only, then read roots inside it (`topn2`)                                 | compiler | QX04/05, QX09       | Memory no longer grows with the window: with I1 + I6, p99 35 / 43 MiB, largest 7d 65 / 52; cold faster than base | shipped   |
+| I3  | Page: `uniqExact` total + boundary page instead of window functions over the window (`pg`)                                           | compiler | QX06, QX09          | Largest 30d 503 → 92 MiB; p99 38 MiB; cold faster than base                                                      | shipped   |
+| I4  | Delta: limit the delta page first, scoped to the project's roots, then re-read only those traces scoped and time-bounded (`dtop+rs`) | compiler | QX06/07, QX08, QX09 | p99 2.9 GiB → 53 MiB; heavy p99 and largest 7d go from ✗ to 55 / 91 MiB; cold faster                             | shipped   |
+| I5  | Groups: distinct threads straight from the window's matching roots (`g2`)                                                            | compiler | QX08, QX09          | Largest 30d 285 → 29 MiB, cold 26 s → 9 s                                                                        | shipped   |
+| I6  | `filesystem_prefetches_limit = 8` on these queries (`pf8`), at the Tier 1 default of 4 threads                                       | setting  | QX01, QX09          | Removes most of the ~150 MiB floor without the cold penalty of turning prefetch off or of fewer threads          | shipped   |
+| I7  | Relation filters: no span dedupe for existence checks, spans seeded from window roots and `endedAt`-bounded (`sp`)                   | compiler | QX08, QX09          | T7/T9/T10 p99 2.7–3.3 GiB (or ✗) → 26–44 MiB                                                                     | shipped   |
 | I8  | Optional: one thread for the keyset lookup only (`t1@2`)                                                                             | setting  | QX09                | Heavy p99 lookup 54 → 39 MiB, +10 s cold                                                                         | trade-off |
 
 ## Experiment register
@@ -54,6 +60,7 @@ Prod numbers are warm medians; cold is filesystem cache off. All proposed, none 
 | QX07  | prod | Delta (`dtop`) and groups (`rs`)                                   | Delta fixed (42–81 MiB); groups at largest stuck at 245                                                                             | done              |
 | QX08  | prod | Relation filters (`sp`); `dtop+rs`; groups `g2`                    | `sp` 18–27 MiB list; `rs` halves delta bytes; `g2` largest 275 → 13                                                                 | done → I4, I5, I7 |
 | QX09  | prod | Cold: prefetch × threads × rewrites                                | One thread / 2 threads not shippable cold; 4 threads + `pf8` never slower than base; `rb`, `nopf@2`, `bs@2`, `dtop+rs+nh` dead ends | done → I6, I8     |
+| QX10  | prod | The shipped compiler (exact current roots) vs the old one          | 80 / 80 lists equivalent; no 4 GiB failures; ≤ 50 MiB per statement to p99 except payloads (≤ 86); ≤ 180 at largest                 | done              |
 
 ## Entries
 
@@ -389,3 +396,88 @@ Best stack per mode at 4 threads and `pf8` (warm median MiB, n = 2–5; cold s, 
   (`t1@2`, +10 s cold), an untested partition bound on the lookup (`endedAt` within the winners' range, so it
   opens fewer daily partitions), or a narrow list table (§5 of the plan). A tenant-prefixed sort key is not an
   option: the replica already has one.
+
+### QX10: the shipped compiler vs the old one (2026-10-07, prod)
+
+**Why the variants weren't shipped as they are.** `topn2`, `pg`, `dtop`, `g2` and `sp` read root rows directly and
+pick one per trace by sort order. That matches the old compiler only when every trace has a single root key, which
+is true on this replica (QX00) but not in general: a trace can have an older root under another `dedupeKey`, and the
+store's conformance tests check that such a root never resurfaces. The compiler change keeps the old rule and cuts
+the cost of applying it:
+
+- **Current roots by key.** `current_root_keys` = `min(dedupeKey) GROUP BY traceId` over every root of the window's
+  traces (tenant-scoped, which the old re-read was not); `root_scope` = the window's rows with those keys. This
+  replaces two window-wide sorts of whole rows with one hash aggregate of two strings.
+- **Keyset and page: total-and-bound, then a bounded list.** Statement 1 returns the number of matching traces and
+  the sort value of the last row the page needs (`arrayElement(arraySort(groupArray(sortValue)), depth)`, per-trace
+  min/max). Statement 2 reads only rows on the near side of that bound, narrow columns, `LIMIT 1 BY traceId`. When
+  nothing lies past the page offset, statement 2 is skipped.
+- **Payloads afterwards.** `metadata` / `input` come from a tenant-scoped lookup for the returned rows only, in every
+  mode (page mode already worked this way).
+- **Delta.** The delta index (no tenant columns) is limited to traces with a root in the tenant's window before it is
+  grouped, and seeds the root scope.
+- **Groups** use the keyed scope with a `threadId`-only projection.
+- **Span existence** (`spans.some` / `none`) skips span dedupe (copies can't change `IN`) and is seeded with the
+  window's root traces instead of `root_scope`, so the current-root keys aren't evaluated twice.
+- **`filesystem_prefetches_limit = 8`** on every `queryTraces()` statement only (not aggregates, see X25).
+
+Store tests: 484 / 484 in the v-next suite, including the root-resurrection conformance cases in keyset, page and
+delta modes.
+
+**Equivalence.** `equiv --legacy` hashes the old and new results on the server: the list (order-sensitive), the
+payloads of the visible rows (as a set) and, for pages, the total. 80 project × window × case comparisons (T0, T1,
+T3, T4, T7, T9, T10, O1, O2, K2, P0, P1, D1, G0; small / p90 / p99 / heavy p99 at 30d, largest at 1d and 7d; some
+cells only where a literal exists): **80 / 80 lists equal**, all controls stable, all page totals equal. Payloads:
+64 equal, 9 inconclusive (the old statement fails at 4 GiB, so there is nothing to compare), 0 different.
+
+**Memory and latency** (`ship`, warm median of 3, cold = 2 reps with the filesystem cache off; MiB per statement:
+total-and-bound / list / payloads; delta and groups are one list statement plus payloads; ✗ = fails):
+
+| Mode      | Project    | Old warm  | New warm (MiB) | Old cold  | New cold per statement (s) |
+| --------- | ---------- | --------- | -------------- | --------- | -------------------------- |
+| keyset T0 | small 30d  | 166       | 14 / 24 / 18   | 17–18 s   | 10–12 / 8–9 / 0.3          |
+|           | p99 30d    | 2654      | 49 / 24 / 65   | 22–23 s   | 16–18 / 9–13 / 0.6         |
+|           | heavy p99  | ✗ 4 GiB   | 45 / 23 / 39   | ✗         | 18–19 / 9–10 / 0.2         |
+|           | largest 7d | ✗ 4 GiB   | 175 / 24 / 39  | ✗         | 22–24 / 10–11 / 0.8        |
+| page P0   | small 30d  | 167 + 14  | 14 / 24 / 18   | 16–17 s   | 11 / 8 / 0.2               |
+|           | p99 30d    | 174 + 26  | 48 / 24 / 26   | 20–23 s   | 19 / 10–11 / 0.1           |
+|           | heavy p99  | 179 + 19  | 45 / 23 / 19   | 19–20 s   | 16 / 7 / 0.1               |
+|           | largest 7d | 293 + 38  | 179 / 24 / 38  | 24–26 s   | 24–26 / 14 / 0.2           |
+| groups G0 | small 30d  | 166       | 13             | 16 s      | 10                         |
+|           | p99 30d    | 174       | 48             | 18–21 s   | 16                         |
+|           | heavy p99  | 178       | 46             | 18–20 s   | 16–17                      |
+|           | largest 7d | 184       | 178            | 22–24 s   | 26–29                      |
+| delta D1  | small 30d  | 167       | 36             | 16–17 s   | 11–15                      |
+|           | p99 30d    | 2974      | 47 / 32        | 20–24 s   | 24 / 0.3                   |
+|           | heavy p99  | ✗ 4 GiB   | 46 / 30        | ✗         | 23 / 0.3                   |
+|           | largest 7d | ✗ 4 GiB   | 80 / 27        | ✗         | 21–24 / 0.4                |
+| spans T7  | small 30d  | 170       | 15             | ✗ timeout | 21                         |
+|           | p99 30d    | 2949      | 51 / 30 / 86   | ✗ timeout | 29–✗ / 27–28 / 0.6         |
+|           | heavy p99  | ✗ timeout | 50 / 31 / 63   | ✗ timeout | 27–28 / 14–23 / 0.2        |
+|           | largest 7d | ✗ timeout | 178 / 32 / 63  | ✗ timeout | ✗ / 19–27 / 0.2            |
+
+Delta and T7 are from the second session (after scoping the delta index and seeding span checks with window roots,
+which took delta from 176–182 MiB to 36–80 and T7's first statement from 65 to 50 at p99, 248 to 178 at largest).
+The first session's numbers for those two are in `experiments.jsonl` under `QX10`.
+
+**Findings**
+
+- Every 4 GiB failure is gone, and old's ✗-timeouts on T7 small become 21 s. Up to p99, every statement but the
+  payload lookup is 13–51 MiB (×0.02–0.3 of old); at the largest, ≤ 180 MiB per statement.
+- **The first statement is the cost.** At heavy p99, `current_root_keys` alone is 44 MiB: the window seed is
+  ~20 MiB (131k root rows) and the key re-read of those traces' roots across all time another 156k rows plus the
+  hash of 131k traces. That re-read is what keeps the old resurrection rule exact; it can't be time-bounded because
+  a trace's lowest key can belong to a root on any day. Hashing the keys to `UInt64` doesn't help (45 vs 46 MiB).
+  At the largest project this statement is 175–179 MiB in every mode, against the variants' 29–65 (which skipped
+  the rule).
+- **Payloads are the rows' own size.** 100 traces' `input` / `metadata` at p99 is 65 MiB (T0) and 86 MiB (T7); old
+  carried the same blobs, sorted with the whole window.
+- **Cold.** Each new statement is at or below the old single statement cold, but keyset / page / T7 now issue two
+  window statements in a row. With the cache off for both, the sum is 1.2–1.5× old at p99 (e.g. T0 p99 26–31 s vs
+  22–23 s). In service the second statement re-reads granules the first just cached; the bench can't simulate a
+  cold-then-warm pair on the shared replica, so this is an upper bound. Groups at the largest is 26–29 s cold vs
+  22–24 s; delta 21–24 s vs 20–24 s (and vs ✗ beyond p99).
+- **Against the target** (≤ 40 MB ≈ 38 MiB to p99, ≤ 200 MB at largest): the largest is inside everywhere. To p99,
+  lists (23–36 MiB) and small projects are inside; the first statement is 45–51 MiB (1.2–1.4×), and payloads at p99
+  are 65–86 MiB (1.7–2.3×), fixed by the size of what's returned. Closing the first-statement gap exactly needs a
+  narrow current-roots table (one row per trace, maintained at write time) so no query re-derives the keys.

@@ -2,27 +2,31 @@
  * Memory experiments for `queryTraces()` (EXPERIMENTS.md). Read-only, sequential, paced, Tier 1 limits; records
  * go to `results/experiments.jsonl` as bucket + project hash only.
  *
- *   tsx bench/trace-query/experiments.ts census  --targets small,p99,p99:62b01951,largest --windows 1d,30d
- *   tsx bench/trace-query/experiments.ts ab      --exp QX01 --variants pf8,nopf --cases T0,P0 --targets small,p99
- *                                                [--windows 1d,30d] [--reps 5] [--cold [--cold-reps 1]]
- *   tsx bench/trace-query/experiments.ts equiv   --exp QX03 --variants nh --cases T0,K2 --targets ... [--windows]
- *   tsx bench/trace-query/experiments.ts explain --variants topn --cases T0 --targets p99 --windows 30d
- *   tsx bench/trace-query/experiments.ts summary [--exp QX01]
+ *   tsx bench/trace-query/experiments.ts census --targets small,p99,p99:62b01951,largest --windows 1d,30d
+ *   tsx bench/trace-query/experiments.ts ship   --exp QX10 --legacy <old trace-query module> --cases T0,P0
+ *                                               --targets small,p99 [--windows 1d,30d] [--reps 5] [--cold [--cold-reps 1]]
+ *   tsx bench/trace-query/experiments.ts equiv  --exp QX10 --legacy <old trace-query module> --cases T0,P0 --targets ...
+ *   tsx bench/trace-query/experiments.ts summary [--exp QX10]
  *
- * Targets: a bucket name (its representative project) or `bucket:hashprefix`. `ab` runs base and every variant
- * interleaved per rep (ABAB…, order reversed on odd reps), so replica drift hits every arm alike. `equiv` compares
- * order-sensitive and order-free hashes of base vs variant results on the server; only counts and hashes return.
- * Every command checks first that no other bench process is running against the replica (`--allow-shared` skips).
+ * Targets: a bucket name (its representative project) or `bucket:hashprefix`. `ship` compares two queryTraces()
+ * implementations — `old`, a copy of the compiler before a change (`--legacy`, e.g. `git show <rev>:<path>` saved
+ * next to the current one), and `new`, the current one — by running each one's statements as the store issues them
+ * (stages.ts `captureTraceQuery`), interleaved per rep (ABAB…, order reversed on odd reps) so replica drift hits
+ * both alike. `equiv` compares order-sensitive and order-free hashes of their results on the server; only counts and
+ * hashes return. The variant rewrites used for QX01–QX09 ran against the compiler at c677e6a9280.
+ * Every command first notes any other bench process running against the replica.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { ClickHouseSettings } from '@clickhouse/client';
 
+import { queryTraces } from '../../src/storage/domains/observability/v-next/trace-query';
 import { isLimitCategory, isOverload, TIERS } from '../shared/client';
 import type { BenchClient, QueryOutcome } from '../shared/client';
-import { installOutputRedaction, loadCredentials, registerSensitive } from '../shared/env';
+import { installOutputRedaction, loadCredentials } from '../shared/env';
 import { fromSummary } from '../shared/metrics';
 import type { QueryMetrics } from '../shared/metrics';
 import { loadSelection } from '../shared/profile';
@@ -30,15 +34,13 @@ import type { SelectedProject, Selection } from '../shared/profile';
 import { median } from '../shared/report-kit';
 import { connect, log, readJson, readRecords } from '../shared/runner';
 import type { Preflight } from '../shared/runner';
-import { RewriteError } from '../shared/scope';
 import { caseById, compileCase, DELTA_HEAD_SQL, timeRangeFor, WINDOWS } from './cases';
 import type { CursorAt } from './cases';
 import { literalsFor, loadSidecar } from './discover';
 import type { Sidecar } from './discover';
 import { files, RESULTS_DIR } from './run';
-import { deltaHead, keyOnly, KeyQueryFailed, traceCursorRows, walkCursor } from './stages';
-import type { KeyRunner, Statement } from './stages';
-import { planVariant, resultColumns } from './variants';
+import { captureTraceQuery, deltaHead, KeyQueryFailed, traceCursorRows, walkCursor } from './stages';
+import type { KeyRunner, QueryTracesFn, Statement, TraceStatements } from './stages';
 
 export const EXPERIMENTS_FILE = `${RESULTS_DIR}/experiments.jsonl`;
 const PAUSE_MS = 3_000;
@@ -50,6 +52,8 @@ export interface ExpRecord {
   runId: string;
   exp: string;
   kind: 'ab' | 'equiv' | 'census' | 'explain';
+  /** ship: which statement of the flow (main, list, payload). */
+  statement?: keyof Omit<TraceStatements, 'keyFailure'>;
   caseId?: string;
   variant?: string;
   stage?: number;
@@ -63,7 +67,7 @@ export interface ExpRecord {
   errorCategory?: string;
   wallMs?: number;
   metrics?: QueryMetrics;
-  /** equiv: aggregate-only comparison; census/explain: aggregate counts. */
+  /** equiv: aggregate-only comparison; census: aggregate counts. */
   data?: Record<string, unknown>;
   note?: string;
   ts: string;
@@ -88,7 +92,7 @@ async function exec<Row = never>(
   ctx: Ctx,
   statement: Statement,
   step: string,
-  options: { cold?: boolean; settings?: ClickHouseSettings; parse?: boolean } = {},
+  options: { cold?: boolean; parse?: boolean } = {},
 ): Promise<QueryOutcome<Row>> {
   for (let attempt = 0; ; attempt++) {
     const wait = ctx.lastEnd + PAUSE_MS - Date.now();
@@ -98,7 +102,7 @@ async function exec<Row = never>(
       logComment: ['aqa-bench', ctx.runId, ctx.exp, step].join(':'),
       cold: options.cold,
       sharedSnapshot: statement.sharedSnapshot,
-      settings: options.settings,
+      settings: statement.settings,
     };
     const outcome = options.parse
       ? await ctx.client.rows<Row>(statement.query, statement.query_params, run)
@@ -137,14 +141,20 @@ export function resolveTargets(selection: Selection, spec: string): SelectedProj
   });
 }
 
-/** The project-scoped compiled statement for a case, with the cursor/watermark the benchmark used. */
-async function baseStatement(
+type Arm = 'old' | 'new';
+type Impls = Record<Arm, QueryTracesFn>;
+const STATEMENTS = ['main', 'list', 'payload'] as const;
+
+/** Each implementation's project-scoped statements for a case, at the cursor / watermark the benchmark uses. */
+async function armStatements(
   ctx: Ctx,
+  impls: Impls,
   caseId: string,
   project: SelectedProject,
   windowId: keyof typeof WINDOWS,
-): Promise<Statement | string> {
+): Promise<Record<Arm, TraceStatements> | string> {
   const def = caseById(caseId);
+  if (!['traces', 'page', 'groups', 'delta'].includes(def.api)) return `${caseId} is not a queryTraces() case`;
   const literals = literalsFor(project, ctx.sidecar);
   const missing = (def.needs ?? []).filter(k => literals[k] === null);
   if (missing.length) return `literal not found: ${missing.join(', ')}`;
@@ -155,9 +165,9 @@ async function baseStatement(
   let head: { cursorId: string; traceId: string } | undefined;
   try {
     if (def.api === 'delta') {
+      if (def.depth) return 'delta depth not supported in experiments';
       head = await deltaHead(runKey, { query: DELTA_HEAD_SQL, query_params: {} });
       cursor = { kind: 'delta', cursorId: '0', traceId: '' };
-      if (def.depth) return 'delta depth not supported in experiments';
     } else if (def.depth) {
       cursor = await walkCursor(def.depth, HOP, async at => {
         const hop = compileCase(def, 'base', literals, timeRange, project, { cursor: at, limit: HOP });
@@ -170,28 +180,37 @@ async function baseStatement(
     if (error instanceof KeyQueryFailed) return error.message;
     throw error;
   }
-  return compileCase(def, 'base', literals, timeRange, project, { cursor, deltaHead: head }).compiled;
+  const { plan } = compileCase(def, 'base', literals, timeRange, project, { cursor, deltaHead: head });
+  if (plan.api !== 'traces' && plan.api !== 'page' && plan.api !== 'groups' && plan.api !== 'delta') {
+    return `${caseId} is not a queryTraces() case`;
+  }
+  const capture = (impl: QueryTracesFn) => captureTraceQuery(impl, plan.plan, project, def.relations, runKey, head);
+  return { old: await capture(impls.old), new: await capture(impls.new) };
 }
 
 // ---------------------------------------------------------------------------
-// ab
+// ship
 // ---------------------------------------------------------------------------
 
 async function runArm(
   ctx: Ctx,
-  spec: string,
-  base: Statement,
+  arm: Arm,
+  statements: TraceStatements,
   meta: Omit<ExpRecord, 'runId' | 'exp' | 'kind' | 'ok' | 'ts'>,
 ): Promise<void> {
-  const plan = planVariant(spec, base);
-  const record = (outcome: QueryOutcome<unknown>, stage: number) => {
+  for (const [index, name] of STATEMENTS.entries()) {
+    const statement = statements[name];
+    if (!statement) continue;
+    const step = `${meta.caseId}:${arm}:${name}:${meta.window}:${meta.bucket}:${meta.hash}:${meta.rep}`;
+    const outcome = await exec(ctx, statement, step, { cold: meta.cold });
     const r: ExpRecord = {
       runId: ctx.runId,
       exp: ctx.exp,
       kind: 'ab',
       ...meta,
-      variant: spec,
-      stage,
+      variant: arm,
+      stage: index,
+      statement: name,
       ok: outcome.ok,
       errorCode: outcome.errorCode,
       errorCategory: outcome.errorCategory,
@@ -202,34 +221,17 @@ async function runArm(
     append(r);
     const m = r.metrics!;
     log(
-      `${meta.caseId} ${meta.bucket}:${meta.hash} ${meta.window} rep${meta.rep}${meta.cold ? ' cold' : ''} ${spec}${stage ? `#${stage}` : ''}: ` +
+      `${meta.caseId} ${meta.bucket}:${meta.hash} ${meta.window} rep${meta.rep}${meta.cold ? ' cold' : ''} ${arm} ${name}: ` +
         (outcome.ok
           ? `${((m.memoryBytes ?? 0) / 2 ** 20).toFixed(1)} MiB, ${(m.readBytes / 1e6).toFixed(1)} MB, ${Math.round(m.durationMs)} ms`
           : `FAILED ${outcome.errorCategory} (code ${outcome.errorCode})`),
     );
-  };
-  const step = `${meta.caseId}:${spec}:${meta.window}:${meta.bucket}:${meta.hash}:${meta.rep}`;
-  const first = await exec(ctx, plan.statements[0]!, step, { cold: meta.cold, settings: plan.settings });
-  record(first, 0);
-  if (!plan.hydrate || !first.ok) return;
-  const keys = await exec<{ s: string; t: string; d: string }>(
-    ctx,
-    keyOnly(plan.statements[0]!, 'toString(startedAt) AS s, traceId AS t, __dedupeKey AS d'),
-    `${step}:keys`,
-    { parse: true },
-  );
-  if (!keys.ok || !keys.rows?.length) return;
-  registerSensitive(keys.rows.flatMap(k => [k.t, k.d]));
-  const second = await exec(ctx, plan.hydrate(keys.rows.map(k => [k.s, k.t, k.d])), `${step}:hydrate`, {
-    cold: meta.cold,
-    settings: plan.hydrateSettings,
-  });
-  record(second, 1);
+  }
 }
 
-async function ab(
+async function ship(
   ctx: Ctx,
-  specs: string[],
+  impls: Impls,
   cases: string[],
   targets: SelectedProject[],
   windows: string[],
@@ -240,46 +242,27 @@ async function ab(
   for (const project of targets) {
     for (const windowId of windows) {
       for (const caseId of cases) {
-        const base = await baseStatement(ctx, caseId, project, windowId as keyof typeof WINDOWS);
+        const arms = await armStatements(ctx, impls, caseId, project, windowId as keyof typeof WINDOWS);
         const meta = { caseId, window: windowId, bucket: project.bucket, hash: project.hash };
-        if (typeof base === 'string') {
+        if (typeof arms === 'string') {
           append({
             runId: ctx.runId,
             exp: ctx.exp,
             kind: 'ab',
             ...meta,
             ok: false,
-            note: `skip: ${base}`,
+            note: `skip: ${arms}`,
             ts: new Date().toISOString(),
           });
-          log(`skip ${caseId} ${project.bucket} ${windowId}: ${base}`);
+          log(`skip ${caseId} ${project.bucket} ${windowId}: ${arms}`);
           continue;
         }
-        const arms = ['base', ...specs].filter(spec => {
-          try {
-            planVariant(spec, base);
-            return true;
-          } catch (error) {
-            if (!(error instanceof RewriteError)) throw error;
-            append({
-              runId: ctx.runId,
-              exp: ctx.exp,
-              kind: 'ab',
-              ...meta,
-              variant: spec,
-              ok: false,
-              note: `n/a: ${error.message}`,
-              ts: new Date().toISOString(),
-            });
-            log(`n/a ${caseId} ${spec}: ${error.message}`);
-            return false;
-          }
-        });
-        if (arms.length < 2) continue;
-        const start = -coldReps;
-        for (let rep = start; rep < reps; rep++) {
-          const order = (rep + 2) % 2 === 0 ? arms : [...arms].reverse();
-          for (const spec of order) await runArm(ctx, spec, base, { ...meta, rep, cold: rep < 0 });
+        for (const arm of ['old', 'new'] as const) {
+          if (arms[arm].keyFailure) log(`${caseId} ${arm}: capture stopped early (${arms[arm].keyFailure})`);
+        }
+        for (let rep = -coldReps; rep < reps; rep++) {
+          const order: Arm[] = (rep + 2) % 2 === 0 ? ['old', 'new'] : ['new', 'old'];
+          for (const arm of order) await runArm(ctx, arm, arms[arm], { ...meta, rep, cold: rep < 0 });
         }
       }
     }
@@ -300,77 +283,142 @@ ${statement.query}
   };
 }
 
+/** The API row's list columns (everything but the `metadata` / `input` payloads). */
+export const LIST_COLUMNS = [
+  'traceId',
+  'rootSpanId',
+  'name',
+  'entityId',
+  'parentSpanId',
+  'threadId',
+  'resourceId',
+  'startedAt',
+  'endedAt',
+  'entityName',
+  'entityType',
+  'environment',
+  'status',
+];
+export const PAYLOAD_COLUMNS = ['traceId', 'rootSpanId', 'metadata', 'input'];
+
+/** Restricts a statement's rows (`where`) and/or keeps its first `limit` rows. */
+export function slice(statement: Statement, options: { where?: string; limit?: number }): Statement {
+  return {
+    ...statement,
+    query: `SELECT * FROM (${statement.query})${options.where ? ` WHERE ${options.where}` : ''}${options.limit !== undefined ? ` LIMIT ${options.limit}` : ''}`,
+  };
+}
+
 interface HashRow {
   n: string;
   unordered: string;
   ordered: string;
 }
+type Hash = HashRow | { error: string };
 
-async function equiv(ctx: Ctx, specs: string[], cases: string[], targets: SelectedProject[], windows: string[]) {
+/**
+ * Old vs new results, compared on the server:
+ * - the list (old: the single keyset / delta / groups statement, or page rows without the total row; new: the
+ *   bounded list, or `main` for delta / groups), order-sensitive;
+ * - the payloads of the returned rows (old: carried on the list rows; new: the payload lookup), as a set;
+ * - page mode: the total.
+ * The old list is hashed before and after the new arm, so live-data drift shows up as an unstable control.
+ */
+async function equiv(ctx: Ctx, impls: Impls, cases: string[], targets: SelectedProject[], windows: string[]) {
+  const same = (a: Hash, b: Hash, ordered: boolean) =>
+    'n' in a &&
+    'n' in b &&
+    String(a.n) === String(b.n) &&
+    (String(a.n) === '0' || (a.unordered === b.unordered && (!ordered || a.ordered === b.ordered)));
   for (const project of targets) {
     for (const windowId of windows) {
       for (const caseId of cases) {
-        const base = await baseStatement(ctx, caseId, project, windowId as keyof typeof WINDOWS);
         const meta = { caseId, window: windowId, bucket: project.bucket, hash: project.hash };
-        if (typeof base === 'string') {
-          log(`skip ${caseId} ${project.bucket} ${windowId}: ${base}`);
+        const arms = await armStatements(ctx, impls, caseId, project, windowId as keyof typeof WINDOWS);
+        if (typeof arms === 'string') {
+          log(`skip ${caseId} ${project.bucket} ${windowId}: ${arms}`);
           continue;
         }
-        const all = resultColumns(base.query);
-        const hashOf = async (
-          statement: Statement,
-          columns: string[],
-          label: string,
-          settings?: ClickHouseSettings,
-        ) => {
+        const def = caseById(caseId);
+        const hashOf = async (statement: Statement | undefined, columns: string[], label: string): Promise<Hash> => {
+          if (!statement) return { error: 'not issued' };
           const out = await exec<HashRow>(ctx, hashStatement(statement, columns), `equiv:${caseId}:${label}`, {
             parse: true,
-            settings,
           });
           return out.ok ? out.rows![0]! : { error: out.errorCategory ?? 'other' };
         };
-        // Base twice: the control for the method itself (ordered hash must be stable).
-        const baseHash = await hashOf(base, all, 'base');
-        const control = await hashOf(base, all, 'base2');
-        for (const spec of specs) {
-          let plan;
-          try {
-            plan = planVariant(spec, base);
-          } catch (error) {
-            if (error instanceof RewriteError) {
-              log(`n/a ${caseId} ${spec}: ${error.message}`);
-              continue;
-            }
-            throw error;
-          }
-          // Two-stage variants: stage 1 must equal base minus the blob columns.
-          const narrow = plan.hydrate ? all.filter(c => c !== 'metadata' && c !== 'input') : all;
-          const left = plan.hydrate ? await hashOf(base, narrow, 'base-narrow') : baseHash;
-          const right = await hashOf(plan.statements[0]!, narrow, spec, plan.settings);
-          const same = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b);
-          const data = {
-            rows: 'n' in left ? Number(left.n) : null,
-            // Two failures with the same category are not a match: the comparison didn't run.
-            match: 'n' in left && 'n' in right && same(left, right),
-            setMatch: 'n' in left && 'n' in right ? left.unordered === right.unordered && left.n === right.n : false,
-            controlStable: same(baseHash, control),
-            errors: ['error' in left ? left.error : null, 'error' in right ? right.error : null].filter(Boolean),
-          };
-          append({
-            runId: ctx.runId,
-            exp: ctx.exp,
-            kind: 'equiv',
-            ...meta,
-            variant: spec,
-            ok: data.match,
-            data,
-            ts: new Date().toISOString(),
-          });
-          log(`equiv ${caseId} ${project.bucket}:${project.hash} ${windowId} ${spec}: ${JSON.stringify(data)}`);
+        const groups = def.api === 'groups';
+        const page = def.api === 'page';
+        const columns = groups
+          ? ['threadId']
+          : def.api === 'delta'
+            ? [...LIST_COLUMNS, '__delta_cursor']
+            : LIST_COLUMNS;
+        const oldList = page ? slice(arms.old.main, { where: '__metadata = 0' }) : arms.old.main;
+        const newList = groups || def.api === 'delta' ? arms.new.main : arms.new.list;
+
+        const left = await hashOf(oldList, columns, 'old');
+        // No list statement means the new flow saw nothing past the bound: it matches only an empty old list.
+        const right = newList ? await hashOf(newList, columns, 'new') : ({ n: '0' } as Hash);
+        const control = await hashOf(oldList, columns, 'old2');
+        const data: Record<string, unknown> = {
+          rows: 'n' in left ? Number(left.n) : null,
+          newRows: 'n' in right ? Number(right.n) : null,
+          // Two failures are not a match: the comparison didn't run.
+          match: same(left, right, true),
+          setMatch: same(left, right, false),
+          controlStable: same(left, control, true),
+          errors: [left, right].flatMap(h => ('error' in h ? [h.error] : [])),
+        };
+        if (!groups) {
+          // Visible rows only: keyset / delta lists carry one look-ahead row the payload lookup skips.
+          const visible =
+            'n' in left
+              ? Math.min(Number(left.n), def.api === 'page' ? Number(left.n) : visibleLimit(arms.old.main))
+              : 0;
+          const oldPayloads = page ? arms.old.payload : arms.old.main && slice(oldList, { limit: visible });
+          // Neither flow looks payloads up for an empty page.
+          const none = { n: '0' } as Hash;
+          const a = visible === 0 && !oldPayloads ? none : await hashOf(oldPayloads, PAYLOAD_COLUMNS, 'old-payload');
+          const b =
+            visible === 0 && !arms.new.payload ? none : await hashOf(arms.new.payload, PAYLOAD_COLUMNS, 'new-payload');
+          data.payloadMatch = same(a, b, false);
+          data.payloadRows = [a, b].map(h => ('n' in h ? Number(h.n) : h.error));
         }
+        if (page) {
+          const total = await exec<{ total: string }>(
+            ctx,
+            { ...arms.old.main, query: `SELECT toString(any(total)) AS total FROM (${arms.old.main.query})` },
+            `equiv:${caseId}:old-total`,
+            { parse: true },
+          );
+          const bound = await exec<{ traces: string }>(ctx, arms.new.main, `equiv:${caseId}:new-total`, {
+            parse: true,
+          });
+          data.totalMatch =
+            total.ok && bound.ok && Number(total.rows![0]?.total ?? 0) === Number(bound.rows![0]?.traces ?? 0);
+        }
+        append({
+          runId: ctx.runId,
+          exp: ctx.exp,
+          kind: 'equiv',
+          ...meta,
+          ok: data.match === true,
+          data,
+          ts: new Date().toISOString(),
+        });
+        log(`equiv ${caseId} ${project.bucket}:${project.hash} ${windowId}: ${JSON.stringify(data)}`);
       }
     }
   }
+}
+
+/** The page size of a keyset / delta statement: its row limit minus the look-ahead row. */
+function visibleLimit(statement: Statement): number {
+  const match = /LIMIT \{(trace_query_\d+):UInt64\}\s*$/.exec(statement.query);
+  const limit = match ? Number(statement.query_params[match[1]!]) : NaN;
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('Could not read the statement row limit');
+  return limit - 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -459,54 +507,6 @@ async function census(ctx: Ctx, targets: SelectedProject[], windows: string[]) {
 }
 
 // ---------------------------------------------------------------------------
-// explain (plan shape only: read type, parts/granules; no conditions or literals)
-// ---------------------------------------------------------------------------
-
-const EXPLAIN_KEEP =
-  /ReadFromMergeTree|ReadType|Parts:|Granules:|Sorting|LimitBy|Limit \(|Expression \(Before ORDER BY|FinishSorting|PartialSorting|MergeSorting/;
-
-async function explain(ctx: Ctx, specs: string[], cases: string[], targets: SelectedProject[], windows: string[]) {
-  for (const project of targets) {
-    for (const windowId of windows) {
-      for (const caseId of cases) {
-        const base = await baseStatement(ctx, caseId, project, windowId as keyof typeof WINDOWS);
-        if (typeof base === 'string') continue;
-        for (const spec of ['base', ...specs]) {
-          const plan = planVariant(spec, base);
-          const statement = plan.statements[0]!;
-          const out = await exec<{ explain: string }>(
-            ctx,
-            { ...statement, query: `EXPLAIN PLAN indexes = 1, actions = 1 ${statement.query}` },
-            `explain:${caseId}:${spec}`,
-            { parse: true, settings: plan.settings },
-          );
-          const lines = out.ok
-            ? out
-                .rows!.map(r => r.explain)
-                .filter(l => EXPLAIN_KEEP.test(l))
-                .map(l => l.replace(/\s+$/, ''))
-            : [];
-          append({
-            runId: ctx.runId,
-            exp: ctx.exp,
-            kind: 'explain',
-            caseId,
-            variant: spec,
-            window: windowId,
-            bucket: project.bucket,
-            hash: project.hash,
-            ok: out.ok,
-            data: { lines },
-            ts: new Date().toISOString(),
-          });
-          log(`explain ${caseId} ${spec} ${project.bucket} ${windowId}:\n${lines.join('\n')}`);
-        }
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // summary
 // ---------------------------------------------------------------------------
 
@@ -527,13 +527,14 @@ export function summarize(records: ExpRecord[], exp?: string): string {
     median(rs.filter(r => r.ok && !r.cold).map(r => mib(r.metrics!.memoryBytes ?? 0)));
   for (const [key, rs] of groups) {
     const [e, c, bucket, hash, window, variant, stage] = key.split('|');
-    const baseRs = groups.get([e, c, bucket, hash, window, 'base', 0].join('|')) ?? [];
+    const baseArm = rs[0]!.statement ? 'old' : 'base';
+    const baseRs = groups.get([e, c, bucket, hash, window, baseArm, stage].join('|')) ?? [];
     const warm = rs.filter(r => r.ok && !r.cold);
     const cold = rs.filter(r => r.cold);
     const m = warmMem(rs);
     const b = warmMem(baseRs);
     out.push(
-      `| ${e} | ${c} | ${bucket}:${hash!.slice(0, 8)} | ${window} | ${variant}${stage !== '0' ? `#${stage}` : ''} | ${warm.length ? m.toFixed(1) : '—'} (${warm.length}) | ${warm.length && b ? `×${(m / b).toFixed(2)}` : '—'} | ${warm.length ? (median(warm.map(r => r.metrics!.readBytes)) / 1e6).toFixed(1) : '—'} | ${warm.length ? Math.round(median(warm.map(r => r.metrics!.durationMs))) : '—'} | ${cold.map(r => (r.ok ? Math.round(r.metrics!.durationMs) : `✗${r.errorCategory}`)).join(', ') || '—'} | ${rs.filter(r => !r.ok).length || ''} |`,
+      `| ${e} | ${c} | ${bucket}:${hash!.slice(0, 8)} | ${window} | ${variant}${rs[0]!.statement ? ` ${rs[0]!.statement}` : stage !== '0' ? `#${stage}` : ''} | ${warm.length ? m.toFixed(1) : '—'} (${warm.length}) | ${warm.length && b ? `×${(m / b).toFixed(2)}` : '—'} | ${warm.length ? (median(warm.map(r => r.metrics!.readBytes)) / 1e6).toFixed(1) : '—'} | ${warm.length ? Math.round(median(warm.map(r => r.metrics!.durationMs))) : '—'} | ${cold.map(r => (r.ok ? Math.round(r.metrics!.durationMs) : `✗${r.errorCategory}`)).join(', ') || '—'} | ${rs.filter(r => !r.ok).length || ''} |`,
     );
   }
   return out.join('\n');
@@ -562,7 +563,7 @@ async function main() {
     allowPositionals: true,
     options: {
       exp: { type: 'string', default: 'QX' },
-      variants: { type: 'string', default: '' },
+      legacy: { type: 'string' },
       cases: { type: 'string', default: 'T0' },
       targets: { type: 'string', default: 'small' },
       windows: { type: 'string', default: '1d,30d' },
@@ -578,7 +579,7 @@ async function main() {
     console.log(summarize(readRecords<ExpRecord>(EXPERIMENTS_FILE), values.exp === 'QX' ? undefined : values.exp));
     return;
   }
-  if (!['ab', 'equiv', 'census', 'explain'].includes(command ?? '')) throw new Error(`Unknown command ${command}`);
+  if (!['ship', 'equiv', 'census'].includes(command ?? '')) throw new Error(`Unknown command ${command}`);
   const others = otherBenchProcesses();
   if (others.length && !values['allow-shared']) {
     log(
@@ -606,17 +607,30 @@ async function main() {
   };
   const targets = resolveTargets(selection, values.targets!);
   const windows = values.windows!.split(',');
-  const specs = values.variants ? values.variants.split(',') : [];
   const cases = values.cases!.split(',');
+  let impls: Impls | undefined;
+  if (command !== 'census') {
+    if (!values.legacy) throw new Error('--legacy <old trace-query module> is required');
+    const legacy = (await import(resolve(values.legacy))) as { queryTraces?: QueryTracesFn };
+    if (typeof legacy.queryTraces !== 'function') throw new Error('--legacy module has no queryTraces export');
+    impls = { old: legacy.queryTraces, new: queryTraces };
+  }
   log(
-    `${command} ${values.exp} run ${runId}: variants [${specs.join(', ')}] cases [${cases.join(', ')}] targets [${targets.map(t => `${t.bucket}:${t.hash}`).join(', ')}] windows [${windows.join(', ')}]`,
+    `${command} ${values.exp} run ${runId}: cases [${cases.join(', ')}] targets [${targets.map(t => `${t.bucket}:${t.hash}`).join(', ')}] windows [${windows.join(', ')}]`,
   );
   try {
     if (command === 'census') await census(ctx, targets, windows);
-    if (command === 'ab')
-      await ab(ctx, specs, cases, targets, windows, Number(values.reps), values.cold ? Number(values['cold-reps']) : 0);
-    if (command === 'equiv') await equiv(ctx, specs, cases, targets, windows);
-    if (command === 'explain') await explain(ctx, specs, cases, targets, windows);
+    if (command === 'ship')
+      await ship(
+        ctx,
+        impls!,
+        cases,
+        targets,
+        windows,
+        Number(values.reps),
+        values.cold ? Number(values['cold-reps']) : 0,
+      );
+    if (command === 'equiv') await equiv(ctx, impls!, cases, targets, windows);
   } finally {
     await client.close();
   }

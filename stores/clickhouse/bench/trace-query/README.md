@@ -49,17 +49,18 @@ npx tsx bench/shared/leak-check.ts [pr-body.md]
 
 ## Memory experiments
 
-`experiments.ts` tests query rewrites and settings (`variants.ts`) against the compiled base, sequentially, 3 s apart. Results go to `results/experiments.jsonl`; the register and findings are in [EXPERIMENTS.md](./EXPERIMENTS.md).
+`experiments.ts` compares two `queryTraces()` implementations, sequentially, 3 s apart: `old`, a copy of the compiler module from before a change, and `new`, the current one. Each runs exactly the statements the store issues (`captureTraceQuery`, project-scoped, fail-closed). Results go to `results/experiments.jsonl`; the register and findings are in [EXPERIMENTS.md](./EXPERIMENTS.md).
 
 ```sh
+D=src/storage/domains/observability/v-next
+git show <rev>:stores/clickhouse/$D/trace-query.ts > $D/trace-query.legacy.ts   # untracked; delete afterwards
 npx tsx bench/trace-query/experiments.ts census                          # duplicate root copies
-npx tsx bench/trace-query/experiments.ts equiv --exp QX03 --variants nh2 --cases T0,D1 --targets p90,p99 --windows 30d
-npx tsx bench/trace-query/experiments.ts ab --exp QX09 --variants nh2+topn2+pf8 --cases T0 --targets p99 --windows 30d --reps 3 [--cold --cold-reps 2]
-npx tsx bench/trace-query/experiments.ts summary --exp QX09
-TQ_SMOKE_URL=http://localhost:18125 npx tsx bench/trace-query/experiments.smoke.ts   # rewrites vs base, local throwaway ClickHouse
+npx tsx bench/trace-query/experiments.ts equiv --exp QX10 --legacy $D/trace-query.legacy.ts --cases T0,D1 --targets p90,p99 --windows 30d
+npx tsx bench/trace-query/experiments.ts ship --exp QX10 --legacy $D/trace-query.legacy.ts --cases T0 --targets p99 --windows 30d --reps 3 [--cold --cold-reps 2]
+npx tsx bench/trace-query/experiments.ts summary --exp QX10
 ```
 
-Variants compose with `+`; `<setting>@2` applies a settings overlay to a two-stage variant's lookup only.
+The variant rewrites behind QX01–QX09 (`variants.ts`, `experiments.smoke.ts`) ran against the compiler at commit `c677e6a9280`.
 
 ## Concurrency
 

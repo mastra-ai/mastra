@@ -32,13 +32,14 @@ function countOccurrences(haystack: string, needle: string): number {
 
 /**
  * Adds `AND projectId = {bench_project_id:String}` after every tenant fragment the compiler emitted.
- * Expected fragments: the roots seed, `root_scope`, and one per related collection.
+ * Expected fragments: the roots seed, `root_scope`, the current-root key re-read when the compiler
+ * uses one (`queryTraces()`), and one per related collection.
  */
-export function injectProjectScope(
-  compiled: CompiledClickHouseTraceQuery,
+export function injectProjectScope<T extends CompiledClickHouseTraceQuery>(
+  compiled: T,
   projectId: string,
   relations: readonly Relation[],
-): CompiledClickHouseTraceQuery {
+): T {
   for (const relation of ['spans', 'scores', 'feedback'] as const) {
     const present = countOccurrences(compiled.query, RELATION_CTE[relation]);
     const declared = relations.includes(relation) ? 1 : 0;
@@ -46,7 +47,25 @@ export function injectProjectScope(
       throw new RewriteError(`Relation ${relation}: expected ${declared} CTE(s), found ${present}`);
     }
   }
-  const expected = 2 + relations.length;
+  const keyed = countOccurrences(compiled.query, 'current_root_keys AS (');
+  if (keyed > 1) throw new RewriteError(`Expected at most one current_root_keys CTE, found ${keyed}`);
+  // queryTraces() also seeds the delta index and span existence checks with the tenant's window roots.
+  const windows = countOccurrences(compiled.query, 'FROM mastra_trace_roots w\n');
+  if (windows > 2) throw new RewriteError(`Expected at most two window-root seeds, found ${windows}`);
+  return addProjectAfterTenant(compiled, projectId, 2 + keyed + windows + relations.length);
+}
+
+/** Adds the project to the `queryTraces()` payload lookup, which the compiler already tenant-scopes. */
+export function injectPayloadProjectScope<T extends CompiledClickHouseTraceQuery>(compiled: T, projectId: string): T {
+  if (!compiled.query.includes('metadataRaw AS metadata')) throw new RewriteError('Not a root payload lookup');
+  return addProjectAfterTenant(compiled, projectId, 1);
+}
+
+function addProjectAfterTenant<T extends CompiledClickHouseTraceQuery>(
+  compiled: T,
+  projectId: string,
+  expected: number,
+): T {
   const tenantParams = new Set<string>();
   let matched = 0;
   const query = compiled.query.replace(TENANT_FRAGMENT, (fragment, param: string) => {

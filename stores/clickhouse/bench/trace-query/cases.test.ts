@@ -3,12 +3,14 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { queryTraces } from '../../src/storage/domains/observability/v-next/trace-query';
+import type { QueryOutcome } from '../shared/client';
 import { PROJECT_PARAM, RewriteError, injectSpanProjectScope } from '../shared/scope';
 import { CASES, caseById, compileCase, DELTA_HEAD_SQL, timeRangeFor, WINDOWS } from './cases';
 import type { TraceQueryLiterals } from './cases';
 import { literalsFor, SIDECAR_SQL } from './discover';
-import { captureSpanHydration, payloadStatement, scopedSpanHydration, walkCursor } from './stages';
-import type { SpanSelectRow } from './stages';
+import { captureSpanHydration, captureTraceQuery, scopedSpanHydration, walkCursor } from './stages';
+import type { KeyRunner, SpanSelectRow, Statement } from './stages';
 
 const SCOPE = { organizationId: 'org-test', projectId: 'proj-test' };
 const LITERALS: TraceQueryLiterals = {
@@ -48,7 +50,10 @@ describe('trace-query case catalogue', () => {
         expect(scoped(compiled.query)).toBe(0);
         return;
       }
-      const expected = def.api === 'spans' ? 2 : 2 + def.relations.length + (variant === 'w1' ? 1 : 0);
+      // queryTraces() also scopes its current-root key re-read; queryThreads() gets that from W1.
+      const keyed = ['traces', 'page', 'groups', 'delta'].includes(def.api) ? 1 : 0;
+      const delta = (def.api === 'delta' ? 1 : 0) + (keyed && def.relations.includes('spans') ? 1 : 0);
+      const expected = def.api === 'spans' ? 2 : 2 + keyed + delta + def.relations.length + (variant === 'w1' ? 1 : 0);
       expect(scoped(compiled.query)).toBe(expected);
       expect(compiled.query_params[PROJECT_PARAM]).toBe('proj-test');
       expect(Object.values(compiled.query_params)).toContain('org-test');
@@ -138,12 +143,75 @@ describe('trace-query case catalogue', () => {
 });
 
 describe('stages', () => {
-  it('scopes the page-mode payload lookup exactly once', () => {
-    const keys = [
-      { traceId: 't', rootSpanId: 's', startedAt: '2026-10-05T00:00:00.000Z', endedAt: '2026-10-05T00:00:01.000Z' },
-    ];
-    expect(payloadStatement(keys, SCOPE, false).query).not.toContain('projectId');
-    expect(scoped(payloadStatement(keys, SCOPE, true).query)).toBe(1);
+  /** Answers capture key reads: the bound statement with `bound`, list key reads with `rows`. */
+  const keyRunner = (bound: { traces: string; bound: string | null }, rows: Record<string, unknown>[]) => {
+    const seen: Array<{ statement: Statement; step: string }> = [];
+    const run: KeyRunner = async <Row>(statement: Statement, step: string) => {
+      seen.push({ statement, step });
+      const out = step === 'trace-bound' ? [bound] : rows;
+      return { ok: true, rows: out as Row[], wallMs: 1 } as QueryOutcome<Row>;
+    };
+    return { run, seen };
+  };
+  const capture = (id: string, run: KeyRunner, head?: { cursorId: string; traceId: string }) => {
+    const def = caseById(id);
+    const { plan } = compileCase(def, 'base', LITERALS, timeRangeFor(WINDOWS['1d'], TO), SCOPE, {
+      ...(def.api === 'delta' ? { cursor: { kind: 'delta' as const, cursorId: '0', traceId: '' } } : {}),
+    });
+    if (plan.api !== 'traces' && plan.api !== 'page' && plan.api !== 'groups' && plan.api !== 'delta') {
+      throw new Error(`${id} is not a queryTraces() case`);
+    }
+    return captureTraceQuery(queryTraces, plan.plan, SCOPE, def.relations, run, head);
+  };
+  const key = {
+    traceId: 't-1',
+    rootSpanId: 's-1',
+    startedAt: '2026-10-05 00:00:00.000',
+    endedAt: '2026-10-05 00:00:01.000',
+  };
+
+  it('captures keyset statements from the real store, project-scoped, with the store settings', async () => {
+    const { run, seen } = keyRunner({ traces: '1', bound: '2026-10-05 00:00:00.000' }, [key]);
+    const traced = await capture('T7', run);
+
+    expect(traced.main.query).toContain(' AS bound');
+    expect(traced.list!.query).toMatch(/AND \(startedAt >= \{trace_query_\d+:DateTime64/);
+    // Roots seed, current-root keys, root_scope, and the span relation with its window-roots seed.
+    for (const statement of [traced.main, traced.list!]) expect(scoped(statement.query)).toBe(5);
+    expect(scoped(traced.payload!.query)).toBe(1);
+    expect(Object.values(traced.payload!.query_params)).toEqual(expect.arrayContaining(['org-test', 't-1', 's-1']));
+    for (const statement of [traced.main, traced.list!, traced.payload!]) {
+      expect(statement.settings).toMatchObject({ filesystem_prefetches_limit: '8' });
+      expect(statement.settings).not.toHaveProperty('max_execution_time');
+      expect(statement.settings).not.toHaveProperty('max_memory_usage');
+    }
+    expect(traced.main.sharedSnapshot).toBe(true);
+    // Only the bound (counts and a timestamp) and key columns are read back.
+    expect(seen.map(s => s.step)).toEqual(['trace-bound', 'trace-keys']);
+    expect(seen[1]!.statement.query).toMatch(
+      /^SELECT toString\(traceId\) AS traceId, toString\(rootSpanId\) AS rootSpanId, startedAt, endedAt FROM \(/,
+    );
+  });
+
+  it('captures only the total-and-bound statement for an empty page', async () => {
+    const { run } = keyRunner({ traces: '0', bound: null }, []);
+    const traced = await capture('P0', run);
+    expect(traced.main.query).toContain(' AS bound');
+    expect(traced.list).toBeUndefined();
+    expect(traced.payload).toBeUndefined();
+  });
+
+  it('captures the delta list with its cursor column, and groups without reading rows', async () => {
+    const delta = keyRunner({ traces: '0', bound: null }, [{ ...key, __delta_cursor: '5' }]);
+    const traced = await capture('D1', delta.run, { cursorId: '9', traceId: 't-9' });
+    expect(traced.main.query).toContain('delta_candidates');
+    expect(delta.seen[0]!.statement.query).toContain('__delta_cursor FROM (');
+    expect(scoped(traced.payload!.query)).toBe(1);
+
+    const groups = keyRunner({ traces: '0', bound: null }, []);
+    const g0 = await capture('G0', groups.run);
+    expect(g0.main.query).toContain('GROUP BY threadId');
+    expect(groups.seen).toHaveLength(0);
   });
 
   it('captures querySpans() hydration from the real store code without a network', async () => {
