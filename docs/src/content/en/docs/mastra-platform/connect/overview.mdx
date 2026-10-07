@@ -1,6 +1,6 @@
 ---
 title: 'Connect | Mastra platform'
-description: 'Connect accounts like Linear, Slack, and GitHub to a Mastra platform project once, then use them in your app as agent tools, chat channels, or credentials with @mastra/connect.'
+description: 'Use Mastra Connect to manage provider connections on Mastra platform and make them available to your app as agent tools, chat channels, or raw credentials.'
 packages:
   - '@mastra/connect'
 ---
@@ -13,32 +13,35 @@ Mastra Connect is free to use on Mastra platform while in beta.
 
 :::
 
-Connect stores your accounts on third-party providers like Linear, Notion, Slack, and GitHub in your [Mastra platform](/docs/mastra-platform/overview) project. You authorize an account once, and the `@mastra/connect` package makes it available to your app in three ways:
+Connect manages connections to services such as GitHub, Slack, and Linear in your [Mastra platform](/docs/mastra-platform/overview) project. The `@mastra/connect` package makes those connections available to your application as tools, channels, or credentials.
 
-| Use | Function | Page |
-| - | - | - |
-| Give agents the provider's API as tools | `tools()` | [Tools](/docs/mastra-platform/connect/tools) |
-| Put agents in Slack, Telegram, or Discord | `channels()` | [Channels](/docs/mastra-platform/connect/channels) |
-| Call the provider's SDK from your own code | `credential()` | [Use a raw credential](#use-a-raw-credential) |
+- **Tools** let agents call a provider's API. Connect supplies ready-made tools and sends their requests through a platform proxy that adds credentials and refreshes OAuth tokens. See [Tools](/docs/mastra-platform/connect/tools).
+- **Channels** let people talk to agents through Slack, Telegram, or Discord. Connect supplies credentials to Mastra's channel providers. See [Channels](/docs/mastra-platform/connect/channels).
+- **Raw credentials** let your code call a provider's SDK directly when the tools don't cover what you need. See [`credential()`](/reference/connect/credential).
 
-Giving an agent a provider's API normally means managing credentials and writing or configuring tools yourself. Connect supplies ready-made tools and manages their credentials on the platform. For supported OAuth providers such as Linear, `mastra connect add` handles authorization without requiring you to create an OAuth app. API key providers still require a key, and [channels](/docs/mastra-platform/connect/channels) can require vendor-side bot or app setup.
+## When to use Connect
 
-Tool calls go to the platform proxy, which adds the credential, refreshes OAuth tokens, and forwards the request to the provider without your app needing to store those credentials. Connection changes take effect as the tool resolver refreshes its cache, without a redeploy.
+Use Connect when you want to manage provider accounts on the platform rather than store credentials and handle OAuth token refresh in your application. You can add or replace connections without changing your agent code. Tool resolvers pick up connection changes as their caches refresh, without a redeploy.
 
-This page connects Linear and gives an agent its tools.
+Combine Connect tools and channels with your own [custom tools](/docs/agents/tools) and [self-managed channels](/docs/channels) in the same application. Connect requires a platform project, but your application can run locally or on your own infrastructure.
 
-## Before you begin
+## How connections work
 
-- A [Mastra platform](/docs/mastra-platform/overview) project.
-- The [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
+A **provider** defines the service and capabilities you can use. A **connection** authorizes an account on that provider and links it to your project. A project can have multiple connections, such as accounts in different Slack workspaces.
 
-## Install the package
+Providers don't all offer the same capabilities or authorization flow. Some use OAuth, others require an API key, and channel setup can require creating a bot or app in the vendor's console. See [Providers](/docs/mastra-platform/connect/providers) to choose the provider for your use case.
+
+## Get started
+
+You need a Mastra platform project and the [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
+
+### Install the package
 
 ```bash npm2yarn
 npm install @mastra/connect
 ```
 
-## Configure the environment
+### Configure the environment
 
 Your app authenticates to the platform with an access token. Create one for the app:
 
@@ -55,64 +58,30 @@ MASTRA_PROJECT_ID=your-project-id
 
 See [environment variables](/reference/connect/tools#environment-variables) for regions and the other optional variables.
 
-## Connect a provider
+### Connect an account
 
-Run this command from the directory containing your `.env` file. The CLI loads `MASTRA_PROJECT_ID` from it:
+Choose a provider from the [provider list](/docs/mastra-platform/connect/providers) and run `mastra connect add` with its ID. For example, to authorize a Linear account:
 
 ```bash
 mastra connect add linear
 ```
 
-Linear uses OAuth. The CLI opens Linear's consent screen in your browser and waits until the connection is active. [Connections](/docs/mastra-platform/connect/connections) covers API key providers, naming, and removing connections.
+Run the command from the directory containing your `.env` file. The CLI guides you through the provider's authorization flow. [Connections](/docs/mastra-platform/connect/connections) covers naming, listing, and removing connections.
 
-## Give an agent the tools
+### Use the connection
 
-Pass [`tools()`](/reference/connect/tools) to the agent's `tools` option:
+Choose how your application uses the connected account:
 
-```typescript title="src/mastra/agents/ops.ts"
-import { Agent } from '@mastra/core/agent'
-import { tools } from '@mastra/connect'
-
-export const opsAgent = new Agent({
-  id: 'ops',
-  name: 'ops',
-  instructions: 'You help the team track work in Linear.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: tools(),
-})
-```
-
-Ask the agent for something that needs Linear:
-
-```typescript
-const response = await opsAgent.generate('Summarize my open Linear issues.')
-```
-
-The agent sees tools like `linear_list_issues` and `linear_create_issue`. [Tools](/docs/mastra-platform/connect/tools) covers limiting which tools an agent gets.
-
-## Use a raw credential
-
-When the generated tools don't cover what you need, [`credential()`](/reference/connect/credential) returns a connection's credential so you can call the provider's SDK yourself:
-
-```typescript
-import { credential } from '@mastra/connect'
-
-const cred = await credential('c_yourconnectionid')
-
-if (cred.type === 'oauth2') {
-  startSdkSession(cred.accessToken)
-} else if (cred.type === 'api_key') {
-  startSdkSession(cred.apiKey)
-} else if (cred.type === 'two_step') {
-  startSdkSession(cred.token)
-}
-```
-
-Requests made with a raw credential skip the platform proxy, which means the platform doesn't record them or limit which hosts they reach. Don't log the credential or return it in agent output.
+- Pass [`tools()`](/docs/mastra-platform/connect/tools) to an agent's `tools` option to give it provider tools, alongside any tools you define yourself.
+- Add the providers returned by [`channels()`](/docs/mastra-platform/connect/channels) to your Mastra configuration, then connect a channel to an agent in Studio.
+- Call [`credential()`](/reference/connect/credential) with a connection ID to use its credential in your own code.
 
 ## Security model
 
-- The platform stores provider credentials and adds them to requests on the server. Your app only sees a credential when it calls `credential()`.
-- The platform records each proxied call so you can audit and count tool use. It doesn't log tool arguments or results.
-- The proxy only sends requests to the provider's own API hosts. Per-connection values, such as a Supabase project URL, extend that list for one connection only.
-- Your code decides which tools an agent gets. See [Tools](/docs/mastra-platform/connect/tools#limit-what-an-agent-can-use).
+For tool calls, the platform adds credentials to requests on the server. It records each proxied call so you can audit and count tool use, without logging tool arguments or results. Requests can only reach the provider's API hosts, including any allowed per-connection hosts such as a Supabase project URL.
+
+Your code controls which tools an agent gets and which calls require approval. See [tool filtering](/docs/mastra-platform/connect/tools#limit-what-an-agent-can-use) for configuration.
+
+### Use a raw credential
+
+Calling `credential()` returns a secret to your application. Requests you make with it bypass the platform proxy, including its host restrictions and call records. Don't log the credential or return it in agent output. The [credential reference](/reference/connect/credential) covers supported types and expiration handling.
