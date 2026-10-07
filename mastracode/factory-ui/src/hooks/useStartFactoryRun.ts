@@ -1,12 +1,13 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 
+import { isRecord } from '../lib/isRecord';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
-import { useIntakeConfigQuery } from './useIntakeConfig';
+import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardRepositorySlug';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
 
@@ -36,24 +37,17 @@ export interface StartFactoryRunInput {
 export function useStartFactoryRun() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const intakeConfig = useIntakeConfigQuery();
+  const repositories = factoryQuery.data?.repositories ?? [];
+  const repositorySlugFor = useCardRepositorySlug(repositories);
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const repositories = factoryQuery.data?.repositories ?? [];
 
+  const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
+    mutationKey: startMutationKey,
     mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
-      const linearProjectId =
-        workItem.source === 'linear-issue' && typeof workItem.metadata?.linearProjectId === 'string'
-          ? workItem.metadata.linearProjectId
-          : undefined;
-      const config = linearProjectId && !intakeConfig.data ? (await intakeConfig.refetch()).data : intakeConfig.data;
-      const mappedSlug = linearProjectId ? config?.linear.repositoryByLinearProject?.[linearProjectId] : undefined;
-      const targetSlug =
-        repositorySlug ??
-        (typeof workItem.metadata?.repository === 'string' ? workItem.metadata.repository : undefined) ??
-        mappedSlug;
+      const targetSlug = repositorySlug ?? (await repositorySlugFor(workItem.source, workItem.metadata));
       const repository = targetSlug
         ? repositories.find(candidate => candidate.slug === targetSlug)
         : repositories.length === 1
@@ -100,5 +94,20 @@ export function useStartFactoryRun() {
     },
   });
 
-  return { start: mutation, enabled: Boolean(factoryId && repositories.length > 0), repositories };
+  const startingItemIds = useMutationState({
+    filters: { mutationKey: startMutationKey, status: 'pending' },
+    select: pending => startingWorkItemId(pending.state.variables),
+  }).filter(itemId => itemId !== undefined);
+
+  return {
+    start: mutation,
+    startingItemIds,
+    enabled: Boolean(factoryId && repositories.length > 0),
+    repositories,
+  };
+}
+
+function startingWorkItemId(variables: unknown): string | undefined {
+  if (!isRecord(variables) || !isRecord(variables.workItem)) return undefined;
+  return typeof variables.workItem.id === 'string' ? variables.workItem.id : undefined;
 }

@@ -29,6 +29,7 @@ import type {
   StepTripwireData,
   ToolCallChunk,
 } from '../types';
+import { isDataChunk } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { isChunkOutputProcessed } from './output-processed';
@@ -87,7 +88,7 @@ export function persistProcessorDataChunk(
   messageId: string,
   chunk: { type: string; data?: unknown; transient?: boolean },
 ): void {
-  if (!chunk.type.startsWith('data-') || chunk.transient) return;
+  if (!isDataChunk(chunk) || chunk.transient) return;
 
   const message: MastraDBMessage = {
     id: messageId,
@@ -1221,19 +1222,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // aggregate stream text because pre-approval text is part of the resumed run.
                   // Durable agents set resolveFinalPromises to force resolution even when
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
-                  // Durable runs output processors in its workflow, so a blocked final step gets
-                  // its text back here, as the output processor pass above does for the main loop.
-                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  if (
-                    self.#options.resolveFinalPromises &&
-                    lastStep?.finishReason === 'tripwire' &&
-                    lastStep.toolCalls.length === 0
-                  ) {
-                    lastStep.text = lastStep.content
-                      .filter(part => part.type === 'text')
-                      .map(part => part.text)
-                      .join('');
-                  }
+                  // A step rejected by a tripwire keeps its empty text, so durable runs don't
+                  // return a rejected reply (#26048).
                   this.resolvePromises({
                     text: self.#producedText(),
                     finishReason: self.#finishReason,
@@ -1740,8 +1730,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       this.#consumeStreamPromise = consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: error => {
+          const streamError = getErrorFromUnknown(error, { fallbackMessage: 'Unknown error consuming stream' });
           this.#consumeStreamErrored = true;
-          this.#consumeStreamError = error;
+          this.#consumeStreamError = streamError;
+          this.#error = streamError;
+          this.#status = 'failed';
+          this.#streamFinished = true;
+          Object.values(this.#delayedPromises).forEach(promise => {
+            if (promise.status.type === 'pending') {
+              promise.reject(streamError);
+            }
+          });
+          this.#closeTransportIfNeeded();
+          this.#emitter.emit('stream-error', streamError);
+          this.#emitter.emit('settled');
         },
         logger: this.logger,
       });
@@ -2126,6 +2128,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+    // Carry the traceId on every chunk Mastra produces so stream consumers can link chunks to their
+    // trace. Custom data-* chunks are left as written: their shape belongs to the user, and AI SDK
+    // UI streams forward them as-is.
+    if (this.traceId && !isDataChunk(chunk) && !chunk.traceId) {
+      chunk.traceId = this.traceId;
+    }
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
   }
@@ -2189,7 +2197,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         // If stream already finished, close immediately
         if (self.#streamFinished) {
-          controller.close();
+          if (self.#consumeStreamErrored) {
+            controller.error(self.#consumeStreamError);
+          } else {
+            controller.close();
+          }
           return;
         }
 
@@ -2198,19 +2210,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           safeEnqueue(controller, chunk);
         };
 
-        const finishHandler = () => {
+        const detachListeners = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
+          self.#emitter.off('stream-error', errorHandler);
+        };
+        const finishHandler = () => {
+          detachListeners();
           safeClose(controller);
+        };
+        const errorHandler = (error: unknown) => {
+          detachListeners();
+          controller.error(error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
         self.#emitter.on('finish', finishHandler);
+        self.#emitter.on('stream-error', errorHandler);
 
-        detach = () => {
-          self.#emitter.off('chunk', chunkHandler);
-          self.#emitter.off('finish', finishHandler);
-        };
+        detach = detachListeners;
       },
 
       pull(_controller) {

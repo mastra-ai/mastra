@@ -15,6 +15,7 @@ import { signalDescription, signalLabel } from './signal-formatting';
 import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -144,7 +145,8 @@ export function SortableSignalHeaders({
                           >
                             <Tooltip>
                               <TooltipTrigger
-                                className="cursor-default font-mono text-column tracking-wider"
+                                render={<Txt as="span" variant="eyebrow" />}
+                                className="cursor-default"
                                 data-testid="signal-column-header"
                                 style={{ color: getSignalColor(signalName) }}
                               >

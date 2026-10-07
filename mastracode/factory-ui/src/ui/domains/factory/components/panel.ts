@@ -7,5 +7,3 @@ export const PANEL = `${raisedSurfaceStyle} rounded-xl`;
 export const PANEL_ROW = 'flex items-center gap-3 rounded-lg px-3 py-2';
 
 export const PANEL_ROW_LINK = `hover:bg-fill transition-colors ${focusRingInset} ${PANEL_ROW}`;
-
-export const TIMESTAMP = 'text-meta text-muted-foreground';

@@ -1,3 +1,6 @@
+import { textStyle } from '@mastra/playground-ui/primitives/text';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 /**
  * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
  * d3-force computes positions (synchronously, deterministic). Knowledge nodes are
@@ -69,18 +72,21 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
         style={{ background: 'var(--badge-purple-strong)' }}
       >
         {labeled ? (
-          <span
-            className="text-foreground pointer-events-none line-clamp-3 max-w-[78%] leading-tight font-medium break-words"
+          <Txt
+            as="span"
+            variant="label"
+            tone="ink"
+            className="pointer-events-none line-clamp-3 max-w-[78%] break-words"
             style={{ fontSize: nameSize }}
             title={node.name}
           >
             {node.name}
-          </span>
+          </Txt>
         ) : null}
         {labeled && large ? (
-          <span className="text-badge-purple-foreground mt-0.5 text-[9px] font-medium tracking-widest uppercase">
+          <Txt as="span" variant="eyebrow" className="text-badge-purple-foreground mt-0.5">
             {node.kind.slice(0, 12)}
-          </span>
+          </Txt>
         ) : null}
       </div>
       <Handle type="target" position={Position.Top} className="!invisible" />
@@ -230,12 +236,15 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
   if (parts.length === 0) return null;
   return (
-    <div
+    <Txt
+      as="p"
+      variant="caption"
+      tone="muted"
       data-testid="knowledge-truncation-banner"
-      className="border-border bg-card text-muted-foreground pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1 text-xs"
+      className="border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
     >
       Partial view — {parts.join(' · ')}
-    </div>
+    </Txt>
   );
 }
 
@@ -257,17 +266,19 @@ function FilterChip({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={[
-        'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors',
+      className={cn(
+        'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
         active
           ? accent
             ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
             : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
           : 'border-border bg-card text-muted-foreground hover:text-foreground',
-      ].join(' ')}
+      )}
     >
       {icon}
-      {label}
+      <Txt as="span" variant="column" className="block">
+        {label}
+      </Txt>
     </button>
   );
 }
@@ -602,33 +613,40 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 min-w-48 rounded-lg p-3 text-xs`}
+        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 min-w-48 rounded-lg p-3`}
         style={style}
       >
         <div className="mb-1 flex items-center gap-1.5">
-          <span className="text-foreground font-semibold">{node.name}</span>
+          <Txt as="span" variant="label" tone="ink">
+            {node.name}
+          </Txt>
         </div>
         {node.description?.trim() ? (
-          <p
+          <Txt
+            as="p"
+            variant="body-sm"
+            tone="ink"
             data-testid="knowledge-hover-description"
-            className="text-foreground mb-2 line-clamp-3 max-w-72 leading-relaxed break-words"
+            className="mb-2 line-clamp-3 max-w-72 break-words"
           >
             {node.description}
-          </p>
+          </Txt>
         ) : null}
-        <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-          <dt>Kind</dt>
-          <dd>{node.kind}</dd>
-          <dt>Scope</dt>
-          <dd>{RUNG_LABELS[node.rung]}</dd>
-          <dt>Knowledge records</dt>
-          <dd>{node.recordCount}</dd>
-          <dt>Links</dt>
-          <dd>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{RUNG_LABELS[node.rung]}</dd>
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Links</dt>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
             {degree.incoming} in · {degree.outgoing} out
           </dd>
-          <dt>Updated</dt>
-          <dd>{new Date(node.updatedAt).toLocaleString()}</dd>
+          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
+          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
+            {new Date(node.updatedAt).toLocaleString()}
+          </dd>
         </dl>
       </div>
     );
@@ -638,14 +656,18 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3 text-xs`}
+        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
         style={style}
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
-          Record
+          <Txt as="span" variant="caption" className="block">
+            Record
+          </Txt>
           {record.pinned ? <Pin size={11} className="text-badge-amber-indicator" aria-label="Pinned" /> : null}
         </div>
-        <div className="text-muted-foreground leading-relaxed">{record.text}</div>
+        <Txt as="p" variant="body-sm" tone="muted">
+          {record.text}
+        </Txt>
       </div>
     );
   }
@@ -656,13 +678,15 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     return (
       <div
         data-testid="knowledge-hover-card"
-        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3 text-xs`}
+        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
         style={style}
       >
-        <div className="text-foreground">{source && target ? `${source} → ${target}` : 'Record'}</div>
-        <div className="text-muted-foreground mt-0.5 leading-relaxed">
+        <Txt as="p" variant="caption" tone="ink">
+          {source && target ? `${source} → ${target}` : 'Record'}
+        </Txt>
+        <Txt as="p" variant="body-sm" tone="muted" className="mt-0.5">
           {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
-        </div>
+        </Txt>
       </div>
     );
   }

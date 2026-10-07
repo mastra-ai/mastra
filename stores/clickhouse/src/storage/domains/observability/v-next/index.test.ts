@@ -16,7 +16,12 @@ import {
   createObservabilityVNextTests,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   traceAggregateResponseMismatch,
+  writeTraceAggregateFixture,
   writeTraceQueryFixture,
 } from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
@@ -28,6 +33,7 @@ import {
   planTraceQuery,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
+  TraceStatus,
 } from '@mastra/core/storage';
 import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,6 +56,7 @@ import {
   TABLE_DISCOVERY_VALUES,
   TABLE_FEEDBACK_EVENTS,
   TABLE_FEEDBACK_EVENTS_DELTA,
+  TABLE_METRIC_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_SCORE_EVENTS_CURRENT,
   TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
@@ -808,6 +815,7 @@ LIMIT 1`,
         'feedback',
         'trace-query-context-ids',
         'trace-aggregate',
+        'span-query',
       ]);
     });
 
@@ -832,6 +840,7 @@ LIMIT 1`,
           'feedback',
           'trace-query-context-ids',
           'trace-aggregate',
+          'span-query',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -3840,6 +3849,111 @@ LIMIT 1`,
       expect(result.spans).toHaveLength(1);
       expect(result.spans[0]!.traceId).toBe('dedup-root-trace');
     });
+
+    describe('unmerged versions in different endedAt partitions', () => {
+      // Tables partition by toDate(endedAt), so versions of one span that end on
+      // different days never merge. Each read must return a version that matches
+      // its filter, with payloads from that same version.
+      const base = {
+        traceId: 'split-version-trace',
+        spanId: 'split-version-root',
+        parentSpanId: null,
+        name: 'root-span',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        entityId: 'a-split',
+        entityName: 'splitAgent',
+        userId: null,
+        organizationId: null,
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: 'test',
+        source: null,
+        serviceName: null,
+        scope: null,
+        attributes: null,
+        tags: null,
+        links: null,
+        output: null,
+        startedAt: new Date('2026-09-30T23:58:00Z'),
+      } as const;
+      const ok = {
+        ...base,
+        metadata: { version: 'ok' },
+        input: { version: 'ok' },
+        error: null,
+        endedAt: new Date('2026-09-30T23:59:00Z'),
+      };
+      const failed = {
+        ...base,
+        metadata: { version: 'failed' },
+        input: { version: 'failed' },
+        error: { message: 'boom' },
+        endedAt: new Date('2026-10-01T00:01:00Z'),
+      };
+
+      beforeEach(async () => {
+        await storage.createSpan({ span: ok });
+        await storage.createSpan({ span: failed });
+      });
+
+      it('listTraces returns the version that matches the status filter', async () => {
+        const success = await storage.listTraces({
+          filters: { status: TraceStatus.SUCCESS },
+          orderBy: { field: 'endedAt', direction: 'DESC' },
+        });
+        expect(success.spans).toHaveLength(1);
+        expect(success.spans[0]!.error ?? null).toBeNull();
+        expect(success.spans[0]!.metadata).toEqual({ version: 'ok' });
+
+        const errored = await storage.listTraces({
+          filters: { status: TraceStatus.ERROR },
+          orderBy: { field: 'endedAt', direction: 'ASC' },
+        });
+        expect(errored.spans).toHaveLength(1);
+        expect(errored.spans[0]!.error).toMatchObject({ message: 'boom' });
+        expect(errored.spans[0]!.metadata).toEqual({ version: 'failed' });
+      });
+
+      it('listBranches returns the version that matches the status filter', async () => {
+        const success = await storage.listBranches({
+          filters: { status: TraceStatus.SUCCESS },
+          orderBy: { field: 'endedAt', direction: 'DESC' },
+        });
+        expect(success.branches).toHaveLength(1);
+        expect(success.branches[0]!.error ?? null).toBeNull();
+        expect(success.branches[0]!.metadata).toEqual({ version: 'ok' });
+
+        const errored = await storage.listBranches({
+          filters: { status: TraceStatus.ERROR },
+          orderBy: { field: 'endedAt', direction: 'ASC' },
+        });
+        expect(errored.branches).toHaveLength(1);
+        expect(errored.branches[0]!.error).toMatchObject({ message: 'boom' });
+        expect(errored.branches[0]!.metadata).toEqual({ version: 'failed' });
+      });
+
+      it('queryTraces page rows carry payloads from the version they describe', async () => {
+        const response = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-09-30T00:00:00Z', to: '2026-10-01T00:00:00Z' },
+              pagination: {},
+            }),
+          ),
+        );
+        if (!('traces' in response)) throw new Error('Expected trace results');
+        expect(response.traces).toHaveLength(1);
+        const trace = response.traces[0]!;
+        const version = trace.status === 'error' ? 'failed' : 'ok';
+        expect(trace.metadata).toEqual({ version });
+        expect(trace.inputPreview).toContain(version);
+      });
+    });
   });
 
   // ==========================================================================
@@ -6803,5 +6917,102 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
       );
       expect(aggregate.rows).toEqual(expected === 1 ? [{ measures: { count: 1 } }] : []);
     }
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces token and cost measures', () => {
+  const connection = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+  let storage: ObservabilityStorageClickhouseVNext;
+  let client: ReturnType<typeof createClient>;
+
+  async function physicalMetricRows(metricId: string): Promise<number> {
+    const result = await client.query({
+      query: `SELECT count() AS rows FROM ${TABLE_METRIC_EVENTS} WHERE metricId = {metricId:String}`,
+      query_params: { metricId },
+      format: 'JSONEachRow',
+    });
+    const [row] = await result.json<{ rows: number | string }>();
+    return Number(row?.rows);
+  }
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+    client = createClient(connection);
+    // Every assertion below runs without background merges, so duplicate metric rows stay physically present
+    // and only the query-time `LIMIT 1 BY metricId` dedupe can collapse them.
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_METRIC_EVENTS}` });
+  });
+
+  afterAll(async () => {
+    try {
+      await storage.dangerouslyClearAll();
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_METRIC_EVENTS}` });
+      await client.close();
+    }
+  });
+
+  describe('fixtures', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it('keeps the retried metric rows physically duplicated', async () => {
+      expect(await physicalMetricRows('sup-1-in')).toBe(2);
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it('counts the same traces as queryTraces with token measures requested', async () => {
+      const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange, measures: ['count', 'tokens.total.sum'] })),
+      );
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 1 } })),
+      );
+      const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+      expect(total).toBe(11);
+      expect(aggregate.rows[0]?.measures.count).toBe(total);
+    });
+  });
+
+  describe('edge cases', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      '%s',
+      async (_name, testCase) => {
+        // The copies differ in timestamp, so their sort keys differ and no merge would ever collapse them.
+        expect(await physicalMetricRows('edge-dup')).toBe(2);
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
   });
 });

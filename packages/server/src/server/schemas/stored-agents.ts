@@ -79,7 +79,7 @@ const scorerConfigSchema = z.object({
  */
 const agentInstructionBlockSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), content: z.string() }),
-  z.object({ type: z.literal('prompt_block_ref'), id: z.string() }),
+  z.object({ type: z.literal('prompt_block_ref'), id: z.string(), rules: ruleGroupSchema.optional() }),
   z.object({ type: z.literal('prompt_block'), content: z.string(), rules: ruleGroupSchema.optional() }),
 ]);
 

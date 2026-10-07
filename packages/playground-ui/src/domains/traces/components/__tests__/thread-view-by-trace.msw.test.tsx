@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import '@/test/inert-resize-observer';
 import type { ListScoresResponse } from '@mastra/client-js';
-import '@/test/jsdom-polyfills';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -924,7 +924,7 @@ describe('ThreadViewByTrace', () => {
       }
     });
 
-    it('opens at the latest turn and stays there while rows grow, until the reader scrolls up', async () => {
+    it('opens at the latest turn and does not move when a row grows', async () => {
       installPagedHandlers();
       const { grow } = stubScrollLayout();
       renderView({ withQueryTrace });
@@ -933,10 +933,10 @@ describe('ThreadViewByTrace', () => {
 
       await waitFor(() => expect(viewport.scrollTop).toBe(600));
 
+      // Growth only comes from the reader expanding a row: the view must stay put.
       act(() => grow(1200));
-      expect(viewport.scrollTop).toBe(800);
+      expect(viewport.scrollTop).toBe(600);
 
-      // The reader scrolls up: growth no longer pulls them back down.
       act(() => scrollReaderTo(viewport, 300));
       act(() => grow(1500));
       expect(viewport.scrollTop).toBe(300);

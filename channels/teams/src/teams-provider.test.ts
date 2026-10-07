@@ -54,6 +54,36 @@ function makeTokenResolver(): TeamsTokenResolver & ReturnType<typeof vi.fn> {
   return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? 'graph-token' : 'dev-portal-token'));
 }
 
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(reqOpts.body)` yields "[object Object]" and
+ * parsing throws. Reply callbacks that need the body must therefore be async.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+
+  const chunks: Uint8Array[] = [];
+  const collect = (chunk: unknown) => {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : Buffer.from(chunk as Uint8Array));
+  };
+
+  if (Array.isArray(body)) {
+    for (const chunk of body) collect(chunk);
+  } else if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    for await (const chunk of body as AsyncIterable<unknown>) collect(chunk);
+  } else {
+    return String(body);
+  }
+  // Join the raw bytes before decoding: a multibyte character split across two
+  // chunks would otherwise decode into two replacement characters.
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /** Stub the client-credentials token mint used to validate self-managed bot credentials. */
 function stubCredentialMint(opts: { ok?: boolean; tenant?: string } = {}): () => string | undefined {
   const { ok = true, tenant = 'botframework.com' } = opts;
@@ -63,8 +93,8 @@ function stubCredentialMint(opts: { ok?: boolean; tenant?: string } = {}): () =>
     .intercept({ path: `/${tenant}/oauth2/v2.0/token`, method: 'POST' })
     .reply(
       ok ? 200 : 401,
-      reqOpts => {
-        captured = String(reqOpts.body);
+      async reqOpts => {
+        captured = await readMockBody(reqOpts.body);
         return ok
           ? { token_type: 'Bearer', access_token: 'bf-token', expires_in: 3599 }
           : { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.' };
@@ -86,23 +116,23 @@ function stubProvisioning() {
   mockAgent
     .get(GRAPH_ORIGIN)
     .intercept({ path: '/v1.0/applications', method: 'POST' })
-    .reply(201, reqOpts => {
-      createAppBody = JSON.parse(String(reqOpts.body));
+    .reply(201, async reqOpts => {
+      createAppBody = JSON.parse(await readMockBody(reqOpts.body));
       createAppAuth = (reqOpts.headers as Record<string, string>).authorization;
       return { id: OBJECT_ID, appId: MINTED_APP_ID };
     });
   mockAgent
     .get(GRAPH_ORIGIN)
     .intercept({ path: `/v1.0/applications/${OBJECT_ID}/addPassword`, method: 'POST' })
-    .reply(200, reqOpts => {
-      addPasswordBody = JSON.parse(String(reqOpts.body));
+    .reply(200, async reqOpts => {
+      addPasswordBody = JSON.parse(await readMockBody(reqOpts.body));
       return { secretText: MINTED_SECRET, keyId: 'key-1' };
     });
   mockAgent
     .get(DEV_PORTAL_ORIGIN)
     .intercept({ path: '/api/botframework', method: 'POST' })
-    .reply(200, reqOpts => {
-      botRegistrationBody = JSON.parse(String(reqOpts.body));
+    .reply(200, async reqOpts => {
+      botRegistrationBody = JSON.parse(await readMockBody(reqOpts.body));
       botRegistrationAuth = (reqOpts.headers as Record<string, string>).authorization;
       return {};
     });
@@ -305,6 +335,20 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const storage = new InMemoryChannelsStorage();
     const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
     await expect(provider.connect('agent-1')).rejects.toThrow(/needs a baseUrl/);
+  });
+
+  it('registers the messaging endpoint against MASTRA_SERVER_URL when no baseUrl is set', async () => {
+    vi.stubEnv('MASTRA_SERVER_URL', 'https://my-app.server.example.com/');
+    const storage = new InMemoryChannelsStorage();
+    const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
+    const stubs = stubProvisioning();
+
+    await provider.connect('agent-1');
+
+    const record = await storage.getInstallationByAgent(PLATFORM, 'agent-1');
+    expect(String(stubs.botRegistrationBody()?.messagingEndpoint)).toBe(
+      `https://my-app.server.example.com/${PLATFORM}/events/${record?.webhookId}`,
+    );
   });
 
   it('rolls back the Entra application when the Dev Portal registration fails', async () => {

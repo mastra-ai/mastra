@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MODEL_ROUTE_MAX_ENTRIES, MODEL_ROUTE_MAX_FIELD_LENGTH } from './constants.js';
 import { stateSchema } from './schema.js';
 
 describe('stateSchema', () => {
@@ -41,6 +42,34 @@ describe('stateSchema', () => {
     const parsed = stateSchema.parse({ modeId: 'build' });
 
     expect(parsed.modeId).toBe('build');
+  });
+
+  it('rejects model routes beyond the execution cap', () => {
+    const entry = { id: 'route', label: 'Route', modelId: 'openai/gpt-5.6-sol' };
+
+    expect(
+      stateSchema.safeParse({ modelRoute: { entries: Array.from({ length: MODEL_ROUTE_MAX_ENTRIES }, () => entry) } })
+        .success,
+    ).toBe(true);
+    expect(
+      stateSchema.safeParse({
+        modelRoute: { entries: Array.from({ length: MODEL_ROUTE_MAX_ENTRIES + 1 }, () => entry) },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects oversized model route fields', () => {
+    const oversized = 'x'.repeat(MODEL_ROUTE_MAX_FIELD_LENGTH + 1);
+
+    for (const field of ['id', 'label', 'modelId', 'accountId', 'memoryModelId'] as const) {
+      expect(
+        stateSchema.safeParse({
+          modelRoute: {
+            entries: [{ id: 'route', label: 'Route', modelId: 'openai/gpt-5.6-sol', [field]: oversized }],
+          },
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it('normalizes the HTTP null sentinel to an absent thinking override', () => {

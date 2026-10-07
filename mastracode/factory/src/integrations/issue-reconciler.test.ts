@@ -408,7 +408,7 @@ describe('issue reconcilers', () => {
     await expect(setup.reconciler([repository])).resolves.toMatchObject({ created: 1, failed: 0 });
     const decisions = await setup.workItems.listDeferredDecisions('org-1', setup.project.id);
     expect(decisions.map(entry => entry.decision)).toMatchObject([{ type: 'upsertLinkedWorkItem' }]);
-    expect(JSON.stringify(decisions)).toContain('github-issue:39');
+    expect(JSON.stringify(decisions)).toContain('github:10:issue:39');
 
     // A repeat sweep dedupes at the ingress by the stable delivery id.
     await setup.reconciler([repository]);

@@ -226,8 +226,8 @@ export interface ObservationConfig {
   /**
    * Token threshold above which buffered activation is allowed to overshoot the
    * retention target. Crossing `blockAfter` does not trigger a blocking observation;
-   * a synchronous observation runs when `messageTokens` is reached and buffered
-   * activation did not happen.
+   * a synchronous observation runs when `messageTokens` is reached and activating
+   * buffered chunks does not bring pending tokens back under it.
    *
    * Accepts either:
    * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
@@ -593,6 +593,9 @@ export interface DataOmObservationFailedPart {
 
     /** Machine-readable failure classification when the observer/provider call failed. */
     failureKind?: 'observer-model' | 'reflector-model';
+
+    /** Set when this attempt failed but the runner is retrying the same cycle, so the failure is not final. */
+    retrying?: true;
 
     /** The OM record ID */
     recordId: string;

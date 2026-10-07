@@ -72,7 +72,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     // If bridge and not internal span, use bridge to init span
     const bridge = observabilityInstance.getBridge();
-    if (bridge && !this.isInternal) {
+    if (bridge && !this.isInternal && !this.isExcluded) {
       const bridgeIds = bridge.createSpan(options);
       if (bridgeIds) {
         this.id = bridgeIds.spanId;

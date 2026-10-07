@@ -56,6 +56,15 @@ type InputShared_Auxiliary_204 =
       value: string;
     }
   | {
+      op: 'matches' | 'notMatches';
+      left: {
+        path: string;
+      };
+      right: {
+        literal: string;
+      };
+    }
+  | {
       op: 'and' | 'or';
       args: InputShared_Auxiliary_204[];
     }
@@ -66,32 +75,32 @@ type InputShared_Auxiliary_204 =
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_227;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_227;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_227;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_227;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_227;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_227;
           };
     };
 
-type InputShared_Auxiliary_223 =
+type InputShared_Auxiliary_227 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -130,22 +139,31 @@ type InputShared_Auxiliary_223 =
       value: string;
     }
   | {
+      op: 'matches' | 'notMatches';
+      left: {
+        path: string;
+      };
+      right: {
+        literal: string;
+      };
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_223[];
+      args: InputShared_Auxiliary_227[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_223;
+      arg: InputShared_Auxiliary_227;
     };
 
-type InputShared_Auxiliary_254 =
+type InputShared_Auxiliary_261 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_254[];
+      args: InputShared_Auxiliary_261[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_254;
+      arg: InputShared_Auxiliary_261;
     }
   | {
       traces:
@@ -157,7 +175,7 @@ type InputShared_Auxiliary_254 =
           };
     };
 
-type InputShared_Auxiliary_675 =
+type InputShared_Auxiliary_689 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -202,27 +220,27 @@ type InputShared_Auxiliary_675 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_675[];
+      args: InputShared_Auxiliary_689[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_675;
+      arg: InputShared_Auxiliary_689;
     };
 
-type InputShared_Auxiliary_749 = {
+type InputShared_Auxiliary_763 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_749[] | undefined;
+  children?: InputShared_Auxiliary_763[] | undefined;
 };
 
-type Shared_Auxiliary_758 = {
+type Shared_Auxiliary_764 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_758[] | undefined;
+  children?: Shared_Auxiliary_764[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -266,6 +284,7 @@ type InputShared_Type_2 = {
   requestContextKeys?: string[] | undefined;
   traceId?: string | undefined;
   parentSpanId?: string | undefined;
+  nestUnderParent?: boolean | undefined;
   tags?: string[] | undefined;
   hideInput?: boolean | undefined;
   hideOutput?: boolean | undefined;
@@ -948,6 +967,12 @@ type InputShared_Type_34 =
   | {
       type: 'prompt_block_ref';
       id: string;
+      rules?:
+        | {
+            operator: 'AND' | 'OR';
+            conditions: InputShared_Type_33[];
+          }
+        | undefined;
     }
   | {
       type: 'prompt_block';
@@ -1774,7 +1799,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_675[];
+  predicates: InputShared_Auxiliary_689[];
 };
 
 type InputShared_Type_89 = {
@@ -1788,7 +1813,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_675;
+  predicate: InputShared_Auxiliary_689;
 };
 
 type InputShared_Type_90 =
@@ -2415,6 +2440,7 @@ type Shared_Type_11 =
   | {
       type: 'prompt_block_ref';
       id: string;
+      rules?: Shared_Type_10 | undefined;
     }
   | {
       type: 'prompt_block';
@@ -3670,6 +3696,8 @@ type Shared_Type_67 = {
   traceQueryTenantScope: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
+  /** Span queries (POST /observability/spans/query) */
+  spanQuery: boolean;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -4179,7 +4207,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_758[] | undefined;
+  files?: Shared_Auxiliary_764[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4475,7 +4503,7 @@ type Shared_Type_97 = {
   prompt: string;
   cron: string;
   timezone?: string | undefined;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
@@ -4527,7 +4555,7 @@ type Shared_Type_99 = {
   agentId?: undefined | undefined;
   cron: string;
   timezone?: string | undefined;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
@@ -4547,6 +4575,21 @@ type Shared_Type_99 = {
     | undefined;
   createdAt: number;
   updatedAt: number;
+};
+
+type Shared_Type_100 = {
+  /** Installation identifier */
+  id: string;
+  /** Platform identifier */
+  platform: string;
+  /** Connected agent identifier */
+  agentId: string;
+  /** Installation status */
+  status: 'active' | 'pending';
+  /** Platform-specific display name */
+  displayName?: string | undefined;
+  /** Installation timestamp */
+  installedAt?: Date | undefined;
 };
 
 // ============================================================================
@@ -5347,6 +5390,14 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5488,6 +5539,14 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
   reason?: string | undefined;
 };
 
@@ -9026,6 +9085,7 @@ export type PostMemoryThreadsThreadIdWorkingMemory_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  mode?: ('replace' | 'merge') | undefined;
 };
 
 export type PostMemoryThreadsThreadIdWorkingMemory_Response = PostAuthRefresh_Response;
@@ -10353,7 +10413,7 @@ export type PostObservabilityTracesAggregate_Body = {
       )
     | `countDistinct.${string}`
   )[];
-  having?: InputShared_Auxiliary_223 | undefined;
+  having?: InputShared_Auxiliary_227 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10437,7 +10497,7 @@ export type PostObservabilityThreadsQuery_Body = {
     };
     where?: InputShared_Auxiliary_204 | undefined;
   };
-  where?: InputShared_Auxiliary_254 | undefined;
+  where?: InputShared_Auxiliary_261 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10473,6 +10533,84 @@ export interface PostObservabilityThreadsQuery_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /observability/spans/query
+// ============================================================================
+export type PostObservabilitySpansQuery_Body = {
+  timeRange: {
+    from: string;
+    to: string;
+  };
+  where?: InputShared_Auxiliary_227 | undefined;
+  orderBy?: {
+    field: 'startedAt' | 'endedAt';
+    direction: 'asc' | 'desc';
+  }[];
+  page?: {
+    limit?: number;
+    after?: string | undefined;
+  };
+};
+
+export type PostObservabilitySpansQuery_Response = {
+  spans: {
+    organizationId: string | null;
+    resourceId: string | null;
+    traceId: string;
+    spanId: string;
+    parentSpanId: string | null;
+    name: string;
+    spanType: string;
+    status: 'success' | 'error';
+    startedAt: string;
+    endedAt: string;
+    durationMs: number;
+    entityType: string | null;
+    entityId: string | null;
+    entityName: string | null;
+    model: string | null;
+    provider: string | null;
+    inputPreview: string | null;
+    inputTruncated: boolean;
+    outputPreview: string | null;
+    outputTruncated: boolean;
+    cost:
+      | {
+          state: 'available';
+          amount: number;
+          currency: string;
+        }
+      | {
+          state: 'missing';
+        }
+      | {
+          state: 'unavailable';
+        };
+  }[];
+  page: {
+    next: string | null;
+  };
+};
+
+export type PostObservabilitySpansQuery_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilitySpansQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilitySpansQuery_Body
+        ? { body?: PostObservabilitySpansQuery_Body }
+        : { body: PostObservabilitySpansQuery_Body })
+>;
+
+export interface PostObservabilitySpansQuery_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilitySpansQuery_Body;
+  request: PostObservabilitySpansQuery_Request;
+  response: PostObservabilitySpansQuery_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /observability/traces/query/fields
 // ============================================================================
 export type PostObservabilityTracesQueryFields_Body = {
@@ -10502,6 +10640,8 @@ export type PostObservabilityTracesQueryFields_Response = {
       | 'notExists'
       | 'includes'
       | 'notIncludes'
+      | 'matches'
+      | 'notMatches'
     )[];
     valueSuggestions: boolean;
   }[];
@@ -14336,6 +14476,12 @@ export type PostMcpServerIdResourcesRead_Response = {
     uri: string;
     text?: string | undefined;
     blob?: string | undefined;
+    mimeType?: string | undefined;
+    _meta?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
   }[];
 };
 
@@ -18297,7 +18443,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_749[] | undefined;
+  files?: InputShared_Auxiliary_763[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18355,7 +18501,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_749[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_763[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19133,6 +19279,7 @@ export type GetSystemPackages_Response = {
   isDev: boolean;
   cmsEnabled: boolean;
   liveKitConnectionRouteEnabled: boolean;
+  liveKitRecordingRouteEnabled?: boolean | undefined;
   editorSource?: ('code' | 'db') | undefined;
   editorSourceCapabilities?:
     | {
@@ -21768,7 +21915,7 @@ export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
 export type GetSchedules_QueryParams = {
   agentId?: string | undefined;
   workflowId?: string | undefined;
-  status?: ('active' | 'paused') | undefined;
+  status?: ('active' | 'paused' | 'completed') | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   name?: string | undefined;
@@ -22156,20 +22303,7 @@ export type GetChannelsPlatformInstallations_PathParams = {
   platform: string;
 };
 
-export type GetChannelsPlatformInstallations_Response = {
-  /** Installation identifier */
-  id: string;
-  /** Platform identifier */
-  platform: string;
-  /** Connected agent identifier */
-  agentId: string;
-  /** Installation status */
-  status: 'active' | 'pending';
-  /** Platform-specific display name */
-  displayName?: string | undefined;
-  /** Installation timestamp */
-  installedAt?: Date | undefined;
-}[];
+export type GetChannelsPlatformInstallations_Response = Shared_Type_100[];
 
 export type GetChannelsPlatformInstallations_Request = Simplify<
   (GetChannelsPlatformInstallations_PathParams extends never
@@ -22248,14 +22382,38 @@ export interface PostChannelsPlatformConnect_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /channels/:platform/:agentId/disconnect
+// Route: POST /channels/:platform/:agentId/reconcile
 // ============================================================================
-export type PostChannelsPlatformAgentIdDisconnect_PathParams = {
+export type PostChannelsPlatformAgentIdReconcile_PathParams = {
   /** Channel platform identifier (e.g., "slack") */
   platform: string;
   /** Agent identifier */
   agentId: string;
 };
+
+export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_100 | null;
+
+export type PostChannelsPlatformAgentIdReconcile_Request = Simplify<
+  (PostChannelsPlatformAgentIdReconcile_PathParams extends never
+    ? {}
+    : { params: PostChannelsPlatformAgentIdReconcile_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostChannelsPlatformAgentIdReconcile_RouteContract {
+  pathParams: PostChannelsPlatformAgentIdReconcile_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostChannelsPlatformAgentIdReconcile_Request;
+  response: PostChannelsPlatformAgentIdReconcile_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /channels/:platform/:agentId/disconnect
+// ============================================================================
+export type PostChannelsPlatformAgentIdDisconnect_PathParams = PostChannelsPlatformAgentIdReconcile_PathParams;
 
 export type PostChannelsPlatformAgentIdDisconnect_Response = PostAuthRefresh_Response;
 
@@ -23167,8 +23325,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
-  scope?: ('global' | 'thread') | undefined;
-  modeId?: string | undefined;
+  thinkingLevel?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Response =
@@ -23918,6 +24075,7 @@ export interface RouteTypes {
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
   'POST /observability/traces/aggregate': PostObservabilityTracesAggregate_RouteContract;
   'POST /observability/threads/query': PostObservabilityThreadsQuery_RouteContract;
+  'POST /observability/spans/query': PostObservabilitySpansQuery_RouteContract;
   'POST /observability/traces/query/fields': PostObservabilityTracesQueryFields_RouteContract;
   'POST /observability/traces/query/values': PostObservabilityTracesQueryValues_RouteContract;
   'GET /observability/metrics': GetObservabilityMetrics_RouteContract;
@@ -24160,6 +24318,7 @@ export interface RouteTypes {
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
+  'POST /channels/:platform/:agentId/reconcile': PostChannelsPlatformAgentIdReconcile_RouteContract;
   'POST /channels/:platform/:agentId/disconnect': PostChannelsPlatformAgentIdDisconnect_RouteContract;
   'GET /agent-controller': GetAgentController_RouteContract;
   'GET /agent-controller/:controllerId/modes': GetAgentControllerControllerIdModes_RouteContract;
@@ -24548,6 +24707,9 @@ export interface Client {
   '/channels/:platform/:agentId/disconnect': {
     POST: PostChannelsPlatformAgentIdDisconnect_RouteContract;
   };
+  '/channels/:platform/:agentId/reconcile': {
+    POST: PostChannelsPlatformAgentIdReconcile_RouteContract;
+  };
   '/channels/:platform/connect': {
     POST: PostChannelsPlatformConnect_RouteContract;
   };
@@ -24854,6 +25016,9 @@ export interface Client {
   };
   '/observability/scores/timeseries': {
     POST: PostObservabilityScoresTimeseries_RouteContract;
+  };
+  '/observability/spans/query': {
+    POST: PostObservabilitySpansQuery_RouteContract;
   };
   '/observability/threads/query': {
     POST: PostObservabilityThreadsQuery_RouteContract;

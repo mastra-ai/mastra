@@ -2215,6 +2215,51 @@ describe('Memory Handlers', () => {
           }),
         );
       });
+
+      it('should return 403 when creating a thread with an id owned by a different resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({
+          threadId: 'support',
+          resourceId: 'user-b',
+          title: 'User B thread',
+          metadata: { plan: 'pro' },
+        });
+        const spy = vi.spyOn(mockMemory, 'createThread');
+
+        await expect(
+          CREATE_THREAD_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'support',
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+
+        expect(spy).not.toHaveBeenCalled();
+        const thread = await mockMemory.getThreadById({ threadId: 'support' });
+        expect(thread).toMatchObject({ resourceId: 'user-b', title: 'User B thread', metadata: { plan: 'pro' } });
+      });
+
+      it('should allow re-creating a thread with an id owned by the same resource', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'support', resourceId: 'user-a', title: 'Old title' });
+
+        const result = await CREATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          threadId: 'support',
+          title: 'New title',
+        });
+
+        expect(result).toMatchObject({ id: 'support', resourceId: 'user-a', title: 'New title' });
+      });
     });
 
     describe('DELETE_THREAD_ROUTE - ownership validation', () => {

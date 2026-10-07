@@ -1,11 +1,11 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
 import { useOverlays } from '../../../lib/overlays';
 import { rememberGlobalSearchTrigger } from '../services/searchTriggerFocus';
 
 export function useGlobalSearchControls() {
   const overlays = useOverlays();
-  const { setOpenMobile } = useMainSidebar();
+  const { setOpenMobile } = useSidebar();
 
   const openSearch = (trigger?: HTMLElement) => {
     // Falling back to activeElement inside an open overlay would remember a node that unmounts with it

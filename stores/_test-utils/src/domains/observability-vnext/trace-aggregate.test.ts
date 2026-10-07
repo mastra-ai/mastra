@@ -10,6 +10,8 @@ import {
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   traceAggregatePercentile,
   traceAggregateResponseMismatch,
@@ -360,6 +362,15 @@ describe('trace-aggregate token and cost conformance cases', () => {
     });
     expect(aggregate.rows).toEqual([{ measures: { count: traces.traces.length } }]);
     expect(traces.traces.length).toBe(11);
+  });
+
+  it.each(TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES)('$name', testCase => {
+    const actual = evaluateTraceAggregateRequest(
+      TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
+      testCase.request,
+      testCase.scope,
+    );
+    expect(actual).toEqual(testCase.expected);
   });
 
   it('counts duplicate metricId rows once', () => {

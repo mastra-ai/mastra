@@ -21,6 +21,83 @@ export function SaveButton() {
 }
 ```
 
+### Tool approvals
+
+`ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
+with its decision status, the full tool arguments (file previews included), and the Approve and
+Decline actions.
+
+```tsx
+import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
+
+<ToolApproval
+  toolName="write_file"
+  args={{ path: 'src/agent.ts', content: 'export const name = "Assistant";' }}
+  disabled={isSubmitting}
+  status={decision}
+  onApprove={approve}
+  onDecline={decline}
+/>;
+```
+
+A tool that already renders its own activity composes the parts instead: `ToolApprovalStatus` beside
+the tool name, `ToolApprovalActions` in the details while the request is pending.
+
+```tsx
+import { ToolApprovalActions, ToolApprovalStatus } from '@mastra/playground-ui/components/ai/tool-approval';
+
+<>
+  <ActivityHeadline icon={icon} label={label} badges={<ToolApprovalStatus status={decision} />} />
+  {!decision && <ToolApprovalActions toolName="write_file" onApprove={approve} onDecline={decline} />}
+</>;
+```
+
+The consumer owns submission, error feedback, and the optional `approved` or `declined` status.
+A decision removes the actions; clearing it restores them for a retry. `disabled` blocks both
+decisions without implying server confirmation. `autoFocus` focuses Approve on mount. Custom
+`children` replace the default argument preview. Examples live under **AI / Tool Approval** in Storybook.
+
+### Agent questions
+
+Use `AskUser` to render an agent's `ask_user` payload with shared answer handling:
+
+```tsx
+import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
+
+<AskUser
+  payload={{ question: 'Choose a deployment target', options: [{ label: 'Staging' }] }}
+  onSubmit={handleAnswerSubmit}
+/>;
+```
+
+For custom layouts, compose the controls inside `AskUser.Root`. The root owns selection, custom text, validation, and submission. `AskUser.Question` names the group and its inputs for assistive technology.
+
+```tsx
+import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
+
+<AskUser.Root key={prompt.id} selectionMode="single_select" disabled={isSubmitting} onSubmit={handleAnswerSubmit}>
+  <AskUser.Body>
+    <AskUser.Question>Choose a deployment target</AskUser.Question>
+    <AskUser.Options>
+      <AskUser.Option value="Staging" description="Validate the release before production.">
+        Staging
+      </AskUser.Option>
+      <AskUser.Option value="Production">Production</AskUser.Option>
+      <AskUser.CustomAnswer />
+    </AskUser.Options>
+    <AskUser.Submit when="custom-answer" className="mt-2" />
+  </AskUser.Body>
+</AskUser.Root>;
+```
+
+Single-select options submit their `value` immediately. `when="custom-answer"` shows the submit control only while **Other…** is selected. For multi-select prompts, use `selectionMode="multi_select"` and omit `when` to keep the submit control visible. You can position the submit control anywhere inside the root.
+
+Selecting **Other…** focuses an inline text field. Empty or whitespace-only text unselects it on blur. Non-empty drafts stay selected, and unchecking **Other…** excludes its text from submission. Answers remain `string` for single-select and free-text prompts, and `string[]` for multi-select prompts.
+
+For a free-text prompt, replace `AskUser.Options` with `AskUser.TextAnswer` and omit `when` from the submit control. Use `AskUser.Pending` for a submitting message or `AskUser.Output` with a `result` to display an answer. Reset the draft by changing the root's `key` when switching prompts. The payload-based card handles question changes automatically.
+
+Interactive examples live under **AI / Ask User** in Storybook, including composed layouts with the submit control outside the options.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
@@ -94,17 +171,36 @@ Every badge hue (`green`, `red`, `amber`, `blue`, `purple`, `orange`, `cyan`, `p
 
 #### Opacity and literal colors
 
-A resting color never depends on what sits behind it. Surfaces, text, borders, notices, status, product, and chart colors are solid ramp steps in both themes, and span colors are solid values in `data-viz.css` at one lightness per theme, whatever layer they sit on.
+Opaque surfaces, text, notices, product avatars, and chart colors use solid ramp steps in both themes. Span colors use solid values in `data-viz.css`. The theme also defines translucent fills and borders whose appearance intentionally depends on the surface beneath them.
 
 Opacity is allowed only through design-system tokens, for layers whose job is to show what is underneath:
 
 - State layers over an existing surface: `fill`, `fill-subtle`, `fill-hover`, `fill-active`, and `fill-strong`.
 - Scrims and overlays: `scrim`.
 - Badge fills: `badge-{hue}-strong` and `badge-{hue}-subtle`, so a badge tints with the card or row it sits on.
-- Neutral hairlines: `border`, `border-strong`, `surface-rim`, and `gray-alpha-*`.
+- Neutral hairlines: the `border` ladder, `surface-rim`, field/inset rims, and `gray-alpha-*`.
 - Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
 
 Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions. `src/color-rules.test.ts` enforces this across playground-ui, Studio, and Factory.
+
+#### Border roles
+
+Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`; the color guard rejects these across the DS, Studio, Factory, and stories. Existing roles cover the following uses without adding a new token value:
+
+| Role                | Token / utility                                              | Use                                                                     |
+| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Surface edge        | `--surface-rim` / `border-surface-rim`                       | App frame, panel and card edges; frame headers that meet them           |
+| Content divider     | `--border` / `border-border`                                 | Internal separators and filled control edges                            |
+| Outlined control    | `--border-strong` / `border-border-strong`                   | Transparent controls at rest                                            |
+| Hover / focus       | `--border-hover`, `--border-focus`                           | Interactive control states                                              |
+| Field edge          | `--field-rim`, `--field-rim-on-surface`, `--field-rim-focus` | Field recipes resolve the edge for their parent surface and focus state |
+| Badge / avatar trim | `--inset-highlight`, `--inset-rim`                           | `shadow-inset` combines a top highlight and rim                         |
+
+`border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box; `shadow-raised` and `shadow-overlay` combine it with a lip and drop shadows. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
+
+`Header` is a layout primitive: every instance uses `border-surface-rim`, matching the surrounding frame or panel. Call sites do not choose a tone. `border={false}` hides the edge. Internal content separators use `border-border` directly or a separator component.
+
+Storybook's Foundations/Surface renders border tokens as isolated 1px edges on named backgrounds, with composed surfaces labeled separately. Foundations/Elevation shows the full recipes and each inset edge separately. Switch themes to inspect the actual token values in context; no extra opacity is applied to these previews.
 
 To migrate removed tokens:
 
@@ -140,6 +236,29 @@ Foundations/Color has one story each for monochrome and chromatic ramps, semanti
 ### Typography
 
 Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, line height, weight, and tracking together. Render text with `Txt`, or use the matching `text-<role>` utility inside a component's own markup.
+
+Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
+
+`hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
+
+`Txt` defaults to the `body` role. With `as="strong"` or `as="b"`, omitting `variant` keeps the text bold; an explicit variant uses that role's weight.
+
+`Txt` renders text elements: headings, paragraphs, inline text, labels, and timestamps. Use `Code` for preformatted code. `Txt` cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
+
+```tsx
+<div className="flex items-center gap-2">
+  <Icon />
+  <Txt as="span" variant="caption">Supporting copy</Txt>
+</div>
+<Link to="/runs">
+  <Txt as="span" variant="caption">View runs</Txt>
+</Link>
+<Button onClick={run}>Run</Button>
+<Input className="font-mono" aria-label="Setup command" />
+<Tree.Label>src/index.ts</Tree.Label>
+```
+
+`Input` and `Textarea` derive typography from their size. `DataPanel.SectionHeading` owns its small-caps style and renders its icon and children directly; callers compose any custom label or action themselves. `PageHeader.Meta` and `PageHeader.Eyebrow` preserve their inherited text styles even for raw children. `CodeEditor` alone exposes a narrow `font="body" | "mono"` choice because its text lives inside CodeMirror: prose fields can use the body face while code defaults to mono.
 
 ```tsx
 import { Txt } from '@mastra/playground-ui/components/Txt';

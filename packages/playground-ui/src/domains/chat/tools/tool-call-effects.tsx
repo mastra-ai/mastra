@@ -1,3 +1,4 @@
+import type { BrowserSessionProbe } from '@mastra/react/hooks/agents';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
@@ -7,7 +8,6 @@ import {
   isBrowserToolError,
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
-import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
 import type { ToolPartFields } from '@/domains/chat/messages/renderers/tool-part';
 import { isRecord } from '@/domains/chat/messages/signal-data';
 import { isSettledState } from '@/domains/chat/tools/tool-card-kind';

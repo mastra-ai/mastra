@@ -6,13 +6,14 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useDatasetExperiment, useDatasetExperimentResults, useExperiments } from '@mastra/react/hooks/datasets';
+import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
 import { ExperimentItemPanel } from '@/domains/experiments/components/experiment-item-panel';
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
@@ -21,7 +22,6 @@ import { ExperimentSideRail } from '@/domains/experiments/components/experiment-
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
-import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
 import { navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -81,7 +81,11 @@ function ExperimentPage() {
     data: experiment,
     isLoading: experimentLoading,
     error: experimentError,
-  } = useDatasetExperiment(datasetId, experimentId ?? '');
+  } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
+  });
 
   const {
     data: results,
@@ -94,9 +98,16 @@ function ExperimentPage() {
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
     orderBy,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });
 
-  const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
+  const { supportsMetrics } = useObservabilityStorageCapabilities();
+  const experimentMetrics = useExperimentMetrics({
+    experimentId,
+    experimentStatus: experiment?.status,
+    supportsMetrics,
+    queryOptions: { enabled: Boolean(experimentId) && supportsMetrics },
+  });
 
   const selection = useExperimentResultsSelection({
     datasetId,

@@ -179,11 +179,11 @@ export function WorkspaceFileBrowser({
           <ArrowLeft />
         </Button>
         <NotepadText className="text-muted-foreground" size={14} />
-        <Txt as="h2" variant="column" className="text-foreground">
+        <Txt tone="ink" as="h2" variant="column">
           Files
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="meta" className="text-muted-foreground ml-auto">
+          <Txt tone="muted" variant="meta" className="ml-auto">
             {persistedFiles.length} {persistedFiles.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}
@@ -212,7 +212,7 @@ export function WorkspaceFileBrowser({
       ) : null}
       {!isLoading && !error && nodes.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt className="text-muted-foreground" variant="caption">
+          <Txt tone="muted" variant="caption">
             No files
           </Txt>
         </div>

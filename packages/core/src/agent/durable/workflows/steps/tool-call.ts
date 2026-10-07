@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
@@ -195,6 +196,20 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
+}
+
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
@@ -243,7 +258,11 @@ async function processChunkThroughOutputProcessors(
             if (data.type.startsWith('data-') && !data.transient) {
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
-            await emitChunkEvent(pubsub, runId, data as ChunkType);
+            try {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            } catch (error) {
+              throw new DurableChunkPublishError(error);
+            }
           },
         }
       : undefined,
@@ -252,17 +271,19 @@ async function processChunkThroughOutputProcessors(
         // Mark chunks the processors ran on so the stream consumer doesn't run
         // them again. Without a runner (no processors, or none in this process)
         // the chunk goes out unmarked and the consumer processes it.
-        await emitChunkEvent(pubsub, runId, c, !!runner);
+        try {
+          await emitChunkEvent(pubsub, runId, c, !!runner);
+        } catch (error) {
+          throw new DurableChunkPublishError(error);
+        }
       }
     },
     onProcessorError: error => {
-      logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-      // Fail closed: drop the chunk instead of emitting the unprocessed
-      // original — a throwing redaction processor must not leak the raw
-      // value. The regular loop registers no fallback at all (processor
-      // failures propagate and fail the request); this engine keeps the
-      // run alive but suppresses the chunk.
-      return null;
+      // Publication failures keep the callers' non-fatal emission path.
+      if (error instanceof DurableChunkPublishError) {
+        throw error.cause;
+      }
+      throw new DurableOutputProcessorError(error);
     },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
@@ -813,15 +834,6 @@ export function createDurableToolCallStep() {
       const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
 
       if (approvalGated && !approvalDecision) {
-        const resumeSchema = JSON.stringify({
-          type: 'object',
-          properties: {
-            approved: { type: 'boolean' },
-            reason: { type: 'string' },
-          },
-          required: ['approved'],
-        });
-
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
@@ -834,7 +846,7 @@ export function createDurableToolCallStep() {
               type: 'tool-call-approval' as const,
               runId,
               from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, resumeSchema, updatedAt: Date.now() },
+              payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
             },
             {
               policy: registryEntry?.toolPayloadTransform,
@@ -852,12 +864,12 @@ export function createDurableToolCallStep() {
             toolName,
             args,
             type: 'approval',
-            resumeSchema,
+            resumeSchema: approvalResumeSchema,
           });
         }
 
         // Add approval metadata to message before persisting
-        addToolMetadata({ type: 'approval', resumeSchema });
+        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
 
         // Flush messages before suspension
         await doFlush();
@@ -925,6 +937,9 @@ export function createDurableToolCallStep() {
                 collectProcessorDataPart,
               );
             } catch (emitError) {
+              if (emitError instanceof DurableOutputProcessorError) {
+                throw emitError;
+              }
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
           }
@@ -1128,15 +1143,6 @@ export function createDurableToolCallStep() {
             const approvalArgs = innerApproval?.args !== undefined ? innerApproval.args : args;
 
             // Tool is requesting approval during execution
-            const approvalResumeSchema = JSON.stringify({
-              type: 'object',
-              properties: {
-                approved: { type: 'boolean' },
-                reason: { type: 'string' },
-              },
-              required: ['approved'],
-            });
-
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
@@ -1395,6 +1401,7 @@ export function createDurableToolCallStep() {
                     args: cleanedArgs,
                     result: chunk.payload.result,
                     providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
+                    providerExecuted,
                   },
                 });
               } else if (chunk.type === 'background-task-failed') {
@@ -1795,7 +1802,7 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result },
+                payload: { toolCallId, toolName, args, result, providerExecuted },
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
@@ -1822,6 +1829,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
         }
@@ -1843,9 +1853,12 @@ export function createDurableToolCallStep() {
             mappingError: serializeError(error),
           };
         }
-        // An authorization denial must fail the run instead of being serialized
-        // as a recoverable tool error for the LLM to retry.
-        if (error instanceof Error && error.name === 'FGADeniedError') {
+        // Output processor failures and authorization denials must fail the run
+        // instead of being serialized as recoverable tool errors.
+        if (
+          error instanceof DurableOutputProcessorError ||
+          (error instanceof Error && error.name === 'FGADeniedError')
+        ) {
           throw error;
         }
         const toolError = serializeError(error);
@@ -1885,6 +1898,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
         }

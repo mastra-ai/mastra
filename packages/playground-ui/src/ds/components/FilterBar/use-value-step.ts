@@ -34,9 +34,15 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
     setSelected(enabled ? toStrings(initialValueRef.current) : []);
   }, [enabled]);
 
-  const suggestions = useValueSuggestions({ field, operatorId: operator?.id ?? '', query, enabled });
+  const freeTextOperator = operator?.freeText === true;
+  const suggestions = useValueSuggestions({
+    field: freeTextOperator ? undefined : field,
+    operatorId: operator?.id ?? '',
+    query,
+    enabled,
+  });
   const type = field?.type;
-  const allowFreeText = !field?.strict && type !== 'boolean';
+  const allowFreeText = (!field?.strict || freeTextOperator) && type !== 'boolean';
 
   const toggle = useCallback((value: string) => {
     setSelected(current => (current.includes(value) ? current.filter(v => v !== value) : [...current, value]));
@@ -63,8 +69,13 @@ export function useValueStep({ field, operator, query, enabled, initialValue, on
   }, [selected, commit]);
 
   const canCommitFreeText = useCallback(
-    (text: string) => allowFreeText && text.length > 0 && (type !== 'number' || Number.isFinite(Number(text))),
-    [allowFreeText, type],
+    (text: string) =>
+      allowFreeText &&
+      text.length > 0 &&
+      (type !== 'number' || Number.isFinite(Number(text))) &&
+      // A text-match literal needs a word: letters, marks, or digits.
+      (!freeTextOperator || /[\p{L}\p{M}\p{N}]/u.test(text)),
+    [allowFreeText, freeTextOperator, type],
   );
 
   const commitFreeText = useCallback(() => {

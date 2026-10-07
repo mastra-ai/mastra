@@ -7,8 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useToolkits } from '@mastra/react/hooks/tool-providers';
 import { memo, useMemo, useState } from 'react';
-import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { ToolkitConnectionControl } from './toolkit-connection-control';
 import type { ProviderSection, ToolkitOption } from './use-provider-toolkit-groups';
@@ -50,8 +50,9 @@ const ToolkitFilterRow = memo(
             data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
             data-checked={checked ? 'true' : 'false'}
             className={cn(
-              'flex shrink items-center gap-2 rounded-md px-2 py-1.5 text-caption select-none hover:bg-fill-subtle',
+              'flex shrink items-center gap-2 rounded-md px-2 py-1.5 select-none hover:bg-fill-subtle',
               disabled && 'opacity-60',
+              'text-caption',
             )}
           >
             <Checkbox
@@ -115,7 +116,10 @@ const ProviderToolkitSection = ({
   disabled,
   multipleAllowed,
 }: ProviderToolkitSectionProps) => {
-  const { data, isLoading } = useToolkits(provider.providerId);
+  const { data, isLoading } = useToolkits({
+    providerId: provider.providerId,
+    queryOptions: { enabled: !!provider.providerId },
+  });
 
   const toolkits = useMemo<ToolkitRow[]>(() => {
     const names = new Map<string, string>();
@@ -150,7 +154,7 @@ const ProviderToolkitSection = ({
         variant="meta"
         tone="muted"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="px-2 pt-1 tracking-wide uppercase"
+        className="px-2 pt-1 uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -226,7 +230,7 @@ export const ToolkitFilterPane = ({
         onValueChange={setSearch}
       />
 
-      <div className="flex shrink-0 items-center gap-2 text-meta">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
@@ -234,11 +238,13 @@ export const ToolkitFilterPane = ({
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
           className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
-          Select all
+          <Txt as="span" variant="meta" className="block">
+            Select all
+          </Txt>
         </button>
-        <span className="text-placeholder" aria-hidden>
+        <Txt as="span" variant="meta" tone="faint" aria-hidden>
           ·
-        </span>
+        </Txt>
         <button
           type="button"
           onClick={onClearAll}
@@ -246,7 +252,9 @@ export const ToolkitFilterPane = ({
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
           className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
-          Clear all
+          <Txt as="span" variant="meta" className="block">
+            Clear all
+          </Txt>
         </button>
       </div>
 

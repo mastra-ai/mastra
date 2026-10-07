@@ -1743,6 +1743,31 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain(base64);
     });
 
+    it('should fall back to the raw tool result when stored modelOutput is null', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-bg',
+              toolName: 'bg',
+              args: {},
+              result: { ok: true, answer: 'background task finished' },
+            },
+            providerMetadata: { mastra: { modelOutput: null, backgroundTask: { taskId: 't1', status: 'completed' } } },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result bg');
+      expect(formatted).toContain('background task finished');
+      expect(formatted).not.toContain('Tool Result bg: null');
+    });
+
     it('should hoist file-data tool-result blocks under the file counter', () => {
       const base64 = 'C'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
@@ -2538,6 +2563,25 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should not attach attachments the agent recorded as unavailable', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at these.' },
+          { type: 'file', data: 'https://example.com/deleted.png', mimeType: 'image/png', filename: 'deleted.png' },
+          { type: 'file', data: 'https://example.com/kept.png', mimeType: 'image/png', filename: 'kept.png' },
+        ],
+        metadata: { mastra: { unavailableAttachments: ['https://example.com/deleted.png'] } },
+      };
+
+      const content = buildObserverHistoryMessage([msg]).content as any[];
+      expect(content[1].text).toContain('[Image #1: deleted.png]');
+      expect(content[1].text).toContain('[Image #2: kept.png]');
+      const attachments = content.filter(part => part.type !== 'text');
+      expect(attachments).toEqual([expect.objectContaining({ type: 'image', image: 'https://example.com/kept.png' })]);
     });
 
     it('should hoist image-data tool-result blocks into observer input attachments', () => {
@@ -4109,13 +4153,9 @@ User asked about </current-task> parsing and how it works
       // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
-      const text = block.repeat(100); // ~11k chars of the same block
+      // A loop of lines; one giant line would be truncated and accepted instead.
+      const text = Array(100).fill(block).join('\n');
       expect(detectDegenerateRepetition(text)).toBe(true);
-    });
-
-    it('should detect extremely long single lines', () => {
-      const line = 'a'.repeat(60_000);
-      expect(detectDegenerateRepetition(line)).toBe(true);
     });
 
     it('should flag degenerate output in parseObserverOutput', () => {
@@ -4201,9 +4241,10 @@ User asked about </current-task> parsing and how it works
 
   describe('describeDegenerateOutput', () => {
     it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      // Under the 10,000-char line limit, so the line is sampled rather than skipped.
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
-      const text = block.repeat(100);
+      const text = block.repeat(50);
       const description = describeDegenerateOutput(text);
       expect(description).toContain(`length=${text.length}`);
       expect(description).toMatch(/duplicateRatio=0\.\d+/);
@@ -4214,6 +4255,21 @@ User asked about </current-task> parsing and how it works
       expect(description).toContain('head="');
       expect(description).toContain('tail="');
       expect(description).not.toContain('\n');
+    });
+
+    it('names the strategy that fired, matching the detector', () => {
+      const windowLoop =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, '.repeat(
+          50,
+        );
+      expect(detectDegenerateRepetition(windowLoop)).toBe(true);
+      expect(describeDegenerateOutput(windowLoop)).toMatch(/strategy=window/);
+
+      const shortToolLog = Array.from({ length: 200 }, (_, i) =>
+        i % 2 ? '  * -> pnpm test → ok' : '  * -> pnpm build → ok',
+      ).join('\n');
+      expect(detectDegenerateRepetition(shortToolLog)).toBe(false);
+      expect(describeDegenerateOutput(shortToolLog)).toContain('strategy=none');
     });
 
     it('bounds snippets to the requested size', () => {

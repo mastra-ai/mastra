@@ -1,5 +1,6 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, CirclePause, CircleSlash, Clock, X } from 'lucide-react';
 
 export interface WorkflowRunStatusInlineProps {
@@ -14,11 +15,13 @@ export interface WorkflowRunStatusInlineProps {
 export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps) {
   const { icon, color } = getStatusVisual(status);
   return (
-    <span className={`inline-flex items-center gap-1.5 text-caption whitespace-nowrap ${color}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${color}`}>
       <span className="inline-flex shrink-0 items-center" aria-hidden>
         {icon}
       </span>
-      <span>{status}</span>
+      <Txt as="span" variant="caption">
+        {status}
+      </Txt>
     </span>
   );
 }

@@ -43,6 +43,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -1200,8 +1201,6 @@ export class Agent<
    * objective record; unset fields fall back to the agent's `goal` config at
    * evaluation time. A judge model (here or in `goal.judge`) is required for the
    * goal to do anything.
-   *
-   * @experimental Agent goals are experimental and may change in a future release.
    */
   async setObjective(
     objective: string,
@@ -8761,9 +8760,6 @@ export class Agent<
     return fullOutput;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions & { withInitialHistory: true | { perPage?: number } },
   ): Promise<AgentThreadSubscription<OUTPUT, true>>;
@@ -8779,9 +8775,6 @@ export class Agent<
     return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(this.#getThreadRuntimeAgent(), options, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async claimThreadOwnership<OUTPUT = TOutput>(options: {
     resourceId: string;
     threadId: string;
@@ -8807,9 +8800,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   updateThreadPeerAdvertisement(options: {
     resourceId: string;
     threadId: string;
@@ -8822,9 +8812,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
     return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub(), this.#getThreadRuntimeAgent());
   }
@@ -8990,16 +8977,21 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    wrapperClose?.();
+    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   sendMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
@@ -9012,9 +9004,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   queueMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
@@ -9027,16 +9016,10 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
     return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent thread event APIs are experimental and may change in a future release.
-   */
   subscribeThreadEvents(scope: SubscribeAgentThreadEventsOptions, listener: AgentThreadEventListener): () => void {
     return agentThreadStreamRuntime.subscribeThreadEvents(
       this as Agent<any, any, any, any>,
@@ -9046,9 +9029,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent state signal APIs are experimental and may change in a future release.
-   */
   sendStateSignal<OUTPUT = TOutput>(
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
@@ -9067,8 +9047,6 @@ export class Agent<
    * notification dispatch workflow, so a deferred delivery can carry
    * freshly-resolved decision fields (e.g. `streamOptions` with the request
    * context a woken idle thread needs to resolve a model).
-   *
-   * @experimental Agent notification signal APIs are experimental and may change in a future release.
    */
   resolveNotificationDeliveryDecision(input: NotificationDeliveryPolicyInput): Promise<NotificationDeliveryDecision> {
     return resolveNotificationDeliveryDecision({
@@ -9077,9 +9055,6 @@ export class Agent<
     });
   }
 
-  /**
-   * @experimental Agent notification signal APIs are experimental and may change in a future release.
-   */
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
@@ -9324,9 +9299,6 @@ export class Agent<
     return results;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   sendSignal<OUTPUT = TOutput>(
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
@@ -10723,6 +10695,14 @@ export class Agent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
