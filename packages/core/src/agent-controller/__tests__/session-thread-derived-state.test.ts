@@ -163,14 +163,14 @@ describe('AgentController thread-derived session state', () => {
 
     const threadA = await session.thread.create({ id: 'thread-a' });
     await session.mode.switch({ modeId: 'plan' });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
     await session.state.set({ thinkingLevel: 'high' });
     await (session as any).processStream({
       fullStream: createUsageStream({ inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
     });
 
     const threadB = await session.thread.create({ id: 'thread-b' });
-    await session.model.switch({ modelId: 'openai/gpt-5.4' });
+    await session.model.switch('openai/gpt-5.4');
     await session.state.set({ thinkingLevel: 'medium' });
     await (session as any).processStream({
       fullStream: createUsageStream({ inputTokens: 40, outputTokens: 50, totalTokens: 90 }),
@@ -219,7 +219,7 @@ describe('AgentController thread-derived session state', () => {
 
     const metadataLessThread = await session.thread.create({ id: 'metadata-less-thread' });
     const configuredThread = await session.thread.create({ id: 'configured-thread' });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
 
     await session.thread.create({ id: 'new-thread' });
     expect(session.model.get()).toBe('');
@@ -242,7 +242,7 @@ describe('AgentController thread-derived session state', () => {
     });
     const threadA = await session.thread.create({ id: 'selection-events-a' });
     await session.mode.switch({ modeId: 'plan' });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
 
     const selectionEvents: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -252,21 +252,21 @@ describe('AgentController thread-derived session state', () => {
     await session.thread.create({ id: 'selection-events-b' });
     expect(selectionEvents).toEqual([
       { type: 'mode_changed', modeId: 'build', previousModeId: 'plan' },
-      { type: 'model_changed', modelId: 'openai/gpt-5.5' },
+      { type: 'model_changed', modelId: 'openai/gpt-5.5', thinkingLevel: 'low' },
     ]);
 
     selectionEvents.length = 0;
     await session.thread.switch({ threadId: threadA.id });
     expect(selectionEvents).toEqual([
       { type: 'mode_changed', modeId: 'plan', previousModeId: 'build' },
-      { type: 'model_changed', modelId: 'anthropic/claude-opus-4-6' },
+      { type: 'model_changed', modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'low' },
     ]);
 
     selectionEvents.length = 0;
     await session.thread.delete({ threadId: threadA.id });
     expect(selectionEvents).toEqual([
       { type: 'mode_changed', modeId: 'build', previousModeId: 'plan' },
-      { type: 'model_changed', modelId: 'openai/gpt-5.5' },
+      { type: 'model_changed', modelId: 'openai/gpt-5.5', thinkingLevel: 'low' },
     ]);
   });
 
@@ -282,7 +282,7 @@ describe('AgentController thread-derived session state', () => {
     });
     const thread = await first.thread.create({ id: 'shared-thread' });
     await first.mode.switch({ modeId: 'plan' });
-    await first.model.switch({ modelId: 'anthropic/claude-sonnet-4-5' });
+    await first.model.switch('anthropic/claude-sonnet-4-5');
     await first.state.set({ thinkingLevel: 'high' });
     await (first as any).processStream({
       fullStream: createUsageStream({ inputTokens: 5, outputTokens: 8, totalTokens: 13 }),
@@ -314,7 +314,7 @@ describe('AgentController thread-derived session state', () => {
     });
     await session.thread.create({ id: 'metadata-refresh-thread' });
     await session.mode.switch({ modeId: 'plan' });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
     await session.state.set({ thinkingLevel: 'high' });
 
     const memory = await storage.getStore('memory');
@@ -549,10 +549,10 @@ describe('AgentController thread-derived session state', () => {
     });
     const threadA = await session.thread.create({ id: 'switch-race-a' });
     await session.mode.switch({ modeId: 'plan' });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
     await session.state.set({ thinkingLevel: 'high' });
     const threadB = await session.thread.create({ id: 'switch-race-b' });
-    await session.model.switch({ modelId: 'openai/gpt-5.4' });
+    await session.model.switch('openai/gpt-5.4');
     await session.state.set({ thinkingLevel: 'medium' });
 
     const memory = await storage.getStore('memory');
@@ -597,7 +597,7 @@ describe('AgentController thread-derived session state', () => {
     });
     const thread = await session.thread.create({ id: 'delete-active-thread' });
     await session.mode.switch({ modeId: 'plan' });
-    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await session.model.switch('anthropic/claude-opus-4-6');
     await session.state.set({ thinkingLevel: 'high' });
 
     await session.thread.delete({ threadId: thread.id });
@@ -912,7 +912,7 @@ describe('AgentController thread-derived session state', () => {
     });
     const settingsThread = await settingsSession.thread.create({ id: 'settings-thread' });
     await settingsSession.mode.switch({ modeId: 'plan' });
-    await settingsSession.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    await settingsSession.model.switch('anthropic/claude-opus-4-6');
     await settingsSession.state.set({ thinkingLevel: 'high' });
 
     const restartedSettingsController = await createSettingsController(storage, 'restart-settings-new');

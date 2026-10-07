@@ -252,11 +252,12 @@ describe('session.model.switch', () => {
     const syncing = session.model.syncFromPersisted();
     await validationStarted;
     session.thread.set({ threadId: 'newly-bound-thread' });
+    listener.mockClear();
     release();
     await syncing;
 
-    expect(session.model.get()).toBe('openai/gpt-4o');
-    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(session.model.get()).toBe('');
+    expect(session.state.get().thinkingLevel).toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -332,10 +333,11 @@ describe('session.model.switch', () => {
 
       const switching = session.model.switch('openai/gpt-5.5', options);
       session.thread.set({ threadId: 'newly-bound-thread' });
+      listener.mockClear();
       await expect(switching).rejects.toThrow('Model switch canceled');
 
-      expect(session.model.get()).toBe('openai/gpt-4o');
-      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(session.model.get()).toBe('');
+      expect(session.state.get().thinkingLevel).toBeUndefined();
       expect(listener).not.toHaveBeenCalled();
       expect(trackModelUse).not.toHaveBeenCalled();
 
@@ -380,14 +382,15 @@ describe('session.model.switch', () => {
 
     const switching = session.model.switch('openai/gpt-5.5');
     session.thread.set({ threadId: 'newly-bound-thread' });
+    listener.mockClear();
     await expect(switching).resolves.toBeUndefined();
 
     expect((await session.thread.getById({ threadId: thread.id }))?.metadata).toMatchObject({
       currentModelId: 'openai/gpt-5.5',
       thinkingLevel: 'low',
     });
-    expect(session.model.get()).toBe('openai/gpt-4o');
-    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(session.model.get()).toBe('');
+    expect(session.state.get().thinkingLevel).toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
     expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
   });
@@ -422,6 +425,7 @@ describe('session.model.switch', () => {
       const switching = session.model.switch('openai/gpt-5.5', options);
       await writeStarted;
       session.thread.set({ threadId: 'newly-bound-thread' });
+      listener.mockClear();
       release();
       await expect(switching).resolves.toBeUndefined();
 
@@ -429,8 +433,8 @@ describe('session.model.switch', () => {
         currentModelId: 'openai/gpt-5.5',
         thinkingLevel: options?.thinkingLevel ?? 'low',
       });
-      expect(session.model.get()).toBe('openai/gpt-4o');
-      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(session.model.get()).toBe('');
+      expect(session.state.get().thinkingLevel).toBeUndefined();
       expect(listener).not.toHaveBeenCalled();
       expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
     },
