@@ -178,7 +178,6 @@ interface DurablePreparationAgent {
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
-  __hasFixedMemory(): boolean;
   __getMaxRetriesConfigured?(): boolean;
   __getMaxProcessorRetries?(): number | undefined;
   __listLLMRequestProcessors(
@@ -800,7 +799,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       threadExists,
       savePerStep,
       observationalMemory,
-      fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
     agentSpanData: agentSpan?.exportSpan(),

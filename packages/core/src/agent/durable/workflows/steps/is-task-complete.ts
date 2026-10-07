@@ -55,17 +55,14 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       };
 
       const registryEntry = globalRunRegistry.get(state.runId);
-      // No scorers → nothing to grade.
-      if (!registryEntry?.isTaskComplete?.scorers?.length) return state;
 
-      // Build the message list lazily — only when the core actually grades
-      // this iteration does it read the transcript / append feedback.
-      const messageListState = await readMessageListState(params, state);
+      // Rehydrate the message list lazily — only when the core actually
+      // grades this iteration does it read the transcript / append feedback.
       let messageList: MessageList | undefined;
       const list = () => {
         if (!messageList) {
           messageList = new MessageList();
-          messageList.deserialize(messageListState);
+          messageList.deserialize(readMessageListState(params.state, state));
         }
         return messageList;
       };

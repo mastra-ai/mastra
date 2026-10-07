@@ -139,12 +139,6 @@ export interface SerializableDurableState {
   savePerStep?: boolean;
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
-  /**
-   * Whether the agent's memory is a fixed instance. Only then may the stored
-   * transcript reference recalled messages instead of copying them: function or
-   * inherited memory can resolve to another store when the run resumes.
-   */
-  fixedMemory?: boolean;
 }
 
 /**

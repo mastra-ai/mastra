@@ -38,10 +38,7 @@ import {
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
-  openMessageListState,
   readMessageListState,
-  releaseMessageListState,
-  seedMessageListState,
   storeMessageListState,
 } from './shared';
 import {
@@ -307,8 +304,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * serialized state only once signals actually arrive (drain-first
    * ordering), and re-serialized into the projected output. Signals are
    * appended to the transcript even without a pubsub transport (`emitChunk`
-   * no-ops), matching prior behavior. Signals only queue in the process
-   * running the agent, so other processes skip the step.
+   * no-ops), matching prior behavior.
    */
   protected override signalDrainStep() {
     return createStep({
@@ -318,11 +314,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       execute: async stepParams => {
         const execOutput = stepParams.inputData as Record<string, any>;
         const rt = this.resolveRuntime(stepParams);
-        if (!rt.drainPendingSignals) return execOutput;
         try {
-          const messageListState = await readMessageListState(stepParams, execOutput);
           let drainList: ReturnType<typeof createRunMessageList> | undefined;
-          const list = () => (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(messageListState));
+          const list = () =>
+            (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(
+              readMessageListState(stepParams.state, execOutput),
+            ));
           const outcome = await drainSignalsToTranscript({
             drainPendingSignals: rt.drainPendingSignals,
             rotateResponseMessageId: sealMessageId => list().rotateResponseMessageId(sealMessageId),
@@ -571,6 +568,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   protected override buildContinuationPredicate(): LoopContinuationPredicate {
     return async (params: any) => {
       const state = params.inputData as IterationState;
+      // The transcript lives in workflow state, or on the iteration state for
+      // runs that thread it through step payloads. Mutations below land on
+      // whichever object holds it; both persist into the next iteration.
+      const transcript: Pick<IterationState, 'messageListState'> =
+        params.state?.messageListState !== undefined ? params.state : state;
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
@@ -601,11 +603,6 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         return false;
       }
 
-      // The transcript lives in workflow state, or on the iteration state for
-      // runs that thread it through step payloads. Writes below land on
-      // whichever object holds it; both persist into the next iteration.
-      const transcript = await openMessageListState(params, state);
-
       // ── Inter-iteration signal drain ──────────────────────────────
       // Mirror the non-durable agentic-loop predicate: drain pending
       // signals that were queued while the previous iteration was
@@ -624,7 +621,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       if (rt.pubsub && rt.drainPendingSignals) {
         try {
           let drainList: ReturnType<typeof createRunMessageList> | undefined;
-          const list = () => (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.read()));
+          const list = () =>
+            (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.messageListState));
           const drainOutcome = await drainSignalsToTranscript({
             drainPendingSignals: rt.drainPendingSignals,
             rotateResponseMessageId: () => list().rotateResponseMessageId(),
@@ -637,7 +635,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           });
           if (drainOutcome.drained && drainList) {
             state.messageId = drainOutcome.nextMessageId;
-            transcript.write(drainList.serialize());
+            transcript.messageListState = drainList.serialize();
 
             // Force continuation — the LLM must see the injected signals
             if (state.lastStepResult) {
@@ -662,7 +660,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         if (!callbackListInstance) {
           callbackListInstance = createRunMessageList({ mastra: rt.mastra });
           try {
-            callbackListInstance.deserialize(transcript.read());
+            callbackListInstance.deserialize(transcript.messageListState);
           } catch {
             // If deserialization fails, callback sees empty messages
           }
@@ -750,7 +748,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             'response',
           );
           // Re-serialize the updated messageList
-          transcript.write(callbackList().serialize());
+          transcript.messageListState = callbackList().serialize();
         },
         logger: rt.logger,
       });
@@ -765,9 +763,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // the non-durable agentic loop. The mutated state.messageId flows into
       // the next singleIterationWorkflow input via map-to-llm-input.
       if (!isFinal) {
-        const boundaryList = createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.read());
+        const boundaryList = createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.messageListState);
         state.messageId = boundaryList.rotateResponseMessageId();
-        transcript.write(boundaryList.serialize());
+        transcript.messageListState = boundaryList.serialize();
       }
 
       // Emit an iteration-complete event for observability. This fires after
@@ -835,12 +833,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       })
         // Initialize iteration state from input
         .map(
-          async params => {
-            const { messageListState, ...input } = params.inputData as DurableAgenticWorkflowInput;
+          async ({ inputData, state, setState }) => {
+            const { messageListState, ...input } = inputData as DurableAgenticWorkflowInput;
             // The transcript rides in workflow state from here on: each
             // persisted snapshot then holds one copy (in `value`) rather than
             // one per step payload. Steps read and update it there.
-            await seedMessageListState(params, messageListState);
+            await setState({ ...(state as object), messageListState });
             const iterationState: IterationState = {
               ...input,
               iterationCount: 0,
@@ -873,14 +871,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
             let finalText = lastStep?.text;
 
-            const messageListState = await readMessageListState(params, state);
-            // Nothing reads the stored transcript after this.
-            releaseMessageListState(params);
-
             const finishResult = await runDurableFinishSideEffects({
               runId: state.runId,
               initData,
-              messageListState,
+              messageListState: readMessageListState(params.state, state),
               mastra: mastra as Mastra | undefined,
               requestContext,
               tracingContext,

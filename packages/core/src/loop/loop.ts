@@ -6,7 +6,6 @@ import { ConsoleLogger } from '../logger';
 import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
-import { findSuspendedStreamState } from './suspended-stream-state';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
@@ -75,7 +74,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     threadId: _internal?.threadId,
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
-    fixedMemory: _internal?.fixedMemory,
     threadExists: _internal?.threadExists,
     transportRef: _internal?.transportRef ?? {},
     backgroundTaskManager: _internal?.backgroundTaskManager,
@@ -136,7 +134,18 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     ...rest,
   };
 
-  const initialStreamState = findSuspendedStreamState(resumeContext?.snapshot)?.streamState;
+  const existingSnapshot = resumeContext?.snapshot;
+  let initialStreamState: any;
+
+  if (existingSnapshot) {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__streamState) {
+        initialStreamState = step.suspendPayload?.__streamState;
+        break;
+      }
+    }
+  }
   const baseStream = workflowLoopStream(workflowLoopProps);
 
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans

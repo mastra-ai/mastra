@@ -35,8 +35,6 @@ export const CURRENT_DATE_KEY = createRunScopeKey<() => Date>('loop:currentDate'
 
 export const SAVE_QUEUE_MANAGER_KEY = createRunScopeKey<SaveQueueManager>('loop:saveQueueManager');
 export const MEMORY_KEY = createRunScopeKey<MastraMemory>('loop:memory');
-/** Whether `MEMORY_KEY` resolves to the same store on resume, so snapshots may reference recalled messages. */
-export const FIXED_MEMORY_KEY = createRunScopeKey<boolean>('loop:fixedMemory');
 export const MEMORY_CONFIG_KEY = createRunScopeKey<MemoryConfigInternal>('loop:memoryConfig');
 export const THREAD_ID_KEY = createRunScopeKey<string>('loop:threadId');
 export const RESOURCE_ID_KEY = createRunScopeKey<string>('loop:resourceId');

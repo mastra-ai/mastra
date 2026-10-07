@@ -1,6 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { stopGoalActivity } from '../../../agent/goal';
-import { MemoryMessageRefs } from '../../../agent/message-list/memory-message-refs';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -28,7 +27,6 @@ import {
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   EAGER_TOOL_EXECUTION_KEY,
-  FIXED_MEMORY_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
@@ -51,7 +49,6 @@ import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
-import { dehydrateStreamState } from '../../suspended-stream-state';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -105,8 +102,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   actor,
   mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
-  // Shared by every suspension of the run, so parallel suspends verify recalled messages once.
-  const memoryMessageRefs = new MemoryMessageRefs();
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -399,18 +394,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      // Recalled messages become refs only when memory is a fixed instance: a resume may not
-      // repeat the request context that function or inherited memory resolved against.
-      const serializeStreamStateForSuspend = () =>
-        dehydrateStreamState(
-          streamState.serialize(),
-          memoryMessageRefs,
-          readScoped(scopeCtx, FIXED_MEMORY_KEY, 'fixedMemory')
-            ? readScoped(scopeCtx, MEMORY_KEY, 'memory')
-            : undefined,
-          logger,
-        );
-
       // Provider-executed tools are handled entirely by the stream path
       // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
@@ -602,7 +585,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: approvalToolName,
                   args: approvalArgs,
                 },
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: streamState.serialize(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
@@ -648,7 +631,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return await suspend(
               {
                 toolCallSuspended: suspendPayload,
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: streamState.serialize(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 toolCallId: inputData.toolCallId,
@@ -720,7 +703,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                 },
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: streamState.serialize(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
               },

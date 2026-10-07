@@ -2503,16 +2503,6 @@ export class Agent<
   }
 
   /**
-   * Whether the agent's memory is a fixed instance, so it resolves to the same
-   * store on every call. Function memory and memory inherited from a delegating
-   * agent depend on the request context, which a resume may not repeat.
-   * @internal
-   */
-  __hasFixedMemory(): boolean {
-    return Boolean(this.#memory) && typeof this.#memory !== 'function';
-  }
-
-  /**
    * Gets the memory instance for this agent, resolving function-based memory if necessary.
    * The memory system enables conversation persistence, semantic recall, and working memory.
    *
