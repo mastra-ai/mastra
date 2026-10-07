@@ -693,6 +693,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       );
     }
 
+    if (indexConfig.type === 'ivfflat' && indexConfig.numSubVectors !== undefined) {
+      this.logger.warn(
+        `numSubVectors is ignored for 'ivfflat' indexes. Use type 'ivfpq' for product-quantized IVF indexes.`,
+      );
+    }
+
     try {
       const tables = await this.lanceClient.tableNames();
       let table: Table;
@@ -737,12 +743,6 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           `Table ${resolvedTableName} has ${rowCount} rows, which is below the 256 row minimum for index creation. Skipping index creation.`,
         );
         return;
-      }
-
-      if (indexConfig.type === 'ivfflat' && indexConfig.numSubVectors !== undefined) {
-        this.logger.warn(
-          `numSubVectors is ignored for 'ivfflat' indexes. Use type 'ivfpq' for product-quantized IVF indexes.`,
-        );
       }
 
       const numPartitions = indexConfig.numPartitions || 128;
