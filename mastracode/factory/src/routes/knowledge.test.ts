@@ -1,3 +1,4 @@
+import type { Agent } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import type { MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
 import { InMemoryStore, knowledgeImporterBindingKey } from '@mastra/core/storage';
@@ -1207,6 +1208,60 @@ describe('KnowledgeRoutes', () => {
     );
     expect(threadDetail.status).toBe(200);
     await expect(threadDetail.json()).resolves.toMatchObject({ run: { source: 'calendar:thread' } });
+  });
+
+  it('returns agentic import transcripts only to host operators', async () => {
+    const recall = vi.fn(async () => ({
+      messages: [
+        {
+          id: 'm-1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'importer-only secret' }] },
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+    }));
+    const agent = { generate: async () => ({}), getMemory: async () => ({ recall }) } as unknown as Agent;
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'notes', agentic: { agent }, handler: async () => {} }],
+    });
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      accessProfile: async ({ builtInScopes, request }) => ({
+        id: 'project',
+        rootScopeAddress: builtInScopes.resource.address,
+        baselineScopes: [builtInScopes.org, builtInScopes.resource],
+        importOperator: request.headers.get('x-operator') === '1',
+      }),
+    });
+    const run = await runtime.createImportRunInternal({
+      id: 'run-agentic',
+      importerId: 'notes',
+      binding: knowledgeImporterBindingKey({ source: 'notes:primary', scope: `resource:${h.projectId}` }),
+      importKind: 'agentic',
+      triggerKind: 'programmatic',
+    });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'running', transcriptThreadId: 'importer-thread' });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'succeeded' });
+    const runs = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/notes/runs`);
+    expect(runs.status).toBe(200);
+    const [listed] = (await runs.json()).runs as Array<{ reference: string }>;
+    const path = `/web/factory/projects/${h.projectId}/knowledge/importers/notes/runs/${listed!.reference}`;
+
+    const reader = await h.app.request(path);
+    expect(reader.status).toBe(200);
+    const readerBody = await reader.json();
+    expect(readerBody).not.toHaveProperty('transcript');
+    expect(JSON.stringify(readerBody)).not.toContain('importer-only secret');
+    expect(recall).not.toHaveBeenCalled();
+
+    const operator = await h.app.request(path, { headers: { 'x-operator': '1' } });
+    expect(operator.status).toBe(200);
+    const operatorBody = await operator.json();
+    expect(operatorBody.transcript).toMatchObject({ threadId: 'importer-thread', available: true });
+    expect(JSON.stringify(operatorBody.transcript.messages)).toContain('importer-only secret');
   });
 
   it('applies trigger filters before run pagination', async () => {
