@@ -462,6 +462,45 @@ describe('AgentController thread-derived session state', () => {
     expect(session.state.get().thinkingLevel).toBe('high');
   });
 
+  it('clears the binding when a failed create cannot reacquire the previous lock', async () => {
+    const storage = new InMemoryStore();
+    const heldLocks = new Set<string>();
+    let rejectPreviousLock = false;
+    const threadLock = {
+      acquire: vi.fn(async (threadId: string) => {
+        if (rejectPreviousLock && threadId === 'rollback-lock-a') throw new Error('reacquire failed');
+        heldLocks.add(threadId);
+      }),
+      release: vi.fn(async (threadId: string) => {
+        heldLocks.delete(threadId);
+      }),
+    };
+    const controller = await createSettingsController(storage, 'rollback-lock', threadLock);
+    const session = await controller.createSession({
+      id: 'rollback-lock-session',
+      resourceId: 'rollback-lock-resource',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+    await session.thread.create({ id: 'rollback-lock-a' });
+    await session.state.set({ thinkingLevel: 'high' });
+    const memory = await storage.getStore('memory');
+    const saveThread = memory!.saveThread.bind(memory);
+    vi.spyOn(memory!, 'saveThread').mockImplementation(args => {
+      if (args.thread.id === 'rollback-lock-b') {
+        rejectPreviousLock = true;
+        return Promise.reject(new Error('save failed'));
+      }
+      return saveThread(args);
+    });
+
+    await expect(session.thread.create({ id: 'rollback-lock-b' })).rejects.toThrow('save failed');
+
+    expect(session.thread.getId()).toBeNull();
+    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(heldLocks).toEqual(new Set());
+  });
+
   it('keeps the current subscription when a switch is rejected', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'switch-failure');

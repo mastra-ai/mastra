@@ -961,7 +961,8 @@ export class SessionThread {
           try {
             await store.acquireLock(oldThreadId);
           } catch {
-            // The binding never changed, but no lock is held.
+            this.cleanupSubscription();
+            this.#clear();
           }
         }
         throw err;
