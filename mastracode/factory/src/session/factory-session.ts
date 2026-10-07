@@ -141,6 +141,12 @@ export interface EnsureFactorySourceSessionArgs {
   factoryProjectId: string;
   branch: string;
   /**
+   * The repository link the session is filed under: the one a work item
+   * targets. Defaults to the factory's position-1 environment link (D1), for
+   * callers where nothing names a repository (chat threads, user sessions).
+   */
+  projectRepositoryId?: string;
+  /**
    * Attribute the run to this user instead of the repo connector. Set when the
    * run has an interactive user — e.g. the person who approved a proposed run.
    */
@@ -186,11 +192,14 @@ export type FactorySourceRepositoryResult =
   | { found: false; reason: 'connection' | 'repository' };
 
 /**
- * The repository link a new session is filed under: the position-1
- * `inEnvironment` link of the factory (decision D1). Session start no longer
- * picks a repository to work in, the sandbox holds every environment
- * repository; the link only keeps the PR tools, subscriptions and audit on
- * one repository until FACT-342 moves them to `sessionRepositories`.
+ * The repository link a new session is filed under. By default the position-1
+ * `inEnvironment` link of the factory (decision D1); a work item that targets
+ * a repository names its link through `projectRepositoryId`, which must be an
+ * environment link of the same factory. Session start no longer picks a
+ * repository to work in, the sandbox holds every environment repository; the
+ * link keeps the PR tools, subscriptions, audit and the work item's
+ * repository check on one repository until FACT-342 moves them to
+ * `sessionRepositories`.
  *
  * The owner is whichever integration owns source control, matched by the
  * handle's own `integrationId` — nothing here is provider-specific.
@@ -199,8 +208,9 @@ export async function resolvePrimaryEnvironmentRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
+  projectRepositoryId?: string;
 }): Promise<FactorySourceRepositoryResult> {
-  const { sourceControl, orgId, factoryProjectId } = args;
+  const { sourceControl, orgId, factoryProjectId, projectRepositoryId } = args;
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
   const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
   if (candidates.length === 0) return { found: false, reason: 'connection' };
@@ -208,6 +218,7 @@ export async function resolvePrimaryEnvironmentRepository(args: {
 
   const links = (await sourceControl.projectRepositories.listByProject({ orgId, factoryProjectId }))
     .filter(link => link.inEnvironment && connectionById.has(link.connectionId))
+    .filter(link => projectRepositoryId === undefined || link.id === projectRepositoryId)
     .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
   for (const link of links) {
     const repository = await sourceControl.repositories.get({ orgId, id: link.repositoryId });
@@ -228,10 +239,11 @@ export async function resolvePrimaryEnvironmentRepository(args: {
  * `FactoryStartCoordinator.prepare` requires this record to already exist —
  * `resolveSourceSession` throws `Factory session not found` otherwise — so every
  * autonomous entry point has to produce one before it can start a run. This is
- * that step, in one place: the owner's connection on the factory project, its
- * position-1 environment repository as the session's link (D1), and a session
- * on the requested branch with that repository's pinned or default branch as
- * the base. The sandbox itself boots every environment repository.
+ * that step, in one place: the owner's connection on the factory project, the
+ * work item's repository link (else the position-1 environment link, D1) as
+ * the session's link, and a session on the requested branch with that
+ * repository's pinned or default branch as the base. The sandbox itself boots
+ * every environment repository.
  *
  * The run is attributed to `attributeToUserId` when the caller has an
  * interactive user (e.g. the approver of a proposed run), and otherwise falls
@@ -241,9 +253,14 @@ export async function resolvePrimaryEnvironmentRepository(args: {
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,
 ): Promise<EnsuredFactorySourceSession> {
-  const { sourceControl, orgId, factoryProjectId, branch } = args;
+  const { sourceControl, orgId, factoryProjectId, branch, projectRepositoryId } = args;
 
-  const resolved = await resolvePrimaryEnvironmentRepository({ sourceControl, orgId, factoryProjectId });
+  const resolved = await resolvePrimaryEnvironmentRepository({
+    sourceControl,
+    orgId,
+    factoryProjectId,
+    projectRepositoryId,
+  });
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
