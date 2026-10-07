@@ -1,12 +1,15 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import type { ReactNode } from 'react';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
 import { ChatConnectionContext } from '../ChatConnectionContext';
 import { ChatModelsProvider } from '../ChatModelsProvider';
+import { ChatModesContext } from '../ChatModesContext';
 import { ChatSessionContext } from '../ChatSessionContext';
 import type { ChatSessionContextApi } from '../ChatSessionContext';
 import { useChatModels } from '../useChatModels';
@@ -43,6 +46,38 @@ function ErrorProbe() {
   return <div>{error ? 'error' : 'ok'}</div>;
 }
 
+function ModelsProviderInBuildMode({ children }: { children: ReactNode }) {
+  return (
+    <ChatModesContext.Provider
+      value={{
+        modes: [{ id: 'build', name: 'Build' }],
+        activeMode: { id: 'build', name: 'Build' },
+        activeModeId: 'build',
+        isLoading: false,
+        error: undefined,
+        setMode: async () => {},
+      }}
+    >
+      <ChatModelsProvider>{children}</ChatModelsProvider>
+    </ChatModesContext.Provider>
+  );
+}
+
+beforeEach(() => {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:resourceId`, ({ params }) =>
+      HttpResponse.json({
+        controllerId: AGENT_CONTROLLER_ID,
+        resourceId: params.resourceId,
+        modeId: 'build',
+        modelId: 'openai/gpt-5',
+        settings: { yolo: false, notifications: 'off', smartEditing: true },
+      }),
+    ),
+  );
+});
+
 describe('ChatModelsProvider', () => {
   it('uses the personal default model ahead of the Factory default for a new chat', async () => {
     server.use(
@@ -56,9 +91,9 @@ describe('ChatModelsProvider', () => {
 
     renderWithProviders(
       <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
+        <ModelsProviderInBuildMode>
           <ActiveModelProbe />
-        </ChatModelsProvider>
+        </ModelsProviderInBuildMode>
       </ChatSessionContext.Provider>,
     );
 
@@ -82,9 +117,9 @@ describe('ChatModelsProvider', () => {
 
     const { client } = renderWithProviders(
       <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
+        <ModelsProviderInBuildMode>
           <LoadingProbe />
-        </ChatModelsProvider>
+        </ModelsProviderInBuildMode>
       </ChatSessionContext.Provider>,
     );
 
@@ -106,10 +141,10 @@ describe('ChatModelsProvider', () => {
 
     renderWithProviders(
       <ChatSessionContext.Provider value={draftSession}>
-        <ChatModelsProvider>
+        <ModelsProviderInBuildMode>
           <ActiveModelProbe />
           <ErrorProbe />
-        </ChatModelsProvider>
+        </ModelsProviderInBuildMode>
       </ChatSessionContext.Provider>,
     );
 
@@ -145,9 +180,9 @@ describe('ChatModelsProvider', () => {
             },
           }}
         >
-          <ChatModelsProvider>
+          <ModelsProviderInBuildMode>
             <ActiveModelProbe />
-          </ChatModelsProvider>
+          </ModelsProviderInBuildMode>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>,
     );

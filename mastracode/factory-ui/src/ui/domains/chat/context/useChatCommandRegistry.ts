@@ -29,6 +29,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModes } from './useChatModes';
 import { useChatPermissions } from './useChatPermissions';
@@ -37,14 +38,6 @@ import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
-const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
-  off: 'Off',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-};
 function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
   return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
