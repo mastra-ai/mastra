@@ -37,10 +37,10 @@ export interface StartFactoryRunInput {
 export function useStartFactoryRun() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const repositorySlugFor = useCardRepositorySlug();
+  const repositories = factoryQuery.data?.repositories ?? [];
+  const repositorySlugFor = useCardRepositorySlug(repositories);
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const repositories = factoryQuery.data?.repositories ?? [];
 
   const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({

@@ -3,21 +3,18 @@ import type { DrilldownScope } from '@mastra/playground-ui/domains/metrics/drill
 import { useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import { useNavigate } from 'react-router';
 
-/** Turns card drilldown scopes into navigations to the Studio traces and logs pages. */
+/** Opens the Studio traces or logs page, keeping the dashboard's date range and filters. */
 export function useMetricsDrilldownNavigation() {
   const { datePreset, customRange, dimensionalFilter } = useMetrics();
   const navigate = useNavigate();
+  const base = { preset: datePreset, customRange, dashboardFilter: dimensionalFilter };
 
-  const openTraces = (scope: DrilldownScope) => {
-    void navigate(
-      buildTracesDrilldownUrl({ preset: datePreset, customRange, dashboardFilter: dimensionalFilter, scope }),
-    );
+  const openTraces = (scope: DrilldownScope = {}) => {
+    void navigate(buildTracesDrilldownUrl({ ...base, scope }));
   };
 
-  const openLogs = (scope: DrilldownScope) => {
-    void navigate(
-      buildLogsDrilldownUrl({ preset: datePreset, customRange, dashboardFilter: dimensionalFilter, scope }),
-    );
+  const openLogs = (scope: DrilldownScope = {}) => {
+    void navigate(buildLogsDrilldownUrl({ ...base, scope }));
   };
 
   return { openTraces, openLogs };

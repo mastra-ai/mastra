@@ -19,13 +19,7 @@ export { useActiveThreadsKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useActiveResourcesKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useTopActiveThreadsMetrics, type ActiveThreadRow } from '@mastra/react/hooks/metrics';
 export { useTopResourcesByThreadsMetrics, type ResourceThreadsRow } from '@mastra/react/hooks/metrics';
-export {
-  buildLogsDrilldownUrl,
-  buildTracesDrilldownUrl,
-  narrowWindowToBucket,
-  type DrilldownScope,
-  type DrilldownWindow,
-} from '../drilldown';
+export { buildLogsDrilldownUrl, buildTracesDrilldownUrl, type DrilldownScope, type TimeRange } from '../drilldown';
 export { chooseMetricsInterval, formatMetricsBucketLabel, type MetricsInterval } from '@mastra/react/hooks/metrics';
 export {
   applyMetricsPropertyFilterTokens,
@@ -39,3 +33,7 @@ export {
   type MetricsDimensionalFilter,
   type MetricsPropertyFilterFieldId,
 } from '../metrics-filters';
+export { useMetricsActivity, type ActivityBucket } from './use-metrics-activity';
+export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use-metrics-latency';
+export { useMetricsScores, type MetricsScores, type ScorerAverage, type ScoresBucket } from './use-metrics-scores';
+export { useTokenSpend, type SpendDimension, type SpendRow } from './use-token-spend';
