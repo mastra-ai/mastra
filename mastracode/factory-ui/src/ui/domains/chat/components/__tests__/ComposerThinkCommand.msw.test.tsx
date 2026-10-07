@@ -1,10 +1,11 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { queryKeys } from '../../../../../api/keys';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
@@ -135,7 +136,7 @@ describe('the /think command', () => {
     expect(input).toHaveValue('');
   });
 
-  it('offers only the levels the active model runs', async () => {
+  describe('on a model whose published efforts stop at high', () => {
     const proModel: AvailableModelOption = {
       id: 'openai/gpt-5-pro',
       provider: 'openai',
@@ -143,21 +144,44 @@ describe('the /think command', () => {
       hasApiKey: true,
       reasoningOptions: [{ type: 'effort', values: ['high'] }],
     };
-    useThinkingHandlers({ initialThinkingLevel: 'high', modelId: proModel.id });
-    server.use(http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [proModel] })));
-    const user = userEvent.setup();
-    renderWithProviders(
-      <OverlayTestProviders>
-        <Transcript />
-        <Composer />
-      </OverlayTestProviders>,
-    );
-    const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
-    await waitFor(() => expect(input).toBeEnabled());
 
-    await user.type(input, '/think low');
-    await user.keyboard('{Enter}');
+    async function renderComposerOnProModel(initialThinkingLevel: string) {
+      useThinkingHandlers({ initialThinkingLevel, modelId: proModel.id });
+      server.use(http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [proModel] })));
+      const { client } = renderWithProviders(
+        <OverlayTestProviders>
+          <Transcript />
+          <Composer />
+        </OverlayTestProviders>,
+      );
+      const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+      await waitFor(() => expect(input).toBeEnabled());
+      await waitFor(() => expect(client.getQueryData(queryKeys.availableModels())).toEqual([proModel]));
+      return input;
+    }
 
-    expect(await screen.findByText('Unknown thinking level: low. Use: off, high, default, status')).toBeInTheDocument();
+    it('rejects a level the model does not run', async () => {
+      const user = userEvent.setup();
+      const input = await renderComposerOnProModel('high');
+
+      await user.type(input, '/think low');
+      await user.keyboard('{Enter}');
+
+      expect(
+        await screen.findByText('Unknown thinking level: low. Use: off, high, default, status'),
+      ).toBeInTheDocument();
+    });
+
+    it('marks the level the saved choice runs at as current', async () => {
+      const user = userEvent.setup();
+      const input = await renderComposerOnProModel('max');
+
+      await user.type(input, '/think');
+      await user.keyboard('{Enter}');
+
+      const options = within(await screen.findByRole('region', { name: '/think options' })).getAllByRole('option');
+      const currentOptions = options.filter(option => option.getAttribute('aria-current') === 'true');
+      expect(currentOptions.map(option => option.textContent)).toEqual([expect.stringMatching(/^High/)]);
+    });
   });
 });

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { getModelReasoningOptions } from '@mastra/core/llm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -446,7 +447,7 @@ describe('GET /web/config/models', () => {
           provider: 'anthropic',
           modelName: 'claude-fable-5',
           hasApiKey: true,
-          reasoningOptions: [{ type: 'effort', values: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+          reasoningOptions: getModelReasoningOptions('anthropic/claude-fable-5'),
         },
       ],
     });
@@ -486,7 +487,7 @@ describe('GET /web/config/models', () => {
           provider: 'anthropic',
           modelName: 'claude-fable-5',
           hasApiKey: true,
-          reasoningOptions: [{ type: 'effort', values: ['low', 'medium', 'high', 'xhigh', 'max'] }],
+          reasoningOptions: getModelReasoningOptions('anthropic/claude-fable-5'),
         },
       ],
     });
