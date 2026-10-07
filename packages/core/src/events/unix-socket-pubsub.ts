@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
@@ -44,7 +44,16 @@ type UnixSocketPubSubOptions = {
    * do honor the frames, they just never acknowledge them.
    */
   membershipAckTimeoutMs?: number;
+  /**
+   * How often (ms) a broker checks that its socket path still leads to its own
+   * socket. If the file was deleted or replaced, the broker hands over and
+   * rejoins through normal election. Otherwise it would keep serving clients
+   * that nobody new can reach.
+   */
+  brokerPathCheckIntervalMs?: number;
 };
+
+type FileIdentity = { dev: number; ino: number };
 
 type BrokerClient = {
   socket: net.Socket;
@@ -61,6 +70,10 @@ type MembershipWaiter = {
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MEMBERSHIP_ACK_TIMEOUT_MS = 5_000;
+const DEFAULT_BROKER_PATH_CHECK_INTERVAL_MS = 2_000;
+// A live broker on a loaded host can refuse connects for a moment (full
+// accept backlog). Retry before treating its socket file as dead.
+const CONNECT_RETRY_DELAYS_MS = [50, 100, 200];
 const NEWLINE_BYTE = 0x0a;
 const LEASE_LOCK_RETRY_MS = 10;
 const PROCESS_NONCE_KEY = Symbol.for('@mastra/core/unix-socket-pubsub/process-nonce');
@@ -98,6 +111,25 @@ function leaseFileName(key: string): string {
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Returns the file identity at `path`, or undefined if nothing is there. */
+async function fileIdentity(path: string): Promise<FileIdentity | undefined> {
+  try {
+    const { dev, ino } = await stat(path);
+    return { dev, ino };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+function sameIdentity(a: FileIdentity | undefined, b: FileIdentity | undefined): boolean {
+  return a !== undefined && b !== undefined && a.dev === b.dev && a.ino === b.ino;
+}
+
+function closeServer(server: net.Server): Promise<void> {
+  return new Promise(resolve => server.close(() => resolve()));
 }
 
 /**
@@ -288,6 +320,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   readonly #leaseProcessDirectory: string;
   readonly #leaseRecoveryOwnerToken = globalThis.crypto.randomUUID();
   #server?: net.Server;
+  /** File identity of the socket this broker bound, so it never removes or trusts a file it didn't create. */
+  #serverIdentity?: FileIdentity;
+  #brokerPathCheckTimer?: ReturnType<typeof setInterval>;
+  #brokerPathCheckIntervalMs: number;
+  #relinquishing?: Promise<void>;
   #clientSocket?: net.Socket;
   #isBroker = false;
   #closed = false;
@@ -329,6 +366,12 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       throw new Error('UnixSocketPubSub membershipAckTimeoutMs must be a positive finite number');
     }
     this.#membershipAckTimeoutMs = membershipAckTimeoutMs;
+
+    const brokerPathCheckIntervalMs = options.brokerPathCheckIntervalMs ?? DEFAULT_BROKER_PATH_CHECK_INTERVAL_MS;
+    if (!Number.isFinite(brokerPathCheckIntervalMs) || brokerPathCheckIntervalMs <= 0) {
+      throw new Error('UnixSocketPubSub brokerPathCheckIntervalMs must be a positive finite number');
+    }
+    this.#brokerPathCheckIntervalMs = brokerPathCheckIntervalMs;
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -944,6 +987,14 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     this.#clientSocket?.destroy();
     this.#clientSocket = undefined;
     this.#rejectMembershipWaiters(new Error('UnixSocketPubSub is closed'));
+    this.#stopBrokerPathCheck();
+
+    // Remove the socket path while the server is still listening: nothing
+    // treats a live socket as dead, so if the path still has our identity
+    // here it is ours. If it doesn't, another broker replaced it.
+    if (this.#isBroker) {
+      await this.#removeSocketPathIf(this.#serverIdentity);
+    }
 
     const clientClosures = [...this.#brokerClients.values()].map(
       client =>
@@ -960,24 +1011,34 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     await Promise.allSettled(clientClosures);
 
     if (this.#server) {
-      await new Promise<void>(resolve => this.#server?.close(() => resolve()));
+      // The server is bound to a private path, so libuv's unlink-on-close
+      // removes only that name, never whatever now sits at socketPath.
+      await closeServer(this.#server);
       this.#server = undefined;
     }
+    this.#serverIdentity = undefined;
 
     await Promise.allSettled([...this.#pendingLeaseOperations]);
     LIVE_LEASE_RECOVERY_OWNERS.delete(this.#leaseRecoveryOwnerToken);
 
-    if (this.#isBroker) {
+    this.#isBroker = false;
+  }
+
+  /** Removes socketPath only if it still has `identity`, so nobody deletes a socket file they did not prove is theirs or dead. */
+  async #removeSocketPathIf(identity: FileIdentity | undefined): Promise<void> {
+    const current = await fileIdentity(this.socketPath).catch(() => undefined);
+    if (sameIdentity(current, identity)) {
       await unlink(this.socketPath).catch(() => {});
     }
-    this.#isBroker = false;
   }
 
   async #ensureStarted(forceReconnect = false): Promise<void> {
     if (this.#closed) {
       throw new Error('UnixSocketPubSub is closed');
     }
-    if (!forceReconnect && (this.#isBroker || (this.#clientSocket && !this.#clientSocket.destroyed))) {
+    // A forced reconnect replaces a client connection. It must never demote a
+    // live broker, which would then connect to its own server as a client.
+    if (this.#isBroker || (!forceReconnect && this.#clientSocket && !this.#clientSocket.destroyed)) {
       return;
     }
     if (this.#starting) {
@@ -999,40 +1060,44 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
     this.#throwIfClosed();
     await mkdir(dirname(this.socketPath), { recursive: true });
-    this.#throwIfClosed();
 
-    try {
-      await this.#listen();
+    let retries = 0;
+    for (;;) {
       this.#throwIfClosed();
-      this.#isBroker = true;
-      return;
-    } catch (error) {
-      if (this.#closed) {
-        await this.close();
-        throw new Error('UnixSocketPubSub is closed');
-      }
-      const code = (error as NodeJS.ErrnoException).code;
-      // EADDRINUSE: another broker bound the socket. EEXIST: another process
-      // created the socket file but hasn't bound yet (macOS race). Both mean
-      // "fall through and try to connect as a client".
-      if (code !== 'EADDRINUSE' && code !== 'EEXIST') throw error;
-    }
-
-    try {
-      await this.#connectClient();
-      this.#throwIfClosed();
-    } catch (error) {
-      if (this.#closed) {
-        await this.close();
-        throw new Error('UnixSocketPubSub is closed');
-      }
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ECONNREFUSED' || code === 'ENOENT' || code === 'ENOTSOCK') {
+      let code: string | undefined;
+      try {
+        await this.#connectClient();
         this.#throwIfClosed();
-        await this.#electBroker();
         return;
+      } catch (error) {
+        if (this.#closed) {
+          await this.close();
+          throw new Error('UnixSocketPubSub is closed');
+        }
+        code = (error as NodeJS.ErrnoException).code;
+        // EAGAIN (Linux) means the broker's accept backlog is full, and a
+        // connection that drops while resubscribing reached a broker that was
+        // closing. Neither proves the socket dead: retry, never elect.
+        if (code === 'EAGAIN' || isBrokerConnectionError(error)) {
+          if (retries >= CONNECT_RETRY_DELAYS_MS.length) throw error;
+          await delay(CONNECT_RETRY_DELAYS_MS[retries++]!);
+          continue;
+        }
+        if (code !== 'ENOENT' && code !== 'ECONNREFUSED' && code !== 'ENOTSOCK') throw error;
       }
-      throw error;
+
+      if (code === 'ENOENT') {
+        // Nothing at the path: publish our own socket there unless another
+        // instance gets there first, in which case connect to it.
+        if (await this.#bindIfAbsent()) return;
+        continue;
+      }
+      if (retries < CONNECT_RETRY_DELAYS_MS.length && code !== 'ENOTSOCK') {
+        await delay(CONNECT_RETRY_DELAYS_MS[retries++]!);
+        continue;
+      }
+      await this.#electBroker();
+      return;
     }
   }
 
@@ -1042,7 +1107,43 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  #listen(): Promise<void> {
+  /**
+   * Becomes the broker only if nothing is at socketPath. The socket is bound
+   * at a private name and hard-linked into place: link() fails with EEXIST
+   * rather than replacing, so this never takes over another broker's path.
+   * The private name also matters on close, because libuv unlinks a pipe
+   * server's bound path by name, which would otherwise delete whichever
+   * broker's file is at socketPath by then.
+   */
+  async #bindIfAbsent(): Promise<boolean> {
+    const privatePath = join(dirname(this.socketPath), `.${randomBytes(6).toString('hex')}`);
+    const server = await this.#listen(privatePath);
+    let published = false;
+    try {
+      const identity = await fileIdentity(privatePath);
+      try {
+        await link(privatePath, this.socketPath);
+        published = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+        throw error;
+      }
+      this.#server = server;
+      this.#serverIdentity = identity;
+      this.#isBroker = true;
+      this.#startBrokerPathCheck();
+    } finally {
+      await unlink(privatePath).catch(() => {});
+      if (!published) await closeServer(server);
+    }
+    if (this.#closed) {
+      await this.close();
+      throw new Error('UnixSocketPubSub is closed');
+    }
+    return true;
+  }
+
+  #listen(path: string): Promise<net.Server> {
     return new Promise((resolve, reject) => {
       const server = net.createServer(socket => this.#handleBrokerClient(socket));
       const onError = (error: Error) => {
@@ -1051,14 +1152,59 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       };
       const onListening = () => {
         server.off('error', onError);
-        this.#server = server;
-        resolve();
+        resolve(server);
       };
 
       server.once('error', onError);
       server.once('listening', onListening);
-      server.listen(this.socketPath);
+      server.listen(path);
     });
+  }
+
+  #startBrokerPathCheck() {
+    this.#stopBrokerPathCheck();
+    this.#brokerPathCheckTimer = setInterval(() => void this.#checkBrokerPath(), this.#brokerPathCheckIntervalMs);
+    this.#brokerPathCheckTimer.unref?.();
+  }
+
+  #stopBrokerPathCheck() {
+    if (this.#brokerPathCheckTimer) clearInterval(this.#brokerPathCheckTimer);
+    this.#brokerPathCheckTimer = undefined;
+  }
+
+  /**
+   * Hands over if socketPath no longer leads to this broker. A broker whose
+   * file was deleted or replaced still serves its connected clients, but no
+   * new instance can reach it, so they form a separate group that never
+   * hears the others' events.
+   */
+  async #checkBrokerPath(): Promise<void> {
+    if (!this.#isBroker || this.#closed || this.#relinquishing) return;
+    const identity = this.#serverIdentity;
+    let current: FileIdentity | undefined;
+    try {
+      current = await fileIdentity(this.socketPath);
+    } catch {
+      return;
+    }
+    if (!this.#isBroker || this.#closed || this.#serverIdentity !== identity || sameIdentity(current, identity)) return;
+    this.#relinquishing = this.#relinquishBroker().finally(() => {
+      this.#relinquishing = undefined;
+    });
+    await this.#relinquishing;
+  }
+
+  /** Stops serving and rejoins through normal election; dropped clients do the same. */
+  async #relinquishBroker(): Promise<void> {
+    const server = this.#server;
+    this.#stopBrokerPathCheck();
+    this.#isBroker = false;
+    this.#server = undefined;
+    this.#serverIdentity = undefined;
+    this.#brokerGroupCursors.clear();
+    for (const client of [...this.#brokerClients.values()]) this.#removeBrokerClient(client);
+    if (server) await closeServer(server);
+    if (!this.#closed) await this.#recoverClientConnection();
   }
 
   #connectClient(): Promise<void> {
@@ -1078,7 +1224,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
           this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
         );
         socket.on('error', error => this.#handleClientDisconnect(socket, error));
-        void this.#resubscribeClient().then(resolve, reject);
+        void this.#resubscribeClient(socket).then(resolve, reject);
       };
 
       socket.once('error', onError);
@@ -1086,7 +1232,13 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     });
   }
 
-  async #resubscribeClient() {
+  /**
+   * Re-registers memberships on a connection that `#start` is still setting
+   * up. Frames go straight to `socket`: the usual reconnect-and-retry path
+   * would wait on the in-flight start, which is waiting on this, and hang
+   * forever if the broker drops the connection mid-resubscribe.
+   */
+  async #resubscribeClient(socket: net.Socket) {
     for (const [topic, subscriptions] of this.#subscriptions) {
       const groups = new Set(
         [...subscriptions.values()]
@@ -1094,7 +1246,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
           .map(subscription => subscription.group),
       );
       for (const group of groups) {
-        await this.#sendSubscribeToBroker(topic, group);
+        await this.#sendMembershipFrameToBroker({ type: 'subscribe', topic, group }, this.#subscribeWaiters, socket);
       }
     }
   }
@@ -1130,8 +1282,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   /**
    * Serializes broker election across processes using an exclusive lock file.
-   * Only the lock winner unlinks the stale socket and listens; losers wait
-   * then connect as clients to the newly elected broker.
+   * This is the only place a socket file is removed by anyone but its own
+   * broker: the lock winner removes it only after a connect under the lock is
+   * refused and the file is still the one it probed. Losers wait, then
+   * connect as clients to the newly elected broker.
    */
   async #electBroker(): Promise<void> {
     const lockPath = this.socketPath + '.elect';
@@ -1156,24 +1310,33 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       throw e;
     }
 
+    const lockIdentity = await lockFd
+      .stat()
+      .then(({ dev, ino }) => ({ dev, ino }))
+      .catch(() => undefined);
     try {
+      const probed = await fileIdentity(this.socketPath);
       // Re-check: a previous election round may have installed a broker
       // between our initial connectClient() and acquiring this lock.
       try {
         await this.#connectClient();
         this.#throwIfClosed();
         return;
-      } catch {
-        // Still no live broker — proceed with election.
+      } catch (error) {
+        this.#throwIfClosed();
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ECONNREFUSED' && code !== 'ENOENT' && code !== 'ENOTSOCK') throw error;
       }
-      await unlink(this.socketPath).catch(() => {});
+      if (probed) await this.#removeSocketPathIf(probed);
+      if (await this.#bindIfAbsent()) return;
+      // Another instance published its socket after the removal.
+      await this.#connectClient();
       this.#throwIfClosed();
-      await this.#listen();
-      this.#throwIfClosed();
-      this.#isBroker = true;
     } finally {
       await lockFd.close().catch(() => {});
-      await unlink(lockPath).catch(() => {});
+      // Only remove the lock if it is still ours; a waiter may have replaced a lock it judged stale.
+      const currentLock = await fileIdentity(lockPath).catch(() => undefined);
+      if (sameIdentity(currentLock, lockIdentity)) await unlink(lockPath).catch(() => {});
     }
   }
 
@@ -1197,6 +1360,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   async #sendMembershipFrameToBroker(
     frame: Extract<ClientFrame, { type: 'subscribe' | 'unsubscribe' }>,
     waiterMap: Map<string, MembershipWaiter[]>,
+    socket?: net.Socket,
   ): Promise<void> {
     const key = membershipKey(frame.topic, frame.group);
     let waiter: MembershipWaiter | undefined;
@@ -1223,7 +1387,12 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       acknowledged.catch(() => {});
     };
     try {
-      await this.#sendToBroker(frame, registerWaiter);
+      if (socket) {
+        registerWaiter();
+        await writeFrame(socket, frame);
+      } else {
+        await this.#sendToBroker(frame, registerWaiter);
+      }
     } catch (error) {
       this.#settleMembershipWaiters(waiterMap, key, error instanceof Error ? error : new Error(String(error)));
     }
@@ -1271,6 +1440,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   #handleBrokerClient(socket: net.Socket) {
+    // A connection accepted while closing would keep server.close() waiting forever.
+    if (this.#closed) {
+      socket.destroy();
+      return;
+    }
     const client: BrokerClient = {
       socket,
       subscriptions: new Set(),

@@ -1138,6 +1138,59 @@ describe('UnixSocketPubSub', () => {
     });
   });
 
+  it('reconnects when the broker drops the connection while it is resubscribing', async () => {
+    const path = await socketPath();
+    const sockets = new Set<net.Socket>();
+    // The next connection is dropped as soon as it is accepted, like a broker
+    // that accepted it while closing, so the client's resubscribe write fails.
+    let dropNextConnection = false;
+    let ackedConnections = 0;
+    const server = net.createServer((socket: net.Socket) => {
+      if (dropNextConnection) {
+        dropNextConnection = false;
+        socket.destroy();
+        return;
+      }
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.on('error', () => {});
+      socket.setEncoding('utf8');
+      let counted = false;
+      socket.on('data', (chunk: string) => {
+        for (const line of chunk.split('\n')) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type !== 'subscribe') continue;
+          if (!counted) ackedConnections += 1;
+          counted = true;
+          socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic })}\n`);
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    try {
+      await pubsub.subscribe('topic-a', vi.fn());
+      expect(ackedConnections).toBe(1);
+
+      dropNextConnection = true;
+      for (const socket of sockets) socket.destroy();
+
+      // Before the fix the reconnect waited on itself forever after the drop.
+      await waitFor(() => expect(ackedConnections).toBe(2), 2000);
+      await pubsub.subscribe('topic-b', vi.fn());
+    } finally {
+      await pubsub.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('does not re-send duplicate callback subscriptions to the broker', async () => {
     const path = await socketPath();
     let subscribeCount = 0;
