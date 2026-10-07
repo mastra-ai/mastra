@@ -70,13 +70,15 @@ describe('resolveSubscriptionSession', () => {
     onTestFinished(async () => {
       await controller.deleteSession({ resourceId: 'session-1' });
     });
-    if (cold) await controller.deleteSession({ resourceId: 'session-1' });
-    else {
+    if (cold) {
+      await original.thread.transferOwnership({ expectedOwnerId: 'user-1', toOwnerId: 'user-2' });
+      await controller.deleteSession({ resourceId: 'session-1' });
+    } else {
       await original.thread.create();
       expect(original.thread.getId()).not.toBe('thread-1');
     }
     const queryThread = vi.spyOn(controller, 'queryThreadById');
-    const getBySessionId = vi.fn(async () => ({ userId: 'user-1', orgId: 'org-1' }));
+    const getBySessionId = vi.fn(async () => ({ userId: cold ? 'user-2' : 'user-1', orgId: 'org-1' }));
     const session = await resolveSubscriptionSession(controller, row(), {
       label: 'Test',
       sourceControl: { sessions: { getBySessionId } },
@@ -87,7 +89,9 @@ describe('resolveSubscriptionSession', () => {
     expect(getBySessionId).not.toHaveBeenCalledWith('factory-1');
     expect(session?.identity.getId()).toBe('session-1');
     expect(session?.identity.getResourceId()).toBe('session-1');
+    expect(session?.identity.getOwnerId()).toBe(cold ? 'user-2' : 'user-1');
     expect(session?.thread.getId()).toBe('thread-1');
+    await expect(session?.thread.getOwner()).resolves.toBe(cold ? 'user-2' : 'user-1');
     expect(session?.state.get()).toMatchObject({ factoryOrgId: 'org-1' });
     if (!cold) expect(session).toBe(original);
   });
