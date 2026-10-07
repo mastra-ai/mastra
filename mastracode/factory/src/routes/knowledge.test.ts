@@ -44,6 +44,7 @@ async function createHarness(
     accessProfile?: KnowledgeAccessProfileResolver;
     isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
     threadTitle?: (threadId: string) => Promise<string | undefined>;
+    authEnabled?: boolean;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -52,7 +53,10 @@ async function createHarness(
   const runtime = options.knowledgeRuntime ?? new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
   const knowledge = await runtime.getStorageInternal();
   const routes = new KnowledgeRoutes({
-    auth: fakeRouteAuth(options.isOrganizationAdmin ? { isOrganizationAdmin: options.isOrganizationAdmin } : {}),
+    auth: fakeRouteAuth({
+      ...(options.isOrganizationAdmin ? { isOrganizationAdmin: options.isOrganizationAdmin } : {}),
+      ...(options.authEnabled === undefined ? {} : { enabled: options.authEnabled }),
+    }),
     projects: seed.projects,
     knowledge: options.knowledgeResolver ?? (async () => runtime),
     ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
@@ -1268,6 +1272,82 @@ describe('KnowledgeRoutes', () => {
     expect(operatorBody).toMatchObject({ run: { status: 'succeeded', source: 'notes:primary' } });
     expect(operatorBody.transcript).toMatchObject({ threadId: 'importer-thread', available: true });
     expect(JSON.stringify(operatorBody.transcript.messages)).toContain('importer-only secret');
+  });
+
+  it('lets an explicit importOperator false override admin and auth-disabled fallbacks', async () => {
+    for (const fallback of [{ isOrganizationAdmin: async () => true }, { authEnabled: false }]) {
+      const runtime = new Knowledge({
+        id: 'mastra',
+        storage: new InMemoryStore(),
+        importers: [{ id: 'calendar', handler: async () => {} }],
+      });
+      const h = await createHarness({
+        knowledgeRuntime: runtime,
+        ...fallback,
+        accessProfile: async ({ builtInScopes }) => ({
+          id: 'project',
+          rootScopeAddress: builtInScopes.resource.address,
+          baselineScopes: [builtInScopes.org, builtInScopes.resource],
+          importOperator: false,
+        }),
+      });
+      const run = await runtime.createImportRunInternal({
+        id: 'run-denied',
+        importerId: 'calendar',
+        binding: knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` }),
+        importKind: 'static',
+        triggerKind: 'programmatic',
+      });
+      await runtime.updateImportRunInternal({ id: run.id, status: 'running' });
+      await runtime.updateImportRunInternal({ id: run.id, status: 'failed', error: 'upstream said private detail' });
+      const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+      for (const path of [base, `${base}/calendar/runs`]) {
+        expect((await h.app.request(path)).status).toBe(403);
+      }
+    }
+  });
+
+  it('keeps import status, errors, and transcripts out of activity for non-operators', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
+    const run = await runtime.createImportRunInternal({
+      id: 'run-activity',
+      importerId: 'calendar',
+      binding: knowledgeImporterBindingKey({ source: 'calendar:primary', scope: `resource:${h.projectId}` }),
+      importKind: 'agentic',
+      triggerKind: 'programmatic',
+    });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'running', transcriptThreadId: 'importer-thread' });
+    await h.knowledge.createNode({
+      name: 'Imported standup',
+      scopeIds: [h.projectScope.at(-1)!],
+      importRunId: run.id,
+    });
+    await runtime.updateImportRunInternal({ id: run.id, status: 'failed', error: 'upstream said private detail' });
+
+    const { status, body } = await activity(h);
+    expect(status).toBe(200);
+    const imported = body.events.filter(event => (event as { sourceType?: string }).sourceType === 'importer');
+    expect(imported.length).toBeGreaterThan(0);
+    const allowed = ['action', 'createdAt', 'id', 'importRunId', 'scopeId', 'sourceId', 'sourceType', 'targetType'];
+    for (const event of imported) {
+      expect(Object.keys(event as object).filter(key => !allowed.includes(key))).toEqual([]);
+      expect(event).toMatchObject({ sourceId: 'calendar' });
+    }
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('failed');
+    expect(serialized).not.toContain('private detail');
+    expect(serialized).not.toContain('importer-thread');
+    expect(serialized).not.toContain('calendar:primary');
+    const runReference = (imported[0] as { importRunId: string }).importRunId;
+    expect(
+      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${runReference}`))
+        .status,
+    ).toBe(403);
   });
 
   it('treats organization administrators as import operators when the profile does not decide', async () => {
