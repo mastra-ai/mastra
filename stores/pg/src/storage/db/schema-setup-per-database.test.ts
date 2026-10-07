@@ -34,15 +34,17 @@ describe('schema setup across databases', () => {
     await storeA.init();
     await expect(storeB.init()).resolves.toBeUndefined();
 
-    const probe = new Pool(configFor(databaseB));
-    try {
-      const { rows } = await probe.query(
-        `SELECT count(*)::int AS count FROM information_schema.tables WHERE table_schema = $1`,
-        [schemaName],
-      );
-      expect(rows[0].count).toBeGreaterThan(0);
-    } finally {
-      await probe.end();
+    for (const db of [databaseA, databaseB]) {
+      const probe = new Pool(configFor(db));
+      try {
+        const { rows } = await probe.query(
+          `SELECT count(*)::int AS count FROM information_schema.tables WHERE table_schema = $1`,
+          [schemaName],
+        );
+        expect(rows[0].count).toBeGreaterThan(0);
+      } finally {
+        await probe.end();
+      }
     }
   });
 });
