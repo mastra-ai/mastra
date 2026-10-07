@@ -10,7 +10,8 @@ import {
 import type { Context } from 'hono';
 import { stream } from 'hono/streaming';
 
-export async function getAgentCardByIdHandler(c: Context) {
+// Explicit return type: with hono 4.13.11, tsc cannot name the inferred c.json() type in emitted declarations (TS2883).
+export async function getAgentCardByIdHandler(c: Context): Promise<Response> {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
   if (!agentId) {
