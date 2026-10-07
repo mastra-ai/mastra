@@ -49,6 +49,18 @@ import type {
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+
+/**
+ * Formats a thread key for error messages. The key's NUL separator would cut
+ * off any stored or displayed text at the resource id.
+ */
+function describeThreadKey(key: string): string {
+  const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
+  if (separator === -1) return `thread ${key}`;
+  const resourceId = key.slice(0, separator);
+  const threadId = key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length);
+  return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;
+}
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /**
@@ -286,8 +298,7 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  | AgentExecutionOptions<any>
-  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -1220,7 +1231,7 @@ export class AgentThreadStreamRuntime {
             requestId: data.requestId,
             runId: data.runId,
             sourceId,
-            error: `Claimed thread owner could not acquire the execution lease for ${key}`,
+            error: `Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`,
           });
         } else if (accepted.error) {
           await reply({
@@ -1582,12 +1593,12 @@ export class AgentThreadStreamRuntime {
       else failMessageIdentity?.(failure);
     };
     if (!isOwnerActive()) {
-      releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-      return { runId, error: `Claimed thread owner was released for ${key}` };
+      releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+      return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
     }
     if (Date.now() >= expiresAt) {
-      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
-      return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+      return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
     }
     // Resolving the owner's stream options can reject. A later retry of the same
     // logical message must be free to route instead of being told this message was
@@ -1621,12 +1632,12 @@ export class AgentThreadStreamRuntime {
       subscription.references++;
       await subscription.ready;
       if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-        return { runId, error: `Claimed thread owner was released for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
       }
       if (Date.now() >= expiresAt) {
-        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
-        return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
       }
 
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -1658,8 +1669,8 @@ export class AgentThreadStreamRuntime {
       }
 
       if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-        return { runId, error: `Claimed thread owner was released for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
       }
       state.activeThreadRunIds.set(key, runId);
       state.threadKeysByRunId.set(runId, key);
@@ -1684,8 +1695,8 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
           const error = !ownerActive
-            ? `Claimed thread owner was released for ${key}`
-            : `Claimed thread owner acceptance expired for ${key}`;
+            ? `Claimed thread owner was released for ${describeThreadKey(key)}`
+            : `Claimed thread owner acceptance expired for ${describeThreadKey(key)}`;
           releaseMessageIdentity(error);
           const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
@@ -1704,7 +1715,9 @@ export class AgentThreadStreamRuntime {
           settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
-        releaseMessageIdentity(new Error(`Claimed thread owner could not acquire the execution lease for ${key}`));
+        releaseMessageIdentity(
+          new Error(`Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`),
+        );
         await this.#drainPendingIdleSignals(state, pubsub, key);
         return undefined;
       }
@@ -1747,7 +1760,9 @@ export class AgentThreadStreamRuntime {
       // never became ready, for example) must not leave a duplicate waiting on an
       // outcome that will never arrive.
       if (!admissionSettled) {
-        failMessageIdentity?.(new Error(`Claimed thread owner admission for ${key} did not complete`));
+        failMessageIdentity?.(
+          new Error(`Claimed thread owner admission for ${describeThreadKey(key)} did not complete`),
+        );
       }
       if (control) {
         control.references--;
@@ -1807,7 +1822,7 @@ export class AgentThreadStreamRuntime {
       // this caller has already reported as timed out.
       const expiresAt = Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS;
       const timeout = setTimeout(
-        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${key}`) }),
+        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${describeThreadKey(key)}`) }),
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
@@ -1855,7 +1870,7 @@ export class AgentThreadStreamRuntime {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
       throw new Error(
-        `No claimed thread owner responded for ${key} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
+        `No claimed thread owner responded for ${describeThreadKey(key)} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
       );
     }
     const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
@@ -2069,8 +2084,7 @@ export class AgentThreadStreamRuntime {
         try {
           if (cancelled) return;
           const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
-            | ReadableStream<unknown>
-            | undefined;
+            ReadableStream<unknown> | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -2171,7 +2185,8 @@ export class AgentThreadStreamRuntime {
       }
       if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
       trimmedThrough = cutoff;
-      void runtime.#getPubSub(pubsub)
+      void runtime
+        .#getPubSub(pubsub)
         .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
         .catch(() => {});
       let keep = cutoff + 1;

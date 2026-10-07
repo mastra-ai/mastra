@@ -3514,7 +3514,10 @@ describe('Agent signals', () => {
       },
       pubsub,
     );
-    await expect(signalResult.accepted).rejects.toThrow('No claimed thread owner responded');
+    // The whole message survives storage and display: no NUL from the internal thread key.
+    await expect(signalResult.accepted).rejects.toThrow(
+      'No claimed thread owner responded for thread failing-discovery-thread (resource failing-discovery-user) within 1000ms',
+    );
     // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
     expect(discoveryRequests).toBeLessThanOrEqual(4);
   });
