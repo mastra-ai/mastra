@@ -1,5 +1,6 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { isLegacyAnyValue } from './trace-filters';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
@@ -24,6 +25,8 @@ export const TRACE_FILTER_OPERATOR_IDS = [
   'gte',
   'lt',
   'lte',
+  'matches',
+  'notMatches',
 ] as const;
 export type TraceFilterOperatorId = (typeof TRACE_FILTER_OPERATOR_IDS)[number];
 
@@ -56,6 +59,8 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
   gte: 'gte',
   lt: 'lt',
   lte: 'lte',
+  matches: 'matches',
+  notMatches: 'notMatches',
 } as const satisfies Record<TraceFilterOperatorId, TraceQueryScalarPredicate['op']>;
 
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
@@ -76,9 +81,12 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
 export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment']);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
-const NEGATIVE_TO_POSITIVE = { isNot: 'is', notIn: 'in', notExists: 'exists' } as const satisfies Partial<
-  Record<TraceFilterOperatorId, TraceFilterOperatorId>
->;
+const NEGATIVE_TO_POSITIVE = {
+  isNot: 'is',
+  notIn: 'in',
+  notExists: 'exists',
+  notMatches: 'matches',
+} as const satisfies Partial<Record<TraceFilterOperatorId, TraceFilterOperatorId>>;
 type NegativeOperatorId = keyof typeof NEGATIVE_TO_POSITIVE;
 const isNegativeOperator = (op: TraceFilterOperatorId): op is NegativeOperatorId => op in NEGATIVE_TO_POSITIVE;
 
@@ -111,6 +119,11 @@ function scalarPredicate(
     case 'in':
     case 'notIn':
       return values.length ? { op: queryOp, value: { path }, set: values } : undefined;
+    case 'matches':
+    case 'notMatches': {
+      const [literal] = values;
+      return typeof literal === 'string' ? { op: queryOp, left: { path }, right: { literal } } : undefined;
+    }
     default: {
       if (!values.length) return undefined;
       // `is` with several values is set membership; `isNot` with several is exclusion.
@@ -156,7 +169,8 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
   if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(token.fieldId) && !isPresence) return undefined;
 
   const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
+    (value): value is string =>
+      typeof value === 'string' && Boolean(value.trim()) && !isLegacyAnyValue(value, operatorId),
   );
   if (!rawValues.length && !isPresence) return undefined;
 
@@ -178,6 +192,11 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
   } else if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(fieldId)) {
     values = rawValues.map(Number).filter(value => !Number.isNaN(value));
     if (!values.length && !isPresence) return undefined;
+  }
+  if (operatorId === 'matches' || operatorId === 'notMatches') {
+    // The query rejects a text literal with no letters or digits; drop it like non-numeric input.
+    values = values.filter(value => /[\p{L}\p{M}\p{N}]/u.test(String(value)));
+    if (!values.length) return undefined;
   }
 
   const { scope, path } = resolveTraceQueryPath(fieldId);
