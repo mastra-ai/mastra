@@ -76,6 +76,7 @@ describe('custom-only board routing', () => {
   it.each([
     ['github pull request', { integrationId: 'github', type: 'pull-request', externalId: 'github:1', url: null }],
     ['gitlab merge request', { integrationId: 'gitlab', type: 'pull-request', externalId: 'gitlab:1', url: null }],
+    ['slack thread', { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:1', url: null }],
     ['manual', null],
   ])('renders a %s card in the initial phase', async (_label, externalSource) => {
     const now = '2026-09-01T12:00:00.000Z';
