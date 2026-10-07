@@ -50,10 +50,12 @@ describe('Knowledge importer webhook handler', () => {
       binding: knowledgeImporterBindingKey(binding),
     });
     expect(['queued', 'running']).toContain(run.status);
-    let terminal = await knowledge.getImportRun(run.id);
+    // Poll storage directly: this test covers webhook routing, not run read authorization.
+    const storage = await knowledge.getStorageInternal();
+    let terminal = await storage.getImportRun(run.id);
     while (terminal && !['succeeded', 'failed', 'skipped', 'interrupted'].includes(terminal.status)) {
       await new Promise(resolve => setTimeout(resolve, 25));
-      terminal = await knowledge.getImportRun(run.id);
+      terminal = await storage.getImportRun(run.id);
     }
     expect(terminal).toMatchObject({ status: 'succeeded' });
     expect(handler).toHaveBeenCalledWith(
