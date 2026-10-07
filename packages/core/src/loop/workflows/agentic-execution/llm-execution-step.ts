@@ -96,6 +96,7 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { applyToolModelOutputProcessors } from '../../shared/steps/tool-result-commit-core';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -1041,6 +1042,25 @@ async function processOutputStream<OUTPUT = undefined>({
               const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
               if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
+              }
+              const nextProviderMetadata = await applyToolModelOutputProcessors(getToolResultProcessorRunner(), {
+                steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
+                messageList,
+                stepNumber: toolResultStepNumber ?? 0,
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+                toolArgs: chunk.payload.args,
+                result: chunk.payload.result,
+                providerExecuted: inferredProviderExecuted,
+                providerMetadata: chunk.payload.providerMetadata as Record<string, unknown> | undefined,
+                ...(toolResultObservability ?? {}),
+                requestContext,
+                retryCount: processorRetryCount ?? 0,
+                writer: toolResultWriter,
+                abortSignal: options?.abortSignal,
+              });
+              if (nextProviderMetadata !== chunk.payload.providerMetadata) {
+                (chunk.payload as { providerMetadata?: unknown }).providerMetadata = nextProviderMetadata;
               }
             } catch (error) {
               if (error instanceof TripWire) {
@@ -2213,8 +2233,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                           Boolean(
                             outputProcessors?.some(processor =>
                               isProcessorWorkflow(processor)
-                                ? processor.__processToolResult !== false
-                                : 'processToolResult' in processor,
+                                ? processor.__processToolResult !== false ||
+                                  processor.__processToolModelOutput !== false
+                                : 'processToolResult' in processor || 'processToolModelOutput' in processor,
                             ),
                           ),
                         isProviderTool,

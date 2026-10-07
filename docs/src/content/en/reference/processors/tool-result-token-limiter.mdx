@@ -1,13 +1,13 @@
 ---
 title: "Reference: ToolResultTokenLimiter | Processors"
-description: "Use ToolResultTokenLimiter to truncate large tool results before they're stored or sent to the language model."
+description: "Use ToolResultTokenLimiter to cap how much of each tool result the language model reads."
 packages:
   - "@mastra/core"
 ---
 
 # ToolResultTokenLimiter
 
-The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs during the agent's turn, after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step. For tools that define `toModelOutput`, the model sees the mapped output of the original result instead. See [Behavior](#behavior).
+The `ToolResultTokenLimiter` is an **output processor** that caps how many tokens of each tool result the model reads. It runs once per result through the [`processToolModelOutput`](/reference/processors/processor-interface) hook, after the tool returns. The stored and streamed result stays whole; only the copy the model reads on later steps is truncated. See [Behavior](#behavior).
 
 ## Usage example
 
@@ -21,7 +21,7 @@ const agent = new Agent({
   instructions: 'You research topics using the available tools.',
   model: '__GATEWAY_OPENAI_MODEL__',
   tools: { fetchPage },
-  inputProcessors: [new TokenLimiterProcessor(8000)],
+  inputProcessors: [new TokenLimiterProcessor({ limit: 8000 })],
   outputProcessors: [new ToolResultTokenLimiter({ limit: 4000 })],
 })
 ```
@@ -57,9 +57,11 @@ When you use it with [`TokenLimiterProcessor`](/reference/processors/token-limit
 ## Behavior
 
 - Results at or under the limit pass through unchanged.
-- Larger results are converted to text (objects become JSON strings), cut to fit the limit, and end with a marker such as `[truncated: showing 2,000 of 18,400 tokens]`, so the model can see the result is partial and ask for less. Token counts are estimates.
-- The truncated value replaces the stored result. The full output of a truncated result isn't kept in memory or message history.
-- A tool's `toModelOutput` receives the original, untruncated result. The model sees the full mapped output. The stored result is still truncated.
+- Larger results are cut to fit the limit and end with a marker such as `[truncated: showing 2,000 of 18,400 tokens]`, so the model can see the result is partial and ask for less. Token counts are estimates.
+- Only the model-facing copy is truncated. Memory, message history, streamed chunks, and the UI keep the full result with its original type. The capped copy is stored with the message and reused on later steps, so each result is truncated once.
+- For tools that define `toModelOutput`, the mapped output is capped. Text and JSON outputs are capped, and so are text entries of `content` outputs. Media entries are left unchanged.
+- Without `toModelOutput`, the model reads a capped text copy of the result. Objects are converted to JSON text for that copy only.
+- Media results such as `{ data, mediaType }` pass through unchanged.
 - Results from background tasks the agent waits for are limited like any other tool result. Results that arrive after the turn ends pass through unchanged.
 - Tool errors, results from provider-executed tools, and results that can't be serialized to JSON pass through unchanged.
-- Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt.
+- Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt. It counts the capped copy, not the full result.

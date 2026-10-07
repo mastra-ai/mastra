@@ -562,7 +562,26 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else if (invocation.state === 'result') {
               // Tool result - this will become a separate CoreMessage
               toolResultCount++;
-              if (invocation.result !== undefined) {
+              // The model reads the mapped/capped copy when one is stored, not the raw result.
+              const modelOutput = (part.providerMetadata?.mastra as { modelOutput?: unknown } | undefined)
+                ?.modelOutput;
+              if (modelOutput != null) {
+                const content = (modelOutput as { type?: string; value?: unknown }).value;
+                if ((modelOutput as { type?: string }).type === 'content' && Array.isArray(content)) {
+                  for (const entry of content as Array<Record<string, unknown>>) {
+                    if (typeof entry.text === 'string') {
+                      tokenString += entry.text;
+                    } else if (typeof entry.data === 'string') {
+                      mediaTokens += estimateMediaTokens(entry.data, entry.mediaType as string | undefined);
+                    } else {
+                      tokenString += JSON.stringify(entry);
+                    }
+                  }
+                } else {
+                  tokenString += JSON.stringify(modelOutput);
+                }
+                overhead -= 12;
+              } else if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
                 } else if (isMediaPayload(invocation.result)) {

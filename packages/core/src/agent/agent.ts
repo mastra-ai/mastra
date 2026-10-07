@@ -2082,6 +2082,9 @@ export class Agent<
       committedWorkflow.__processToolResult = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processToolResult,
       );
+      committedWorkflow.__processToolModelOutput = validProcessors.some(
+        processor => isProcessorWorkflow(processor) || !!processor.processToolModelOutput,
+      );
       if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
         committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
           let result = inputData;

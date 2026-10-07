@@ -23,6 +23,7 @@
  *      step before the gated tool-result chunk is emitted.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ToolResultTokenLimiter } from '../../../../processors/processors/tool-result-token-limiter';
 import { ChunkFrom } from '../../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
@@ -177,6 +178,21 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     const toolResultChunks = emittedChunksOfType('tool-result');
     expect(toolResultChunks).toHaveLength(1);
     expect(toolResultChunks[0].payload.result).toEqual(REDACTED_RESULT);
+  });
+
+  it('caps only the model-facing copy with processToolModelOutput', async () => {
+    const messageList = seedMessageList();
+    const big = 'word '.repeat(2000);
+    setupRegistry(new ToolResultTokenLimiter(64) as any, messageList);
+    globalRunRegistry.get(RUN_ID)!.tools = { [TOOL_NAME]: { execute: vi.fn().mockResolvedValue(big) } } as any;
+
+    const output = await runToolCallStep();
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toBe(big);
+    expect(output.providerMetadata.mastra.modelOutput.value).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
+    const toolResultChunks = emittedChunksOfType('tool-result');
+    expect(toolResultChunks[0].payload.result).toBe(big);
   });
 
   it('replaces the tool-result with a tripwire and blocks the commit when a processor aborts', async () => {

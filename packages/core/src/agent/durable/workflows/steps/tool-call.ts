@@ -9,6 +9,7 @@ import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
+import { applyToolModelOutputProcessors } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
@@ -1745,6 +1746,20 @@ export function createDurableToolCallStep() {
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
+            providerMetadata = await applyToolModelOutputProcessors(resultProcessorRunner, {
+              steps: [],
+              stepNumber: 0,
+              messageList,
+              toolName,
+              toolCallId,
+              toolArgs: cleanedArgs,
+              result,
+              providerMetadata: providerMetadata as Record<string, unknown> | undefined,
+              ...(processorObservabilityContext ?? {}),
+              requestContext: registryEntry.requestContext,
+              retryCount: 0,
+              abortSignal: toolAbortSignal,
+            }) as typeof providerMetadata;
           } catch (processorError) {
             if (processorError instanceof TripWire) {
               // Blocked: emit a tripwire chunk instead of the tool-result and

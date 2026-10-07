@@ -29,6 +29,7 @@ For a conceptual walkthrough of preparation, the agent loop, tool execution, and
 | Tool execution | Once per local tool call | Receives the live [`RequestContext`](/docs/server/request-context). Approval or suspension can delay execution. |
 | Tool [`onOutput`](/reference/tools/create-tool#onoutput) | Once after successful local execution | Receives the tool output. |
 | `processToolResult` | Per local/client result, or when a deferred provider result arrives | Can inspect, redact, or abort before a raw tool result enters the message list. |
+| `processToolModelOutput` | Once per tool result, after `processToolResult` and `toModelOutput` | Changes only what the model reads. The stored result stays unchanged. |
 | `processAPIError` | On eligible provider API errors | Can update request state and request another provider attempt. |
 | [`onIterationComplete`](/reference/agents/generate#parameters) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
 | `processOutputResult` | Once at finalization | Post-processes the completed agent result before it's returned. |
@@ -90,6 +91,10 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult
 
   processToolResult?(args: ProcessToolResultArgs<TTripwireMetadata>): ProcessorMessageResult
+
+  processToolModelOutput?(
+    args: ProcessToolModelOutputArgs<TTripwireMetadata>,
+  ): Promise<ProcessToolModelOutputResult> | ProcessToolModelOutputResult
 
   processOutputResult?(args: ProcessOutputResultArgs<TTripwireMetadata>): ProcessorMessageResult
 }
@@ -1474,6 +1479,54 @@ const agent = new Agent({
 ```
 
 ## Usage examples
+
+
+### `processToolModelOutput`
+
+Changes what the model reads for a tool result without changing the result. `processToolResult` changes the result; `processToolModelOutput` changes only what the model reads. Memory, message history, and streamed chunks keep the result as `processToolResult` left it.
+
+It runs once per tool result, after every `processToolResult` rewrite and after the tool's `toModelOutput` mapping. Output processors run in order, and each one receives the previous one's `modelOutput`. The final value is stored with the message and used on every later prompt. [`ToolResultTokenLimiter`](/reference/processors/tool-result-token-limiter) uses this hook.
+
+Return `{ modelOutput }` to replace the model-facing output, or return nothing to keep it.
+
+```typescript oxfmt:false
+processToolModelOutput?(
+  args: ProcessToolModelOutputArgs,
+): Promise<ProcessToolModelOutputResult> | ProcessToolModelOutputResult;
+```
+
+#### `ProcessToolModelOutputArgs`
+
+<PropertiesTable
+  content={[
+  { name: 'toolName', type: 'string', description: 'Name of the tool.', isOptional: false },
+  { name: 'toolCallId', type: 'string', description: 'ID of the tool call.', isOptional: false },
+  { name: 'args', type: 'unknown', description: 'Arguments the tool was called with.', isOptional: false },
+  { name: 'result', type: 'unknown', description: 'Final tool result, after all `processToolResult` rewrites.', isOptional: false },
+  {
+    name: 'modelOutput',
+    type: 'ToolModelOutput | undefined',
+    description: "Current model-facing output. `undefined` when the tool has no `toModelOutput` and no earlier processor set one.",
+    isOptional: false,
+  },
+  { name: 'providerExecuted', type: 'boolean', description: 'Whether the provider executed the tool.', isOptional: true },
+  { name: 'stepNumber', type: 'number', description: 'Current step number (0-indexed).', isOptional: false },
+  { name: 'abort', type: '(reason?: string, options?: { retry?: boolean }) => never', description: 'Aborts processing.', isOptional: false },
+]}
+/>
+
+```typescript
+import type { Processor } from '@mastra/core/processors'
+
+export class ShortSummaries implements Processor {
+  id = 'short-summaries'
+
+  processToolModelOutput({ toolName, result }) {
+    if (toolName !== 'searchDocs') return
+    return { modelOutput: { type: 'text', value: JSON.stringify(result).slice(0, 2000) } }
+  }
+}
+```
 
 ### Basic input processor
 

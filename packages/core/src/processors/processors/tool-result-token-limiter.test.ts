@@ -35,7 +35,12 @@ function makeModel(prompts: any[]) {
   });
 }
 
-async function run(output: unknown, limit: number | { limit: number }, toModelOutput?: (output: any) => any) {
+async function run(
+  output: unknown,
+  limit: number | { limit: number },
+  toModelOutput?: (output: any) => any,
+  extraProcessors: any[] = [],
+) {
   const prompts: any[] = [];
   const agent = new Agent({
     id: 'trl-agent',
@@ -51,7 +56,7 @@ async function run(output: unknown, limit: number | { limit: number }, toModelOu
         ...(toModelOutput ? { toModelOutput } : {}),
       }),
     },
-    outputProcessors: [new ToolResultTokenLimiter(limit)],
+    outputProcessors: [new ToolResultTokenLimiter(limit), ...extraProcessors],
   });
 
   const stream = await agent.stream('go', { maxSteps: 3 });
@@ -64,35 +69,87 @@ async function run(output: unknown, limit: number | { limit: number }, toModelOu
   return { chunkResult, promptOutput };
 }
 
+const MARKER = /\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/;
+
+function callHook(limit: number, result: unknown, modelOutput?: any, providerExecuted?: boolean) {
+  return new ToolResultTokenLimiter(limit).processToolModelOutput({
+    result,
+    modelOutput,
+    toolCallId: 'c',
+    toolName: 't',
+    args: {},
+    providerExecuted,
+  } as any) as { modelOutput?: any } | undefined;
+}
+
 describe('ToolResultTokenLimiter', () => {
-  it('truncates an oversized string result before the next model call', async () => {
-    const { chunkResult, promptOutput } = await run('word '.repeat(2000), { limit: 64 });
+  it('caps the model copy of an oversized string and keeps the streamed result whole', async () => {
+    const raw = 'word '.repeat(2000);
+    const { chunkResult, promptOutput } = await run(raw, { limit: 64 });
 
-    expect(chunkResult).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
-    expect(estimateTokenCount(chunkResult as string)).toBeLessThanOrEqual(64);
-    expect(chunkResult).toContain('of 2,000 tokens]');
-    expect(promptOutput).toEqual({ type: 'text', value: chunkResult });
+    expect(chunkResult).toBe(raw);
+    expect(promptOutput.type).toBe('text');
+    expect(promptOutput.value).toMatch(MARKER);
+    expect(promptOutput.value).toContain('of 2,000 tokens]');
+    expect(estimateTokenCount(promptOutput.value)).toBeLessThanOrEqual(64);
   });
 
-  it('truncates an oversized object result as JSON text', async () => {
-    const { chunkResult, promptOutput } = await run(
-      { items: Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item ${i}` })) },
-      { limit: 64 },
-    );
+  it('keeps an object result as an object and gives the model capped JSON text', async () => {
+    const raw = { items: Array.from({ length: 500 }, (_, i) => ({ id: i, name: `item ${i}` })) };
+    const { chunkResult, promptOutput } = await run(raw, { limit: 64 });
 
-    expect(chunkResult).toMatch(/^\{"items":\[/);
-    expect(promptOutput).toEqual({ type: 'text', value: chunkResult });
-    expect(chunkResult).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
+    expect(chunkResult).toEqual(raw);
+    expect(promptOutput.type).toBe('text');
+    expect(promptOutput.value).toMatch(/^\{"items":\[/);
+    expect(promptOutput.value).toMatch(MARKER);
   });
 
-  it('gives toModelOutput the raw value, so mapped output is not capped for the model', async () => {
+  it('caps the mapped toModelOutput value', async () => {
     const raw = 'word '.repeat(2000);
     const mapper = vi.fn((output: string) => ({ type: 'text', value: `mapped:${output}` }));
     const { chunkResult, promptOutput } = await run(raw, { limit: 64 }, mapper);
 
     expect(mapper).toHaveBeenCalledWith(raw);
-    expect(chunkResult).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
-    expect(promptOutput).toEqual({ type: 'text', value: `mapped:${raw}` });
+    expect(chunkResult).toBe(raw);
+    expect(promptOutput.value).toMatch(/^mapped:word/);
+    expect(promptOutput.value).toMatch(MARKER);
+  });
+
+  it('leaves media results untouched', async () => {
+    const raw = { data: 'A'.repeat(200_000), mediaType: 'image/png' };
+    const { chunkResult, promptOutput } = await run(raw, { limit: 64 });
+
+    expect(chunkResult).toEqual(raw);
+    expect(JSON.stringify(promptOutput)).not.toContain('[truncated');
+  });
+
+  it('caps text entries of content output and leaves media entries alone', () => {
+    const image = { type: 'media', data: 'A'.repeat(50_000), mediaType: 'image/png' };
+    const out = callHook(64, 'x', {
+      type: 'content',
+      value: [{ type: 'text', text: 'word '.repeat(2000) }, image],
+    });
+    expect(out!.modelOutput.value[0].text).toMatch(MARKER);
+    expect(out!.modelOutput.value[1]).toBe(image);
+  });
+
+  it('caps the redacted result when a processToolResult redactor runs after it', async () => {
+    const redactor = {
+      id: 'redactor',
+      processToolResult: ({ messageList, toolCallId, toolName, args, result }: any) => {
+        messageList.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId, toolName, args, result: result.replaceAll('word', 'XXXX') },
+        });
+        return messageList;
+      },
+    };
+    const { chunkResult, promptOutput } = await run('word '.repeat(2000), { limit: 64 }, undefined, [redactor]);
+
+    expect(chunkResult).toBe('XXXX '.repeat(2000));
+    expect(promptOutput.value).toMatch(/^XXXX/);
+    expect(promptOutput.value).not.toContain('word');
+    expect(promptOutput.value).toMatch(MARKER);
   });
 
   it('leaves results under the limit unchanged', async () => {
@@ -103,11 +160,10 @@ describe('ToolResultTokenLimiter', () => {
   });
 
   it('accepts a bare number as the limit', async () => {
-    const { chunkResult } = await run('word '.repeat(500), 100);
+    const { promptOutput } = await run('word '.repeat(500), 100);
 
-    expect(estimateTokenCount(chunkResult as string)).toBeLessThanOrEqual(100);
-
-    expect(chunkResult).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
+    expect(estimateTokenCount(promptOutput.value)).toBeLessThanOrEqual(100);
+    expect(promptOutput.value).toMatch(MARKER);
   });
 
   it.each([0, -5, 1.5, 63, Number.NaN, Number.POSITIVE_INFINITY])('rejects an invalid limit (%s)', limit => {
@@ -119,37 +175,13 @@ describe('ToolResultTokenLimiter', () => {
   });
 
   it('leaves provider-executed results unchanged', () => {
-    const updateToolInvocation = vi.fn(() => true);
-    const messageList = { updateToolInvocation } as any;
-    const result = new ToolResultTokenLimiter(64).processToolResult({
-      result: 'word '.repeat(500),
-      toolCallId: 'c',
-      toolName: 'web_search',
-      args: {},
-      providerExecuted: true,
-      messageList,
-    } as any);
-    expect(result).toBeUndefined();
-    expect(updateToolInvocation).not.toHaveBeenCalled();
+    expect(callHook(64, 'word '.repeat(500), undefined, true)).toBeUndefined();
   });
-
-  function callHook(limit: number, result: unknown, updated = true) {
-    const updateToolInvocation = vi.fn((_part: any) => updated);
-    const returned = new ToolResultTokenLimiter(limit).processToolResult({
-      result,
-      toolCallId: 'c',
-      toolName: 't',
-      args: {},
-      messageList: { updateToolInvocation },
-    } as any);
-    return { returned, updateToolInvocation, written: updateToolInvocation.mock.calls[0]?.[0]?.toolInvocation.result };
-  }
 
   it('keeps the marker at the minimum limit when the original has 7+ digit tokens', () => {
     const text = 'word '.repeat(1_200_000);
     expect(estimateTokenCount(text)).toBeGreaterThanOrEqual(1_000_000);
-    const { written } = callHook(64, text);
-    expect(written).toMatch(/\[truncated: showing [\d,]+ of \d{1,3}(,\d{3}){2,} tokens\]$/);
+    expect(callHook(64, text)!.modelOutput.value).toMatch(/\[truncated: showing [\d,]+ of \d{1,3}(,\d{3}){2,} tokens\]$/);
   });
 
   it.each([64, 300, 2000])('stays within the limit with the marker (limit %s)', limit => {
@@ -157,9 +189,9 @@ describe('ToolResultTokenLimiter', () => {
       'word '.repeat(5000),
       JSON.stringify({ rows: Array.from({ length: 2000 }, (_, i) => ({ i })) }),
     ]) {
-      const { written } = callHook(limit, text);
-      expect(written).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
-      const kept = Number(/showing ([\d,]+) of/.exec(written)![1].replace(/,/g, ''));
+      const written: string = callHook(limit, text)!.modelOutput.value;
+      expect(written).toMatch(MARKER);
+      const kept = Number(/showing ([\d,]+) of/.exec(written)![1]!.replace(/,/g, ''));
       expect(kept).toBe(estimateTokenCount(written.slice(0, written.lastIndexOf('\n['))));
       expect(estimateTokenCount(written)).toBeLessThanOrEqual(limit);
     }
@@ -167,18 +199,12 @@ describe('ToolResultTokenLimiter', () => {
 
   it('leaves a result exactly at the limit unchanged', () => {
     const text = 'word '.repeat(200);
-    const { updateToolInvocation } = callHook(estimateTokenCount(text), text);
-    expect(updateToolInvocation).not.toHaveBeenCalled();
+    expect(callHook(estimateTokenCount(text), text)).toBeUndefined();
   });
 
   it('passes through results that cannot be serialized', () => {
     const circular: any = { data: 'x'.repeat(5000) };
     circular.self = circular;
-    const { updateToolInvocation } = callHook(64, circular);
-    expect(updateToolInvocation).not.toHaveBeenCalled();
-  });
-
-  it('reports no change when the tool invocation is not found', () => {
-    expect(callHook(64, 'word '.repeat(500), false).returned).toBeUndefined();
+    expect(callHook(64, circular)).toBeUndefined();
   });
 });

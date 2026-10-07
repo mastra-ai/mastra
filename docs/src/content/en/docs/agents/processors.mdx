@@ -452,6 +452,25 @@ const agent = new Agent({
 
 See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-processor) for custom encoding, strategy, and count mode options.
 
+### `ToolResultTokenLimiter`
+
+Caps how many tokens of each tool result the model reads. The stored and streamed result stays whole. Add it as an output processor next to `TokenLimiter`, with a limit well below the `TokenLimiter` budget, so one large result doesn't push the current tool call out of the prompt.
+
+```typescript {8}
+import { Agent } from '@mastra/core/agent'
+import { TokenLimiter, ToolResultTokenLimiter } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'my-agent',
+  name: 'my-agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  inputProcessors: [new TokenLimiter({ limit: 8000 })],
+  outputProcessors: [new ToolResultTokenLimiter({ limit: 4000 })],
+})
+```
+
+See the [`ToolResultTokenLimiter` reference](/reference/processors/tool-result-token-limiter) for details.
+
 ### `ToolCallFilter`
 
 Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.

@@ -163,8 +163,12 @@ describe('ToolResultTokenLimiter with TokenLimiterProcessor (#24110)', () => {
     expect(persisted.map(m => m.role)).toEqual(['user', 'assistant']);
     const stored = storedToolResults(persisted);
     expect(stored).toHaveLength(1);
-    expect(stored[0]!.result).toMatch(/\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
-    expect(stored[0]!.result).toContain(SENTINEL);
+    // The stored result stays whole; only the model-facing copy is capped.
+    expect(stored[0]!.result).toBe(RULES);
+    const storedPart = persisted
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result') as any;
+    expect(storedPart.providerMetadata.mastra.modelOutput.value).toMatch(/\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
   });
 
   it('still trims older oversized tool results from history', async () => {

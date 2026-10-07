@@ -39,6 +39,7 @@ import type {
   ProcessorStepExecutor,
   ProcessorStreamWriter,
   ProcessorStreamWriterOptions,
+  ToolModelOutput,
 } from '../processors';
 import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX, ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
@@ -449,6 +450,7 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processOutputResult: Function })
     | (Processor<TProcessorId> & { processOutputStep: Function })
     | (Processor<TProcessorId> & { processToolResult: Function })
+    | (Processor<TProcessorId> & { processToolModelOutput: Function })
     | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
@@ -746,6 +748,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       case 'outputStep':
         return EntityType.OUTPUT_STEP_PROCESSOR;
       case 'toolResult':
+      case 'toolModelOutput':
         return EntityType.TOOL_RESULT_PROCESSOR;
       default:
         return EntityType.OUTPUT_PROCESSOR;
@@ -767,6 +770,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         return 'output step processor';
       case 'toolResult':
         return 'tool result processor';
+      case 'toolModelOutput':
+        return 'tool model output processor';
       default:
         return 'processor';
     }
@@ -787,6 +792,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         return !!processor.processOutputStep;
       case 'toolResult':
         return !!processor.processToolResult;
+      case 'toolModelOutput':
+        return !!processor.processToolModelOutput;
       default:
         return false;
     }
@@ -850,6 +857,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        toolModelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
@@ -1047,7 +1055,10 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // the public processor span would export as an orphan trace root.
       const fallbackSpan = currentSpan && getRootExportSpan(currentSpan) ? currentSpan : undefined;
       const parentSpan =
-        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
+        phase === 'inputStep' ||
+        phase === 'outputStep' ||
+        phase === 'toolResult' ||
+        phase === 'toolModelOutput'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
           : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
 
@@ -1065,7 +1076,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
               entityName: processor.name ?? processor.id,
               input: buildProcessorSpanInput(),
               attributes: {
-                ...resolveProcessorSpanAttributes(processor, phase),
+                ...resolveProcessorSpanAttributes(processor, phase === 'toolModelOutput' ? 'toolResult' : phase),
                 processorExecutor: 'workflow',
                 // Read processorIndex from processor (set in combineProcessorsIntoWorkflow)
                 processorIndex: processor.processorIndex,
@@ -1175,6 +1186,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        toolModelOutput,
         providerExecuted,
       };
 
@@ -1700,6 +1712,29 @@ export function createStepFromProcessor<TProcessorId extends string>(
             return { ...passThrough, messages };
           }
 
+          case 'toolModelOutput': {
+            if (processor.processToolModelOutput) {
+              const result = await processor.processToolModelOutput({
+                ...baseContext,
+                messages: messages as MastraDBMessage[],
+                messageList: passThrough.messageList!,
+                stepNumber: stepNumber ?? 0,
+                toolName: toolName ?? '',
+                toolCallId: toolCallId ?? '',
+                args: toolCallArgs,
+                result: toolResultValue,
+                modelOutput: toolModelOutput as ToolModelOutput | undefined,
+                providerExecuted,
+                systemMessages: (systemMessages ?? []) as CoreMessage[],
+                steps: steps ?? [],
+              });
+              if (result && 'modelOutput' in result) {
+                return { ...passThrough, messages, toolModelOutput: result.modelOutput };
+              }
+            }
+            return { ...passThrough, messages };
+          }
+
           default:
             return { ...passThrough, messages };
         }
@@ -1767,6 +1802,7 @@ export function isProcessor(obj: unknown): obj is Processor {
     typeof rec.processOutputResult === 'function' ||
     typeof rec.processOutputStep === 'function' ||
     typeof rec.processToolResult === 'function' ||
+    typeof rec.processToolModelOutput === 'function' ||
     typeof rec.processAPIError === 'function' ||
     typeof rec.computeStateSignal === 'function'
   );

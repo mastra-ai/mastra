@@ -1,6 +1,6 @@
 import { estimateTokenCount } from 'tokenx';
 import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
-import type { ProcessToolResultArgs, Processor } from '../index';
+import type { ProcessToolModelOutputArgs, Processor, ToolModelOutput } from '../index';
 
 /** Smallest accepted limit, so a useful slice fits beside the truncation marker. */
 const MIN_LIMIT = 64;
@@ -11,9 +11,9 @@ export interface ToolResultTokenLimiterOptions {
 }
 
 /**
- * Output processor that truncates tool results over a token limit before they
- * are stored in the message list or sent to the model on the next step.
- * Provider-executed tool results are left unchanged.
+ * Output processor that caps the model-facing copy of each tool result at a token
+ * limit. The stored and streamed result stays whole; only what the model reads on
+ * later steps is truncated. Media and provider-executed results are left unchanged.
  */
 export class ToolResultTokenLimiter implements Processor<'tool-result-token-limiter'> {
   public readonly id = 'tool-result-token-limiter';
@@ -28,27 +28,47 @@ export class ToolResultTokenLimiter implements Processor<'tool-result-token-limi
     this.limit = limit;
   }
 
-  processToolResult({ result, toolCallId, toolName, args, providerExecuted, messageList }: ProcessToolResultArgs) {
+  processToolModelOutput({ result, modelOutput, providerExecuted }: ProcessToolModelOutputArgs) {
     if (providerExecuted) return;
-
+    if (modelOutput) {
+      const capped = this.capModelOutput(modelOutput);
+      return capped === modelOutput ? undefined : { modelOutput: capped };
+    }
+    if (isMediaPayload(result)) return;
     const text = toText(result);
     if (text === undefined) return;
+    const capped = this.cap(text);
+    return capped === text ? undefined : { modelOutput: { type: 'text', value: capped } };
+  }
 
+  private capModelOutput(output: ToolModelOutput): ToolModelOutput {
+    if (output.type === 'text' && typeof output.value === 'string') {
+      const capped = this.cap(output.value);
+      return capped === output.value ? output : { ...output, value: capped };
+    }
+    if (output.type === 'json') {
+      const text = toText(output.value);
+      if (text === undefined) return output;
+      const capped = this.cap(text);
+      return capped === text ? output : { type: 'text', value: capped };
+    }
+    if (output.type === 'content' && Array.isArray(output.value)) {
+      let changed = false;
+      const value = output.value.map(part => {
+        if (part.type !== 'text' || typeof part.text !== 'string') return part;
+        const capped = this.cap(part.text);
+        if (capped === part.text) return part;
+        changed = true;
+        return { ...part, text: capped };
+      });
+      return changed ? ({ ...output, value } as ToolModelOutput) : output;
+    }
+    return output;
+  }
+
+  private cap(text: string): string {
     const tokens = estimateTokenCount(text);
-    if (tokens <= this.limit) return;
-
-    const truncated = truncate(text, tokens, this.limit);
-    const updated = messageList.updateToolInvocation({
-      type: 'tool-invocation',
-      toolInvocation: {
-        state: 'result',
-        toolCallId,
-        toolName,
-        args,
-        result: truncated,
-      },
-    });
-    return updated ? messageList : undefined;
+    return tokens <= this.limit ? text : truncate(text, tokens, this.limit);
   }
 }
 
@@ -67,6 +87,16 @@ function truncate(text: string, total: number, limit: number): string {
     budget--;
   }
   return marker(0, total).trimStart();
+}
+
+/** `{ data, mediaType | mimeType }` results (images, files) are sent to the model as media, not text. */
+function isMediaPayload(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.data === 'string' &&
+    (typeof candidate.mediaType === 'string' || typeof candidate.mimeType === 'string')
+  );
 }
 
 function toText(value: unknown): string | undefined {

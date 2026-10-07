@@ -561,6 +561,61 @@ export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends Proc
 }
 
 /**
+ * Model-facing form of a tool result, as produced by a tool's `toModelOutput`
+ * and stored in `providerMetadata.mastra.modelOutput`.
+ */
+export type ToolModelOutput =
+  | { type: 'text'; value: string; providerOptions?: Record<string, unknown> }
+  | { type: 'json'; value: unknown; providerOptions?: Record<string, unknown> }
+  | { type: 'error-text'; value: string; providerOptions?: Record<string, unknown> }
+  | { type: 'error-json'; value: unknown; providerOptions?: Record<string, unknown> }
+  | {
+      type: 'content';
+      value: Array<
+        | { type: 'text'; text: string; providerOptions?: Record<string, unknown> }
+        | { type: string; [key: string]: unknown }
+      >;
+      providerOptions?: Record<string, unknown>;
+    }
+  | { type: string; value?: unknown; [key: string]: unknown };
+
+/**
+ * Arguments for processToolModelOutput method.
+ * Called once per successful tool result, after every `processToolResult` rewrite and
+ * after the tool's `toModelOutput` mapping. Changes only what the model reads — the
+ * stored and streamed `result` is never modified.
+ */
+export interface ProcessToolModelOutputArgs<TTripwireMetadata = unknown>
+  extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** Name of the tool that was executed */
+  toolName: string;
+  /** Unique identifier for this specific tool call */
+  toolCallId: string;
+  /** Arguments the LLM passed to the tool */
+  args: unknown;
+  /** Final tool result, after all processToolResult rewrites */
+  result: unknown;
+  /**
+   * Current model-facing output. `undefined` when the tool has no `toModelOutput`
+   * and no earlier processor supplied one. Each processor sees the previous one's output.
+   */
+  modelOutput: ToolModelOutput | undefined;
+  /** Whether this result came from a provider-executed tool */
+  providerExecuted?: boolean;
+  /** All system messages */
+  systemMessages: CoreMessageV4[];
+  /** All completed steps so far */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+}
+
+/** Return value of processToolModelOutput. Omit `modelOutput` (or return nothing) to keep the current value. */
+export type ProcessToolModelOutputResult = { modelOutput?: ToolModelOutput } | undefined | void;
+
+/**
  * Arguments for processAPIError method.
  * Called when the LLM API call fails with a non-retryable error (API rejection).
  * This is distinct from network errors or retryable server errors (which are handled by p-retry).
@@ -835,6 +890,23 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   ): Promise<MessageList | MastraDBMessage[] | undefined | void> | MessageList | MastraDBMessage[] | void | undefined;
 
   /**
+   * Rewrite the model-facing copy of a tool result.
+   *
+   * `processToolResult` changes the result; `processToolModelOutput` changes only what
+   * the model reads. It runs once per result, after all `processToolResult` rewrites
+   * and after the tool's `toModelOutput` mapping, so processor order between the two
+   * hooks does not matter. Output processors run in sequence, each seeing the previous
+   * `modelOutput`. The final value is stored as `providerMetadata.mastra.modelOutput`,
+   * persists with the message, and is used on every later prompt. The stored and
+   * streamed `result` is never changed.
+   *
+   * @returns `{ modelOutput }` to replace the model-facing output, or undefined to keep it.
+   */
+  processToolModelOutput?(
+    args: ProcessToolModelOutputArgs<TTripwireMetadata>,
+  ): Promise<ProcessToolModelOutputResult> | ProcessToolModelOutputResult;
+
+  /**
    * Process an LLM API rejection error before it's surfaced as a final error.
    * Only called for non-retryable API rejections (e.g., 400/422 status codes),
    * NOT for network errors or retryable server errors (which are handled by p-retry).
@@ -922,6 +994,8 @@ export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolResult'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolModelOutput'> &
       Processor<string, TTripwireMetadata>);
 
 // ErrorProcessor requires processAPIError
@@ -972,6 +1046,11 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
    * undefined and are treated as implementing it.
    */
   __processToolResult?: boolean;
+  /**
+   * @internal Whether any wrapped processor implements `processToolModelOutput`.
+   * Unknown workflows leave it undefined and are treated as implementing it.
+   */
+  __processToolModelOutput?: boolean;
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
 };
