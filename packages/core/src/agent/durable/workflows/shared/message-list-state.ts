@@ -6,6 +6,7 @@ import { createStoredMessageLoader, MemoryMessageRefs } from '../../../message-l
 import type { DehydratedMessageListState, StoredMessageLoader } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
 import { globalRunRegistry } from '../../run-registry';
+import type { SerializableDurableState } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
 
 type MessageListStateCarrier = { messageListState?: SerializedMessageListState };
@@ -106,6 +107,10 @@ export async function openMessageListState(
 }
 
 async function dehydrate(params: TranscriptParams, messageListState: SerializedMessageListState) {
+  // Function or inherited memory can resolve to another store on resume, where refs would not
+  // resolve, so only fixed memory gets refs. With no refs stored, `write` above has none to make.
+  const { state } = (params.getInitData() ?? {}) as RunIdentity;
+  if (!state?.fixedMemory) return messageListState;
   const run = runTranscriptRefs(params);
   await run.refs.verify(messageListState, run.load, run.logger);
   return run.refs.dehydrate(messageListState);
@@ -127,7 +132,12 @@ const runMessageRefs = new TTLCache<string, MemoryMessageRefs>({
   updateAgeOnGet: true,
 });
 
-type RunIdentity = { runId?: string; agentId?: string; requestContextEntries?: Record<string, unknown> };
+type RunIdentity = {
+  runId?: string;
+  agentId?: string;
+  requestContextEntries?: Record<string, unknown>;
+  state?: SerializableDurableState;
+};
 
 function runTranscriptRefs(params: TranscriptParams) {
   // Both the outer loop's and the iteration workflow's init data carry the

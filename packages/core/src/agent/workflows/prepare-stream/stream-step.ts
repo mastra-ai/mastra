@@ -128,6 +128,7 @@ export function createStreamStep<OUTPUT = undefined>({
           threadId: loopOptions.threadId,
           resourceId,
           memory,
+          fixedMemory: capabilities.agent.__hasFixedMemory(),
           backgroundTaskManager,
           agentBackgroundConfig,
           backgroundTaskManagerConfig: backgroundTaskManager?.config,

@@ -30,6 +30,7 @@ import {
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   EAGER_TOOL_EXECUTION_KEY,
+  FIXED_MEMORY_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
@@ -399,11 +400,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
+      // Recalled messages become refs only when memory is a fixed instance: a resume may not
+      // repeat the request context that function or inherited memory resolved against.
       const serializeStreamStateForSuspend = () =>
         dehydrateStreamState(
           streamState.serialize(),
           memoryMessageRefs,
-          readScoped(scopeCtx, MEMORY_KEY, 'memory'),
+          readScoped(scopeCtx, FIXED_MEMORY_KEY, 'fixedMemory')
+            ? readScoped(scopeCtx, MEMORY_KEY, 'memory')
+            : undefined,
           logger,
         );
 
