@@ -2,11 +2,12 @@ import { pathToFileURL } from 'node:url';
 import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { askUserTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
+import { askUserTool, webFetchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { Memory } from '@mastra/memory';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
+import { webSearchTool } from '../tools/web-search';
 
 const workspacePath = 'workspace';
 
