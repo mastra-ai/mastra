@@ -256,6 +256,24 @@
                         "maxRetries": 0
                       },
                       "availableTools": ["metadataTool"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "metadataTool",
+                          "description": "A tool that adds custom metadata",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "input": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["input"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,
@@ -539,6 +557,24 @@
                         "maxRetries": 0
                       },
                       "availableTools": ["metadataTool"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "metadataTool",
+                          "description": "A tool that adds custom metadata",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "input": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["input"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,

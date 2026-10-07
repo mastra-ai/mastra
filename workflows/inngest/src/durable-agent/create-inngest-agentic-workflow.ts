@@ -401,15 +401,23 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // End MODEL_GENERATION span with final output (children before parent)
           // This span was created BEFORE the workflow started and stayed open for all iterations.
-          // Same shape as the core durable agent: `text` is the output, usage goes to the
-          // attributes through the tracker so consumers find it where every other model span puts it.
+          // Same shape as the core durable agent: `text` and the run's `toolCalls` are the output,
+          // usage goes to the attributes through the tracker so consumers find it where every
+          // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
           if (state.modelSpanData) {
             const modelSpan = observability?.rebuildSpan(
               state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
             ) as AIModelGenerationSpan | undefined;
+            const toolCalls = state.accumulatedSteps.flatMap(step =>
+              ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                args: tc.args,
+              })),
+            );
             modelSpan?.createTracker()?.endGeneration({
-              output: { text: finalText },
+              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: { finishReason: state.lastStepResult?.reason || 'stop' },
               usage: state.accumulatedUsage,
             });

@@ -2,6 +2,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
 
+import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 
@@ -26,14 +27,14 @@ export function GlobalSearchNavigationResults({
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(`/factories/${factoryId}/work`, false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}
         title="Review"
         subtitle="Factory navigation"
         value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(`/factories/${factoryId}/review`, false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}
@@ -94,16 +95,30 @@ export function GlobalSearchNavigationResults({
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.models}
-        subtitle="Settings"
-        value={`Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
+        subtitle="Factory settings"
+        value={`Factory Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
+        title={SETTINGS_SECTION_LABELS['personal-models']}
+        subtitle="Your settings"
+        value={`Your personal Models Settings ${settingsSectionPath(factoryId, 'personal-models')}`}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'personal-models'), true)}
+      />
+      <CommandPaletteItem
+        icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.memory}
-        subtitle="Settings"
-        value={`Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
+        subtitle="Your settings"
+        value={`Your personal Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
+      />
+      <CommandPaletteItem
+        icon={<Settings />}
+        title={SETTINGS_SECTION_LABELS['factory-memory']}
+        subtitle="Factory settings"
+        value={`Factory Memory Settings memory observational ${settingsSectionPath(factoryId, 'factory-memory')}`}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory-memory'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}

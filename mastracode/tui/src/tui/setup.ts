@@ -7,18 +7,15 @@ import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-t
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
-import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
-import { SimpleProgressComponent } from './components/simple-progress.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
-import { askModalQuestion } from './modal-question.js';
-import { showModalOverlay } from './overlay.js';
+import { switchModeWithPack } from './model-packs/apply.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -176,7 +173,7 @@ export function setupKeyboardShortcuts(
     const currentIndex = modes.findIndex(m => m.id === currentId);
     const nextIndex = (currentIndex + 1) % modes.length;
     const nextMode = modes[nextIndex]!;
-    await state.session.mode.switch({ modeId: nextMode.id });
+    await switchModeWithPack({ state }, nextMode.id);
   });
 
   // Ctrl+Y - toggle YOLO mode
@@ -401,6 +398,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'clone', description: 'Clone the current thread' },
     { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
+    { name: 'resume', description: 'Alias for /threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'packs', description: 'Alias for /models' },
     { name: 'model', description: 'Change the current mode model' },
@@ -419,6 +417,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'ctx', description: 'Alias for /context' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
+    { name: 'rename', description: 'Alias for /name' },
     {
       name: 'resource',
       description: 'Show/switch resource ID (tag for sharing)',
@@ -737,110 +736,6 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
   };
   state.waitForAgentControllerEvents = state.options.backgroundToolsEnabled ? () => eventQueue : undefined;
   state.unsubscribe = state.session.subscribe(listener);
-}
-
-// =============================================================================
-// Thread Selection
-// =============================================================================
-
-export async function promptForThreadSelection(state: TUIState): Promise<void> {
-  const currentPath = state.projectInfo.rootPath;
-  const currentResourceId = state.session.identity.getResourceId();
-
-  const allThreads = await state.session.thread.list();
-  const activeThreadId = state.session.thread.getId();
-
-  // Filter to threads explicitly tagged for the current working directory.
-  const taggedThreads = allThreads.filter(t => {
-    const threadPath = t.metadata?.projectPath as string | undefined;
-    return !!threadPath && threadPath === currentPath;
-  });
-  const threads: typeof taggedThreads = [];
-  for (const thread of taggedThreads) {
-    const isActiveBlankThread = thread.id === activeThreadId && !thread.title;
-    if (isActiveBlankThread) {
-      const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
-      if (messages.length === 0) continue;
-    }
-    threads.push(thread);
-  }
-
-  if (threads.length === 0) {
-    const driftCandidates = (
-      await state.session.thread.list({
-        allResources: true,
-        metadata: { projectPath: currentPath },
-      })
-    ).filter(t => t.resourceId !== currentResourceId);
-    const [thread] = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-    if (thread) {
-      const answer = await askModalQuestion(state.ui, {
-        question: [
-          'This directory is tagged on a different resource.',
-          '',
-          `Project: ${currentPath}`,
-          `Thread: ${thread.title || thread.id}`,
-          `Old resource: ${thread.resourceId}`,
-          `Current resource: ${currentResourceId}`,
-          '',
-          'Clone this thread into the current resource and resume the clone?',
-        ].join('\n'),
-        options: [{ label: 'Clone and resume' }, { label: 'Start fresh' }],
-        selectedOptionLabel: 'Clone and resume',
-        allowCustomResponse: false,
-        overlay: { widthPercent: 80, maxHeight: '70%' },
-      });
-
-      if (answer === 'Clone and resume') {
-        const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
-        progress.start('Cloning thread into the current resource...');
-        showModalOverlay(state.ui, progress, { widthPercent: 70, maxHeight: '40%', minHeightPercent: 0.35 });
-        state.ui.requestRender();
-
-        try {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          progress.updateStatus('Loading cloned thread...');
-          state.ui.requestRender();
-          await state.session.thread.cloneToCurrentResource({
-            threadId: thread.id,
-            expectedResourceId: thread.resourceId,
-            expectedProjectPath: currentPath,
-          });
-        } finally {
-          state.ui.hideOverlay();
-          state.ui.requestRender();
-        }
-        return;
-      }
-    }
-
-    // No existing threads for this path - defer creation until first message
-    state.pendingNewThread = true;
-    return;
-  }
-
-  // Sort by most recent
-  const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-  // Try each in order until one is unlocked
-  for (const thread of sortedThreads) {
-    try {
-      await state.session.thread.switch({ threadId: thread.id });
-      if (!thread.metadata?.projectPath) {
-        await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
-      }
-      return;
-    } catch (error) {
-      if (error instanceof ThreadLockError) {
-        continue; // Try the next one
-      }
-      throw error;
-    }
-  }
-
-  // All directory threads are locked — silently start a new thread
-  state.pendingNewThread = true;
 }
 
 // =============================================================================

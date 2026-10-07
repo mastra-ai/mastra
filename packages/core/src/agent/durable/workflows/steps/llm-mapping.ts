@@ -156,6 +156,13 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          if (toolResult.mappingError) {
+            const mappingError = new Error(toolResult.mappingError.message);
+            mappingError.name = toolResult.mappingError.name;
+            mappingError.stack = toolResult.mappingError.stack;
+            throw mappingError;
+          }
+
           // An aborted call was cancelled mid-flight, not completed: recording it
           // would fake-complete the call (`result: undefined` reads as success on
           // resume), so leave the invocation incomplete. Mirrors the non-durable
@@ -208,13 +215,12 @@ export function createDurableLLMMappingStep() {
           }
 
           // Compute toModelOutput for successful tool results (Bug 9 parity).
-          // Start from the existing providerMetadata so it's preserved even when
-          // toModelOutput is absent or fails — otherwise provider-executed tools
-          // or tools without a mapper lose their metadata. Results that already
-          // carry a mapped output from tool-call.ts (`modelOutputComputed`) are
-          // not recomputed: the serialization boundary is why tool-call maps
-          // eagerly, and this step only covers results that crossed the boundary
-          // unmapped (background completion, provider fallback).
+          // Start from the existing providerMetadata so tools without a mapper
+          // preserve their metadata. Results that already carry a mapped output
+          // from tool-call.ts (`modelOutputComputed`) are not recomputed: the
+          // serialization boundary is why tool-call maps eagerly, and this step
+          // only covers results that crossed the boundary unmapped (background
+          // completion, provider fallback).
           let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
             | Record<string, unknown>
             | undefined;
@@ -233,12 +239,6 @@ export function createDurableLLMMappingStep() {
               result: toolResult.result,
               existingProviderMetadata: toolResult.providerMetadata as Record<string, unknown> | undefined,
               parentSpan: stepSpan,
-              onMappingError: (err: unknown) => {
-                // toModelOutput errors are non-fatal — the tool result is still usable
-                mastra
-                  ?.getLogger?.()
-                  ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
-              },
             });
           }
 
@@ -350,9 +350,9 @@ export function createDurableLLMMappingStep() {
           text: llmOutput.text,
           toolCalls: llmOutput.toolCalls,
           usage: llmOutput.stepResult.totalUsage ?? {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
+            inputTokens: undefined,
+            outputTokens: undefined,
+            totalTokens: undefined,
           },
           steps: [], // Steps are accumulated at the loop level
         },

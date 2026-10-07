@@ -199,10 +199,10 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           className="flex flex-col gap-3"
         >
           <Txt
-            variant="caption"
+            variant="eyebrow"
             tone="muted"
             as="h3"
-            className="tracking-wide uppercase"
+
             data-testid={`model-provider-section-title-${group.providerId}`}
           >
             {group.providerName}
@@ -247,9 +247,9 @@ const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
     >
       <TriangleAlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
       <Txt variant="meta">
-        <span className="font-medium">
+        <Txt as="span" variant="meta">
           {provider}/{modelId}
-        </span>{' '}
+        </Txt>{' '}
         is no longer allowed by the admin policy. Pick a different model to save changes.
       </Txt>
     </div>

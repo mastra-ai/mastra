@@ -382,7 +382,7 @@ function ThreadRailPreviewContent({
         </Txt>
       )}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
           {turn.files.map(file => (
             <Txt
               as="span"

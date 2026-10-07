@@ -11,10 +11,12 @@ import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
+import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
+import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -682,7 +684,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         policy: { mode: 'durable' },
         pendingFeedbackStop: state.pendingFeedbackStop ?? false,
         llmWantsToContinue: state.lastStepResult?.isContinued === true || drainForcedContinue,
-        underMaxSteps: state.iterationCount < runMaxSteps,
+        // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
+        // Retries stay bounded by maxProcessorRetries.
+        underMaxSteps: state.accumulatedSteps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
         steps: state.accumulatedSteps,
         stopWhen: rt.stopWhen,
         consumeDelegationBail: () => {
@@ -709,7 +713,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             toolResults: (lastStep?.toolResults ?? []).map((tr: any) => ({
               id: tr.toolCallId || tr.id || '',
               name: tr.toolName || tr.name || '',
-              result: tr.result,
+              result: normalizeToolOutput(tr.result).output,
               error: tr.error,
             })),
             isFinal,
@@ -846,6 +850,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 outputTokens: 0,
                 totalTokens: 0,
               },
+              usageAggregationVersion: 1,
               lastStepResult: undefined,
             };
             return iterationState;
@@ -942,10 +947,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       args: tc.args,
                     })),
                   );
+                  const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
-                    attributes: { finishReason: finalOutput.stepResult?.reason },
-                    usage: state.accumulatedUsage,
+                    attributes: {
+                      finishReason: finalOutput.stepResult?.reason,
+                      ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                    },
+                    usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
                 }
                 if (agentSpanData) {

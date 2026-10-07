@@ -1,5 +1,23 @@
 # @mastra/slack
 
+## 1.7.2-alpha.1
+
+### Patch Changes
+
+- Channel providers now honor the `MASTRA_SERVER_URL` environment variable when deriving the server's public URL for OAuth callbacks and webhook registration. Deployed servers bind an address like `0.0.0.0:3000` that is never reachable from the outside, which broke Slack OAuth redirects, Telegram `setWebhook` (HTTPS required), and Teams messaging endpoints. Set `MASTRA_SERVER_URL` to the deployment's public HTTPS URL and channels work without passing `server: { studioHost, studioProtocol, studioPort }` to the `Mastra` instance; explicit `baseUrl` provider config and `server.studio*` overrides still take precedence. ([#26026](https://github.com/mastra-ai/mastra/pull/26026))
+
+- Updated dependencies [[`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936)]:
+  - @mastra/core@1.75.0-alpha.8
+
+## 1.7.2-alpha.0
+
+### Patch Changes
+
+- Fixed `disconnect()` orphaning Slack apps for pending installations. Connecting an agent mints a real Slack app via the manifest API before the OAuth install completes; disconnecting during that pending window previously removed only the local record and left the app behind in the Slack workspace. `disconnect()` now deletes the minted app for pending installations too. ([#25987](https://github.com/mastra-ai/mastra/pull/25987))
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 1.7.1
 
 ### Patch Changes

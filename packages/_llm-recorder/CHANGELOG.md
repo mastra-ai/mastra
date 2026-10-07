@@ -1,5 +1,7 @@
 # @internal/llm-recorder
 
+## 0.0.76
+
 ## 0.0.75
 
 ## 0.0.74

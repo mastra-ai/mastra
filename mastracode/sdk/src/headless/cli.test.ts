@@ -14,10 +14,18 @@ const lifecycleMocks = vi.hoisted(() => {
     }),
     stopDiagnostics: vi.fn(async () => diagnostics.stop()),
     runMC: vi.fn(),
+    loadSettings: vi.fn(),
+    resolveModelDefaults: vi.fn(),
+    listBuiltinModePacks: vi.fn(),
   };
 });
 
 vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCode }));
+vi.mock('../onboarding/packs.js', () => ({ listBuiltinModePacks: lifecycleMocks.listBuiltinModePacks }));
+vi.mock('../onboarding/settings.js', () => ({
+  loadSettings: lifecycleMocks.loadSettings,
+  resolveModelDefaults: lifecycleMocks.resolveModelDefaults,
+}));
 vi.mock('../process-memory-diagnostics.js', () => ({
   createProcessMemoryDiagnosticsFromEnvironment: lifecycleMocks.createDiagnostics,
   startConfiguredProcessMemoryDiagnostics: lifecycleMocks.startDiagnostics,
@@ -209,6 +217,12 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     lifecycleMocks.startDiagnostics.mockClear();
     lifecycleMocks.diagnostics.stop.mockClear();
     lifecycleMocks.runMC.mockReset();
+    lifecycleMocks.loadSettings.mockReset();
+    lifecycleMocks.resolveModelDefaults.mockReset();
+    lifecycleMocks.listBuiltinModePacks.mockReset();
+    lifecycleMocks.loadSettings.mockReturnValue({ models: { activeModelPackId: null, modeDefaults: {} } });
+    lifecycleMocks.resolveModelDefaults.mockReturnValue({});
+    lifecycleMocks.listBuiltinModePacks.mockReturnValue([]);
     process.argv = argv('--prompt', 'do it');
     stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(code => {
@@ -237,8 +251,16 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
           hasServers: () => false,
           disconnect: vi.fn(async () => void lifecycleMocks.order.push('mcp-stop')),
         },
-        effectiveDefaults: {},
-        signalsPubSub: { close: vi.fn(async () => void lifecycleMocks.order.push('signals-stop')) },
+        effectiveDefaults: { build: 'openai/gpt-5.5' },
+        // close() reads `this` like the real pubsub, so a detached call is caught.
+        signalsPubSub: {
+          closed: false,
+          async close() {
+            this.closed = true;
+            lifecycleMocks.order.push('signals-stop');
+          },
+        },
+        stopNotificationDispatch: vi.fn(async () => void lifecycleMocks.order.push('dispatch-stop')),
         stopPluginSignalProviders: vi.fn(() => lifecycleMocks.order.push('providers-stop')),
       };
     });
@@ -246,6 +268,12 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       async *[Symbol.asyncIterator]() {},
       result: Promise.resolve({ status: 'completed', exitCode: 0 }),
     });
+    const settings = {
+      models: { activeModelPackId: 'custom:review-pack', modeDefaults: {} },
+      customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
+    };
+    lifecycleMocks.loadSettings.mockReturnValue(settings);
+    lifecycleMocks.resolveModelDefaults.mockReturnValue({ build: 'anthropic/claude-opus-4-6' });
 
     await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:0');
 
@@ -253,6 +281,10 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       settingsPath: undefined,
       coAuthor: { name: 'mastracode' },
     });
+    expect(lifecycleMocks.resolveModelDefaults).toHaveBeenCalledWith(settings, []);
+    expect(lifecycleMocks.runMC).toHaveBeenCalledWith(
+      expect.objectContaining({ modeDefaults: { build: 'anthropic/claude-opus-4-6' } }),
+    );
     expect(lifecycleMocks.order).toEqual(
       expect.arrayContaining(['diagnostics-start', 'mastracode-create', 'intervals-stop', 'diagnostics-stop']),
     );
@@ -264,7 +296,37 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     );
     expect(lifecycleMocks.order.at(-1)).toBe('exit-0');
     expect(lifecycleMocks.diagnostics.stop).toHaveBeenCalledOnce();
+    // Dispatch leases are released first; the pubsub closes only after the workers stop.
+    const at = (step: string) => lifecycleMocks.order.indexOf(step);
+    expect(at('dispatch-stop')).toBeGreaterThan(-1);
+    expect(at('dispatch-stop')).toBeLessThan(at('workers-stop'));
+    expect(at('signals-stop')).toBeGreaterThan(at('workers-stop'));
   });
+
+  it('exits even when notification dispatch never finishes stopping', async () => {
+    const pubsub = { close: vi.fn(async () => void lifecycleMocks.order.push('signals-stop')) };
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: {},
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      effectiveDefaults: {},
+      signalsPubSub: pubsub,
+      stopNotificationDispatch: vi.fn(() => new Promise<void>(() => {})),
+      stopPluginSignalProviders: vi.fn(),
+    }));
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    });
+
+    await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
+
+    expect(pubsub.close).toHaveBeenCalledOnce();
+    expect(lifecycleMocks.order.at(-1)).toBe('exit-0');
+  }, 10_000);
 
   it('stops diagnostics when Mastra Code startup fails', async () => {
     lifecycleMocks.createMastraCode.mockRejectedValue(new Error('boot failed'));

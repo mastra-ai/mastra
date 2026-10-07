@@ -126,7 +126,6 @@ function createMockSettings() {
       omPackId: null,
     },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -178,6 +177,7 @@ function createMockSettings() {
 
 /** Stand-in for the Mastra the controller builds on init(). */
 const mastraStub = {
+  getStorage: vi.fn(() => undefined),
   startWorkers: vi.fn(async () => {}),
   stopWorkers: vi.fn(async () => {}),
   addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {
@@ -186,7 +186,8 @@ const mastraStub = {
   addProcessorConfiguration: vi.fn(),
 };
 
-vi.mock('@mastra/core/agent-controller', () => ({
+vi.mock('@mastra/core/agent-controller', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/core/agent-controller')>()),
   AgentController: class {
     constructor(config: unknown) {
       controllerConstructorMock(config);
@@ -384,7 +385,6 @@ vi.mock('../onboarding/settings.js', () => ({
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
   saveSettings: vi.fn(),
-  THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId',
   toCustomProviderModelId: vi.fn(),
 }));
 
@@ -478,6 +478,13 @@ const createVectorStoreMock = vi.fn(() => ({}));
 vi.mock('../utils/storage-factory.js', () => ({
   createStorage: createStorageMock,
   createVectorStore: createVectorStoreMock,
+}));
+
+const createSignalsPubSubMock = vi.fn(() => ({ close: vi.fn(async () => {}), getLeaseProvider: vi.fn() }));
+
+vi.mock('../utils/signals-pubsub.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../utils/signals-pubsub.js')>()),
+  createSignalsPubSub: createSignalsPubSubMock,
 }));
 
 vi.mock('../utils/thread-lock.js', () => ({
@@ -795,7 +802,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(getAvailableModePacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
+    expect(getAvailableModePacksMock).not.toHaveBeenCalled();
     expect(getAvailableOmPacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
   });
 
@@ -815,9 +822,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ vector: vector as any });
 
-    // Third argument is the settings path threaded through for pack-driven
-    // observational-memory resolution; no `settingsPath` was configured here.
-    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined);
+    // The settings path and model-pack option are threaded through for
+    // observational-memory resolution; neither was configured here.
+    expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined, {
+      disableSettingsOmSeed: undefined,
+    });
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });
 
@@ -968,6 +977,72 @@ describe('createMastraCode', () => {
     expect(shared.storage).toBe(built.storage);
     expect(shared.vector).toBe(createVectorStoreMock.mock.results[0]?.value);
     expect(shared.storageBackend).toBe('pg');
+  });
+
+  describe('cross-project agent discovery gating', () => {
+    const signalSettings = (signals: Record<string, boolean>) => ({
+      ...createMockSettings(),
+      signals: { ...createMockSettings().signals, ...signals },
+    });
+    const sharedDiscoveryFlag = () =>
+      (createSignalsPubSubMock.mock.calls.at(-1) as unknown[] | undefined)?.[1] as
+        | { sharedAgentDiscovery?: boolean }
+        | undefined;
+
+    beforeEach(() => {
+      createSignalsPubSubMock.mockClear();
+    });
+
+    it('shares peer discovery across projects when cross-agent communication is on', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true, experimentalCrossAgentSignals: true }));
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode();
+
+      expect(createSignalsPubSubMock).toHaveBeenCalledTimes(1);
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
+    });
+
+    it('keeps peer discovery in the project when cross-agent communication is off', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true }));
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode();
+
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false });
+    });
+
+    it('never shares discovery when the Unix socket PubSub is off', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ experimentalCrossAgentSignals: true }));
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode();
+
+      // Only the notification dispatch lease store may exist; it never joins the shared scope.
+      for (const call of createSignalsPubSubMock.mock.calls as unknown[][]) {
+        expect((call[1] as { sharedAgentDiscovery?: boolean } | undefined)?.sharedAgentDiscovery).not.toBe(true);
+      }
+    });
+
+    it('does not create the Unix socket PubSub when a pubsub is injected', async () => {
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ pubsub: {} as never, unixSocketPubSub: true, crossAgentSignals: true });
+
+      expect(createSignalsPubSubMock).not.toHaveBeenCalled();
+    });
+
+    it('follows the crossAgentSignals config over the setting in both directions', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true, experimentalCrossAgentSignals: true }));
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ crossAgentSignals: false });
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false });
+
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true }));
+      await createMastraCode({ crossAgentSignals: true });
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
+    });
   });
 
   it('registers the built-in state signal providers on the code agent', async () => {
@@ -1744,10 +1819,20 @@ describe('createMastraCode', () => {
     controllerGetCurrentThreadIdMock.mockReturnValue('active-thread');
     controllerModeMock = 'plan';
     controllerModelMock = 'openai/gpt-5.6-sol';
-    controllerStateMock = { activeModelPackId: 'openai', yolo: false, sandboxAllowedPaths: ['/active-only'] };
+    controllerStateMock = {
+      modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
+      yolo: false,
+      sandboxAllowedPaths: ['/active-only'],
+    };
     controllerThreadMetadataMock = {
+      currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
-      activeModelPackId: 'anthropic',
+      modelRoute: {
+        entries: [
+          { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
+          { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        ],
+      },
       subagentModelId_explore: 'openai/gpt-5.6-mini',
       yolo: true,
     };
@@ -1773,8 +1858,28 @@ describe('createMastraCode', () => {
 
     expect(controllerContext.session.modeId).toBe('build');
     expect(controllerContext.session.modelId).toBe('anthropic/claude-fable-5-1');
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'currentModelId',
+      value: 'anthropic/claude-fable-5-1',
+    });
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'modelPersistenceVersion',
+      value: 2,
+    });
+    expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
+      threadId: 'notification-thread',
+      key: 'modeModelId_build',
+      value: undefined,
+    });
     expect(controllerContext.getState()).toMatchObject({
-      activeModelPackId: 'anthropic',
+      modelRoute: {
+        entries: [
+          { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
+          { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        ],
+      },
       yolo: false,
       sandboxAllowedPaths: [],
     });
@@ -1782,16 +1887,23 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions.requireToolApproval).toBe(true);
     controllerSetStateMock.mockClear();
 
-    await controllerContext.setThreadSetting({ key: 'mastracodePendingPackFallback', value: { toPackId: 'openai' } });
-    await controllerContext.setState({ mastracodePendingPackFallback: { toPackId: 'openai' } });
-    controllerContext.emitEvent({ type: 'info', message: 'Switched model pack' });
+    const pendingFallback = {
+      fromEntryId: 'anthropic',
+      toEntryId: 'openai',
+      toModelId: 'openai/gpt-5.6-sol',
+      reason: 'pool-exhausted',
+      at: '2026-10-05T00:00:00.000Z',
+    };
+    await controllerContext.setThreadSetting({ key: 'mastracodePendingModelFallback', value: pendingFallback });
+    await controllerContext.setState({ mastracodePendingModelFallback: pendingFallback });
+    controllerContext.emitEvent({ type: 'info', message: 'Switched model route' });
 
     expect(controllerSetThreadSettingOnMock).toHaveBeenCalledWith({
       threadId: 'notification-thread',
-      key: 'mastracodePendingPackFallback',
-      value: { toPackId: 'openai' },
+      key: 'mastracodePendingModelFallback',
+      value: pendingFallback,
     });
-    expect(controllerContext.getState()).toMatchObject({ mastracodePendingPackFallback: { toPackId: 'openai' } });
+    expect(controllerContext.getState()).toMatchObject({ mastracodePendingModelFallback: pendingFallback });
     expect(controllerSetStateMock).not.toHaveBeenCalled();
     expect(controllerEmitMock).not.toHaveBeenCalled();
   });
@@ -1840,6 +1952,46 @@ describe('createMastraCode', () => {
     });
 
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
+  });
+
+  async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
+    const { createMastraCode } = await import('../index.js');
+    const mastraCode = await createMastraCode(options);
+    if (!ownedHere) controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+    const decision = await decide({
+      record: { priority: 'high', source: 'sentinel', resourceId: 'some-resource', threadId: 'some-thread' },
+      threadState: 'idle',
+      now: new Date('2026-10-01T00:00:00.000Z'),
+    });
+    await mastraCode.stopNotificationDispatch();
+    await (mastraCode as { signalsPubSub?: { close?: () => Promise<void> } }).signalsPubSub?.close?.();
+    return decision;
+  }
+
+  it("leaves another project's notifications for that project's process, with the socket pubsub on or off", async () => {
+    for (const unixSocketPubSub of [true, false]) {
+      const decision = await decideDelivery({ unixSocketPubSub }, { ownedHere: false });
+      expect(decision).toMatchObject({ action: 'deliver', hold: true });
+      expect(decision.streamOptions).toBeUndefined();
+    }
+  });
+
+  it("leaves this resource's notifications to this process's own dispatch, not the shared schedule", async () => {
+    const decision = await decideDelivery({ unixSocketPubSub: true }, { ownedHere: true });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeDefined();
+  });
+
+  it('does not hold notifications when the embedder configured its own PubSub', async () => {
+    for (const ownedHere of [true, false]) {
+      expect(await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere })).not.toHaveProperty(
+        'hold',
+      );
+    }
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

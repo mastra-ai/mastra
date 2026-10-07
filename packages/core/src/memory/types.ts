@@ -444,7 +444,28 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
-export type ObservationalMemoryActivationTTL = number | string | 'auto' | false;
+/**
+ * A single idle activation TTL: milliseconds, a duration string like `"5m"` or `"1hr"`,
+ * `"auto"` for a provider-aware TTL, or `false` to disable idle activation.
+ */
+export type ObservationalMemoryActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs. Keys are provider names (e.g. `anthropic`, `openai`),
+ * matched case-insensitively against the part of the actor model's provider before the
+ * first `.` (so `anthropic` matches `anthropic.messages`). `default` applies to every
+ * provider without its own key; without `default`, unmatched providers don't idle-activate.
+ *
+ * @example { default: 'auto', anthropic: '1h' }
+ */
+export type ObservationalMemoryActivationTTLByProvider = {
+  default?: ObservationalMemoryActivationTTLValue;
+  [provider: string]: ObservationalMemoryActivationTTLValue | undefined;
+};
+
+export type ObservationalMemoryActivationTTL =
+  | ObservationalMemoryActivationTTLValue
+  | ObservationalMemoryActivationTTLByProvider;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -597,7 +618,7 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
    * (blocking) observation runs when the `messageTokens` threshold is reached and
-   * buffered activation did not happen.
+   * activating buffered chunks does not bring pending tokens back under it.
    *
    * Accepts either:
    * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens`.
@@ -871,6 +892,10 @@ export interface ObservationalMemoryOptions {
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached. Useful to align with prompt cache TTLs.
    *
+   * Pass an object to set a TTL per provider, with `default` for every other provider.
+   * Use this when your requests set a prompt cache TTL that Mastra can't detect, such as
+   * Anthropic's per-message `cacheControl: { ttl: '1h' }`.
+   *
    * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
    * opt reflections into idle activation.
    *
@@ -878,6 +903,7 @@ export interface ObservationalMemoryOptions {
    * @example "5m"
    * @example "1hr"
    * @example "auto"
+   * @example { default: 'auto', anthropic: '1h' }
    */
   activateAfterIdle?: ObservationalMemoryActivationTTL;
 

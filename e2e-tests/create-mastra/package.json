@@ -11,9 +11,8 @@
     "execa": "^9.6.1",
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
-    "npm-cli-login": "^1.0.0",
-    "verdaccio": "^6.7.4",
-    "verdaccio-auth-memory": "^13.0.3",
+    "verdaccio": "^6.10.5",
+    "verdaccio-auth-memory": "^13.1.3",
     "vitest": "^4.1.11"
   },
   "dependencies": {

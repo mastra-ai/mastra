@@ -167,7 +167,7 @@ export const normalizeWorkspaceFromApi = (
 export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined): AgentInstructionBlock[] =>
   (blocks ?? []).map(block => {
     if (block.type === 'prompt_block_ref') {
-      return { type: 'prompt_block_ref' as const, id: block.promptBlockId };
+      return { type: 'prompt_block_ref' as const, id: block.promptBlockId, rules: block.rules };
     }
     return { type: 'prompt_block' as const, content: block.content, rules: block.rules };
   });
@@ -226,7 +226,7 @@ export const mapInstructionBlocksFromApi = (
       )
       .map(b => {
         if (b.type === 'prompt_block_ref') {
-          return createRefInstructionBlock(b.id);
+          return createRefInstructionBlock(b.id, b.rules);
         }
         return createInstructionBlock(normalizeBlockContent(b.content), b.rules);
       });

@@ -1,8 +1,7 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { useMCPServerTool, useMCPServers } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { MCPServerCombobox } from './components/mcp-server-combobox';
-import { useMCPServerTool } from './hooks/use-mcp-server-tool';
-import { useMCPServers } from './hooks/use-mcp-servers';
 
 export function McpServerCrumb() {
   const { serverId } = useParams<{ serverId: string }>();
@@ -22,7 +21,11 @@ export function McpServerSwitcher() {
 
 export function McpServerToolCrumb() {
   const { serverId, toolId } = useParams<{ serverId: string; toolId: string }>();
-  const { data: tool } = useMCPServerTool(serverId ?? '', toolId ?? '', { enabled: !!serverId && !!toolId });
+  const { data: tool } = useMCPServerTool({
+    serverId: serverId ?? '',
+    toolId: toolId ?? '',
+    queryOptions: { enabled: !!serverId && !!toolId },
+  });
 
   return tool?.name ?? toolId ?? null;
 }

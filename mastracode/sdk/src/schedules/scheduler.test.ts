@@ -243,6 +243,22 @@ describe('ThreadScheduler', () => {
     expect(() => scheduler.create({ trigger: every(60_000, '1m'), prompt: '  ' }, target)).toThrow(/empty/);
   });
 
+  it('stop drops a fire still assembling and clears its rearmed timer', async () => {
+    const { scheduler, deliver, assemblePrompt } = setup();
+    let release!: () => void;
+    assemblePrompt.mockImplementationOnce(() => new Promise(resolve => (release = () => resolve({ prompt: 'late' }))));
+    scheduler.create(every5m, target);
+    await vi.advanceTimersByTimeAsync(2.5 * 60_000);
+    expect(assemblePrompt).toHaveBeenCalledOnce();
+    scheduler.stop();
+    expect(scheduler.list()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+    release();
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(deliver).not.toHaveBeenCalled();
+    expect(assemblePrompt).toHaveBeenCalledOnce();
+  });
+
   it('stop clears every schedule', async () => {
     const { scheduler, deliver } = setup();
     scheduler.create(every5m, target);

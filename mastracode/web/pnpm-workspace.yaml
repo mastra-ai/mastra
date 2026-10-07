@@ -7,14 +7,20 @@ packages:
   - '.'
 overrides:
   hono@<4.12.34: 4.12.34
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   postcss@<8.5.23: 8.5.23
   # Vanta 2026-09-28: undici 5/6 floor (Dependabot/Aikido)
-  undici@<6.29.0: 6.29.0
 # Share pnpm's machine-global virtual store (same setting as the monorepo
 # root). With identical versions this makes react/react-dom resolve to the
 # exact same physical module as the `link:`ed monorepo packages use, so the
 # UI never ends up with two React instances.
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'undici@<8.11.2': 8.11.2
+  'yargs@<18.1.0': 18.2.0
+  'nanoid@<5.1.16': 5.1.16
+  # Vanta 2026-10-05 (Aikido): yaml 2.9.0 (vite optional peer) -> 2.9.1
+  'yaml@>=2.0.0 <2.9.1': 2.9.1
+  # Vanta 2026-10-06: nested-lock security floors
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
 enableGlobalVirtualStore: true
 # Mirrors the monorepo root policy: postinstall build scripts for these deps
 # are unnecessary (esbuild works without its install script under pnpm's

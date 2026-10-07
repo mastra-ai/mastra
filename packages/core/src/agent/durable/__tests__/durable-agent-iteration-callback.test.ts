@@ -109,7 +109,7 @@ function makeNeverStoppingModel() {
   });
 }
 
-function makeAgent(model: LanguageModelV2) {
+function makeAgent(model: LanguageModelV2, toolOutput?: unknown) {
   return new Agent({
     id: 'test-agent',
     name: 'test-agent',
@@ -119,7 +119,7 @@ function makeAgent(model: LanguageModelV2) {
       myTool: {
         description: 'A test tool',
         parameters: { type: 'object', properties: { x: { type: 'number' } } } as any,
-        execute: async ({ x }: any) => `result-${x}`,
+        execute: async ({ x }: any) => (toolOutput === undefined ? `result-${x}` : toolOutput),
       },
     },
   });
@@ -305,6 +305,39 @@ describe('DurableAgent onIterationComplete callback', () => {
     expect(typeof first.finishReason).toBe('string');
     // Messages should be an array (may be empty if no memory configured)
     expect(Array.isArray(first.messages)).toBe(true);
+
+    cleanup();
+  });
+
+  it.each([
+    ['unwraps a sole-key value result', { value: 42 }, 42],
+    [
+      'preserves sibling metadata on a documented wrapper shape',
+      { type: 'json', value: { ok: true }, receipt: 'r-1' },
+      { type: 'json', value: { ok: true }, receipt: 'r-1' },
+    ],
+  ])('%s in the iteration callback payload', async (_name, toolOutput, expectedResult) => {
+    const model = makeToolCallingModel(1);
+    const agent = makeAgent(model as LanguageModelV2, toolOutput);
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    const onIterationComplete = vi.fn(() => ({ continue: false as const }));
+
+    const { fullStream, cleanup } = await durableAgent.stream('Go', {
+      maxSteps: 10,
+      onIterationComplete,
+    });
+
+    for await (const _ of fullStream) {
+      // drain
+    }
+
+    expect(onIterationComplete).toHaveBeenCalledTimes(1);
+    expect(onIterationComplete.mock.calls[0]?.[0].toolResults).toEqual([
+      expect.objectContaining({
+        name: 'myTool',
+        result: expectedResult,
+      }),
+    ]);
 
     cleanup();
   });

@@ -7,6 +7,7 @@ import type { CoreTool } from '../../../tools/types';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
 import type {
+  SerializableClientTool,
   SerializableToolMetadata,
   SerializableModelConfig,
   SerializableModelListEntry,
@@ -234,9 +235,41 @@ export function serializeModelSettings(
 }
 
 /**
+ * Snapshot call-time client tools from their converted CoreTools so a worker in
+ * another process can rebuild them. Provider tools (no JSON input schema to
+ * carry) are skipped.
+ */
+export function serializeClientTools(
+  clientTools: Record<string, unknown> | undefined,
+  tools: Record<string, CoreTool>,
+): Record<string, SerializableClientTool> | undefined {
+  if (!clientTools) return undefined;
+  const out: Record<string, SerializableClientTool> = {};
+  for (const name of Object.keys(clientTools)) {
+    const tool = tools[name];
+    if (
+      !tool ||
+      (tool as { type?: string }).type === 'provider-defined' ||
+      (tool as { type?: string }).type === 'provider'
+    ) {
+      continue;
+    }
+    const meta = serializeToolMetadata(name, tool);
+    out[name] = {
+      id: meta.id,
+      description: meta.description,
+      inputSchema: meta.inputSchema,
+      requireApproval: meta.requireApproval,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
+  clientTools?: SerializableDurableOptions['clientTools'];
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
@@ -279,6 +312,7 @@ export function serializeDurableOptions(options: {
   }
 
   return {
+    clientTools: options.clientTools,
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,

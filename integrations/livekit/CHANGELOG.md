@@ -1,5 +1,117 @@
 # @mastra/livekit
 
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- Raised the supported LiveKit Agents and plugin minimum to 1.7.1 so speech flushing and playback outcome APIs are available. **Before:** The peer range `^1.4.0` accepted Agents 1.4–1.6. **After:** The minimum is `1.7.1`. Upgrade Agents and any installed LiveKit or Silero plugins to matching versions: ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+  ```sh
+  npm install @livekit/agents@1.7.1 @livekit/agents-plugin-livekit@1.7.1 @livekit/agents-plugin-silero@1.7.1
+  ```
+
+  Existing session setup can stay in place. Attach the playback observer before starting the session:
+
+  ```ts
+  import { voice } from '@livekit/agents';
+  import { observeVoiceSession } from '@mastra/livekit/plugin';
+
+  const session = new voice.AgentSession();
+  observeVoiceSession(session, {
+    onSpeechComplete: result => console.log(result.outcome),
+  });
+  ```
+
+- Added a browser-safe `@mastra/livekit/client` entry point for recording playback. It exports `getLiveKitRecording`, `LiveKitRecording`, and `LiveKitRecordingResponse`, reusing a Mastra client's authentication and fetch configuration without importing LiveKit server or worker code. ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+  Applications using the client entry point need `@mastra/client-js` 1.51.2 or newer within 1.x. The SDK is an optional peer; server and worker imports do not require it.
+
+  If you used `client.getLiveKitRecording(traceId)` in an earlier snapshot, replace it with:
+
+  ```ts
+  import { getLiveKitRecording } from '@mastra/livekit/client';
+
+  const recording = await getLiveKitRecording(client, traceId);
+  ```
+
+  Studio now uses this entry point for Review Audio.
+
+- Fixed recording URL validation so malformed URLs produce validation failures without throwing unexpected exceptions. Playback remains limited to HTTP and HTTPS URLs. ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+  Aligned the Zod peer range with LiveKit Agents: `^3.25.76 || ^4.1.8`. Older Zod versions are no longer accepted. Upgrade before installing this release:
+
+  ```sh
+  npm install zod@^3.25.76
+  # Or use Zod 4:
+  npm install zod@^4.1.8
+  ```
+
+- Added per-turn generation metrics, playback completion hooks, and speech-segment flushing. `onTurnComplete` keeps its generation-only behavior; `onSpeechComplete` reports server playback outcomes without changing memory persistence. ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+  ```ts
+  // Before: generation completion only
+  createLiveKitWorker({ mastra, onTurnComplete: handleGeneration });
+
+  // After: observe generation and playback separately
+  createLiveKitWorker({
+    mastra,
+    onTurnComplete: handleGeneration,
+    onTurnMetrics: handleMetrics,
+    onSpeechComplete: handlePlayback,
+  });
+  ```
+
+  Reply generators can now emit a `VOICE_TEXT_FLUSH` boundary as well as strings. Custom string-only generators still work. Code consuming generator output directly must handle the boundary explicitly:
+
+  ```ts
+  // Before
+  text += chunk;
+
+  // After
+  if (typeof chunk === 'string') text += chunk;
+  else flushSpeechSegment();
+  ```
+
+  For `MastraLLM`, use the `mastraLLMNode` adapter in the LiveKit agent to translate these boundaries. Playback transcripts may be partial or estimated; server playback does not prove that the remote listener heard the audio.
+
+### Patch Changes
+
+- Required an explicit recording authorization callback before trace lookup or playback URL resolution. Missing policies fail at route registration, and denied requests cannot access recording storage. ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+  ```ts
+  // Before: authentication alone did not check recording ownership.
+  liveKitRecordingRoute({ resolveRecording });
+
+  // After: the application verifies access to the requested trace.
+  liveKitRecordingRoute({ authorize: authorizeRecording, resolveRecording });
+  ```
+
+  The authorization callback must return `true` to permit access, including when `requiresAuth` is `false` for a local demo.
+
+- Fixed `vad: false` to disable voice activity detection when creating a LiveKit session. LiveKit treats an omitted VAD as a request for its bundled default, so the worker now explicitly opts out. Explicit VAD instances, prewarmed Silero, and `sessionOptions` overrides keep their existing behavior. ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+- Fixed `liveKitConnectionRoute()` to return HTTP 409 when recording is requested for an existing room, without dispatching an agent or issuing a participant token. Use a unique `roomName` for each recorded call. ([#24674](https://github.com/mastra-ai/mastra/pull/24674))
+
+  Programmatic callers of `dispatchVoiceSession()` can distinguish this conflict with the exported `LiveKitRecordingRoomConflictError`:
+
+  ```ts
+  import { dispatchVoiceSession, LiveKitRecordingRoomConflictError } from '@mastra/livekit';
+
+  try {
+    await dispatchVoiceSession({ roomName, recording });
+  } catch (error) {
+    if (error instanceof LiveKitRecordingRoomConflictError) {
+      console.error(`Room ${error.roomName} already exists; start the call with a fresh room name.`);
+    } else {
+      throw error;
+    }
+  }
+  ```
+
+- Updated dependencies [[`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`84143a8`](https://github.com/mastra-ai/mastra/commit/84143a892e1e8427899c39e9661bd0675714792c), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936)]:
+  - @mastra/core@1.75.0-alpha.8
+  - @mastra/client-js@1.52.0-alpha.8
+
 ## 0.4.2
 
 ### Patch Changes

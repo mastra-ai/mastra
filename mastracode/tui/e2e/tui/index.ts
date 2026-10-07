@@ -2,6 +2,7 @@ import { abortFollowupScenario } from './abort-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentConnectionsCrossProjectScenario } from './agent-connections-cross-project.js';
 import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
 import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
 import { agentConnectionsToolFlowScenario } from './agent-connections-tool-flow.js';
@@ -108,6 +109,7 @@ import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { modeSwitchAppliesPackModelScenario } from './mode-switch-applies-pack-model.js';
 import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
@@ -136,6 +138,7 @@ import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
+import { planApprovalGoalReplacesActiveScenario } from './plan-approval-goal-replaces-active.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import {
@@ -171,6 +174,8 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
 import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
+import { resumeLockedThreadScenario } from './resume-locked-thread.js';
+import { resumeMissingThreadScenario } from './resume-missing-thread.js';
 import { schedulesCommandScenario } from './schedules-command.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
@@ -237,6 +242,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agent-connections-cross-project': agentConnectionsCrossProjectScenario,
   'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
   'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,
   'agent-connections-tool-flow': agentConnectionsToolFlowScenario,
@@ -341,6 +347,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'model-search': modelSearchScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
+  'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
   'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
@@ -364,6 +371,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,
   'persistent-goal-reload': persistentGoalReloadScenario,
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
+  'plan-approval-goal-replaces-active': planApprovalGoalReplacesActiveScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'permission-request-hook': permissionRequestHookScenario,
@@ -439,6 +447,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
   'terminal-resize-reflow': terminalResizeReflowScenario,
   'thread-history': threadHistoryScenario,
+  'resume-locked-thread': resumeLockedThreadScenario,
+  'resume-missing-thread': resumeMissingThreadScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'tool-suspension-same-run-resume': toolSuspensionSameRunResumeScenario,
