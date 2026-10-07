@@ -324,11 +324,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
     );
     const existingNames = new Set(existingTables.rows.map(row => String(row.name)));
-    if (
-      existingNames.size > 0 &&
-      !existingNames.has(TABLE_KNOWLEDGE_SCHEMA) &&
-      (await this.#replaceEmptyPublishedV1())
-    ) {
+    if (existingNames.size > 0 && !existingNames.has(TABLE_KNOWLEDGE_SCHEMA) && (await this.#replacePublishedV1())) {
       existingNames.clear();
     }
     if (existingNames.size > 0) {
@@ -469,12 +465,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   /**
-   * Earlier releases created empty Knowledge tables for every app. When exactly that layout and its
-   * indexes are the only Knowledge objects, drop it so canonical storage can initialize; replacing it
-   * loses nothing. Rows, partial or unfamiliar tables, views, triggers, and extra indexes all leave the
-   * database untouched.
+   * Knowledge v1 was experimental and its data is not migrated. When exactly the published v1 tables
+   * and indexes are the only Knowledge objects, drop them, discarding any rows they hold, so canonical
+   * storage can initialize. Partial or unfamiliar tables, views, triggers, and extra indexes all leave
+   * the database untouched.
    */
-  async #replaceEmptyPublishedV1(): Promise<boolean> {
+  async #replacePublishedV1(): Promise<boolean> {
     return this.#transaction(async tx => {
       const objects = await tx.execute(
         "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
@@ -499,9 +495,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         );
       }
       if (!isPublishedKnowledgeV1Layout(columnsByTable)) return false;
-      for (const table of tables) {
-        if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return false;
-      }
       for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
       return true;
     });
