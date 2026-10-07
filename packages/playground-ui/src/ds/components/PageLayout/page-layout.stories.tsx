@@ -8,6 +8,7 @@ import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
+import { Txt } from '../Txt';
 import { PageLayout } from './index';
 import { MainCard } from '@/ds/new/layout/app-shell';
 import { PageHeader } from '@/ds/new/layout/page-header';
@@ -80,17 +81,37 @@ export const Container: Story = {
 
 export const TopBarSpacingComparison: Story = {
   render: () => (
-    <div className="grid grid-cols-2">
-      <StoryFrame>
-        <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
-          <div className="mt-6">{resourceList}</div>
-        </PageLayout>
-      </StoryFrame>
-      <StoryFrame>
-        <PageLayout header={pageHeader}>
-          <div className="mt-6">{resourceList}</div>
-        </PageLayout>
-      </StoryFrame>
+    <div className="grid grid-cols-3">
+      <div>
+        <Txt variant="caption" tone="muted">
+          With top bar
+        </Txt>
+        <StoryFrame>
+          <PageLayout breadcrumbs={crumbs} headerActions={headerActions} reserveTopBar header={pageHeader}>
+            <div className="mt-6">{resourceList}</div>
+          </PageLayout>
+        </StoryFrame>
+      </div>
+      <div>
+        <Txt variant="caption" tone="muted">
+          Reserved top bar
+        </Txt>
+        <StoryFrame>
+          <PageLayout reserveTopBar header={pageHeader}>
+            <div className="mt-6">{resourceList}</div>
+          </PageLayout>
+        </StoryFrame>
+      </div>
+      <div>
+        <Txt variant="caption" tone="muted">
+          Default without top bar
+        </Txt>
+        <StoryFrame>
+          <PageLayout header={pageHeader}>
+            <div className="mt-6">{resourceList}</div>
+          </PageLayout>
+        </StoryFrame>
+      </div>
     </div>
   ),
   play: async ({ canvasElement }) => {
@@ -106,7 +127,7 @@ export const TopBarSpacingComparison: Story = {
       };
     });
 
-    await expect(offsets.map(offset => offset.header)).toEqual([56, 56]);
+    await expect(offsets.map(offset => offset.header)).toEqual([56, 56, 16]);
     await expect(offsets[1]?.body).toBe(offsets[0]?.body);
   },
 };

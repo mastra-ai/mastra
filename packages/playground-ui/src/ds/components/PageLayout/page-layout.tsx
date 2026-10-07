@@ -8,6 +8,7 @@ export interface PageLayoutProps {
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
+  reserveTopBar?: boolean;
   /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
   actionRow?: ReactNode;
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
@@ -23,6 +24,7 @@ export function PageLayout({
   children,
   breadcrumbs,
   headerActions,
+  reserveTopBar = false,
   actionRow,
   header,
   variant = 'container',
@@ -36,7 +38,7 @@ export function PageLayout({
   return (
     <div
       data-slot="page-layout"
-      className={cn('flex h-full min-h-0 flex-col', !(breadcrumbs || headerActions) && 'pt-10')}
+      className={cn('flex h-full min-h-0 flex-col', reserveTopBar && !(breadcrumbs || headerActions) && 'pt-10')}
     >
       {(breadcrumbs || headerActions) && (
         <Header className="h-10 min-h-10 shrink-0 gap-2 overflow-hidden px-2">
