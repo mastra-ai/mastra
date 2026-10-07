@@ -10,6 +10,7 @@ import {
   THINKING_LEVEL_VALUES,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
@@ -67,8 +68,11 @@ function loose(c: unknown): Context {
  * Where a provider's active credential comes from, as seen by the caller.
  * Local mode reports `oauth`/`stored` (server-global `auth.json`); tenant mode
  * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
+ * `deployment` (tenant mode) marks a provider the operator opted in to run on
+ * the server process's own credentials (e.g. Amazon Bedrock's AWS chain).
  */
 export type ProviderCredentialSource =
+  | 'deployment'
   | 'oauth'
   | 'stored'
   | 'env'
@@ -157,16 +161,28 @@ export async function listProviders({
   controller,
   authStorage,
   tenantCredentials,
+  deploymentProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
+  deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
     if (seen.has(model.provider)) continue;
+
+    if (tenantCredentials && isDeploymentModelProvider(model.provider)) {
+      // Credentials for these providers live on the server process, never in
+      // tenant rows, so no account can connect them. List them only when the
+      // operator opted the deployment in and the server has credentials.
+      const usable =
+        deploymentProviders?.has(model.provider) && models.some(m => m.provider === model.provider && m.hasApiKey);
+      if (usable) seen.set(model.provider, { provider: model.provider, source: 'deployment' });
+      continue;
+    }
 
     const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
@@ -305,6 +321,38 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
 // ── Available models ───────────────────────────────────────────────────────
 
 /**
+ * Providers whose credentials can only come from the server process (Amazon
+ * Bedrock authenticates through the AWS credential chain). In tenant mode they
+ * are usable only when the operator lists them in
+ * `MastraFactoryConfig.deploymentModelProviders`.
+ */
+export const DEPLOYMENT_MODEL_PROVIDERS: readonly string[] = [AMAZON_BEDROCK_GATEWAY_ID];
+
+export function isDeploymentModelProvider(provider: string): boolean {
+  return DEPLOYMENT_MODEL_PROVIDERS.includes(provider);
+}
+
+/**
+ * Normalize the operator's `deploymentModelProviders` list. Unsupported ids are
+ * ignored with a warning rather than failing boot.
+ */
+export function resolveDeploymentModelProviders(providers: readonly string[] | undefined): ReadonlySet<string> {
+  const resolved = new Set<string>();
+  for (const raw of providers ?? []) {
+    const provider = raw.trim();
+    if (!provider) continue;
+    if (isDeploymentModelProvider(provider)) {
+      resolved.add(provider);
+    } else {
+      console.warn(
+        `[factory] Ignoring deployment model provider "${provider}". Supported: ${DEPLOYMENT_MODEL_PROVIDERS.join(', ')}.`,
+      );
+    }
+  }
+  return resolved;
+}
+
+/**
  * Compute which providers the user can reach, mirroring the TUI's
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
  * the named providers, plus any other provider that has a usable key.
@@ -313,16 +361,23 @@ export async function buildProviderAccess({
   controller,
   authStorage,
   tenantCredentials,
+  deploymentProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
+  deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
     if (tenantCredentials) {
+      // Tenant rows never authenticate these providers; only an operator
+      // opt-in plus credentials on the server process does.
+      if (isDeploymentModelProvider(provider)) {
+        return deploymentProviders?.has(provider) && hasModelKey(provider) ? 'apikey' : false;
+      }
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
       const credential = userRec?.credential ?? orgRec?.credential;
@@ -566,6 +621,11 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   /** Notifies the host after custom providers change so model-router caches can be dropped. */
   onCustomProvidersChanged?: (tenant: { orgId: string }) => void;
   /**
+   * Tenant mode: providers the operator opted in to run on the server process's
+   * own credentials (see `DEPLOYMENT_MODEL_PROVIDERS`).
+   */
+  deploymentProviders?: ReadonlySet<string>;
+  /**
    * Path of the server's settings.json backing the deployment-scoped thinking
    * defaults. Defaults to the standard app-data location; injectable for tests.
    */
@@ -592,7 +652,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 export class ConfigRoutes extends Route<ConfigRoutesDeps> {
   routes(): ApiRoute[] {
     const options = this.deps;
-    const { controller, authStorage, auth } = options;
+    const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
@@ -639,6 +699,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
+                deploymentProviders,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
@@ -668,6 +729,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const scope = body.scope === 'org' ? 'org' : 'user';
           try {
             if (ctx.mode === 'tenant') {
+              // A stored key would never be read: these providers authenticate
+              // with the server process's credentials only.
+              if (isDeploymentModelProvider(provider)) {
+                return c.json(
+                  {
+                    error: 'provider_configured_by_deployment',
+                    message: `${provider} is configured by the Factory deployment (credentials on the server), not per account.`,
+                  },
+                  400,
+                );
+              }
               if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
@@ -678,7 +750,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               onCredentialsChanged(tenant);
               await seedPersonalOmDefaults({ memorySettings: options.memorySettings, tenant, provider });
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records });
+              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
@@ -710,7 +782,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records });
+              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
@@ -833,6 +905,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
+                deploymentProviders,
               }),
             ]);
             const catalog = models
@@ -1083,6 +1156,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               controller,
               authStorage: tenantCredentials ? undefined : authStorage,
               tenantCredentials,
+              deploymentProviders,
             });
             if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
 

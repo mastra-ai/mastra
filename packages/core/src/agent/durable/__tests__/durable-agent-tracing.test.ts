@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
+import { getCurrentSpan } from '../../../observability/context-storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -328,6 +329,39 @@ describe('DurableAgent observability tracing', () => {
       const agentSpan = agentSpans[0];
       const childSpanTypes = agentSpan.createChildSpan.mock.calls.map((call: any[]) => call[0]?.type);
       expect(childSpanTypes).toContain('model_generation');
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('runs the provider call inside the model span context (#25988)', async () => {
+    const { spy } = await spyOnSpans();
+
+    try {
+      const observedSpanTypes: (string | undefined)[] = [];
+      const model = createTextStreamModel('Hello');
+      const originalDoStream = model.doStream.bind(model);
+      model.doStream = async (options: any) => {
+        observedSpanTypes.push(getCurrentSpan()?.type);
+        return originalDoStream(options);
+      };
+
+      const baseAgent = new Agent({
+        id: 'span-context-agent',
+        name: 'Span Context Agent',
+        instructions: 'You are a test assistant',
+        model: model as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      // The mock tracker exposes the MODEL_GENERATION span as its current span.
+      expect(observedSpanTypes).toEqual(['model_generation']);
 
       cleanup();
     } finally {

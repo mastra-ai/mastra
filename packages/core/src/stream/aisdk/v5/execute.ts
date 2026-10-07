@@ -114,6 +114,24 @@ export function resolveJsonPromptInjection(
   return capability === true ? undefined : 'inline';
 }
 
+/**
+ * Whether a step sends a native structured-output schema (`responseFormat`) to the model.
+ * Tools are dropped under `toolChoice: 'none'` only in this case (#14459); when the schema is
+ * injected into the prompt instead, tools are kept so providers retain tool history (#25908).
+ */
+export function sendsNativeResponseFormat(
+  structuredOutput: { schema?: unknown; model?: unknown; jsonPromptInjection?: JsonPromptInjection } | undefined,
+  model: { provider: string; modelId: string },
+): boolean {
+  if (!structuredOutput?.schema || structuredOutput.model) return false;
+  const { jsonPromptInjection } = structuredOutput;
+  const modelRoute = `${model.provider.split('.')[0]}/${model.modelId}`;
+  return !resolveJsonPromptInjection(
+    jsonPromptInjection,
+    jsonPromptInjection === 'auto' ? modelSupportsStructuredOutput(modelRoute) : undefined,
+  );
+}
+
 type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
 
 /**
@@ -239,18 +257,19 @@ export function execute<OUTPUT = undefined>({
   const targetVersion: ModelSpecVersion =
     model.specificationVersion === 'v4' ? 'v4' : model.specificationVersion === 'v3' ? 'v3' : 'v2';
 
-  const toolsAndToolChoice = prepareToolsAndToolChoice({
-    tools,
-    toolChoice,
-    activeTools,
-    targetVersion,
-  });
-
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
       ? 'processor'
       : 'direct'
     : undefined;
+
+  const toolsAndToolChoice = prepareToolsAndToolChoice({
+    tools,
+    toolChoice,
+    activeTools,
+    targetVersion,
+    stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, model),
+  });
 
   const responseFormat = structuredOutput?.schema
     ? getResponseFormat(structuredOutput?.schema, {

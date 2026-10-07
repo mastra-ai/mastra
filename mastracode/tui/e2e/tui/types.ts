@@ -179,6 +179,8 @@ export type ScenarioName =
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'legacy-thread-model-restore'
+  | 'saved-thread-model-restore'
   | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'

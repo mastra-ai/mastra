@@ -235,6 +235,43 @@ describe('Model provider onboarding', () => {
     });
   });
 
+  describe('when the deployment provides Amazon Bedrock', () => {
+    it('lets a member pick it as connected without an API-key dialog', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'amazon-bedrock', source: 'deployment' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [
+              {
+                id: 'amazon-bedrock/anthropic.claude-sonnet-4-5',
+                provider: 'amazon-bedrock',
+                modelName: 'anthropic.claude-sonnet-4-5',
+                hasApiKey: true,
+              },
+            ],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+
+      const bedrock = await screen.findByRole('button', { name: 'Amazon Bedrock' });
+      expect(bedrock).toBeEnabled();
+      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+      await user.click(bedrock);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      expect(screen.getByText('amazon-bedrock/anthropic.claude-sonnet-4-5')).toBeInTheDocument();
+    });
+  });
+
   describe('when the user is not an organization admin', () => {
     it('keeps shared providers selectable and disables new organization connections', async () => {
       registerAuthHandler();
