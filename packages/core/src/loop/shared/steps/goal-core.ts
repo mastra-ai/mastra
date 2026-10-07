@@ -354,8 +354,11 @@ export async function evaluateGoal(deps: {
       // the registration key.
       const scorerRef = goal.scorer;
       const registered = (mastra?.listScorers?.() ?? {}) as Record<string, MastraScorer<any, any, any, any>>;
+      const candidates = Object.values(registered);
       scorer =
-        Object.values(registered).find(s => s?.id === scorerRef || s?.name === scorerRef) ?? registered[scorerRef];
+        candidates.find(s => s?.id === scorerRef) ??
+        candidates.find(s => s?.name === scorerRef) ??
+        registered[scorerRef];
       if (!scorer) {
         throw new Error(`Goal scorer "${scorerRef}" not found (matched by scorer id or registration key)`);
       }
