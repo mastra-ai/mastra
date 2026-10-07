@@ -95,8 +95,8 @@ function createRunner(model: MockLanguageModelV2, extractors: Extractor<any>[], 
 
 const REPLY = '<observations>\n* User likes tea.\n</observations>';
 
-describe('observer logs missing required sections', () => {
-  it('warns with the slugs of required sections the observer left out', async () => {
+describe('observer logs required sections it could not extract', () => {
+  it('warns with the slug of a required section the observer left out', async () => {
     const { model } = createScriptedModel([{ text: REPLY, finishReason: 'stop' }]);
     const warn = vi.fn();
     const mood = new Extractor({ name: 'Mood', instructions: 'Describe the mood.', required: true });
@@ -106,8 +106,8 @@ describe('observer logs missing required sections', () => {
 
     expect(result.extractionFailures?.map(f => f.slug)).toEqual(['mood']);
     expect(warn).toHaveBeenCalledWith(
-      'OM observer output is missing required sections',
-      expect.objectContaining({ missingSlugs: ['mood'], threadId: 'thread-1' }),
+      'OM observer could not extract required sections',
+      expect.objectContaining({ failedSlugs: ['mood'], threadId: 'thread-1' }),
     );
   });
 
@@ -118,6 +118,6 @@ describe('observer logs missing required sections', () => {
 
     await createRunner(model, [mood], warn).call(undefined, [createMessage('Hi', 'user')]);
 
-    expect(warn).not.toHaveBeenCalledWith('OM observer output is missing required sections', expect.anything());
+    expect(warn).not.toHaveBeenCalledWith('OM observer could not extract required sections', expect.anything());
   });
 });
