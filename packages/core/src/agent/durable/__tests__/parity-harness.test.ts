@@ -608,18 +608,11 @@ describe('expectEngineParity', () => {
 
   it('records a run that fails mid-stream and compares it', async () => {
     // The failure is compared rather than thrown out of the scenario. The
-    // wrapped engines re-emit the failure's chunks from workflow state with
-    // slimmer payloads (an error chunk that keeps the error but loses `type`,
-    // and an error-path `step-finish` that loses `messages`), so the payloads
-    // are left out of this comparison and pinned explicitly below instead.
-    const results = await expectEngineParity(
-      failingScenario({
-        differences: {
-          durable: { reason: 'self-test: re-emitted failure payloads', ignore: ['chunkPayloads'] },
-          evented: { reason: 'self-test: re-emitted failure payloads', ignore: ['chunkPayloads'] },
-        },
-      }),
-    );
+    // wrapped engines re-emit the failure's chunks from workflow state, and the
+    // only payload difference left is the `type` key plain keeps on its error
+    // chunk, which `KNOWN_CHUNK_DIFFERENCES` declares — so the payloads are not
+    // ignored here, they are compared.
+    const results = await expectEngineParity(failingScenario());
 
     for (const engine of ENGINES) {
       const turn = results[engine]!.turns[0]!;
@@ -638,12 +631,12 @@ describe('expectEngineParity', () => {
       // contract is exactly name and message.
       expect(turn.error).toStrictEqual({ name: 'Error', message: 'scripted model failure' });
 
-      // The wrapped engines re-emit the error as a plain object; plain keeps the
-      // raw `Error`, whose name and message are not enumerable properties. Either
-      // way a `stack` — which would carry this machine's checkout path — is
-      // stripped before anything is compared.
+      // Every engine hands the same failure on, read the same way: plain sends
+      // the live `Error`, the wrapped engines its serialised form, and both
+      // compare as name and message. A `stack` — which would carry this
+      // machine's checkout path — is stripped on both.
       const errorPayload = (turn.chunkPayloads[turn.chunks.indexOf('AGENT:error')] as { error?: unknown }).error;
-      expect(errorPayload).toEqual(engine === 'plain' ? {} : { name: 'Error', message: 'scripted model failure' });
+      expect(errorPayload).toStrictEqual({ name: 'Error', message: 'scripted model failure' });
     }
   });
 
@@ -663,6 +656,21 @@ describe('expectEngineParity', () => {
     await expect(expectEngineParity(scenario)).rejects.toThrow(
       /durable differs from plain at turns\[0\]\.error\.message/,
     );
+
+    // The failure is compared twice over — as `turn.error` and inside the error
+    // chunk's own payload. Declaring the first away must not make the second
+    // pass, or restoring `ignore: ['chunkPayloads']` on failed runs would leave
+    // this test green.
+    await expect(
+      expectEngineParity({
+        ...scenario,
+        differences: {
+          durable: { reason: 'self-test: compare the payload alone', ignore: ['error'] },
+        },
+      }),
+    ).rejects.toThrow(
+      /durable differs from its declared expectation at turns\[0\]\.chunkPayloads\[\d+\]\.error\.message/,
+    );
   });
 
   it('records a run whose stream() rejects before it streams anything', async () => {
@@ -674,27 +682,40 @@ describe('expectEngineParity', () => {
 
     // The run produced no chunks at all, so it only clears the
     // "compared nothing on plain" guard because its error was recorded.
+    //
+    // The one difference left is the failure's class, and it is a real one, not
+    // a recording artifact: `stream()` rejects before the model is called, and
+    // plain surfaces the plain `Error` the argument validation raises while the
+    // wrapped engines surface a `TypeError` for the same input and the same
+    // message. The declaration is narrowed to `error` alone — the assertions
+    // below still compare both classes and the message.
+    const preStreamClassReason =
+      'pre-stream rejection: same message, but plain reports `Error` where the wrapped engines report `TypeError`';
     const results = await expectEngineParity({
       ...scenario,
       differences: {
-        durable: { reason: 'self-test: the wrapped engines reject with a TypeError', ignore: ['error'] },
-        evented: { reason: 'self-test: the wrapped engines reject with a TypeError', ignore: ['error'] },
+        durable: { reason: preStreamClassReason, ignore: ['error'] },
+        evented: { reason: preStreamClassReason, ignore: ['error'] },
       },
     });
 
     for (const engine of ENGINES) {
       const turn = results[engine]!.turns[0]!;
       expect(turn.chunks).toEqual([]);
-      expect(turn.error?.message).toMatch(/modelSettings\.timeout/);
+      // Same message on every engine; only the class differs. Asserted here for
+      // each engine rather than for plain and durable alone, so the declaration
+      // above cannot hide an evented that drifts to another message or class.
+      expect(turn.error?.message).toBe(results.plain!.turns[0]!.error?.message);
+      expect(turn.error).toStrictEqual({
+        name: engine === 'plain' ? 'Error' : 'TypeError',
+        message: turn.error!.message,
+      });
       // Rejected before the model was ever called on any engine.
       expect(results[engine]!.requests).toHaveLength(0);
     }
-    // Both engines report the same message; they disagree on the class because
-    // plain surfaces a plain `Error` where the wrapped engines surface the
-    // `TypeError` the settings validation actually throws.
-    expect(results.durable!.turns[0]!.error?.message).toBe(results.plain!.turns[0]!.error?.message);
-    expect(results.plain!.turns[0]!.error).toMatchObject({ name: 'Error' });
-    expect(results.durable!.turns[0]!.error).toMatchObject({ name: 'TypeError' });
+    // And the message is the settings validation's, not something else that
+    // happens to match across engines.
+    expect(results.plain!.turns[0]!.error?.message).toMatch(/modelSettings\.timeout/);
 
     await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
   });
@@ -1068,6 +1089,34 @@ describe('expectEngineParity', () => {
     const result = { name: 'deployment', message: 'ready', stack: ['a', 'b'] };
     expect(normalizePayload(result)).toEqual(result);
     expect(normalizePayload({ stack: 'a' })).not.toEqual(normalizePayload({ stack: 'b' }));
+  });
+
+  it('reads a live Error as the name and message a serialised one carries', () => {
+    // Plain hands a failure on as the `Error` itself; the wrapped engines hand
+    // on `{ name, message, stack }`. Both have to record the same thing, or the
+    // failure this harness now compares is a recording artifact rather than an
+    // engine difference.
+    const thrown = new Error('boom');
+    const serialised = { name: 'Error', message: 'boom', stack: thrown.stack };
+
+    expect(normalizePayload(thrown)).toEqual({ name: 'Error', message: 'boom' });
+    expect(normalizePayload(thrown, [], true)).toEqual(normalizePayload(serialised, [], true));
+    // The class is compared too, so a `TypeError` never passes for an `Error`.
+    expect(normalizePayload(new TypeError('boom'))).toEqual({ name: 'TypeError', message: 'boom' });
+
+    // Reading name and message must not cost the properties an application put
+    // on the error: those are enumerable, so they used to be recorded, and two
+    // errors differing only in one of them have to stay different.
+    const coded = Object.assign(new Error('boom'), { code: 'ETIMEDOUT' });
+    expect(normalizePayload(coded)).toEqual({ name: 'Error', message: 'boom', code: 'ETIMEDOUT' });
+    expect(normalizePayload(coded)).not.toEqual(normalizePayload(Object.assign(new Error('boom'), { code: 'OTHER' })));
+
+    // Following those properties has to stay cycle-safe: the error itself joins
+    // the ancestry before they are read, so an error that carries itself is
+    // recorded once rather than recursed into forever.
+    const selfReferential = Object.assign(new Error('boom'), { cause: undefined as unknown });
+    selfReferential.cause = selfReferential;
+    expect(normalizePayload(selfReferential)).toEqual({ name: 'Error', message: 'boom', cause: '[circular]' });
   });
 
   it('runs a suspension and a resume on all three engines', async () => {

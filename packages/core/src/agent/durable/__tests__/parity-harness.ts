@@ -238,6 +238,14 @@ export const VOLATILE_PAYLOAD_KEYS = new Set([
  * containing itself) become `'[circular]'`; an object shared twice is
  * serialised twice.
  *
+ * A live `Error` becomes its enumerable properties plus `{ name, message }`:
+ * plain hands a failure on as the error itself, whose name and message are not
+ * enumerable properties, while a wrapped engine hands on a serialised
+ * `{ name, message, stack }`. Reading both as name and message is what makes
+ * them comparable — and recording the bare `Error` as `{}` would hide the
+ * message the whole comparison is about. Its enumerable properties are kept, so
+ * an application error whose `code` differs still compares as different.
+ *
  * `dropStack` is set only where the payload is known to be a failure — the
  * `error` chunk, where the engines hand the error on as data. There the error's
  * `stack` embeds the absolute checkout path and so differs on every machine.
@@ -252,6 +260,14 @@ export function normalizePayload(value: unknown, ancestors: readonly object[] = 
   if (value instanceof Uint8Array) return Buffer.from(value).toString('base64');
   if (ancestors.includes(value)) return '[circular]';
   const nested = [...ancestors, value];
+
+  if (value instanceof Error) {
+    return normalizePayload(
+      { ...Object.fromEntries(Object.entries(value)), name: value.name, message: value.message },
+      nested,
+      dropStack,
+    );
+  }
 
   if (Array.isArray(value)) return value.map(entry => normalizePayload(entry, nested, dropStack) ?? null);
   if (value instanceof Map) return normalizePayload(Object.fromEntries(value), nested, dropStack);
@@ -1065,15 +1081,31 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
   {
     ticket: 'COR-1390',
     reason:
+      "Plain forwards a failed run as the live `Error` under `type: 'error'`; durable and evented forward the " +
+      'serialised error alone.',
+    chunkType: 'error',
+    paths: ['type'],
+  },
+  {
+    ticket: 'COR-1390',
+    reason:
       'Durable and evented re-emit the loop step-finish payload as the serialised workflow step envelope: extra ' +
-      '`type`/`_durableStepContent`, empty `messages`, `metadata` without model metadata, a slim `output` and no ' +
-      '`processorRetryCount`.',
+      '`type`/`_durableStepContent`, no `messages` envelope at all, `metadata` without model metadata, a slim ' +
+      '`output` and no `processorRetryCount`.',
     chunkType: 'step-finish',
     paths: [
       'type',
       '_durableStepContent',
       'processorRetryCount',
       'metadata.modelMetadata',
+      // `messages` is a closed envelope — `{ all, user, nonUser }`, the shape
+      // `LLMIterationData.messages` declares and its zod schema enforces
+      // (loop/workflows/schema.ts) — so declaring the parent cannot hide a
+      // sibling key the type does not allow. The three child paths stay for the
+      // stale check: the parent delete removes them from the comparison, but the
+      // check still reads the original payload, where each child is a way for
+      // this declaration to stop reproducing.
+      'messages',
       'messages.all',
       'messages.user',
       'messages.nonUser',
