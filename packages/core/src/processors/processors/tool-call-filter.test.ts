@@ -422,6 +422,52 @@ describe('ToolCallFilter', () => {
     });
   });
 
+  describe('current-run steps after memory pruned response messages', () => {
+    // After observational memory removes earlier response messages mid-run, step content
+    // extraction indexes past the remaining step boundaries and returns `content: []`,
+    // while the step's response messages still carry this run's calls and results.
+    const prunedStep = {
+      content: [],
+      response: {
+        messages: [
+          { role: 'assistant', content: [toolCallPart('current-1', 'search')] },
+          { role: 'tool', content: [toolResultPart('current-1', 'search')] },
+        ],
+      },
+    };
+
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'earlier question' }] },
+      { role: 'assistant', content: [toolCallPart('history-1', 'search')] },
+      { role: 'tool', content: [toolResultPart('history-1', 'search')] },
+      { role: 'user', content: [{ type: 'text', text: 'new question' }] },
+      { role: 'assistant', content: [toolCallPart('current-1', 'search')] },
+      { role: 'tool', content: [toolResultPart('current-1', 'search')] },
+    ];
+
+    async function runWithSteps(steps: unknown[]) {
+      const result = await new ToolCallFilter({ exclude: ['search'] }).processLLMRequest!({
+        prompt,
+        model: 'test-model' as any,
+        stepNumber: steps.length,
+        steps,
+        state: {},
+        abort: (() => {
+          throw new Error('Aborted');
+        }) as (reason?: string) => never,
+      } as any);
+      return result?.prompt ?? prompt;
+    }
+
+    it("keeps the current run's tool calls when step content is empty", async () => {
+      expect(toolCallIdsIn(await runWithSteps([prunedStep]))).toEqual(['current-1', 'current-1']);
+    });
+
+    it("still strips a previous turn's tool calls", async () => {
+      expect(toolCallIdsIn(await runWithSteps([prunedStep]))).not.toContain('history-1');
+    });
+  });
+
   describe('processor provider config', () => {
     const prompt = (): LanguageModelV2Prompt => [
       { role: 'assistant', content: [toolCallPart('call-search', 'search', { query: 'SECRET_QUERY' })] },

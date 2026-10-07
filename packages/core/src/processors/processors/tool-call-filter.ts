@@ -137,7 +137,7 @@ export class ToolCallFilter implements Processor {
       // getter: steps restored from a suspend snapshot are plain JSON without class getters.
       const currentRunToolCallIds = new Set<string>();
       for (const step of steps ?? []) {
-        if (step.content) {
+        if (step.content?.length) {
           for (const part of step.content) {
             if (part.type === 'tool-call' || part.type === 'tool-result') {
               currentRunToolCallIds.add(part.toolCallId);
@@ -146,9 +146,23 @@ export class ToolCallFilter implements Processor {
           continue;
         }
         // Durable engines pass reduced step records with flat `toolCalls`/`toolResults` and no `content`.
-        const record = step as { toolCalls?: { toolCallId: string }[]; toolResults?: { toolCallId: string }[] };
+        // `content` is also empty when memory pruned earlier response messages mid-run, so fall back
+        // to the step's response messages as well.
+        const record = step as {
+          toolCalls?: { toolCallId: string }[];
+          toolResults?: { toolCallId: string }[];
+          response?: { messages?: { content: unknown }[] };
+        };
         for (const call of [...(record.toolCalls ?? []), ...(record.toolResults ?? [])]) {
           currentRunToolCallIds.add(call.toolCallId);
+        }
+        for (const message of record.response?.messages ?? []) {
+          if (!Array.isArray(message.content)) continue;
+          for (const part of message.content as { type?: string; toolCallId?: string }[]) {
+            if ((part.type === 'tool-call' || part.type === 'tool-result') && part.toolCallId) {
+              currentRunToolCallIds.add(part.toolCallId);
+            }
+          }
         }
       }
       return currentRunToolCallIds;
