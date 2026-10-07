@@ -139,6 +139,42 @@ describe('AgentController FGA', () => {
     );
   });
 
+  it('denies explicit-thread signals before reading or writing the thread', async () => {
+    const controller = createController();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    const getThread = vi.spyOn(session.thread, 'getById');
+    const sendSignal = vi.spyOn(session.machinery.getAgent(), 'sendSignal');
+    const provider = createProvider(false);
+    controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+
+    const result = session.sendSignalToThread(
+      { type: 'notification', contents: 'test notification' },
+      { resourceId: 'resource-1', threadId: 'thread-1' },
+      { requestContext: createRequestContext() },
+    );
+    await expect(result.accepted).rejects.toBeInstanceOf(FGADeniedError);
+
+    expect(getThread).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('denies active-run follow-ups before binding or queueing work', async () => {
+    const controller = createController();
+    const session = await controller.createSession({ resourceId: 'resource-1' });
+    vi.spyOn(session.run, 'isRunning').mockReturnValue(true);
+    const ensureFollowUpBinding = vi.spyOn(session, 'ensureFollowUpBinding');
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    const provider = createProvider(false);
+    controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+
+    await expect(
+      session.followUp({ content: 'follow up', requestContext: createRequestContext() }),
+    ).rejects.toBeInstanceOf(FGADeniedError);
+
+    expect(ensureFollowUpBinding).not.toHaveBeenCalled();
+    expect(queueMessage).not.toHaveBeenCalled();
+  });
+
   it('authorizes actor-aware session reads before returning protected data', async () => {
     const controller = createController();
     const session = await controller.createSession({ resourceId: 'resource-1' });

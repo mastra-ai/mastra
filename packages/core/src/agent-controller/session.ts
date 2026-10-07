@@ -3941,9 +3941,11 @@ export class Session<TState = unknown> {
   sendSignalToThread(
     input: AgentSignalInput,
     target: { resourceId: string; threadId: string },
+    options?: { requestContext?: RequestContext },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true }> } {
     const signal = createSignal(input);
     const accepted = Promise.resolve().then(async () => {
+      await this.machinery.authorizeExecute?.(options?.requestContext);
       const resourceId = this.identity.getResourceId();
       const thread = target.resourceId === resourceId ? await this.thread.getById({ threadId: target.threadId }) : null;
       if (!thread || thread.resourceId !== resourceId) {
@@ -4415,6 +4417,7 @@ export class Session<TState = unknown> {
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
+    await this.machinery.authorizeExecute?.(requestContext);
     const threadId = this.thread.getId();
     if (!threadId) return;
     const resourceId = this.identity.getResourceId();
