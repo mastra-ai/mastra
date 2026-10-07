@@ -875,8 +875,8 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL carries filterTraceId, filterEnvironment and a legacy filterTags', () => {
-    it('renders one chip per query-supported filter in URL order, ignoring tags', async () => {
+  describe('when the URL carries filterTraceId, filterTags and filterEnvironment', () => {
+    it('renders one chip per filter in URL order, including tags', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
@@ -885,11 +885,51 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      // Tags cannot be filtered by the trace query API, so no chip advertises them.
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
-        'Trace IDistrace-a',
-        'Environmentisprod',
-      ]);
+      const chips = Array.from(getFilterChips(), chip => chip.textContent).slice(1);
+      expect(chips).toHaveLength(3);
+      expect(chips[0]).toBe('Trace IDistrace-a');
+      expect(chips[1]).toContain('Tags');
+      expect(chips[1]).toContain('alpha');
+      expect(chips[2]).toBe('Environmentisprod');
+    });
+
+    it('sends the tag as an includes predicate to the trace query API', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      renderPage('/traces?filterTags=alpha');
+
+      await waitFor(() => expect(JSON.stringify(bodies)).toContain('{"op":"includes","path":"tags","value":"alpha"}'));
+    });
+  });
+
+  describe('when the URL pairs the presence-only feedback comment with a text value', () => {
+    it('loads the traces without sending the invalid comment predicate', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?filterFeedbackComment=wrong%20answer');
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(bodies.length).toBeGreaterThan(0);
+      expect(JSON.stringify(bodies)).not.toContain('"comment"');
+      expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
     });
   });
 

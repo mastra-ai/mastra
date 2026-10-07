@@ -91,7 +91,27 @@ describe('createTraceFilterBarFields', () => {
   it('omits fields the query API cannot filter on', () => {
     expect(byId('runId')).toBeUndefined();
     expect(byId('serviceName')).toBeUndefined();
-    expect(byId('tags')).toBeUndefined();
+  });
+
+  describe('when withQueryTrace is true', () => {
+    it('offers tags with list operators', () => {
+      expect(byId('tags')?.operators).toEqual(['in', 'notIn', 'exists', 'notExists']);
+    });
+
+    it('suggests tag values from the trace scope', () => {
+      const resolver = async () => [];
+      const calls: [string, string][] = [];
+      const withSuggestions = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        valueSuggestions: (scope, path) => {
+          calls.push([scope, path]);
+          return resolver;
+        },
+      });
+      expect(withSuggestions.find(f => f.id === 'tags')?.suggestions).toBe(resolver);
+      expect(calls).toContainEqual(['trace', 'tags']);
+    });
   });
 
   it('does not suggest the unsupported running status', () => {
@@ -207,6 +227,7 @@ describe('createTraceFilterBarFields', () => {
       'entityName',
       'rootEntityType',
       'status',
+      'tags',
       'entityId',
       'resourceId',
       'threadId',
@@ -412,6 +433,35 @@ describe('filter group URL params', () => {
 
       expect(getTraceFilterGroups(getPreservedTraceFilterParams(params))).toEqual([group]);
       expect(hasAnyTraceFilterParams(params)).toBe(true);
+    });
+  });
+});
+
+describe('presence-only filter URL params', () => {
+  describe('when a hand-edited URL gives the feedback comment a text value', () => {
+    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
+      'drops the token for %s',
+      query => {
+        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
+          { fieldId: 'traceId', value: 'abc' },
+        ]);
+      },
+    );
+  });
+
+  describe('when the feedback comment carries a presence operator', () => {
+    it('keeps the token', () => {
+      expect(
+        getTracePropertyFilterTokens(new URLSearchParams('filterFeedbackComment=&filterFeedbackComment.op=exists')),
+      ).toEqual([{ fieldId: 'feedback.comment', value: '', operatorId: 'exists' }]);
+    });
+  });
+
+  describe('when the feedback comment was just added without an operator', () => {
+    it('keeps the pending token', () => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams('filterFeedbackComment='))).toEqual([
+        { fieldId: 'feedback.comment', value: '' },
+      ]);
     });
   });
 });

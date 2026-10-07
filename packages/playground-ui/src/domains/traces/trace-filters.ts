@@ -297,6 +297,7 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'notExists',
 ];
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
+const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
 const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 // The legacy list endpoint only matches by equality.
@@ -428,7 +429,7 @@ export function createTraceFilterBarFields({
   /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
   metadataFields?: readonly TraceMetadataFilterField[];
   /** Builds a lazy value resolver for a related-scope field (`spans.model`, …). Absent → free text. */
-  valueSuggestions?: (scope: TraceQueryRelatedScope, path: string) => FilterBarSuggestionsResolver;
+  valueSuggestions?: (scope: TraceQueryRelatedScope | 'trace', path: string) => FilterBarSuggestionsResolver;
   /**
    * When false, only fields the legacy list endpoint (`buildTraceListFilters`) can express are offered, each with
    * the `is` operator only: no related-scope (`spans.*`, `scores.*`, `feedback.*`) or metadata fields.
@@ -507,6 +508,13 @@ export function createTraceFilterBarFields({
       suggestions,
     }));
 
+  const tagsResolver = valueSuggestions?.('trace', 'tags');
+  const tagsField: FilterBarField = {
+    ...traceFieldBase('tags'),
+    operators: TRACE_TAGS_OPERATORS,
+    ...(tagsResolver ? { suggestions: tagsResolver } : {}),
+  };
+
   const hidden = new Set(hiddenFieldIds);
   if (!withQueryTrace) {
     return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
@@ -516,7 +524,7 @@ export function createTraceFilterBarFields({
     }));
   }
   return [
-    ...pickFields.sort(byLabel),
+    ...[...pickFields, tagsField].sort(byLabel),
     ...textFields.sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
@@ -640,6 +648,12 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     // Text and synthetic single-value fields: include empty strings so
     // pending-but-not-yet-filled filters survive URL round-trips.
     const value = raw[0];
+    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
+      // Presence-only fields can't match a value; a hand-edited URL that gives
+      // them one would show a chip for a filter that is never applied.
+      const isPresence = operatorId === 'exists' || operatorId === 'notExists';
+      if (operatorId ? !isPresence : Boolean(value)) continue;
+    }
     if (value !== undefined) tokens.push({ fieldId, value, ...(operatorId ? { operatorId } : {}) });
   }
 

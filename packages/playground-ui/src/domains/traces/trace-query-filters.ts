@@ -4,7 +4,6 @@ import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
-  'tags',
   'runId',
   'sessionId',
   'requestId',
@@ -130,15 +129,41 @@ type TokenPredicate =
   /** A positive predicate on a related row; the caller decides how to wrap it in `some`. */
   | { scope: TraceQueryRelatedScope; predicate: TraceQueryScalarPredicate };
 
+/** `tags` is a string array: membership is `includes` per tag; "in" any of
+ *  several tags is an `or`, "not in" all of them is an `and`. `notIncludes`
+ *  does not match traces without tags, so exclusion also keeps untagged traces. */
+function tagsPredicate(operatorId: TraceFilterOperatorId, tags: string[]): TraceQueryPredicate | undefined {
+  if (operatorId === 'exists' || operatorId === 'notExists') return { op: operatorId, path: 'tags' };
+  const negative = operatorId === 'notIn' || operatorId === 'isNot';
+  const args: TraceQueryPredicate[] = tags.map(value => ({
+    op: negative ? 'notIncludes' : 'includes',
+    path: 'tags',
+    value,
+  }));
+  const combined = args.length <= 1 ? args[0] : { op: negative ? ('and' as const) : ('or' as const), args };
+  if (!combined || !negative) return combined;
+  return { op: 'or', args: [combined, { op: 'notExists', path: 'tags' }] };
+}
+
+/** Fields the query API can only test for presence; any other operator is rejected with a 422. */
+const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
+
 function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | undefined {
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return undefined;
-  const operatorId = token.operatorId ?? 'is';
+  const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
+  // Hand-edited URLs can pair these fields with value operators; drop them rather than fail the page.
+  if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(token.fieldId) && !isPresence) return undefined;
 
   const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
     (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
   );
   if (!rawValues.length && !isPresence) return undefined;
+
+  if (token.fieldId === 'tags') {
+    const predicate = tagsPredicate(operatorId, rawValues);
+    return predicate ? { predicate } : undefined;
+  }
 
   let fieldId = token.fieldId;
   let values: (string | number)[] = rawValues;
