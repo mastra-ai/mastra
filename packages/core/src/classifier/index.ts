@@ -34,6 +34,8 @@ export interface MastraEvaluationModelInterface {
   readonly modelId: string;
   readonly supportedQuestionTypes: DecisionModelV4['supportedQuestionTypes'];
   doDecide(options: DecisionModelV4CallOptions): Promise<EvaluationModelResult>;
+  /** @deprecated Use `doDecide` instead. */
+  doEvaluate(options: DecisionModelV4CallOptions): Promise<EvaluationModelResult>;
 }
 
 export class MastraEvaluationModel extends MastraBase implements MastraEvaluationModelInterface {
@@ -283,12 +285,16 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           options.abortSignal?.throwIfAborted();
           attemptCount += 1;
           try {
-            return await this.model.doDecide({
+            const callOptions = {
               state: options.state,
               questions: providerQuestions,
               abortSignal: options.abortSignal,
               providerOptions: options.providerOptions,
-            });
+            };
+            // Subclasses written before doDecide existed may override doEvaluate; keep honoring them.
+            return this.model.doEvaluate !== MastraEvaluationModel.prototype.doEvaluate
+              ? await this.model.doEvaluate(callOptions)
+              : await this.model.doDecide(callOptions);
           } catch (error) {
             lastProviderError = error;
             throw error;

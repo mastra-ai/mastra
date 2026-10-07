@@ -201,6 +201,24 @@ describe('Classifier', () => {
       expect(doDecide).toHaveBeenCalledTimes(1);
       expect(doEvaluate).not.toHaveBeenCalled();
     });
+
+    it('still calls doEvaluate overrides on MastraEvaluationModel subclasses', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>();
+      class LegacyOverrideModel extends MastraEvaluationModel {
+        override async doEvaluate() {
+          return { answers: { unsafe: { type: 'boolean' as const, probability: 0.9 } }, warnings: [] };
+        }
+      }
+
+      const result = await new Classifier({
+        id: 'legacy-override',
+        model: new LegacyOverrideModel(createDecisionModel(doDecide)),
+        questions: booleanQuestions,
+      }).evaluate({ state: 'x' });
+
+      expect(result.answers.unsafe.probability).toBe(0.9);
+      expect(doDecide).not.toHaveBeenCalled();
+    });
   });
 
   it('evaluates per-call choice and score questions and supplies response defaults', async () => {
