@@ -59,8 +59,9 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
-      actionRow={
-        <>
+      // Not `actionRow`: that one is pinned; the filters should scroll with the page.
+      header={
+        <div className="flex flex-col gap-2 pb-4">
           <ActionRow>
             <ActionRow.Start>
               <DateRangeSelector />
@@ -85,7 +86,7 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
             onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
             autoFocusFilterFieldId={autoFocusFilterFieldId}
           />
-        </>
+        </div>
       }
     >
       <h1 className="sr-only">Metrics</h1>

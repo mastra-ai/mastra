@@ -24,7 +24,9 @@ describe('UsageCard', () => {
   it('keeps the tabs when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<UsageCard />);
-    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
+    expect(await screen.findByText("Couldn't load")).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Models' })).toBeDefined();
+    // No rows, so no column header to label them.
+    expect(screen.queryByText('Tokens')).toBeNull();
   });
 });

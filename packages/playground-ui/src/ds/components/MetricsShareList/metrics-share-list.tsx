@@ -110,6 +110,7 @@ function ShareListBody({
             valueWidth={valueWidth}
             share={fmtShare(r.share, total)}
             highlighted={hover === r.key || activeKey === r.key}
+            active={activeKey === r.key}
             dimmed={isRowDimmed(r, hover)}
             onHover={() => setHover(r.key)}
             LinkComponent={LinkComponent}

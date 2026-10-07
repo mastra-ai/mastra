@@ -70,21 +70,19 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
         {onViewErrors && <OpenErrorsInLogsButton onClick={() => onViewErrors(rootEntityType)} />}
       </>
     ),
-    toolbar: (
-      <MetricsCard.Toolbar>
-        <MetricsCard.Tabs<Entity> value={entity} onValueChange={setEntity}>
-          <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
-          <MetricsCard.Tab value="workflows">Workflows</MetricsCard.Tab>
-          <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
-        </MetricsCard.Tabs>
-        <MetricsShareList.Header columns={COLUMNS} valueLabel="Runs" />
-      </MetricsCard.Toolbar>
-    ),
   };
+  const tabs = (
+    <MetricsCard.Tabs<Entity> value={entity} onValueChange={setEntity}>
+      <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
+      <MetricsCard.Tab value="workflows">Workflows</MetricsCard.Tab>
+      <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
+    </MetricsCard.Tabs>
+  );
 
+  // Without rows, the column header would label nothing; the tabs stay to try another entity.
   if (volume.isError) {
     return (
-      <ChartCard {...layout}>
+      <ChartCard {...layout} toolbar={<MetricsCard.Toolbar>{tabs}</MetricsCard.Toolbar>}>
         <ChartCardError />
       </ChartCard>
     );
@@ -93,6 +91,12 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
   return (
     <ChartCard
       {...layout}
+      toolbar={
+        <MetricsCard.Toolbar>
+          {tabs}
+          <MetricsShareList.Header columns={COLUMNS} valueLabel="Runs" />
+        </MetricsCard.Toolbar>
+      }
       summary={<MetricsCard.Summary value={formatCount(total)} label="runs and calls" isLoading={volume.isLoading} />}
       isUpdating={volume.isPlaceholderData}
     >

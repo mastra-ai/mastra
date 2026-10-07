@@ -43,6 +43,9 @@ describe('TraceVolumeCard', () => {
   it('says so when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<TraceVolumeCard />);
-    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
+    expect(await screen.findByText("Couldn't load")).toBeDefined();
+    // The tabs stay to try another entity; the column header has no rows to label.
+    expect(screen.getByRole('tab', { name: 'Workflows' })).toBeDefined();
+    expect(screen.queryByText('Error rate')).toBeNull();
   });
 });

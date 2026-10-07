@@ -28,6 +28,6 @@ describe('AgentRunsCard', () => {
   it('says so when the data fails to load', async () => {
     failingMetrics();
     renderInMetrics(<AgentRunsCard />);
-    expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
+    expect(await screen.findByText("Couldn't load")).toBeDefined();
   });
 });

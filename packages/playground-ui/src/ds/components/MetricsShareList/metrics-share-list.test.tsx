@@ -142,6 +142,18 @@ describe('MetricsShareList', () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it('marks the active row as current for screen readers', () => {
+    render(
+      <MetricsShareList
+        rows={[row('a', 2, { onClick: vi.fn() }), row('b', 1, { onClick: vi.fn() })]}
+        valueLabel="Runs"
+        activeKey="b"
+      />,
+    );
+    expect(screen.getByRole('button', { name: /b/ }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByRole('button', { name: /a/ }).hasAttribute('aria-current')).toBe(false);
+  });
+
   it('dims the other rows while one is hovered', () => {
     render(<MetricsShareList rows={[row('a', 2), row('b', 1)]} valueLabel="Runs" />);
     const [a, b] = screen.getAllByRole('listitem').map(li => li.querySelector<HTMLElement>(':scope > *'));

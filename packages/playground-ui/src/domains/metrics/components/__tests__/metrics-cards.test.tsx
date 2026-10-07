@@ -116,16 +116,16 @@ describe('Metrics cards', () => {
     });
 
     it('shows an error in every chart card instead of an empty state', async () => {
-      // Token usage, runs, failure rate, latency, trace volume, usage and scores (after the client's retries).
-      await waitFor(
-        () => expect(screen.getAllByText("Couldn't load this data. Try again in a moment.")).toHaveLength(7),
-        { timeout: 5000 },
-      );
+      // 4 KPIs, then token usage, runs, failure rate, latency, trace volume, usage and scores
+      // (after the client's retries), all with the same short message.
+      await waitFor(() => expect(screen.getAllByText("Couldn't load")).toHaveLength(11), { timeout: 5000 });
       expect(screen.queryByText('No agent runs in this range.')).toBeNull();
     });
 
     it('says each KPI could not load instead of showing a bare dash', async () => {
-      await waitFor(() => expect(screen.getAllByText("Couldn't load")).toHaveLength(4), { timeout: 5000 });
+      // The KPIs and the chart cards share the message, so wait for all of them, then count the KPIs' dashes.
+      await waitFor(() => expect(screen.getAllByText("Couldn't load")).toHaveLength(11), { timeout: 5000 });
+      expect(screen.getAllByText('—')).toHaveLength(4);
     });
   });
 });
