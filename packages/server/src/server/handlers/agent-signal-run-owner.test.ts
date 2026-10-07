@@ -56,7 +56,7 @@ async function setup() {
   const subscription = await agent.subscribeToThread({ threadId, resourceId: OWNER });
   const stream = await agent.stream('owner starts', { memory: { thread: threadId, resource: OWNER } });
   for (let i = 0; i < 200 && prompts.length === 0; i++) await new Promise(resolve => setTimeout(resolve, 10));
-  return { mastra, prompts, release, stream, subscription };
+  return { mastra, memory, prompts, release, stream, subscription, threadId };
 }
 
 function callerContext(resourceId: string) {
@@ -112,7 +112,7 @@ describe('signal and message routes with only a runId', () => {
         } as any),
     },
   ])('$name rejects a caller whose resource does not own the run', async ({ call }) => {
-    const { mastra, prompts, release, stream, subscription } = await setup();
+    const { mastra, memory, prompts, release, stream, subscription, threadId } = await setup();
     try {
       await expectAccessDenied(call(mastra, stream.runId));
     } finally {
@@ -122,5 +122,30 @@ describe('signal and message routes with only a runId', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     subscription.unsubscribe();
     expect(prompts.join('\n')).not.toContain('INJECTED');
+    const { messages } = await memory.recall({ threadId, hideSignals: false });
+    expect(JSON.stringify(messages)).not.toContain('INJECTED');
+  });
+
+  it('accepts input from the caller whose resource owns the run', async () => {
+    const { mastra, memory, prompts, release, stream, subscription, threadId } = await setup();
+    try {
+      await SEND_AGENT_MESSAGE_ROUTE.handler({
+        mastra,
+        agentId: 'guarded',
+        requestContext: callerContext(OWNER),
+        runId: stream.runId,
+        message: 'FROM_OWNER',
+      } as any);
+    } finally {
+      release();
+    }
+    await stream.text;
+    for (let i = 0; i < 200 && !prompts.join('\n').includes('FROM_OWNER'); i++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    subscription.unsubscribe();
+    expect(prompts.join('\n')).toContain('FROM_OWNER');
+    const { messages } = await memory.recall({ threadId, hideSignals: false });
+    expect(JSON.stringify(messages)).toContain('FROM_OWNER');
   });
 });
