@@ -146,7 +146,8 @@ describe('MemoryMessageRefs', () => {
 
     byId.delete('a1');
     const logger = testLogger();
-    const hydrated = await new MemoryMessageRefs().hydrate(persisted, load, { logger, runId: 'run-1' });
+    const reader = new MemoryMessageRefs();
+    const hydrated = await reader.hydrate(persisted, load, { logger, runId: 'run-1' });
 
     expect(hydrated.messages.map(message => message.id)).toEqual(['u1', state.messages[2]!.id]);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('deleted from memory'), {
@@ -155,6 +156,11 @@ describe('MemoryMessageRefs', () => {
     });
     const restored = new MessageList({ threadId: 't', resourceId: 'r' }).deserialize(hydrated);
     expect(restored.get.all.db().map(message => message.id)).toEqual(['u1', state.messages[2]!.id]);
+
+    // Later restores of the same run don't look the deleted message up again.
+    load.mockClear();
+    expect(await reader.hydrate(persisted, load)).toEqual(hydrated);
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('fails to hydrate refs without a store, and stays inline when it cannot verify', async () => {
