@@ -7,6 +7,24 @@ export function cardLinearProjectId(source: string, metadata: Record<string, unk
   return metadata.linearProjectId;
 }
 
+function matchesProviderRepositoryId(
+  repository: LinkedRepositoryPayload,
+  metadata: Record<string, unknown> | undefined,
+) {
+  const provider = repository.provider ?? 'github';
+  const id = provider === 'github' ? metadata?.githubRepositoryId : metadata?.gitlabProjectId;
+  return id != null && repository.externalId === String(id);
+}
+
+function findUniqueRepositoryByProviderId(
+  repositories: LinkedRepositoryPayload[],
+  metadata: Record<string, unknown> | undefined,
+) {
+  const matches = repositories.filter(repository => matchesProviderRepositoryId(repository, metadata));
+  const [match] = matches;
+  return matches.length === 1 ? match : undefined;
+}
+
 export function cardRepositorySlug(
   source: string,
   metadata: Record<string, unknown> | undefined,
@@ -14,17 +32,8 @@ export function cardRepositorySlug(
   repositories: LinkedRepositoryPayload[],
 ) {
   // The provider id survives repository renames, so it outranks a possibly stale slug.
-  const providerIds = [
-    ['github', metadata?.githubRepositoryId],
-    ['gitlab', metadata?.gitlabProjectId],
-  ] as const;
-  const matches = repositories.filter(repository =>
-    providerIds.some(
-      ([provider, id]) =>
-        id != null && (repository.provider ?? 'github') === provider && repository.externalId === String(id),
-    ),
-  );
-  if (matches.length === 1) return matches[0]!.slug;
+  const repository = findUniqueRepositoryByProviderId(repositories, metadata);
+  if (repository) return repository.slug;
   if (typeof metadata?.repository === 'string') return metadata.repository;
   const projectId = cardLinearProjectId(source, metadata);
   if (projectId === undefined) return undefined;

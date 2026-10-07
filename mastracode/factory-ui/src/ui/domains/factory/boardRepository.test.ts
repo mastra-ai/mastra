@@ -16,7 +16,8 @@ function repository(provider: 'github' | 'gitlab', externalId: string, slug: str
 
 describe('cardRepositorySlug', () => {
   it('matches a provider id only against repositories from the same provider', () => {
-    const repositories = [repository('gitlab', '101', 'acme/gitlab'), repository('github', '101', 'acme/github')];
+    const gitlabRepository = repository('gitlab', '101', 'acme/gitlab');
+    const repositories = [gitlabRepository, repository('github', '101', 'acme/github')];
 
     expect(
       cardRepositorySlug('github-issue', { repository: 'acme/old', githubRepositoryId: 101 }, undefined, repositories),
@@ -26,8 +27,31 @@ describe('cardRepositorySlug', () => {
     ).toBe('acme/gitlab');
     expect(
       cardRepositorySlug('github-issue', { repository: 'acme/old', githubRepositoryId: 101 }, undefined, [
-        repositories[0]!,
+        gitlabRepository,
       ]),
     ).toBe('acme/old');
+  });
+
+  it('falls back to the stored slug when the provider id matches multiple repositories', () => {
+    const repositories = [repository('github', '101', 'acme/one'), repository('github', '101', 'acme/two')];
+
+    expect(
+      cardRepositorySlug(
+        'github-issue',
+        { repository: 'acme/stored', githubRepositoryId: 101 },
+        undefined,
+        repositories,
+      ),
+    ).toBe('acme/stored');
+    expect(cardRepositorySlug('github-issue', { githubRepositoryId: 101 }, undefined, repositories)).toBeUndefined();
+  });
+
+  it('treats an unspecified provider as GitHub and preserves zero-valued ids', () => {
+    const repositories = [{ ...repository('github', '0', 'acme/renamed'), provider: undefined }];
+
+    expect(
+      cardRepositorySlug('github-issue', { repository: 'acme/old', githubRepositoryId: 0 }, undefined, repositories),
+    ).toBe('acme/renamed');
+    expect(cardRepositorySlug('github-issue', undefined, undefined, repositories)).toBeUndefined();
   });
 });
