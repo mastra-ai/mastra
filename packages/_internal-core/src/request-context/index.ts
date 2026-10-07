@@ -259,8 +259,19 @@ function projectForSpan(
   ancestors.add(obj);
   try {
     if (Array.isArray(obj)) {
-      // Use the intrinsic map so an own `map` override can't return the original array.
-      return Array.prototype.map.call(obj, item => projectForSpan(item, ancestors, depth + 1, budget));
+      // Build a fresh intrinsic array rather than calling `map`, so neither an own
+      // `map` override nor `constructor[Symbol.species]` can supply the result.
+      // Each slot is charged to the budget so sparse arrays with a huge `length`
+      // can't stall span creation.
+      const length = obj.length;
+      const limit = Math.min(length, budget.remaining);
+      budget.remaining -= limit;
+      const out: unknown[] = [];
+      for (let i = 0; i < limit; i++) {
+        out.push(projectForSpan(obj[i], ancestors, depth + 1, budget));
+      }
+      if (limit < length) out.push('[Truncated]');
+      return out;
     }
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(obj)) {

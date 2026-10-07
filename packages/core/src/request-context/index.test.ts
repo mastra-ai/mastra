@@ -673,6 +673,45 @@ describe('RequestContext', () => {
       expect(JSON.stringify(result)).not.toContain('FAKEtelegramTOKEN');
     });
 
+    it('should not let Symbol.species supply an unprojected array', () => {
+      class TelegramAdapter {
+        staticBotToken = '123456789:FAKEtelegramTOKEN';
+      }
+      const leaked = { adapter: new TelegramAdapter() };
+      class Evil extends Array {
+        static get [Symbol.species]() {
+          return function () {
+            return leaked;
+          };
+        }
+      }
+      const arr = Evil.from([new TelegramAdapter()]);
+      const ctx = new RequestContext();
+      ctx.set('list', arr);
+
+      const result = ctx.serializeForSpan();
+
+      expect(result['list']).toEqual(['[object]']);
+      expect(Array.isArray(result['list'])).toBe(true);
+      expect(JSON.stringify(result)).not.toContain('FAKEtelegramTOKEN');
+    });
+
+    it('should bound sparse arrays with a huge length', () => {
+      const sparse: unknown[] = [];
+      sparse.length = 2 ** 32 - 1;
+      sparse[0] = 'first';
+      const ctx = new RequestContext();
+      ctx.set('sparse', sparse);
+
+      const start = Date.now();
+      const projected = ctx.serializeForSpan()['sparse'] as unknown[];
+
+      expect(projected[0]).toBe('first');
+      expect(projected[projected.length - 1]).toBe('[Truncated]');
+      expect(projected.length).toBeLessThanOrEqual(10_001);
+      expect(Date.now() - start).toBeLessThan(2000);
+    });
+
     it('should keep an own __proto__ key as data', () => {
       const value = JSON.parse('{"__proto__": {"polluted": true}, "ok": 1}');
       const ctx = new RequestContext();
