@@ -54,6 +54,7 @@ export async function fetchWithRetry(
     }
 
     const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+    signal?.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(timer);
