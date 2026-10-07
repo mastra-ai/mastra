@@ -3373,6 +3373,17 @@ describe('factory environment sandbox context', () => {
         'octocat/hello',
         'octocat/docs',
       ]);
+
+      // The next start skips the failed workspace command instead of failing again.
+      mocks.runSetupCommand.mockClear();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await expect(boot(resolver)).resolves.toBeDefined();
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).not.toContain('touch .workspace-ready');
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Skipping workspace setup command that already failed this session',
+        expect.objectContaining({ sessionId: 'session-a' }),
+      );
+      warn.mockRestore();
       mocks.runSetupCommand.mockReset();
     });
 

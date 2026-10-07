@@ -940,7 +940,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
     await expect(resolve(resolveArgs())).resolves.toBe('us-existing');
 
     expect(sourceControl.sessions.getForBranch).toHaveBeenCalledWith({
-      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
       userId: 'user-1',
       branch: 'slack/1700-42',
     });
