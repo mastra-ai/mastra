@@ -783,6 +783,32 @@ describe('AgentController thread-derived session state', () => {
     expect(session.thread.getId()).toBeNull();
   });
 
+  it('detaches a parked run before changing the session resource', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'resource-parked-run');
+    const session = await controller.createSession({
+      id: 'resource-parked-run-session',
+      resourceId: 'resource-parked-run-old',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+    const thread = await session.thread.create({ id: 'resource-parked-run-thread' });
+    session.suspensions.register({
+      toolCallId: 'resource-parked-run-call',
+      runId: 'resource-parked-run-id',
+      toolName: 'ask_user',
+      threadId: thread.id,
+      resourceId: 'resource-parked-run-old',
+    });
+    const detach = vi.spyOn(session.stream, 'detach');
+
+    await controller.setResourceId(session, { resourceId: 'resource-parked-run-new' });
+
+    expect(detach).toHaveBeenCalledOnce();
+    expect(session.identity.getResourceId()).toBe('resource-parked-run-new');
+    expect(session.thread.getId()).toBeNull();
+  });
+
   it('re-keys the session when releasing the previous thread lock fails', async () => {
     const storage = new InMemoryStore();
     const threadLock = {
