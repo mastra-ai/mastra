@@ -111,11 +111,19 @@ export class ExperimentsPG extends ExperimentsStorage {
       ],
     });
     // Tables created before targetType/targetId became nullable keep NOT NULL,
-    // which breaks caller-driven experiments. DROP NOT NULL is a no-op otherwise.
-    const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
-    await this.#db.client.none(
-      `ALTER TABLE ${experimentsTable} ALTER COLUMN "targetType" DROP NOT NULL, ALTER COLUMN "targetId" DROP NOT NULL`,
+    // which breaks caller-driven experiments. Only ALTER when needed to avoid an
+    // ACCESS EXCLUSIVE lock on every startup.
+    const notNullTargetColumns = await this.#db.client.any<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = $2
+         AND column_name IN ('targetType', 'targetId') AND is_nullable = 'NO'`,
+      [this.#schema, TABLE_EXPERIMENTS],
     );
+    if (notNullTargetColumns.length > 0) {
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const alterations = notNullTargetColumns.map(c => `ALTER COLUMN "${c.column_name}" DROP NOT NULL`).join(', ');
+      await this.#db.client.none(`ALTER TABLE ${experimentsTable} ${alterations}`);
+    }
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
