@@ -1,5 +1,62 @@
 # @mastra/core
 
+## 1.76.0-alpha.0
+
+### Minor Changes
+
+- Added `tracingOptions.nestUnderParent` to attach a run as a child of an earlier run in the same trace, for example an LLM judge under the run it scores. The trace then keeps the name, input, output, and tags of the run that started it. The new `nestUnderRun()` helper builds these options from the earlier run's result. ([#25691](https://github.com/mastra-ai/mastra/pull/25691))
+
+  ```ts
+  import { nestUnderRun } from '@mastra/core/observability';
+
+  const turn = await assistant.generate('When does my order ship?');
+
+  await judge.generate('Grade this answer', {
+    tracingOptions: nestUnderRun(turn),
+    // same as: { traceId: turn.traceId, parentSpanId: turn.spanId, nestUnderParent: true }
+  });
+  ```
+
+  Runs that pass `parentSpanId` without the new option behave as before.
+
+- Added `matches` and `notMatches` operators to advanced trace queries. They match whole words or phrases, ignoring case, on span `name` and feedback `comment`. ([#25111](https://github.com/mastra-ai/mastra/pull/25111))
+
+  ```ts
+  { feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'incorrect dosage' } } } }
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`2233844`](https://github.com/mastra-ai/mastra/commit/223384452984718e16fc660d29f0d5d93a1ebaf2))
+
+- Fixed durable agents running the model call outside the model step span context. `getCurrentSpan()` inside AI SDK model middleware and span-correlated logs now resolve to the model span for durable agents, matching regular agents. ([#26184](https://github.com/mastra-ai/mastra/pull/26184))
+
+- Fixed durable agents, including Inngest agents, ignoring an `abort()` from an output processor's `processOutputResult`. The run now reports the tripwire with `finishReason: 'other'`, as a regular `Agent` does. The rejected answer is no longer saved to memory. ([#26178](https://github.com/mastra-ai/mastra/pull/26178))
+
+- Fixed foreign durable run lookups mutating the local registry and breaking shutdown. ([#26189](https://github.com/mastra-ai/mastra/pull/26189))
+
+- Fixed durable and evented runs to filter internal messages before saving them to memory. ([#26186](https://github.com/mastra-ai/mastra/pull/26186))
+
+- Fixed `PIIDetector` sending a message's original text to the model when redaction left nothing usable. With `strategy: 'redact'`, a message is now dropped instead of passed through unredacted when redaction leaves no text or only whitespace (for example an SSN-only message with `redactionMethod: 'remove'`), or when PII is flagged with no usable spans. This applies to `processInput` and `processOutputResult`. Fixes #25553. ([#26209](https://github.com/mastra-ai/mastra/pull/26209))
+
+- Setting `toolChoice: 'none'` now keeps earlier tool calls and results in the conversation, so the model can give a final text answer based on them. Amazon Bedrock no longer drops that tool history or rejects extended-thinking blocks. ([#26232](https://github.com/mastra-ai/mastra/pull/26232))
+
+  ```ts
+  prepareStep: ({ stepNumber }) => (stepNumber >= 3 ? { toolChoice: 'none' } : undefined);
+  ```
+
+  Tools are still left out when the step sends a structured-output schema as the response format, because some providers (such as Gemini) reject tools combined with it.
+
+- Fixed a guardrail leak where a reply rejected by an output processor's `processOutputStep` was still saved to the memory thread and returned as `result.text` when the run ended on the tripwire (after `maxProcessorRetries` ran out, or on an abort without retry). The rejected reply is now dropped; the user message and any earlier accepted steps, such as tool calls and results, are still kept. Fixes #26048. ([#26168](https://github.com/mastra-ai/mastra/pull/26168))
+
+- Fixed cross-process durable run observers to return parsed structured output objects. ([#26195](https://github.com/mastra-ai/mastra/pull/26195))
+
+- Fixed stored signals rendering different markup after they are reloaded from storage. Signal attributes now render in a stable order, so the same message produces the same prompt text on every turn. ([#25957](https://github.com/mastra-ai/mastra/pull/25957))
+
+- Fixed approved tool suspensions reappearing as pending after a restart. When a new session subscribed to a thread with initial history, suspensions that had already been answered could be registered again, showing stale approval prompts and making auto-resume code fail completed runs. Only suspensions on the latest assistant message are now treated as pending. ([#26165](https://github.com/mastra-ai/mastra/pull/26165))
+
+- Fixed EventEmitterPubSub so publish() no longer rejects when a subscriber throws synchronously; the error is logged and delivery continues. ([#26187](https://github.com/mastra-ai/mastra/pull/26187))
+
 ## 1.75.0
 
 ### Minor Changes

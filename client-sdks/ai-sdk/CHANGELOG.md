@@ -1,5 +1,34 @@
 # @mastra/ai-sdk
 
+## 1.11.0-alpha.0
+
+### Minor Changes
+
+- The `messageMetadata` callback in `chatRoute`, `handleChatStream`, and `toAISdkStream` now receives the run's `traceId`. Return it as message metadata so `useChat` clients have the trace ID on a live answer, for example to attach feedback, without a server lookup. Fixes [#26140](https://github.com/mastra-ai/mastra/issues/26140). ([#26233](https://github.com/mastra-ai/mastra/pull/26233))
+
+  ```ts
+  chatRoute({
+    path: '/chat/:agentId',
+    messageMetadata: ({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined),
+  });
+  ```
+
+  `traceId` is undefined when tracing is disabled or with `@mastra/core` versions before 1.75.0.
+
+### Patch Changes
+
+- Restored live sub-agent progress in `handleChatStream()` and `chatRoute()`. Both helpers now stream `data-tool-agent` and `data-tool-agent-step` parts by default when an agent delegates to sub-agents, including on the AI SDK v6/v7 approval-resume path. These parts can contain sub-agent reasoning and intermediate tool calls and results. Pass `includeSubAgentMetadata: false` to turn them off. ([#26224](https://github.com/mastra-ai/mastra/pull/26224))
+
+  ```ts
+  chatRoute({
+    path: '/chat/:agentId',
+    includeSubAgentMetadata: false,
+  });
+  ```
+
+- Updated dependencies [[`2233844`](https://github.com/mastra-ai/mastra/commit/223384452984718e16fc660d29f0d5d93a1ebaf2), [`a8f39b6`](https://github.com/mastra-ai/mastra/commit/a8f39b629d8bcd6659b61bf71bd5a5dd2f38ed12), [`04a2433`](https://github.com/mastra-ai/mastra/commit/04a2433d8e533010e23c3af84421d52bd0b3a908), [`c0540d2`](https://github.com/mastra-ai/mastra/commit/c0540d2dfccec3470eed3cab539221557abd1fc5), [`a7404f9`](https://github.com/mastra-ai/mastra/commit/a7404f965b811a0eef35d41a5e69c91187eb0cf6), [`956901a`](https://github.com/mastra-ai/mastra/commit/956901a36b84a85f3985d9e5956494749b7ea72c), [`838fd4b`](https://github.com/mastra-ai/mastra/commit/838fd4b1526c5385424d8e147d3d1d37137f6a13), [`7c0cf99`](https://github.com/mastra-ai/mastra/commit/7c0cf997ab2306a176aa84fe6f611574721120c3), [`18afca3`](https://github.com/mastra-ai/mastra/commit/18afca34ba6ab013152da61b2017dc443c2aa08b), [`f2243ae`](https://github.com/mastra-ai/mastra/commit/f2243ae5e0d183fdbb8c8f3ff81fa86d32036a6c), [`b329f0d`](https://github.com/mastra-ai/mastra/commit/b329f0d45ce719acdd8926263269de6c91e31305), [`539d0e6`](https://github.com/mastra-ai/mastra/commit/539d0e638c9eaa3b71d99df067061af4ddbb2045), [`fe99f41`](https://github.com/mastra-ai/mastra/commit/fe99f41ea293a172da840c89a782d13a7c7a7709), [`1511a1d`](https://github.com/mastra-ai/mastra/commit/1511a1d65d9e2ccc08b4d6746f8e8053fc48549e)]:
+  - @mastra/core@1.76.0-alpha.0
+
 ## 1.10.7
 
 ### Patch Changes
