@@ -2251,6 +2251,44 @@ describe('Agent Routes Authorization', () => {
         ['finish', undefined, 2],
       ]);
     });
+
+    it("still resumes from an offset when the run's claim can't be read", async () => {
+      const runId = 'observe-offset-unreadable-claim-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+
+      const workflows = (await storage.getStore('workflows'))!;
+      await workflows.claimRunOwnership({ runId, ownerId: 'owner', leaseMs: 30_000 });
+      vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
+
+      await publish({
+        type: 'chunk',
+        data: { type: 'text-delta', payload: { id: 't', text: 'before ' } },
+        generation: 1,
+      });
+      await publish({
+        type: 'chunk',
+        data: { type: 'text-delta', payload: { id: 't', text: 'after' } },
+        generation: 1,
+      });
+      await publish({ type: 'finish', data: {}, generation: 1 });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        offset: 1,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.data?.payload?.text])).toEqual([
+        ['chunk', 'after'],
+        ['finish', undefined],
+      ]);
+    });
   });
 
   describe('SIGNAL_ROUTES', () => {

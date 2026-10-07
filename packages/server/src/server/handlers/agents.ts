@@ -2638,7 +2638,15 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // took the run over, and would then accept what the lost execution still
       // publishes, its finish included. Follow the run's current claim instead.
       // Runs fenced by a pubsub lease have no generation and are unaffected.
-      let newestGeneration = offset ? await readRunClaimGeneration(mastra, runId) : undefined;
+      // The floor only adds protection, so a failed read must not fail the reconnect.
+      let newestGeneration = offset
+        ? await readRunClaimGeneration(mastra, runId).catch(error => {
+            mastra
+              .getLogger()
+              ?.warn(`Couldn't read the claim of run ${runId}; observing it without a floor`, { error });
+            return undefined;
+          })
+        : undefined;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.

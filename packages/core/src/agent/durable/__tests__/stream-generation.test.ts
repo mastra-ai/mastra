@@ -11,7 +11,7 @@
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
@@ -220,6 +220,38 @@ describe('observe() from an offset', () => {
 
     expect(texts(reader.chunks)).toEqual(['recovered']);
     expect(reader.chunks.filter(c => c.type === 'finish')).toHaveLength(1);
+    observed.cleanup();
+    await transport.close();
+  });
+
+  it("still reconnects when the run's claim can't be read", async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'observed-agent',
+      name: 'Observed Agent',
+      instructions: 'You are a helpful agent.',
+      model: new MockLanguageModelV2({}) as LanguageModelV2,
+    });
+    const transport = new EventEmitterPubSub();
+    const durable = createDurableAgent({ agent, pubsub: transport });
+    new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
+    const pubsub = durable.pubsub;
+    const runId = 'observed-run';
+
+    const workflows = (await storage.getStore('workflows'))!;
+    await workflows.claimRunOwnership({ runId, ownerId: 'owner', leaseMs: 30_000 });
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before ')));
+    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
+
+    const observed = await durable.observe(runId, { offset: 1 });
+    const reader = readFullStream(observed.fullStream as ReadableStream<any>);
+    await runInRunFenceScope(scopeAt(runId, 1), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('after'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+    await reader.done;
+
+    expect(texts(reader.chunks)).toEqual(['after']);
     observed.cleanup();
     await transport.close();
   });
