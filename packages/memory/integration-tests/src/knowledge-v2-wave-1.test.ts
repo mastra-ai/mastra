@@ -469,7 +469,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     const memory = new Memory({ storage });
     await memory.createThread({ threadId: 'preserved-thread', resourceId: 'proof', title: 'Preserved' });
 
-    const runtime = createRuntime(storage);
+    const runtime = createRuntime(storage, await createVector());
     const reconciled = await runtime.knowledge.reconcile();
     const resourceScopeId = reconciled.scopes['resource:shipyard']!;
     const node = await runtime.knowledge.createNode({

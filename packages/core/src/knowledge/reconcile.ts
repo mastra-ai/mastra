@@ -4,7 +4,6 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureScope,
 } from '../storage/domains/knowledge';
-import { assertKnowledgeDescriptionWithinBound } from '../storage/domains/knowledge/base';
 
 export interface KnowledgeScopeAccessConfig {
   principal: 'self' | 'parent' | string;
@@ -38,7 +37,7 @@ export function validateKnowledgeScopeTypes(
   scopeTypes: KnowledgeScopeTypesConfig | undefined,
 ): KnowledgeScopeTypesConfig {
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
-  for (const config of Object.values(types)) assertKnowledgeDescriptionWithinBound(config?.description);
+  for (const config of Object.values(types)) assertScopeDescriptionWithinBound(config?.description);
   const patterns = Object.keys(types).filter(pattern => pattern !== 'custom');
   for (const [index, pattern] of patterns.entries()) {
     assertPattern(pattern);
@@ -56,12 +55,23 @@ export function validateKnowledgeScopeTypes(
   return types;
 }
 
+/** Scope descriptions share the node description bound, counted in UTF-16 code units. */
+const MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH = 400;
+
+function assertScopeDescriptionWithinBound(description: unknown): void {
+  if (typeof description === 'string' && description.length > MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+    );
+  }
+}
+
 export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): KnowledgeStructurePlan {
   const addresses = new Set<string>();
   for (const scope of plan.scopes) {
     assertAddress(scope.address);
     if (!scope.name.trim()) throw new Error(`Knowledge scope ${scope.address} must have a name`);
-    assertKnowledgeDescriptionWithinBound(scope.description);
+    assertScopeDescriptionWithinBound(scope.metadata?.description);
     if (addresses.has(scope.address)) throw new Error(`Duplicate Knowledge scope address: ${scope.address}`);
     addresses.add(scope.address);
     const parents = new Set<string>();
@@ -144,7 +154,6 @@ export function materializeKnowledgeScopePlan(
         grants,
       },
     ],
-    retrofit: false,
   });
 }
 
