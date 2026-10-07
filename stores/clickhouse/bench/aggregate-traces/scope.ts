@@ -109,7 +109,10 @@ export type Variant =
   | 'hk'
   | 'nord'
   | 'arch2'
-  | 'arch3';
+  | 'arch3'
+  | 'sk'
+  | 'srio'
+  | 'safe';
 
 /** Lab-only tables created by `lab.ts derive` (memory track 3); see `ROLLUP_DDL`. */
 export const USAGE_ROLLUP_TABLE = 'mastra_trace_usage';
@@ -257,11 +260,19 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
       return out;
     }
     case 'shape': {
-      let out = singleRootDedupe(scopedReread(compiled));
-      if (out.query.includes('current_spans AS (')) out = spanSemiJoin(out);
-      if (out.query.includes('usage AS (')) out = applyVariant(out, 'nodedupe');
-      return out;
+      const out = applyVariant(compiled, 'sk');
+      return out.query.includes('usage AS (') ? applyVariant(out, 'nodedupe') : out;
     }
+    // `shape` minus the token retry dedupe removal: every dedupe kept, no write-path assumptions.
+    case 'sk': {
+      const out = singleRootDedupe(scopedReread(compiled));
+      return out.query.includes('current_spans AS (') ? spanSemiJoin(out) : out;
+    }
+    // Compiler-only changes that stay exact under duplicate writes: `sk` + `rio` + `hk`.
+    case 'srio':
+      return readInOrderDedupe(applyVariant(compiled, 'sk'));
+    case 'safe':
+      return hashedKeys(applyVariant(compiled, 'srio'));
     case 'w1': {
       const tenantParam = /AND organizationId = (\{trace_query_\d+:String\}) AND projectId/.exec(compiled.query)?.[1];
       if (!tenantParam) throw new RewriteError('Variant w1: query is not project-scoped');

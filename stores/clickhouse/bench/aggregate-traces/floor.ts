@@ -322,6 +322,60 @@ export const PROBES: Probe[] = [
       settings: { filesystem_prefetches_limit: 8 },
     },
   ]),
+  // Compiler-only path that keeps every dedupe (`sk`, `safe` = sk + rio + hk), alone and with the prefetch limit.
+  ...['F0', 'F3', 'E1', 'E3', 'E4', 'T1', 'T3'].flatMap((caseId): Probe[] =>
+    (['sk', 'safe'] as const).flatMap((v): Probe[] => [
+      { id: `${caseId}-${v}`, note: `${caseId} 30d, variant ${v}`, sql: compiled(caseId, 30, v) },
+      {
+        id: `${caseId}-${v}-pf8`,
+        note: `${caseId} 30d, variant ${v} + prefetch limit 8`,
+        sql: compiled(caseId, 30, v),
+        settings: { filesystem_prefetches_limit: 8 },
+      },
+    ]),
+  ),
+  // Token rows read through a trace-ordered projection on mastra_metric_events (lab: `usage_by_trace`).
+  ...['E4', 'T1', 'T3', 'T4'].flatMap((caseId): Probe[] =>
+    (['sk', 'srio', 'safe'] as const).flatMap((v): Probe[] => [
+      {
+        id: `${caseId}-${v}-noproj`,
+        note: `${caseId} 30d, ${v}, projections off`,
+        sql: compiled(caseId, 30, v),
+        settings: { optimize_use_projections: 0 },
+      },
+      {
+        id: `${caseId}-${v}-proj`,
+        note: `${caseId} 30d, ${v}, trace-ordered projection`,
+        sql: compiled(caseId, 30, v),
+        settings: { preferred_optimize_projection_name: 'usage_by_trace' },
+      },
+      {
+        id: `${caseId}-${v}-projio`,
+        note: `${caseId} 30d, ${v}, trace-ordered projection + aggregation in order`,
+        sql: compiled(caseId, 30, v),
+        settings: { preferred_optimize_projection_name: 'usage_by_trace', optimize_aggregation_in_order: 1 },
+      },
+    ]),
+  ),
+  // Same, against a trace-ordered narrow copy of the token rows (lab table `mastra_metric_by_trace`), which is
+  // what the projection would hold: tests whether the (traceId, metricId) dedupe streams in sort order.
+  ...['E4', 'T1', 'T3', 'T4'].flatMap((caseId): Probe[] =>
+    (['sk', 'safe'] as const).flatMap((v): Probe[] =>
+      ([0, 1] as const).map(
+        (inOrder): Probe => ({
+          id: `${caseId}-${v}-bytrace${inOrder ? '-io' : ''}`,
+          note: `${caseId} 30d, ${v}, token rows ordered by trace${inOrder ? ', aggregation in order' : ''}`,
+          sql: (p, to) => {
+            const c = compiled(caseId, 30, v)(p, to);
+            const query = c.query.replace(/FROM mastra_metric_events\n/g, 'FROM mastra_metric_by_trace\n');
+            if (query === c.query) throw new Error('token read anchor missing');
+            return { ...c, query };
+          },
+          settings: { optimize_aggregation_in_order: inOrder },
+        }),
+      ),
+    ),
+  ),
   // Schema variants (lab only, need `lab.ts derive`), and skip indexes off for the bloom-filter comparison.
   ...['F0', 'F3', 'E1', 'E3', 'E4', 'T1', 'T3', 'T4'].flatMap(caseId =>
     (['base', 'shape', 'urollup', 'snidx', 'arch'] as const).flatMap(v => {

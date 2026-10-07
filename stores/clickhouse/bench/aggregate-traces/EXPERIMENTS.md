@@ -34,44 +34,47 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | I11 | Idempotent token writes: identical retry batches or a stable `insert_deduplication_token` (dedup window on source and rollup)                                                                | write            | X23                | Retried batches are dropped before the MV fires, so the I8 rollup stays exact. Re-batched or partial retries still double-count                                                                          | measured local                          |
 | I12 | Hourly token/cost rollup for dashboards: `(org, project, hour, entityType, entityName, environment, serviceName, executionSource)` with counts, error counts, token and cost sums (`hourly`) | schema           | X26                | Lab: E4/T1/T2/E1/F0 at 8–14 MiB for **every** project size (largest E4 882 → 12 MiB, 436 → 8 MB read). 0 mismatches in 264 comparisons. Only additive measures on those dimensions, hour-aligned windows | measured local                          |
 | I13 | Integer trace keys: `cityHash64(traceId)` in every `IN` set and the usage join (`hk`)                                                                                                        | compiler         | X27                | Lab largest ×0.6–0.7 alone (E4 302 → 190, T4 186 → 91 MiB); 0 mismatches                                                                                                                                 | measured local                          |
-| I14 | No query-time root dedupe (`nord`); needs idempotent root writes (the replica has ~no duplicate roots)                                                                                       | compiler + write | X27                | With I13 (`arch2`): largest F0/F3/E3/E1/T4 23–37 MiB (from 118–186). Usage-join cases stay at 113–186 MiB                                                                                                | measured local                          |
-| I15 | Token/cost totals stored on the trace root row at write time (no usage join) (`arch3`)                                                                                                       | schema           | X27                | With I13 + I14: largest E4/T1/T3/T4 29–35 MiB, p99 16–20 MiB. 0 mismatches in 960 comparisons                                                                                                            | measured local                          |
+| I14 | No query-time root dedupe (`nord`); needs idempotent root writes                                                                                                                             | compiler + write | X27                | With I13 (`arch2`): largest F0/F3/E3/E1/T4 23–37 MiB (from 118–186). Usage-join cases stay at 113–186 MiB                                                                                                | **rejected**: roots are rewritten (X33) |
+| I15 | Token/cost totals stored on the trace root row at write time (no usage join) (`arch3`)                                                                                                       | schema           | X27                | With I13 + I14: largest E4/T1/T3/T4 29–35 MiB, p99 16–20 MiB. 0 mismatches in 960 comparisons                                                                                                            | **rejected**: late token rows (X33)     |
 | I16 | Split a long window into per-day queries and merge (additive measures only)                                                                                                                  | planner          | X28                | Per-query peak follows one day: largest 1-day `shape` 17–25 MiB vs 228–315 MiB for 30 days, no schema change                                                                                             | measured local                          |
 
 ## Experiment register
 
-| ID  | Env   | Question                                                                                                                   | Result (short)                                                                                                                  | Status |
-| --- | ----- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| X01 | prod  | Baseline: latency/bytes/memory by project size                                                                             | Peak 592 MiB (non-token), 991 MiB (token/cost); ~160 MiB even for 25-trace projects                                             | done   |
-| X02 | prod  | W1: tenant-scope the outer re-read                                                                                         | Bytes ×0.13–0.5 (small–p99), ×0.84 largest; memory ×0.9–1.4                                                                     | done   |
-| X03 | prod  | `quantileExact` vs `quantileDeterministic`; `uniq` vs `uniqExact`                                                          | No material difference                                                                                                          | done   |
-| X04 | prod  | `max_threads = 2` (t2)                                                                                                     | Memory ×0.91–1.02, often slower                                                                                                 | done   |
-| X05 | prod  | External GROUP BY/sort at 256 MiB (spill)                                                                                  | E4 largest ×0.65 memory but ×3.8 latency; elsewhere no gain                                                                     | done   |
-| X06 | prod  | Dedupe token rows on `metricId` only (mkey)                                                                                | Memory ×0.98–1.03                                                                                                               | done   |
-| X07 | prod  | Diagnostic: no retry dedupe (nodedupe) / no `costMetadata` parse (nocm)                                                    | nodedupe ×0.47 largest, ×0.86 p99; nocm ×0.96–0.98                                                                              | done   |
-| X08 | prod  | `FINAL` instead of manual dedupe                                                                                           | Worse: 986–1209 MiB largest                                                                                                     | done   |
-| X09 | prod  | Is the floor tied to parts/granules selected?                                                                              | 30d scoped count selects 268/268 parts before PK; `endedAt` bound cuts to 19 parts, 156 → 55 MiB                                | done   |
-| X10 | prod  | What sets the ~160 MiB floor? (meter, columns, settings)                                                                   | `SELECT 1` 7.5 MiB; floor independent of columns/threads/blocks/buffers; prefetch off → 8.5 MiB                                 | done   |
-| X11 | prod  | Which prefetch setting? Effect on full queries                                                                             | Prefetched read pool is the floor; both off is best (small F0 10, E4 28, F3 16 MiB)                                             | done   |
-| X12 | prod  | Cold (object-storage) latency with prefetch off                                                                            | Small: no cost. p99 +30–40%, largest F0 times out (>30 s vs 22 s). Prefetch limit 8 sits between                                | done   |
-| X13 | local | Stage-by-stage CTE breakdown                                                                                               | Memory jumps at the span dedupe (F3) and the token usage dedupe (E4); root stages are cheap                                     | done   |
-| X17 | local | Query-shape rewrites (`rs`, `r1`, `sp`, `shape`): equivalence and memory                                                   | 0 mismatches in 3,096 comparisons; `r1` does nothing; `sp`/`shape` cut p99 F3 128 → 48 MiB                                      | done   |
-| X18 | prod  | Shape rewrites ± prefetch limit vs the 32–64 / 256 MiB budget                                                              | Small and p99 F0/F3 within budget; E4 p99 139 MiB; largest 242–432 MiB, still over 256 for F3/E4                                | done   |
-| X14 | local | Lab calibration: does local reproduce shape memory?                                                                        | Yes, within ~10–20% of prod with prefetch off (small/p99 F0, E4, F3; largest E4 820 vs ~930 MiB)                                | done   |
-| X15 | prod  | Duplicate rate of token metric rows (does the retry dedupe ever fire?)                                                     | 0 duplicate `metricId`s in 30 days for all 15 projects (up to 2.06M token rows)                                                 | done   |
-| X16 | prod  | Keep prefetch but bound it (`filesystem_prefetch_max_memory_usage`, `filesystem_prefetches_limit`, `prefetch_buffer_size`) | Only `filesystem_prefetches_limit = 8` works: small count 12 MiB, F0 23–27, E4 42; p99 F0 52                                    | done   |
-| X19 | local | Root dedupe in sort-key order (`rio`); join algorithms                                                                     | `rio` cuts largest E3 ~42%, F0 ~17%, 0 mismatches; only `partial_merge` join helps E4 (×0.87)                                   | done   |
-| X20 | local | Usage rollup + span-name index (`urollup`, `snidx`, `arch`) on pulled data                                                 | 0 mismatches in 1,320 comparisons; `arch` largest E4 294, F3 115, E1 134 MiB                                                    | done   |
-| X21 | local | Rollup keyed by `cityHash64(traceId)`; FINAL read; dropping the `IN candidates` filter                                     | UInt64 key ×0.75–0.85 memory; FINAL no gain; dropping the filter changes results                                                | done   |
-| X22 | local | `traceId` bloom filters                                                                                                    | No memory change; bytes drop only for small tenants on the unscoped base re-read                                                | done   |
-| X23 | local | Retries vs write-time rollups; per-metric ReplacingMergeTree + FINAL; insert dedup tokens                                  | Rollup double-counts retries; per-metric FINAL exact at ~355 MiB; dedup keeps the MV exact                                      | done   |
-| X24 | local | Concurrency: 10/25/50 parallel non-largest queries, base vs `arch`                                                         | Server peak at 50: +722 MiB → +392 MiB; no failures                                                                             | done   |
-| X25 | prod  | Cold reads for `shape` and `shape + limit 8`                                                                               | `shape` lets small/p99 F3/E4 finish cold; limit 8 pushes p99 F3/E4 over 30 s; largest F3/E4 time out cold                       | done   |
-| X26 | local | Hourly token/cost rollup for dashboard queries (`hourly`)                                                                  | 8–14 MiB at every size; largest E4 882 → 12 MiB; 0 mismatches in 264 comparisons                                                | done   |
-| X27 | local | Integer trace keys, no root dedupe, usage on the root row (`hk`, `nord`, `arch2`, `arch3`)                                 | `arch3` largest 23–35 MiB for every measured case; 0 mismatches (2,880 + 960)                                                   | done   |
-| X28 | local | One day of a 30-day query (per-day split)                                                                                  | Largest `shape` 1-day 17–25 MiB vs 228–315 MiB for 30 days                                                                      | done   |
-| X29 | prod  | mid and p90 with `shape` and `shape + limit 8`, warm and cold                                                              | Warm F0/F3 20–28 MiB, E4 36–42 MiB; cold all finish, 8–30 s                                                                     | done   |
-| X30 | prod  | Prefetch limit 4/8/16/32, warm and cold, small–p99                                                                         | Memory rises with the limit (8 ≈ 4 < 16 < 32); cold latency about the same for every limit; p99 F3/E4 cold time out at all four | done   |
+| ID  | Env   | Question                                                                                                                   | Result (short)                                                                                                                               | Status |
+| --- | ----- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| X01 | prod  | Baseline: latency/bytes/memory by project size                                                                             | Peak 592 MiB (non-token), 991 MiB (token/cost); ~160 MiB even for 25-trace projects                                                          | done   |
+| X02 | prod  | W1: tenant-scope the outer re-read                                                                                         | Bytes ×0.13–0.5 (small–p99), ×0.84 largest; memory ×0.9–1.4                                                                                  | done   |
+| X03 | prod  | `quantileExact` vs `quantileDeterministic`; `uniq` vs `uniqExact`                                                          | No material difference                                                                                                                       | done   |
+| X04 | prod  | `max_threads = 2` (t2)                                                                                                     | Memory ×0.91–1.02, often slower                                                                                                              | done   |
+| X05 | prod  | External GROUP BY/sort at 256 MiB (spill)                                                                                  | E4 largest ×0.65 memory but ×3.8 latency; elsewhere no gain                                                                                  | done   |
+| X06 | prod  | Dedupe token rows on `metricId` only (mkey)                                                                                | Memory ×0.98–1.03                                                                                                                            | done   |
+| X07 | prod  | Diagnostic: no retry dedupe (nodedupe) / no `costMetadata` parse (nocm)                                                    | nodedupe ×0.47 largest, ×0.86 p99; nocm ×0.96–0.98                                                                                           | done   |
+| X08 | prod  | `FINAL` instead of manual dedupe                                                                                           | Worse: 986–1209 MiB largest                                                                                                                  | done   |
+| X09 | prod  | Is the floor tied to parts/granules selected?                                                                              | 30d scoped count selects 268/268 parts before PK; `endedAt` bound cuts to 19 parts, 156 → 55 MiB                                             | done   |
+| X10 | prod  | What sets the ~160 MiB floor? (meter, columns, settings)                                                                   | `SELECT 1` 7.5 MiB; floor independent of columns/threads/blocks/buffers; prefetch off → 8.5 MiB                                              | done   |
+| X11 | prod  | Which prefetch setting? Effect on full queries                                                                             | Prefetched read pool is the floor; both off is best (small F0 10, E4 28, F3 16 MiB)                                                          | done   |
+| X12 | prod  | Cold (object-storage) latency with prefetch off                                                                            | Small: no cost. p99 +30–40%, largest F0 times out (>30 s vs 22 s). Prefetch limit 8 sits between                                             | done   |
+| X13 | local | Stage-by-stage CTE breakdown                                                                                               | Memory jumps at the span dedupe (F3) and the token usage dedupe (E4); root stages are cheap                                                  | done   |
+| X17 | local | Query-shape rewrites (`rs`, `r1`, `sp`, `shape`): equivalence and memory                                                   | 0 mismatches in 3,096 comparisons; `r1` does nothing; `sp`/`shape` cut p99 F3 128 → 48 MiB                                                   | done   |
+| X18 | prod  | Shape rewrites ± prefetch limit vs the 32–64 / 256 MiB budget                                                              | Small and p99 F0/F3 within budget; E4 p99 139 MiB; largest 242–432 MiB, still over 256 for F3/E4                                             | done   |
+| X14 | local | Lab calibration: does local reproduce shape memory?                                                                        | Yes, within ~10–20% of prod with prefetch off (small/p99 F0, E4, F3; largest E4 820 vs ~930 MiB)                                             | done   |
+| X15 | prod  | Duplicate rate of token metric rows (does the retry dedupe ever fire?)                                                     | 0 duplicate `metricId`s in 30 days for all 15 projects (up to 2.06M token rows)                                                              | done   |
+| X16 | prod  | Keep prefetch but bound it (`filesystem_prefetch_max_memory_usage`, `filesystem_prefetches_limit`, `prefetch_buffer_size`) | Only `filesystem_prefetches_limit = 8` works: small count 12 MiB, F0 23–27, E4 42; p99 F0 52                                                 | done   |
+| X19 | local | Root dedupe in sort-key order (`rio`); join algorithms                                                                     | `rio` cuts largest E3 ~42%, F0 ~17%, 0 mismatches; only `partial_merge` join helps E4 (×0.87)                                                | done   |
+| X20 | local | Usage rollup + span-name index (`urollup`, `snidx`, `arch`) on pulled data                                                 | 0 mismatches in 1,320 comparisons; `arch` largest E4 294, F3 115, E1 134 MiB                                                                 | done   |
+| X21 | local | Rollup keyed by `cityHash64(traceId)`; FINAL read; dropping the `IN candidates` filter                                     | UInt64 key ×0.75–0.85 memory; FINAL no gain; dropping the filter changes results                                                             | done   |
+| X22 | local | `traceId` bloom filters                                                                                                    | No memory change; bytes drop only for small tenants on the unscoped base re-read                                                             | done   |
+| X23 | local | Retries vs write-time rollups; per-metric ReplacingMergeTree + FINAL; insert dedup tokens                                  | Rollup double-counts retries; per-metric FINAL exact at ~355 MiB; dedup keeps the MV exact                                                   | done   |
+| X24 | local | Concurrency: 10/25/50 parallel non-largest queries, base vs `arch`                                                         | Server peak at 50: +722 MiB → +392 MiB; no failures                                                                                          | done   |
+| X25 | prod  | Cold reads for `shape` and `shape + limit 8`                                                                               | `shape` lets small/p99 F3/E4 finish cold; limit 8 pushes p99 F3/E4 over 30 s; largest F3/E4 time out cold                                    | done   |
+| X26 | local | Hourly token/cost rollup for dashboard queries (`hourly`)                                                                  | 8–14 MiB at every size; largest E4 882 → 12 MiB; 0 mismatches in 264 comparisons                                                             | done   |
+| X27 | local | Integer trace keys, no root dedupe, usage on the root row (`hk`, `nord`, `arch2`, `arch3`)                                 | `arch3` largest 23–35 MiB for every measured case; 0 mismatches (2,880 + 960)                                                                | done   |
+| X28 | local | One day of a 30-day query (per-day split)                                                                                  | Largest `shape` 1-day 17–25 MiB vs 228–315 MiB for 30 days                                                                                   | done   |
+| X29 | prod  | mid and p90 with `shape` and `shape + limit 8`, warm and cold                                                              | Warm F0/F3 20–28 MiB, E4 36–42 MiB; cold all finish, 8–30 s                                                                                  | done   |
+| X30 | prod  | Prefetch limit 4/8/16/32, warm and cold, small–p99                                                                         | Memory rises with the limit (8 ≈ 4 < 16 < 32); cold latency about the same for every limit; p99 F3/E4 cold time out at all four              | done   |
+| X31 | prod  | Compiler rewrites that keep every dedupe (`sk`, `safe` = sk + sort-order dedupe + integer keys), ± limit 8, warm and cold  | Non-token small–p90 18–43 MiB; token/cost stays 34–49 / 293–302 / 866 MiB (p90 / p99 / largest); 0 mismatches in 2,880                       | done   |
+| X32 | local | Trace-ordered projection / copy of token rows so the `(traceId, metricId)` dedupe streams                                  | Projection never chosen; sorted copy alone 806–875 MiB, in-order aggregation worse; the dedupe alone is ~470 MiB                             | done   |
+| X33 | prod  | Write-side facts for schema proposals (`prechecks.ts`, all tenants, 7 days)                                                | Roots rewritten (0.08% of traces, up to 263 copies); 0 duplicate token rows; span names never change; 4.3% of token rows after the root ends | done   |
 
 ## Entries
 
@@ -478,18 +481,83 @@ Cold seconds (2 reps):
 - Correction: the earlier I1 note ("cold reads: no cost for small projects") came from X12's base queries, whose
   cold time was dominated by the unscoped re-read. With `shape` the limit's cold cost is visible at every size.
 
+### X31: compiler rewrites that keep every dedupe (prod, 2026-10-07)
+
+`shape` (X17/X18/X25/X29/X30) also drops the token retry dedupe (`nodedupe`), which is only safe with retry-safe
+token writes. `sk` is `shape` without that; `safe` adds the sort-order root dedupe (I7) and `cityHash64(traceId)`
+keys (I13). Both keep the root and token dedupes; `spans.some` skips the span dedupe (existence can't change).
+Lab: 0 mismatches in 2,880 comparisons (`sk`, `srio`, `safe`). Prod, 30 days, warm median peak MiB:
+
+| Probe                                      | small          | mid            | p90            | p99             | largest         |
+| ------------------------------------------ | -------------- | -------------- | -------------- | --------------- | --------------- |
+| F0 as compiled / `safe` / `safe` + limit 8 | 166 / 151 / 18 | 170 / 156 / 20 | 177 / 161 / 27 | 174 / 162 / 56  | 296 / 177 / 173 |
+| F3                                         | 169 / 154 / 21 | 174 / 159 / 25 | 177 / 164 / 34 | 189 / 170 / 64  | 549 / 208 / 196 |
+| E1                                         | 177 / 157 / 18 | 185 / 157 / 28 | 179 / 161 / 43 | 179 / 159 / 77  | 333 / 219 / 217 |
+| E3                                         | 169 / 155 / 24 | 174 / 160 / 43 | 177 / 164 / 40 | 189 / 167 / 121 | 562 / 294 / 287 |
+| E4                                         | 225 / 224 / 34 | 224 / 225 / 49 | 227 / 222 / 38 | 321 / 293 / 273 | 956 / 867 / 863 |
+| T1                                         | 221 / 219 / 31 | 221 / 219 / 47 | 221 / 219 / 37 | 302 / 302 / 262 | 971 / 866 / 851 |
+| T3                                         | 218 / 221 / 31 | 218 / 222 / 47 | 219 / 222 / 36 | 303 / 299 / 258 | 951 / 866 / 861 |
+
+Cold, seconds (2 reps): F0 `safe` 6–7.5 small–p90, 11 p99, 20 largest (limit 8: +1 s). F3 `safe` 16–19 small–p90,
+26 p99, timeout largest; with limit 8 21–22 small–p90, timeout p99+. E4 `safe` 13–16.5 small–p90, 26 p99, timeout
+largest; with limit 8 15.5–20 small–p90, timeout p99+.
+
+- **Correction:** the E4/T1/T3 numbers in X18/X29 and the earlier "step 1" row (E4 p99 146, largest 432 MiB) used
+  `shape`, i.e. without the token dedupe. With every dedupe kept, compiler changes don't move token/cost at p99+.
+- Sort-order dedupe + integer keys are the useful additions for non-token cases on large projects (largest, with limit 8: F3
+  338 → 196, E3 464 → 287 MiB vs `sk`).
+
+### X32: token rows ordered by trace (local, 2026-10-07)
+
+Idea: a projection on `mastra_metric_events` ordered by `(organizationId, projectId, traceId, metricId)` so the
+`(traceId, metricId)` dedupe streams, with no MV. Results:
+
+- ClickHouse never chose the projection: the base table's key `(org, project, name, timestamp)` already reads
+  fewer marks for a 30-day token filter (97 vs 291 marks on the largest project). `force_optimize_projection_name`
+  only asserts, and `preferred_optimize_projection_name` didn't switch it.
+- A sorted narrow copy (what the projection holds) read directly: E4/T1/T3 largest 806–875 MiB (no change);
+  `optimize_aggregation_in_order` made it worse (950–1020 MiB).
+- The dedupe step alone, on the largest project: ~470 MiB (base or sorted), 360–435 MiB in order, even
+  single-threaded. Roots dedupe alone: 58 MiB.
+- Conclusion: ordering alone doesn't help; the X23 narrow ReplacingMergeTree read with `FINAL` (361 MiB, exact
+  under retries) is the low-risk schema option for token rows. The lab's `traceId` bloom index on
+  `mastra_metric_events` (X22) was dropped for this test and not re-added.
+
+### X33: write-side facts (prod, read-only, 2026-10-07)
+
+`prechecks.ts`, all tenants, last 7 days, counts and ratios only:
+
+| Fact                                              | Result                                                                                                   |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Roots stored more than once                       | 437 of 542k traces (0.08%), up to 263 copies; 434 with different `endedAt`, 9 with different error state |
+| Token rows stored more than once                  | 0 of 1.26M                                                                                               |
+| Spans stored more than once                       | 4.4k of 5.3M (0.08%), up to 64 copies; 0 with a different name                                           |
+| Token rows after the root ended                   | 4.3% (1.2% more than a minute after); every token row has a root                                         |
+| Token rows in another hour than the root's start  | 1.2% of rows, 9.9% of tokens                                                                             |
+| Token rows with null / different `rootEntityName` | 2.6% / 0.14%                                                                                             |
+| Traces crossing an hour boundary                  | 0.37% (p50 3 s, p99 172 s)                                                                               |
+| Hourly rollup rows vs roots                       | 23k vs 545k                                                                                              |
+| Span-name index rows vs span rows                 | 3.8M vs 5.3M                                                                                             |
+| Insert sizes, part counts                         | not visible from the read-only service                                                                   |
+
+Consequences in [SCHEMA-PROPOSALS.md](./SCHEMA-PROPOSALS.md): I14 and I15 rejected; a roots-fed rollup must
+count traces duplicate-safely; the span-name index is exact.
+
 ## Recommendation (memory track)
+
+See [SCHEMA-PROPOSALS.md](./SCHEMA-PROPOSALS.md) for risks, write-side facts (X33) and how to test the schema
+changes before shipping; it supersedes steps 3–4 below where they differ (I14/I15 rejected).
 
 Target: most projects 10–30 MiB per query, largest ≤ 256 MiB. Expected warm peaks (prod for compiler + prefetch,
 lab for schema; the lab matches prod once the prefetch floor is gone):
 
-| Step                                                                              | small–p90 (most projects) | p99         | largest     |
-| --------------------------------------------------------------------------------- | ------------------------- | ----------- | ----------- |
-| Today                                                                             | 165–227 MiB               | 174–325 MiB | 299–964 MiB |
-| 1. Compiler `shape` + limit 8 for small–p90 (prod; I7/I13 not yet measured there) | 15–42 MiB                 | 48–146 MiB  | 240–430 MiB |
-| 2. Dashboard token/cost from the hourly rollup (I12)                              | 8–14 MiB                  | 10–12 MiB   | 10–12 MiB   |
-| 3. Per-trace path: I8 + I9 + I14 + I15 (`arch3`)                                  | 8–18 MiB                  | 12–20 MiB   | 23–35 MiB   |
-| 3′. If I14/I15 can't land: I8 + I9 + I13 (`arch` + `hk`)                          | 8–19 MiB                  | 18–36 MiB   | 79–190 MiB  |
+| Step                                                                      | small–p90 (most projects) | p99         | largest     |
+| ------------------------------------------------------------------------- | ------------------------- | ----------- | ----------- |
+| Today                                                                     | 165–227 MiB               | 174–325 MiB | 299–964 MiB |
+| 1. Compiler `safe` + limit 8 for small–p90, every dedupe kept (prod, X31) | 18–49 MiB                 | 159–302 MiB | 177–867 MiB |
+| 2. Dashboard token/cost from the hourly rollup (I12)                      | 8–14 MiB                  | 10–12 MiB   | 10–12 MiB   |
+| 3. Per-trace path: I8 + I9 + I14 + I15 (`arch3`)                          | 8–18 MiB                  | 12–20 MiB   | 23–35 MiB   |
+| 3′. If I14/I15 can't land: I8 + I9 + I13 (`arch` + `hk`)                  | 8–19 MiB                  | 18–36 MiB   | 79–190 MiB  |
 
 1. **Compiler (no schema change):** scope and time-bound the re-read (I2, I3), no span dedupe for `spans.some`
    (I5), root dedupe in sort order (I7), `cityHash64(traceId)` for every trace-id set and the usage join (I13).

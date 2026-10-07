@@ -207,6 +207,18 @@ describe('query-shape variants', () => {
     expect(compile('F3', 'shape').query).not.toContain('LIMIT 1 BY dedupeKey');
   });
 
+  it('sk and safe keep the root and token dedupes; safe adds sort-order dedupe and integer keys', () => {
+    for (const v of ['sk', 'safe'] as const) {
+      expect(compile('E4', v).query).toContain('GROUP BY traceId, metricId');
+      expect(compile('E4', v).query).toContain('LIMIT 1 BY traceId');
+    }
+    const safe = compile('E4', 'safe').query;
+    expect(safe).toMatch(/ORDER BY startedAt, traceId, dedupeKey\n\s+LIMIT 1 BY traceId/);
+    expect(safe).toContain('cityHash64(traceId) AS traceHash');
+    expect(compile('F0', 'sk').query).not.toContain('cityHash64(traceId) IN');
+    expect(compile('F0', 'safe').query).toContain('cityHash64(traceId) IN');
+  });
+
   it('stageQuery ends the WITH chain at the named CTE', () => {
     const q = compile('E4', 'base').query;
     expect(stageQuery(q, 'usage')).toMatch(/\nSELECT count\(\) AS n, sum\(cityHash64\(\*\)\) AS h FROM usage$/);

@@ -575,6 +575,9 @@ export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>([
   'nord',
   'arch2',
   'arch3',
+  'sk',
+  'srio',
+  'safe',
 ]);
 
 export interface ProjectScope {
