@@ -867,6 +867,33 @@ export class AIV5Adapter {
       });
     }
 
+    if (
+      data &&
+      typeof data === 'object' &&
+      !(data instanceof URL) &&
+      !(data instanceof Uint8Array) &&
+      !(data instanceof ArrayBuffer) &&
+      typeof (data as { type?: unknown }).type === 'string'
+    ) {
+      // AI SDK v7 tagged FileData: { type: 'url' | 'data' | 'text' | 'reference', ... }
+      const tagged = data as { type: string; url?: unknown; data?: unknown; text?: unknown };
+      if (tagged.type === 'url' && (typeof tagged.url === 'string' || tagged.url instanceof URL)) {
+        data = tagged.url;
+      } else if (tagged.type === 'data' && tagged.data != null) {
+        data = tagged.data as typeof data;
+      } else if (tagged.type === 'text' && typeof tagged.text === 'string') {
+        return `data:${mimeType};base64,${Buffer.from(tagged.text, 'utf8').toString('base64')}`;
+      } else {
+        throw new MastraError({
+          id: 'MASTRA_AIV5_DATA_PART_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Unsupported file data type "${tagged.type}" in message part. Provider file references are not supported as message input.`,
+          details: { type: tagged.type },
+        });
+      }
+    }
+
     if (data instanceof URL) {
       return data.toString();
     } else {
@@ -890,7 +917,13 @@ export class AIV5Adapter {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else {
-        return '';
+        throw new MastraError({
+          id: 'MASTRA_AIV5_DATA_PART_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Unrecognized file data in message part',
+          details: { dataType: typeof data },
+        });
       }
     }
   }
