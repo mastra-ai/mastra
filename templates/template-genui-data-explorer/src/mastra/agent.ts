@@ -123,6 +123,7 @@ export function explorerAgent(
         "A chart request needs a supported grouped result, even for one observation. A scalar alone cannot satisfy a chart request. Select the advertised grouping that matches the requested trend, comparison or matrix.",
         "Periods are start-inclusive and end-exclusive. For the last N complete months, if coverage.end is the first of a month, use it as the exclusive end and subtract N calendar months for the start. Do not use the inclusive asOf day as a period end. Prefer source example periods for matching relative questions.",
         "Use only fields advertised for the chosen metric. Unused fields must be absent/null, including records; records is true only for record inspection. Apply requested categories as filters, not as a grouping substitute. A filtered total needs no groupBy unless a breakdown is requested.",
+        "For a comparison, analyze each requested period before composing all views together. Reuse successful result IDs; do not repeat an identical successful plan.",
         ...(options.catalog
           ? [
               "After analyzing, use compose with the exact resultId, role, columns[].key and grouping returned by analyze. Choose only from that result's compatibleComponents list. Do not invent column names from metric names or column labels. Prefer line for series, bar for ranked, heatmap for matrix, table for records, metric for scalar. Line/bar charts use x=returned grouping and y=the compatible numeric column key. Heatmaps use x=returned axes.x, y=returned axes.y, value=returned axes.value. Scalar/table views have no x, y or value. Empty columns mean no chart axes exist: use a scalar component, including for a forecast. Titles must be short metric labels WITHOUT digits or dates; periods are displayed separately. Never abbreviate or corrupt a requested period to bypass the title rule. Set scenario=true when the returned representation marks scenario=true. Unused properties are absent/null. Refine accepted card IDs to replace them; new IDs add cards.",
@@ -181,7 +182,7 @@ export function explorerAgent(
             "No validated UI composition was selected. Ask for a supported view and retry.",
           );
       },
-      prepareStep: () => {
+      prepareStep: ({ tools }) => {
         const session = sessionFrom(requestContext);
         session.controller.signal.throwIfAborted();
         if (++session.steps > LIMITS.steps) {
@@ -196,14 +197,18 @@ export function explorerAgent(
           !session.composition &&
           session.results.length &&
           session.results.every((result) => hasAvailableData(result.data, session.descriptor))
-        )
+        ) {
+          if (!tools?.analyze)
+            throw new SourceError("invalid-input", "The prepared analysis tool is unavailable.");
           return {
             toolChoice: "required" as const,
             tools: {
-              analyze,
+              // Keep Mastra's provider-compatible schema and execution wrapper across steps.
+              analyze: tools.analyze,
               compose: compose(compositionInputSchema(session.results, catalog)),
             },
           };
+        }
         return {};
       },
     }),

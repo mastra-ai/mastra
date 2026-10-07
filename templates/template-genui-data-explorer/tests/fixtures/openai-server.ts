@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { sourceDescriptorSchema } from "../../data-sources/source.ts";
 import { representationSchema } from "../../src/analysis/contracts.ts";
+import type { AnalysisRequest } from "../../data-sources/source.ts";
 
 const messageSchema = z.object({ role: z.string(), content: z.unknown().optional() });
 const bodySchema = z.object({
@@ -30,10 +31,11 @@ function metadata(value: unknown): z.infer<typeof representationSchema> | undefi
     }
   return;
 }
-export function deterministicOpenAI() {
+export function deterministicOpenAI(options: { plans?: readonly AnalysisRequest[] } = {}) {
   const calls: { question: string }[] = [];
   const stages: { question: string; tools: number }[] = [];
   const compositionSchemas: unknown[] = [];
+  const analysisSchemas: unknown[] = [];
   const server = createServer(async (request, response) => {
     try {
       let json = "";
@@ -42,6 +44,9 @@ export function deterministicOpenAI() {
       const index = body.messages.findLastIndex((item) => item.role === "user");
       const question = String(body.messages[index]?.content);
       const tools = body.messages.slice(index + 1).filter((item) => item.role === "tool");
+      analysisSchemas.push(
+        body.tools?.find((tool) => tool.function.name === "analyze")?.function.parameters,
+      );
       const instructions = body.messages
         .filter((item) => item.role === "system")
         .map((item) => String(item.content))
@@ -57,7 +62,8 @@ export function deterministicOpenAI() {
       const cohort = /cohort|heatmap/i.test(question);
       const monthlyChurn = !cohort && /churn/i.test(question);
       const component = records ? "table" : cohort ? "heatmap" : ranked ? "bar" : "line";
-      if (tools.length === 1)
+      const planCount = options.plans?.length ?? 1;
+      if (tools.length === planCount)
         compositionSchemas.push(
           body.tools?.find((tool) => tool.function.name === "compose")?.function.parameters,
         );
@@ -67,7 +73,7 @@ export function deterministicOpenAI() {
         ? { start: start.toISOString().slice(0, 10), end: source.coverage.end }
         : source.coverage;
       const content =
-        tools.length === 0
+        tools.length < planCount
           ? {
               name: "analyze",
               arguments: JSON.stringify({
@@ -90,38 +96,39 @@ export function deterministicOpenAI() {
                 period: records
                   ? { start: source.asOf.slice(0, 7) + "-01", end: source.coverage.end }
                   : period,
+                ...(options.plans ? { groupBy: null, ...options.plans[tools.length] } : {}),
               }),
             }
-          : tools.length === 1
+          : tools.length === planCount
             ? {
                 name: "compose",
                 arguments: JSON.stringify({
-                  components: [
-                    {
-                      id: `standalone-${component}`,
-                      component,
-                      version: "1",
-                      resultId: metadata(tools[0]?.content)?.resultId,
-                      properties: {
-                        scenario: null,
-                        options: null,
-                        title: records
-                          ? "Opportunity records"
-                          : ranked
-                            ? "Ranked Sales"
-                            : "Monthly Sales",
-                        ...(records
-                          ? {}
-                          : cohort
-                            ? {
-                                x: metadata(tools[0]?.content)?.axes?.x,
-                                y: metadata(tools[0]?.content)?.axes?.y,
-                                value: metadata(tools[0]?.content)?.axes?.value,
-                              }
-                            : { x: metadata(tools[0]?.content)?.grouping, y: "value" }),
-                      },
+                  components: tools.map((tool, index) => ({
+                    id: options.plans
+                      ? `standalone-${component}-${index}`
+                      : `standalone-${component}`,
+                    component: options.plans ? "metric" : component,
+                    version: "1",
+                    resultId: metadata(tool.content)?.resultId,
+                    properties: {
+                      scenario: null,
+                      options: null,
+                      title: records
+                        ? "Opportunity records"
+                        : ranked
+                          ? "Ranked Sales"
+                          : "Monthly Sales",
+                      ...(records || options.plans
+                        ? {}
+                        : cohort
+                          ? {
+                              x: metadata(tools[0]?.content)?.axes?.x,
+                              y: metadata(tools[0]?.content)?.axes?.y,
+                              value: metadata(tools[0]?.content)?.axes?.value,
+                            }
+                          : { x: metadata(tools[0]?.content)?.grouping, y: "value" }),
                     },
-                  ],
+                  })),
                 }),
               }
             : undefined;
@@ -176,5 +183,5 @@ export function deterministicOpenAI() {
       response.end("Deterministic provider fixture failed.");
     }
   });
-  return { server, calls, stages, compositionSchemas };
+  return { server, calls, stages, compositionSchemas, analysisSchemas };
 }

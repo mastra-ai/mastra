@@ -344,6 +344,83 @@ it("a verified scalar cannot complete a visual request without composition", asy
   }
 });
 
+it("OpenAI compares September sales in both years without retrying successful plans", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sales-comparison-"));
+  const path = join(dir, "sales.sqlite");
+  const fixture = referenceFixture(path);
+  fixture.db.exec(`
+    INSERT INTO opportunities VALUES (6,1,'2025-09-01'),(7,1,'2026-09-01');
+    INSERT INTO opportunity_history VALUES
+      (6,'2025-09-15','won',12000,'2025-09-15',1,'SMB'),
+      (7,'2026-09-15','won',18000,'2026-09-15',1,'SMB');
+  `);
+  fixture.db.close();
+  const provider = deterministicOpenAI({
+    plans: [
+      { metric: "bookings", period: { start: "2025-09-01", end: "2025-10-01" } },
+      { metric: "bookings", period: { start: "2026-09-01", end: "2026-10-01" } },
+    ],
+  });
+  await new Promise<void>((resolve) => provider.server.listen(0, "127.0.0.1", resolve));
+  const address = provider.server.address();
+  if (!address || typeof address === "string") throw new Error("Missing fixture address.");
+  const explorer = new DataExplorer(
+    new SalesSource(path),
+    {
+      providerId: "openai",
+      modelId: "gpt-4.1-mini",
+      apiKey: "synthetic-local-provider",
+      url: `http://127.0.0.1:${address.port}/v1`,
+      api: "chat",
+    },
+    { catalog: components },
+  );
+  try {
+    let views = 0;
+    const outcome = await explorer.analyze(
+      {
+        workspaceId,
+        threadId,
+        requestId: "september-comparison",
+        baseRevision: 0,
+        question: "Compare sales of september 2025 and 2026",
+      },
+      {
+        signal: AbortSignal.timeout(5000),
+        execute: async (requestContext, session) => {
+          const stream = await explorer.agent.stream("Compare sales of september 2025 and 2026", {
+            requestContext,
+            abortSignal: session.controller.signal,
+          });
+          for await (const chunk of stream.fullStream) {
+            void chunk;
+          }
+          return { finishReason: await stream.finishReason };
+        },
+        onComplete: (session) => {
+          views = session.composition?.components.length ?? 0;
+        },
+      },
+    );
+    expect(
+      outcome.status,
+      JSON.stringify({ message: outcome.message, stages: provider.stages }),
+    ).toBe("complete");
+    expect(
+      outcome.results.map((result) => result.data.value),
+      outcome.message,
+    ).toEqual([12000, 18000]);
+    expect(views).toBe(2);
+    expect(provider.stages.map((stage) => stage.tools)).toEqual([0, 1, 2, 3]);
+    expect(provider.analysisSchemas[1]).toEqual(provider.analysisSchemas[0]);
+  } finally {
+    await explorer.close();
+    provider.server.closeAllConnections();
+    await new Promise<void>((resolve) => provider.server.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 it("OpenAI optional null arguments produce a verified composed result", async () => {
   const dir = await mkdtemp(join(tmpdir(), "provider-arguments-"));
   const path = join(dir, "sales.sqlite");
