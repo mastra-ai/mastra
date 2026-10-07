@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 21 providers (877 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 21 providers (883 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -18,15 +18,15 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | Provider | Provider ID | Tools |
 | - | - | - |
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
-| <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 33 |
+| <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
-| <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 46 |
+| <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
 | <ProviderLogo slug="googlecalendar" /> [Google Calendar](#google-calendar) | `google-calendar` | 43 |
 | <ProviderLogo slug="googledocs" /> [Google Docs](#google-docs) | `google-docs` | 37 |
 | <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 30 |
 | <ProviderLogo slug="gmail" /> [Gmail](#gmail) | `google-mail` | 52 |
 | <ProviderLogo slug="googlesheets" /> [Google Sheets](#google-sheets) | `google-sheet` | 18 |
-| <ProviderLogo slug="hubspot" /> [HubSpot](#hubspot) | `hubspot` | 49 |
+| <ProviderLogo slug="hubspot" /> [HubSpot](#hubspot) | `hubspot` | 50 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> [incident.io](#incidentio) | `incident-io` | 66 |
 | <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
@@ -34,7 +34,7 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
 | <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
-| <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 51 |
+| <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 52 |
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
 | <ProviderLogo src="https://svgl.app/library/workos.svg" /> [WorkOS](#workos) | `workos` | 40 |
@@ -90,7 +90,7 @@ Provider ID: `clerk` · 42 tools
 
 ## Discord
 
-Provider ID: `discord` · 33 tools
+Provider ID: `discord` · 34 tools
 
 | Tool | Description |
 | - | - |
@@ -121,6 +121,7 @@ Provider ID: `discord` · 33 tools
 | `discord_list_roles` | List roles from Discord. |
 | `discord_list_webhooks` | List webhooks from a Discord channel |
 | `discord_remove_guild_member_role` | Remove a role from a guild member |
+| `discord_search_members` | Search guild members whose username or nickname starts with the query, instead of paging the full member list. |
 | `discord_update_channel` | Update a Discord channel. |
 | `discord_update_guild` | Update a guild in Discord |
 | `discord_update_guild_member` | Update a guild member in Discord |
@@ -164,7 +165,7 @@ Provider ID: `fireflies` · 27 tools
 
 ## GitHub
 
-Provider ID: `github` · 46 tools
+Provider ID: `github` · 49 tools
 
 | Tool | Description |
 | - | - |
@@ -209,6 +210,9 @@ Provider ID: `github` · 46 tools
 | `github_list_workflows` | List GitHub Actions workflows configured in a repository. |
 | `github_merge_pull_request` | Merge an open pull request using the selected merge method. |
 | `github_rerun_workflow_run` | Rerun a completed or failed workflow run. |
+| `github_search_code` | Search file contents across GitHub repositories. The query must be scoped with a repo:, org:, or user: qualifier. |
+| `github_search_issues` | Search issues and pull requests across GitHub with the search API instead of paging repository listings. Supports the full GitHub search query syntax. |
+| `github_search_repositories` | Search repositories across GitHub by name, organization, language, or topic instead of needing to know the exact owner/repo up front. |
 | `github_submit_pull_request_review` | Create a pull request review with approval, comment, or change request. |
 | `github_update_issue` | Edit an issue's title, body, state, assignees, labels, or milestone. |
 | `github_update_label` | Update a repository label's name, color, or description. |
@@ -432,7 +436,7 @@ Provider ID: `google-sheet` · 18 tools
 
 ## HubSpot
 
-Provider ID: `hubspot` · 49 tools
+Provider ID: `hubspot` · 50 tools
 
 | Tool | Description |
 | - | - |
@@ -475,6 +479,7 @@ Provider ID: `hubspot` · 49 tools
 | `hubspot_list_marketing_emails` | List marketing emails |
 | `hubspot_list_tickets` | List support tickets |
 | `hubspot_search_companies` | Search companies by criteria |
+| `hubspot_search_contacts` | Search contacts by free-text query or property filters instead of paging the full contact list. |
 | `hubspot_search_deals` | Search deals by criteria |
 | `hubspot_search_tickets` | Search tickets by criteria |
 | `hubspot_submit_form` | Submit a HubSpot form on behalf of a visitor, using the authenticated form submission endpoint. |
@@ -904,7 +909,7 @@ Provider ID: `resend` · 80 tools
 
 ## Slack
 
-Provider ID: `slack` · 51 tools
+Provider ID: `slack` · 52 tools
 
 | Tool | Description |
 | - | - |
@@ -948,6 +953,7 @@ Provider ID: `slack` · 51 tools
 | `slack_remove_reaction` | Remove an emoji reaction from a specific message |
 | `slack_rename_channel` | Rename a Slack channel |
 | `slack_schedule_message` | Schedule a Slack message to a channel or thread, subject to Slack's 120-day scheduling limit. |
+| `slack_search_channels` | Find Slack channels by name without paging manually. Scans conversations.list and returns channels whose name contains the query (case-insensitive). |
 | `slack_search_files` | Search workspace files with pagination |
 | `slack_search_messages` | Search for messages matching a query |
 | `slack_send_ephemeral_message` | Send a message visible only to one user in a channel |
