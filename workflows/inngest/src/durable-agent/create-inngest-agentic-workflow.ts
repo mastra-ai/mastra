@@ -5,6 +5,7 @@ import {
   createDurableToolCallStep,
   DurableAgentDefaults,
   DurableStepIds,
+  emitChunkEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -24,6 +25,7 @@ import type {
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
+import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
 import { z } from 'zod';
@@ -383,14 +385,26 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             finalText = finishResult.outputText;
           }
 
+          const tripwire = finishResult.tripwire;
+          if (tripwire && pubsub) {
+            await emitChunkEvent(pubsub, state.runId, {
+              type: 'tripwire',
+              runId: state.runId,
+              from: ChunkFrom.AGENT,
+              payload: tripwire,
+            });
+          }
+
           const finalOutput = {
             messageListState: finishResult.messageListState,
             messageId: state.messageId,
-            stepResult: state.lastStepResult || {
-              reason: 'stop',
-              warnings: [],
-              isContinued: false,
-            },
+            stepResult: tripwire
+              ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
+              : state.lastStepResult || {
+                  reason: 'stop',
+                  warnings: [],
+                  isContinued: false,
+                },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,
