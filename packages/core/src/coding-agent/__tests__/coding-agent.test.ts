@@ -347,11 +347,11 @@ describe('createCodingAgent', () => {
     const resolved = await agent.listErrorProcessors();
     const ids = resolved.map(processor => processor.id);
 
-    // The added defaults are placed at their own positions, so both repairs still run before the
+    // The added defaults are placed at their own positions, so every repair still runs before the
     // retry processor even though the caller named only the latter.
     expect(ids).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
     // The caller's tuned instance is the one that runs — the default is not added alongside it.
-    expect(resolved[2]).toBe(customRetry);
+    expect(resolved[3]).toBe(customRetry);
     expect(resolved.filter(processor => processor.id === 'stream-error-retry-processor')).toHaveLength(1);
   });
 
