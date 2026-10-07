@@ -12,6 +12,10 @@ context, and individual records need tables. This template shows how to build ge
 Mastra: the agent chooses what to display as the conversation evolves, while your components control
 how it looks and behaves.
 
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1791411728/genui-mastra_rg50uv.mp4"></video>
+
 ## Prerequisites
 
 - **Node.js 24.15.0 or later** and NPM.
