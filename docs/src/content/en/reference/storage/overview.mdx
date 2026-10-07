@@ -452,16 +452,24 @@ Knowledge storage is experimental.
 
 Knowledge tables are created the first time Knowledge is used, for example when you call `storage.getStore('knowledge')`. Ordinary `storage.init()` doesn't create them.
 
-Databases initialized by earlier releases contain v1 Knowledge tables. The current Knowledge storage uses a different schema and doesn't migrate v1 data. What happens on first use depends on what those tables hold:
+Databases initialized by earlier releases contain v1 Knowledge tables. The current Knowledge storage uses a different schema and doesn't migrate v1 data. What happens on first use depends on what Mastra finds:
 
-- **Empty, unmodified v1 tables**: Mastra drops them and creates the current schema. Nothing is lost.
-- **v1 tables with rows, or a Knowledge schema Mastra doesn't recognize**: Knowledge refuses to start and throws `KnowledgeSchemaResetRequiredError`. Mastra doesn't change or delete any tables, so your existing Knowledge data stays in place.
+- **Unmodified v1 tables, with or without rows**: Mastra drops them and creates the current schema. Any v1 Knowledge data is deleted. Other storage domains aren't touched.
+- **A Knowledge schema Mastra doesn't recognize**, such as extra tables, indexes, views, or triggers on the Knowledge tables: Knowledge refuses to start and throws `KnowledgeSchemaResetRequiredError`. Mastra doesn't change or delete any tables, so your existing Knowledge data stays in place.
 
 Other storage domains keep working while Knowledge is blocked.
 
+:::warning
+
+Back up the v1 Knowledge tables before upgrading if you need to keep their contents. To keep Mastra from replacing them on first use, defer Knowledge initialization as described in [Defer Knowledge initialization](#defer-knowledge-initialization).
+
+:::
+
+If you stored v1 Knowledge embeddings in a vector store, delete the `knowledge_documents` indexes, including any `knowledge_documents_dimension_<N>` indexes. Their entries point at deleted v1 records and take result slots from current Knowledge search.
+
 ### Reset Knowledge storage
 
-To replace the old tables with the current schema, call `dangerouslyReset()` on the Knowledge domain:
+To replace a Knowledge schema Mastra doesn't recognize with the current schema, call `dangerouslyReset()` on the Knowledge domain:
 
 ```typescript
 await storage.stores?.knowledge?.dangerouslyReset()
@@ -477,4 +485,4 @@ await storage.stores?.knowledge?.dangerouslyReset()
 
 Set `disableInit: true` on the store, or set the `MASTRA_DISABLE_STORAGE_INIT=true` environment variable, to stop `getStore('knowledge')` from initializing Knowledge. This also turns off automatic initialization for every other domain, so you must create those tables yourself, for example by calling `storage.init()`.
 
-With initialization deferred, call `storage.initKnowledge()` when you're ready to activate Knowledge. It runs `storage.init()` first, which creates the other domains' tables, then runs the same Knowledge checks and throws `KnowledgeSchemaResetRequiredError` in the same cases.
+With initialization deferred, call `storage.initKnowledge()` when you're ready to activate Knowledge. It runs `storage.init()` first, which creates the other domains' tables, then runs the same Knowledge checks. It replaces unmodified v1 tables and throws `KnowledgeSchemaResetRequiredError` for a schema Mastra doesn't recognize.
