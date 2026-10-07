@@ -5460,9 +5460,12 @@ export class Session<TState = unknown> {
     this.displayState.deletePendingSuspension(address);
 
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, { threadId, resourceId });
-
-    await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId);
-    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
+    const isActiveBinding = threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
+    let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
+    if (isActiveBinding) {
+      await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId);
+      resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
+    }
 
     try {
       const sharedOptions = this.machinery.buildSharedRunOptions();
@@ -5483,28 +5486,30 @@ export class Session<TState = unknown> {
         streamOptions: {
           ...sharedOptions,
           memory: { thread: threadId, resource: resourceId },
-          abortSignal: this.run.ensureAbortController().signal,
+          abortSignal: isActiveBinding ? this.run.ensureAbortController().signal : new AbortController().signal,
           requestContext,
           toolsets: await this.machinery.buildToolsets(requestContext),
         },
       });
-      await resumedSubscriptionBoundary.promise;
+      await resumedSubscriptionBoundary?.promise;
     } finally {
-      resumedSubscriptionBoundary.cancel();
-      const activeThreadId = this.thread.getId();
-      if (activeThreadId) {
-        const activeResourceId = this.identity.getResourceId();
-        const activeRequestContext = await this.machinery.buildRequestContext(requestContextInput, {
-          threadId: activeThreadId,
-          resourceId: activeResourceId,
-        });
-        await this.thread.ensureSubscription(
-          activeThreadId,
-          undefined,
-          activeRequestContext,
-          activeResourceId,
-          () => this.thread.getId() === activeThreadId && this.identity.getResourceId() === activeResourceId,
-        );
+      resumedSubscriptionBoundary?.cancel();
+      if (isActiveBinding) {
+        const activeThreadId = this.thread.getId();
+        if (activeThreadId) {
+          const activeResourceId = this.identity.getResourceId();
+          const activeRequestContext = await this.machinery.buildRequestContext(requestContextInput, {
+            threadId: activeThreadId,
+            resourceId: activeResourceId,
+          });
+          await this.thread.ensureSubscription(
+            activeThreadId,
+            undefined,
+            activeRequestContext,
+            activeResourceId,
+            () => this.thread.getId() === activeThreadId && this.identity.getResourceId() === activeResourceId,
+          );
+        }
       }
     }
   }
