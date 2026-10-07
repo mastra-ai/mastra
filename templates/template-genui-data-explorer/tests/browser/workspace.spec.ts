@@ -64,6 +64,12 @@ async function ask(page: Page, text: string, revision: number) {
     page.getByText(`Revision ${revision} · Saved locally`, { exact: false }),
   ).toBeVisible();
 }
+async function showFilters(page: Page) {
+  await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeEnabled();
+  await expect(page.locator(".card-filters > summary").first()).toBeVisible();
+  const closed = page.locator(".card-filters:not([open]) > summary:visible");
+  while (await closed.count()) await closed.first().click();
+}
 async function revision(page: Page, count: number) {
   await expect.poll(async () => (await saved(page)).revision).toBe(count);
   await expect(page.getByText(`Revision ${count} · Saved locally`, { exact: false })).toBeVisible();
@@ -146,11 +152,13 @@ test("copilot_workspace_filters_drills_and_compares", async ({ page }, testInfo)
   expect(first.results[0]?.data.value).toBe(42000);
   expect(first.components[0]?.component).toBe("line");
   await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
+  await showFilters(page);
   await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
   const filtered = await saved(page);
   expect(filtered.filters).toEqual({ segment: "SMB" });
   expect(filtered.results[0]?.data.value).toBe(36000);
+  await showFilters(page);
   await page
     .getByLabel(/^Compare Segment /)
     .first()
@@ -364,6 +372,7 @@ test("inspection returns to the saved filtered overview after restart without mo
   await page.goto("/");
   await ask(page, "Show monthly bookings", 1);
   await expect(page.getByRole("button", { name: "Back to overview", exact: true })).toHaveCount(0);
+  await showFilters(page);
   await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
   const overview = await saved(page);
@@ -397,6 +406,7 @@ test("filter replacement resets table pagination", async ({ page }) => {
   await ask(page, "Show bookings records", 1);
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+  await showFilters(page);
   await page.getByLabel("Segment filter Bookings records").selectOption({ label: "Enterprise" });
   await revision(page, 2);
   await expect(page.getByText("Page 1 of 1", { exact: true })).toBeVisible();
@@ -447,6 +457,7 @@ test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
       return json && typeof json === "object" && "status" in json ? json.status : undefined;
     })
     .toBe("working");
+  await showFilters(page);
   await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "Enterprise" });
   await revision(page, 2);
   await slow;
@@ -466,6 +477,7 @@ test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
 test("workspace_restores_after_restart_and_partial_failure", async ({ page }) => {
   await page.goto("/");
   await ask(page, "Show monthly bookings", 1);
+  await showFilters(page);
   await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
   const before = await saved(page);
@@ -501,6 +513,7 @@ test("workspace_restores_after_restart_and_partial_failure", async ({ page }) =>
     before.messages.at(-1)?.content ?? "missing prior verified explanation",
   );
   triggerSaveFailure(true);
+  await showFilters(page);
   await page
     .getByLabel(/^Compare Segment /)
     .first()
@@ -511,6 +524,7 @@ test("workspace_restores_after_restart_and_partial_failure", async ({ page }) =>
   await page.reload();
   await expect(page.getByText(/Workspace save failed/).first()).toBeVisible();
   triggerSaveFailure(false);
+  await showFilters(page);
   await page
     .getByLabel(/^Compare Segment /)
     .first()
@@ -571,6 +585,7 @@ test("configured_catalog_drives_dynamic_copilot_compositions", async ({ page }) 
   const custom = await saved(page);
   const binding = custom.components.find((component) => component.component === "compact");
   expect(binding).toBeDefined();
+  await showFilters(page);
   await page
     .locator('[data-component="compact"]')
     .getByLabel(/^Compare Segment /)
@@ -933,13 +948,16 @@ test("education source renders intent-selected charts and typed controls without
   });
   await page.getByRole("button", { name: "Back to overview", exact: true }).click();
   await revision(page, 3);
+  await showFilters(page);
   await daily.getByLabel(/^School filter /).selectOption({ label: "Primary" });
   await revision(page, 4);
   expect((await saved(page)).results[0]?.data.request.filters).toEqual({ schoolId: 10 });
+  await showFilters(page);
   await daily.getByLabel(/^Compare School /).selectOption({ label: "Secondary" });
   await daily.getByRole("button", { name: "Compare School", exact: true }).click();
   await revision(page, 5);
   expect((await saved(page)).results.map((result) => result.data.value)).toEqual([4, 2]);
+  await showFilters(page);
   await daily.getByLabel(/^School filter /).selectOption({ label: "All" });
   await revision(page, 6);
   await ask(page, "Show a course ranking", 7);
@@ -969,4 +987,71 @@ test("education source renders intent-selected charts and typed controls without
     true,
   );
   await matrix.screenshot({ path: testInfo.outputPath("education-matrix.png") });
+});
+
+test("card footers group responsive controls and keep comparison input independent", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1080 });
+  await page.goto("/");
+  await ask(page, "Show monthly bookings", 1);
+  const card = page.locator(".card").first();
+  const footer = card.locator("footer");
+  const owner = footer.getByRole("group", { name: "Sales representative", exact: true });
+  await expect(owner).not.toBeVisible();
+  await expect(footer.getByRole("button", { name: "Correct this view" })).toBeVisible();
+  await footer.getByText("Filters and comparisons", { exact: true }).click();
+  await expect(owner).toBeVisible();
+  const fields = footer.getByRole("group", {
+    name: /^(Sales representative|Segment|Region|Stage)$/,
+  });
+  await expect(fields).toHaveCount(4);
+  const filter = owner.getByLabel("Sales representative filter Monthly bookings", { exact: true });
+  const comparison = owner.getByLabel("Compare Sales representative Monthly bookings", {
+    exact: true,
+  });
+  await filter.fill("1");
+  await comparison.fill("2");
+  await owner.getByRole("button", { name: "Compare Sales representative", exact: true }).click();
+  await revision(page, 2);
+  const compared = await saved(page);
+  expect(compared.results.map((result) => result.data.value)).toEqual([42000, 6000]);
+  expect(compared.results[0]?.data.request.filters).toBeUndefined();
+  expect(compared.results[1]?.data.request.filters).toEqual({ ownerId: 2 });
+  await expect(filter).toHaveValue("1");
+  await owner
+    .getByRole("button", { name: "Apply Sales representative filter", exact: true })
+    .click();
+  await revision(page, 3);
+  expect(
+    (await saved(page)).results.find((result) => result.data.request.filters?.ownerId === 1)?.data
+      .value,
+  ).toBe(36000);
+  await showFilters(page);
+  await owner
+    .getByRole("button", { name: "Clear Sales representative filter", exact: true })
+    .click();
+  await revision(page, 4);
+  await showFilters(page);
+  await expect(filter).toHaveValue("");
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await footer.scrollIntoViewIfNeeded();
+  await footer.screenshot({ path: testInfo.outputPath("footer-desktop-dark.png") });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1080 });
+    await expect
+      .poll(async () => footer.evaluate((element) => element.scrollWidth <= element.clientWidth))
+      .toBe(true);
+    for (const field of await fields.all()) {
+      await expect
+        .poll(async () => field.evaluate((element) => element.scrollWidth <= element.clientWidth))
+        .toBe(true);
+    }
+  }
+  await owner.scrollIntoViewIfNeeded();
+  await owner.screenshot({ path: testInfo.outputPath("footer-mobile-dark.png") });
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await owner.screenshot({ path: testInfo.outputPath("footer-mobile-light.png") });
+  await footer.getByText("Filters and comparisons", { exact: true }).click();
+  await expect(owner).not.toBeVisible();
 });

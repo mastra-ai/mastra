@@ -281,6 +281,69 @@ input {
   gap: 0.4rem;
   align-items: center;
 }
+.card-footer {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--edge);
+}
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.card-filters > summary {
+  color: var(--subtle);
+  font-size: 0.85rem;
+}
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.filter-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--edge);
+  border-radius: 0.5rem;
+}
+.filter-field legend {
+  padding: 0 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.filter-row + .filter-row {
+  margin-top: 0.75rem;
+}
+.filter-row label {
+  display: grid;
+  flex: 1 1 8rem;
+  min-width: 0;
+  gap: 0.3rem;
+  color: var(--subtle);
+  font-size: 0.8rem;
+}
+.filter-row input,
+.filter-row select {
+  width: 100%;
+  min-width: 0;
+  color: var(--ink);
+}
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
 .notice label {
   display: grid;
   gap: 0.5rem;

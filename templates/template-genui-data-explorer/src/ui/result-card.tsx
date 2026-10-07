@@ -69,50 +69,60 @@ export function ResultCard({ componentId }: { componentId: string }) {
             void act(action);
           }}
         />
-        <div className="controls">
-          {overviewFor(snapshot.workspace, binding.id) && (
+        <footer className="card-footer">
+          <div className="card-actions">
+            {overviewFor(snapshot.workspace, binding.id) && (
+              <button
+                disabled={isRunning}
+                onClick={() => {
+                  void act({ type: "back", componentId: binding.id });
+                }}
+              >
+                Back to overview
+              </button>
+            )}
             <button
               disabled={isRunning}
-              onClick={() => {
-                void act({ type: "back", componentId: binding.id });
-              }}
+              title="Describe a change and apply it to update this view. Source records remain unchanged."
+              onClick={() => correct(binding.id, "")}
             >
-              Back to overview
+              Correct this view
             </button>
-          )}
-          <button
-            disabled={isRunning}
-            title="Describe a change and apply it to update this view. Source records remain unchanged."
-            onClick={() => correct(binding.id, "")}
-          >
-            Correct this view
-          </button>
+          </div>
           {capability?.fields.includes("filters") &&
-            capability.filters.map((field) => (
-              <FilterControls
-                key={`${result.resultId}:${field}`}
-                control={filterControl(capability, field)}
-                value={result.data.request.filters?.[field]}
-                componentId={binding.id}
-                title={title}
-                actions={entry.actions}
-                disabled={isRunning}
-                act={act}
-              />
-            ))}
-        </div>
-        <details className="source-details">
-          <summary>Source details</summary>
-          <p>{capability?.description}</p>
-          <p>Source: {snapshot.workspace.source.title}</p>
-          {Object.keys(result.data.request.filters ?? {}).length > 0 && (
-            <p>
-              {Object.entries(result.data.request.filters ?? {})
-                .map(([key, value]) => `${key}: ${value}`)
-                .join(" · ")}
-            </p>
-          )}
-        </details>
+            capability.filters.length > 0 &&
+            entry.actions.some((action) => action === "filter" || action === "compare") && (
+              <details className="card-filters">
+                <summary>Filters and comparisons</summary>
+                <div className="filter-grid">
+                  {capability.filters.map((field) => (
+                    <FilterControls
+                      key={`${result.resultId}:${field}`}
+                      control={filterControl(capability, field)}
+                      value={result.data.request.filters?.[field]}
+                      componentId={binding.id}
+                      title={title}
+                      actions={entry.actions}
+                      disabled={isRunning}
+                      act={act}
+                    />
+                  ))}
+                </div>
+              </details>
+            )}
+          <details className="source-details">
+            <summary>Source details</summary>
+            <p>{capability?.description}</p>
+            <p>Source: {snapshot.workspace.source.title}</p>
+            {Object.keys(result.data.request.filters ?? {}).length > 0 && (
+              <p>
+                {Object.entries(result.data.request.filters ?? {})
+                  .map(([key, value]) => `${key}: ${value}`)
+                  .join(" · ")}
+              </p>
+            )}
+          </details>
+        </footer>
       </div>
     </article>
   );
