@@ -215,6 +215,15 @@ describe('Voice Handlers', () => {
         const parsed = GENERATE_SPEECH_ROUTE.bodySchema!.parse({ text: 'hi', options: { speaker: 'nova' } });
         expect(parsed).toEqual({ text: 'hi', options: { speaker: 'nova' } });
       });
+
+      it('keeps provider-specific options and rejects a non-string options.speaker', () => {
+        const schema = GENERATE_SPEECH_ROUTE.bodySchema!;
+        expect(schema.parse({ text: 'hi', options: { speaker: 'nova', speed: 1.2 } })).toEqual({
+          text: 'hi',
+          options: { speaker: 'nova', speed: 1.2 },
+        });
+        expect(schema.safeParse({ text: 'hi', speakerId: 'alloy', options: { speaker: 42 } }).success).toBe(false);
+      });
     });
 
     it('should generate speech successfully with dynamic instructions', async () => {
