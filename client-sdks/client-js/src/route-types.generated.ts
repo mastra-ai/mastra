@@ -7900,7 +7900,16 @@ export type GetProcessors_Response = {
     id: string;
     name?: string | undefined;
     description?: string | undefined;
-    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest')[];
+    phases: (
+      | 'input'
+      | 'inputStep'
+      | 'outputStream'
+      | 'outputResult'
+      | 'outputStep'
+      | 'toolResult'
+      | 'toolModelOutput'
+      | 'llmRequest'
+    )[];
     agentIds: string[];
     configurations: {
       agentId: string;
@@ -7937,7 +7946,16 @@ export type GetProcessorsProcessorId_Response = {
   id: string;
   name?: string | undefined;
   description?: string | undefined;
-  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest')[];
+  phases: (
+    | 'input'
+    | 'inputStep'
+    | 'outputStream'
+    | 'outputResult'
+    | 'outputStep'
+    | 'toolResult'
+    | 'toolModelOutput'
+    | 'llmRequest'
+  )[];
   configurations: {
     agentId: string;
     agentName: string;

@@ -183,6 +183,30 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
   it('caps only the model-facing copy with processToolModelOutput', async () => {
     const messageList = seedMessageList();
     const big = 'word '.repeat(2000);
+    setupRegistry(
+      {
+        id: 'shortener',
+        name: 'shortener',
+        processToolModelOutput: async ({ result }: any) => ({
+          modelOutput: { type: 'text', value: String(result).slice(0, 10) + '[cut]' },
+        }),
+      },
+      messageList,
+    );
+    globalRunRegistry.get(RUN_ID)!.tools = { [TOOL_NAME]: { execute: vi.fn().mockResolvedValue(big) } } as any;
+
+    const output = await runToolCallStep();
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toBe(big);
+    expect(output.providerMetadata.mastra.modelOutput).toEqual({ type: 'text', value: 'word word [cut]' });
+    const toolResultChunks = emittedChunksOfType('tool-result');
+    expect(toolResultChunks[0].payload.result).toBe(big);
+  });
+
+  it('caps the model-facing copy with ToolResultTokenLimiter', async () => {
+    const messageList = seedMessageList();
+    const big = 'word '.repeat(2000);
     setupRegistry(new ToolResultTokenLimiter(64) as any, messageList);
     globalRunRegistry.get(RUN_ID)!.tools = { [TOOL_NAME]: { execute: vi.fn().mockResolvedValue(big) } } as any;
 

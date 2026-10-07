@@ -17,6 +17,7 @@ import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
+import { applyToolModelOutputProcessors } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
@@ -1491,6 +1492,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
                         resultPayload.result = postProcessorResult;
                       }
+                      resultPayload.providerMetadata = await applyToolModelOutputProcessors(getToolResultRunner(), {
+                        steps: (inputData as any).accumulatedSteps ?? [],
+                        messageList,
+                        stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                        toolName: resultPayload.toolName,
+                        toolCallId: resultPayload.toolCallId,
+                        toolArgs: resultPayload.args,
+                        result: resultPayload.result,
+                        providerExecuted: resultProviderExecuted,
+                        providerMetadata: resultPayload.providerMetadata,
+                        requestContext,
+                        retryCount: processorRetryCount,
+                        tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                        writer: toolResultChunkWriter,
+                        abortSignal: executionAbortSignal,
+                      });
                     } catch (error) {
                       if (error instanceof TripWire) {
                         logger?.warn?.('Tool result processor tripwire triggered', {

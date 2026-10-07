@@ -29,7 +29,7 @@ For a conceptual walkthrough of preparation, the agent loop, tool execution, and
 | Tool execution | Once per local tool call | Receives the live [`RequestContext`](/docs/server/request-context). Approval or suspension can delay execution. |
 | Tool [`onOutput`](/reference/tools/create-tool#onoutput) | Once after successful local execution | Receives the tool output. |
 | `processToolResult` | Per local/client result, or when a deferred provider result arrives | Can inspect, redact, or abort before a raw tool result enters the message list. |
-| `processToolModelOutput` | Once per tool result, after `processToolResult` and `toModelOutput` | Changes only what the model reads. The stored result stays unchanged. |
+| `processToolModelOutput` | Once per tool result (twice for an awaited background task), after `processToolResult` and `toModelOutput` | Changes only what the model reads. The stored result stays unchanged. |
 | `processAPIError` | On eligible provider API errors | Can update request state and request another provider attempt. |
 | [`onIterationComplete`](/reference/agents/generate#parameters) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
 | `processOutputResult` | Once at finalization | Post-processes the completed agent result before it's returned. |
@@ -1486,6 +1486,10 @@ Changes what the model reads for a tool result without changing the result. `pro
 
 It runs once per tool result, after every `processToolResult` rewrite and after the tool's `toModelOutput` mapping. `toModelOutput` maps the result the tool returned, so `modelOutput` doesn't reflect `processToolResult` rewrites; `result` does. It also runs for background task results, including ones that arrive after the turn ends, as long as the agent's processors are still registered in this process. Output processors run in order, and each one receives the previous one's `modelOutput`. The final value is stored with the message and used on every later prompt. [`ToolResultTokenLimiter`](/reference/processors/tool-result-token-limiter) uses this hook.
 
+A background task with the `awaited` disposition is the one exception to once per result. The hook runs when the task result is applied to the message list and again when the awaited result returns to the turn, and each run starts from the tool's `toModelOutput` mapping. Write the hook so running it twice on the same result gives the same output.
+
+The hook doesn't run for client-side tools (tools without `execute`). Their results come back from the client, and only the tool's `toModelOutput` mapping applies.
+
 Return `{ modelOutput }` to replace the model-facing output, or return nothing to keep it.
 
 ```typescript oxfmt:false
@@ -1511,7 +1515,7 @@ processToolModelOutput?(
     name: 'modelOutput',
     type: 'ToolModelOutput | undefined',
     description:
-      'Current model-facing output, mapped by `toModelOutput` from the result the tool returned. `undefined` when the tool has no `toModelOutput` and no earlier processor set one.',
+      'Current model-facing output, mapped by `toModelOutput` from the result the tool returned. `undefined` when no `toModelOutput` mapping applied (the tool has none, or the provider executed it) and no earlier processor set one.',
     isOptional: false,
   },
   {
@@ -1520,7 +1524,13 @@ processToolModelOutput?(
     description: 'Whether the provider executed the tool.',
     isOptional: true,
   },
-  { name: 'stepNumber', type: 'number', description: 'Current step number (0-indexed).', isOptional: false },
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description:
+      'Current step number (0-indexed). It is `0` in the durable tool-call step and for background task results.',
+    isOptional: false,
+  },
   {
     name: 'abort',
     type: '(reason?: string, options?: { retry?: boolean }) => never',

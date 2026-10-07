@@ -902,7 +902,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * `modelOutput`. The final value is stored as `providerMetadata.mastra.modelOutput`,
    * persists with the message, and is used on every later prompt. The stored and
    * streamed `result` is never changed. It also runs for background task results,
-   * including ones that arrive after the turn ends.
+   * including ones that arrive after the turn ends. An awaited background task is the
+   * exception to once per result: the hook runs when the result is applied to the
+   * message list and again when the awaited result returns to the turn, so it should
+   * give the same output when run twice on the same result. It doesn't run for
+   * client-side tools (tools without `execute`).
    *
    * @returns `{ modelOutput }` to replace the model-facing output, or undefined to keep it.
    */

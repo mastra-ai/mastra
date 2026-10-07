@@ -25,6 +25,7 @@ type ProcessorPhase =
   | 'outputResult'
   | 'outputStep'
   | 'toolResult'
+  | 'toolModelOutput'
   | 'llmRequest';
 
 /**
@@ -56,7 +57,7 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
   if (isProcessorWorkflow(processor)) {
     // Workflow processors can potentially handle all phases
     // The createStep in workflows handles each phase and it's a no-op if not implemented
-    return ['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult'];
+    return ['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult', 'toolModelOutput'];
   }
 
   // For individual processors, detect by checking which methods exist
@@ -78,6 +79,9 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
   }
   if (typeof processor.processToolResult === 'function') {
     phases.push('toolResult');
+  }
+  if (typeof processor.processToolModelOutput === 'function') {
+    phases.push('toolModelOutput');
   }
   if (typeof processor.processLLMRequest === 'function') {
     phases.push('llmRequest');
