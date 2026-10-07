@@ -1,8 +1,6 @@
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
-const QUERY_BATCH_SIZE = 1000;
-
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
   upstashToken: string;
@@ -187,66 +185,6 @@ export class UpstashTransport extends LoggerTransport {
     return !filters || Object.entries(filters).every(([key, value]) => log[key as keyof BaseLogMessage] === value);
   }
 
-  private async scanLogs({
-    fromDate,
-    toDate,
-    logLevel,
-    filters,
-    runId,
-    returnPaginationResults,
-    page,
-    perPage,
-  }: {
-    fromDate?: Date;
-    toDate?: Date;
-    logLevel?: LogLevel;
-    filters?: Record<string, any>;
-    runId?: string;
-    returnPaginationResults: boolean;
-    page: number;
-    perPage: number;
-  }): Promise<{
-    logs: BaseLogMessage[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }> {
-    const logs: BaseLogMessage[] = [];
-    const pageStart = (page - 1) * perPage;
-    const pageEnd = pageStart + perPage;
-    let total = 0;
-    let offset = 0;
-
-    while (true) {
-      const response = await this.executeUpstashCommands([
-        ['LRANGE', this.listName, offset, offset + QUERY_BATCH_SIZE - 1],
-      ]);
-      const rawLogs = response?.[0]?.result;
-      if (!Array.isArray(rawLogs) || rawLogs.length === 0) break;
-
-      for (const log of this.parseLogs(rawLogs)) {
-        if (!this.matchesLog(log, { fromDate, toDate, logLevel, filters, runId })) continue;
-
-        if (!returnPaginationResults || (total >= pageStart && total < pageEnd)) {
-          logs.push(log);
-        }
-        total++;
-      }
-
-      offset += rawLogs.length;
-      if (rawLogs.length < QUERY_BATCH_SIZE) break;
-    }
-
-    return {
-      logs,
-      total,
-      page,
-      perPage: returnPaginationResults ? perPage : total,
-      hasMore: returnPaginationResults && pageEnd < total,
-    };
-  }
-
   async listLogs(params?: {
     fromDate?: Date;
     toDate?: Date;
@@ -297,15 +235,32 @@ export class UpstashTransport extends LoggerTransport {
         };
       }
 
-      return this.scanLogs({
-        fromDate,
-        toDate,
-        logLevel,
-        filters,
-        returnPaginationResults,
+      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, -1]]);
+      const filteredLogs = this.parseLogs(response?.[0]?.result).filter(log =>
+        this.matchesLog(log, { fromDate, toDate, logLevel, filters }),
+      );
+
+      if (!returnPaginationResults) {
+        return {
+          logs: filteredLogs,
+          total: filteredLogs.length,
+          page,
+          perPage: filteredLogs.length,
+          hasMore: false,
+        };
+      }
+
+      const total = filteredLogs.length;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
+
+      return {
+        logs: filteredLogs.slice(start, end),
+        total,
         page,
         perPage,
-      });
+        hasMore: end < total,
+      };
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
       return {
@@ -345,16 +300,19 @@ export class UpstashTransport extends LoggerTransport {
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
       const perPage = perPageInput || 100;
 
-      return this.scanLogs({
-        runId,
-        fromDate,
-        toDate,
-        logLevel,
-        filters,
-        returnPaginationResults: true,
+      const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
+      const logs = allLogs.logs.filter(log => this.matchesLog(log, { runId }));
+      const total = logs.length;
+      const start = (page - 1) * perPage;
+      const end = start + perPage;
+
+      return {
+        logs: logs.slice(start, end),
+        total,
         page,
         perPage,
-      });
+        hasMore: end < total,
+      };
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
       return {

@@ -223,35 +223,70 @@ describe('UpstashTransport', () => {
       expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
     });
 
-    it('should scan run ID queries in bounded ranges', async () => {
-      const firstChunk = Array.from({ length: 1000 }, (_, index) =>
-        JSON.stringify({
-          msg: index === 999 ? 'wanted1' : `other${index}`,
-          runId: index === 999 ? 'test-run-id' : 'other-run-id',
-          time: index,
+    it('should read run ID queries from a single snapshot', async () => {
+      const logs = [
+        JSON.stringify({ msg: 'other', runId: 'other-run-id', time: 1 }),
+        JSON.stringify({ msg: 'wanted1', runId: 'test-run-id', time: 2 }),
+        JSON.stringify({ msg: 'wanted2', runId: 'test-run-id', time: 3 }),
+      ];
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: logs }]),
         }),
       );
-      fetchMock
-        .mockImplementationOnce(() =>
-          Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve([{ result: firstChunk }]),
-          }),
-        )
-        .mockImplementationOnce(() =>
-          Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve([{ result: [JSON.stringify({ msg: 'wanted2', runId: 'test-run-id', time: 1000 })] }]),
-          }),
-        );
 
       const result = await transport.listLogsByRunId({ runId: 'test-run-id', page: 2, perPage: 1 });
 
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, 999]]);
-      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual([['LRANGE', 'test-logs', 1000, 1999]]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
       expect(result).toMatchObject({ total: 2, page: 2, perPage: 1, hasMore: false });
       expect(result.logs[0]?.msg).toBe('wanted2');
+    });
+
+    it('should read filtered queries from a single snapshot', async () => {
+      const logs = [
+        JSON.stringify({ msg: 'info', level: LogLevel.INFO, time: 1 }),
+        JSON.stringify({ msg: 'error', level: LogLevel.ERROR, time: 2 }),
+      ];
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ logLevel: LogLevel.ERROR, page: 1, perPage: 1 });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
+      expect(result).toMatchObject({ total: 1, page: 1, perPage: 1, hasMore: false });
+      expect(result.logs.map(log => log.msg)).toEqual(['error']);
+    });
+
+    it('should return every log when pagination results are disabled', async () => {
+      const logs = [JSON.stringify({ msg: 'message1', time: 1 }), JSON.stringify({ msg: 'message2', time: 2 })];
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false, page: 2, perPage: 1 });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
+      expect(result).toEqual({
+        logs: [
+          { msg: 'message1', time: 1 },
+          { msg: 'message2', time: 2 },
+        ],
+        total: 2,
+        page: 2,
+        perPage: 2,
+        hasMore: false,
+      });
     });
 
     it('should return empty array for listLogs', async () => {
