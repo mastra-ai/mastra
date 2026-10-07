@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import { formatDuration } from '@/utils/duration';
 
-const THREAD_LIST_COLUMNS = '11rem 12rem minmax(10rem,1fr) minmax(10rem,1fr) 5rem 7rem 6rem';
+const THREAD_LIST_COLUMNS = '10rem 9rem 11rem minmax(8rem,1fr) minmax(8rem,1fr) 8rem 4rem 6rem 5rem';
 
 export type ThreadsListViewProps = {
   threadIds: string[];
@@ -37,16 +37,18 @@ export function ThreadsListView({
     <TracesDataList columns={THREAD_LIST_COLUMNS} fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
         <TracesDataList.TopCell>Last activity</TracesDataList.TopCell>
+        <TracesDataList.TopCell>Thread ID</TracesDataList.TopCell>
         <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         <TracesDataList.TopCell>First message</TracesDataList.TopCell>
         <TracesDataList.TopCell>Last message</TracesDataList.TopCell>
+        <TracesDataList.TopCell>Resource ID</TracesDataList.TopCell>
         <TracesDataList.TopCell className="justify-end text-right">Turns</TracesDataList.TopCell>
         <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
       </TracesDataList.Top>
 
       {isLoading ? (
-        <DataListSkeletonRows columnCount={7} />
+        <DataListSkeletonRows columnCount={9} />
       ) : threadIds.length === 0 ? (
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No threads found for applied filters' : 'No threads found yet'}
@@ -101,9 +103,11 @@ function ThreadRow({
       ) : (
         <DataList.TextCell>{placeholder}</DataList.TextCell>
       )}
+      <DataList.TextCell font="mono">{threadId}</DataList.TextCell>
       <TracesDataList.NameCell name={summary?.entityName ?? placeholder} parentSpanId={null} />
       <TracesDataList.InputCell input={summary?.firstInput ?? placeholder} />
       <TracesDataList.InputCell input={summary?.lastInput ?? placeholder} />
+      <DataList.TextCell font="mono">{summary ? (summary.resourceId ?? '—') : placeholder}</DataList.TextCell>
       <DataList.NumberCell font="mono">
         {summary ? `${summary.turnCount}${summary.hasMoreTurns ? '+' : ''}` : placeholder}
       </DataList.NumberCell>

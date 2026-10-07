@@ -5,7 +5,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import {
   useFeedbackAvailable,
   useThreadQueryAvailable,
@@ -440,69 +440,73 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     !!url.selectedDateTo;
 
   const actionRow = (
-    <ActionRow>
-      <ActionRow.Start>
-        {threadQuery.enabled && (
-          <SegmentedControl aria-label="List view" value={view} onValueChange={setView}>
-            <SegmentedControlItem value="traces">Traces</SegmentedControlItem>
-            <SegmentedControlItem value="threads">Threads</SegmentedControlItem>
-          </SegmentedControl>
-        )}
-        <FilterBar
-          fields={filterBarFields}
-          operators={TRACE_FILTER_BAR_OPERATORS}
-          {...(withQueryTrace
-            ? { value: filterBarValue, onValueChange: handleFilterBarChange }
-            : { value: flatFilterBarValue, onValueChange: handleFlatFilterBarChange })}
-          // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
-          // draft that id so the chip survives the round trip without remounting.
-          createItemId={fieldId => fieldId}
-          maxDepth={3}
-          aria-label="Trace filters"
-          className="min-w-64 flex-1"
-        >
-          <FilterBar.Chips
-            renderChip={item =>
-              item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-                <TraceTimeRangeChip
-                  preset={url.datePreset}
-                  onPresetChange={url.handleDatePresetChange}
-                  dateFrom={url.selectedDateFrom}
-                  dateTo={url.selectedDateTo}
-                  onDateChange={url.handleDateChange}
-                  onDateRangeChange={url.handleDateRangeChange}
-                  disabled={isTracesLoading}
-                  presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-                />
-              ) : (
-                <FilterBar.Chip item={item} />
-              )
-            }
-          />
-          <FilterBar.Input placeholder={view === 'threads' ? 'Filter threads…' : 'Filter traces…'} />
-        </FilterBar>
-      </ActionRow.Start>
-      <ActionRow.End>
-        {view === 'traces' && (
-          <TraceColumnsMenu
-            preferences={traceColumns.preferences}
-            availableMetadataKeys={availableMetadataKeys}
-            usageDisabledReason={usageDisabledReason}
-            withQueryTrace={withQueryTrace}
-            onToggleColumn={traceColumns.toggleColumn}
-            onAddCustomColumn={traceColumns.addCustomColumn}
-            onRemoveCustomColumn={traceColumns.removeCustomColumn}
-            onAddMetadataColumn={traceColumns.addMetadataColumn}
-            onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
-            onReset={traceColumns.resetColumns}
-          />
-        )}
-        <Field orientation="horizontal" disabled={isTracesLoading}>
-          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
-          <FieldLabel>Auto refresh</FieldLabel>
-        </Field>
-      </ActionRow.End>
-    </ActionRow>
+    <>
+      {threadQuery.enabled && (
+        <Tabs defaultTab="traces" value={view} onValueChange={setView}>
+          <TabList>
+            <Tab value="traces">Traces</Tab>
+            <Tab value="threads">Threads</Tab>
+          </TabList>
+        </Tabs>
+      )}
+      <ActionRow>
+        <ActionRow.Start>
+          <FilterBar
+            fields={filterBarFields}
+            operators={TRACE_FILTER_BAR_OPERATORS}
+            {...(withQueryTrace
+              ? { value: filterBarValue, onValueChange: handleFilterBarChange }
+              : { value: flatFilterBarValue, onValueChange: handleFlatFilterBarChange })}
+            // Items are rebuilt from URL tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
+            // draft that id so the chip survives the round trip without remounting.
+            createItemId={fieldId => fieldId}
+            maxDepth={3}
+            aria-label="Trace filters"
+            className="min-w-64 flex-1"
+          >
+            <FilterBar.Chips
+              renderChip={item =>
+                item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
+                  <TraceTimeRangeChip
+                    preset={url.datePreset}
+                    onPresetChange={url.handleDatePresetChange}
+                    dateFrom={url.selectedDateFrom}
+                    dateTo={url.selectedDateTo}
+                    onDateChange={url.handleDateChange}
+                    onDateRangeChange={url.handleDateRangeChange}
+                    disabled={isTracesLoading}
+                    presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+                  />
+                ) : (
+                  <FilterBar.Chip item={item} />
+                )
+              }
+            />
+            <FilterBar.Input placeholder={view === 'threads' ? 'Filter threads…' : 'Filter traces…'} />
+          </FilterBar>
+        </ActionRow.Start>
+        <ActionRow.End>
+          {view === 'traces' && (
+            <TraceColumnsMenu
+              preferences={traceColumns.preferences}
+              availableMetadataKeys={availableMetadataKeys}
+              usageDisabledReason={usageDisabledReason}
+              withQueryTrace={withQueryTrace}
+              onToggleColumn={traceColumns.toggleColumn}
+              onAddCustomColumn={traceColumns.addCustomColumn}
+              onRemoveCustomColumn={traceColumns.removeCustomColumn}
+              onAddMetadataColumn={traceColumns.addMetadataColumn}
+              onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
+              onReset={traceColumns.resetColumns}
+            />
+          )}
+          <Field orientation="horizontal" disabled={isTracesLoading}>
+            <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
+            <FieldLabel>Auto refresh</FieldLabel>
+          </Field>
+        </ActionRow.End>
+      </ActionRow>
+    </>
   );
 
   // Hold the whole toolbar + list behind one skeleton until field discovery has settled, so the
