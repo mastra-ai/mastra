@@ -657,3 +657,62 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
     expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('openai/gpt-4o'))).toBe(true);
   });
 });
+
+describe("execute toolChoice 'none' (issue #25908)", () => {
+  const tools = {
+    lookup: {
+      type: 'function',
+      description: 'Look something up',
+      inputSchema: z.object({ q: z.string() }),
+    } as any,
+  };
+
+  async function captureCallOptions(structuredOutput?: Parameters<typeof execute>[0]['structuredOutput']) {
+    let captured: any;
+    const model = new MockLanguageModelV2({
+      doStream: async (options: any) => {
+        captured = options;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"suggestions":["ship"]}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    await readStream(
+      execute({
+        runId: 'test-run-id',
+        model: model as any,
+        inputMessages,
+        tools,
+        toolChoice: 'none',
+        onResult: () => {},
+        methodType: 'stream',
+        structuredOutput,
+      }),
+    );
+    return captured;
+  }
+
+  it('keeps tool definitions so providers retain tool history', async () => {
+    const options = await captureCallOptions();
+
+    expect(options.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    expect(options.toolChoice).toEqual({ type: 'none' });
+  });
+
+  it('strips tools when a structured-output schema is sent with the request (#14459)', async () => {
+    const options = await captureCallOptions({ schema });
+
+    expect(options.tools).toBeUndefined();
+    expect(options.toolChoice).toEqual({ type: 'none' });
+  });
+});

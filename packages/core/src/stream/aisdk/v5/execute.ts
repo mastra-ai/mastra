@@ -239,18 +239,19 @@ export function execute<OUTPUT = undefined>({
   const targetVersion: ModelSpecVersion =
     model.specificationVersion === 'v4' ? 'v4' : model.specificationVersion === 'v3' ? 'v3' : 'v2';
 
-  const toolsAndToolChoice = prepareToolsAndToolChoice({
-    tools,
-    toolChoice,
-    activeTools,
-    targetVersion,
-  });
-
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
       ? 'processor'
       : 'direct'
     : undefined;
+
+  const toolsAndToolChoice = prepareToolsAndToolChoice({
+    tools,
+    toolChoice,
+    activeTools,
+    targetVersion,
+    stripToolsWhenNone: structuredOutputMode === 'direct',
+  });
 
   const responseFormat = structuredOutput?.schema
     ? getResponseFormat(structuredOutput?.schema, {
