@@ -23,7 +23,7 @@ import {
   getDisplayTransform,
   getUsageNumber,
 } from './stream-content';
-import type { ActiveSubagentState, TokenUsage } from './types';
+import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -1040,6 +1040,7 @@ export class SessionRunEngine {
         const suspRunId = this.#session.run.getRunId();
         const suspThreadId = state.threadId;
         const suspResourceId = state.resourceId;
+        let emitSuspension = true;
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
           // A subscription restored for the current mode can replay this
@@ -1067,6 +1068,12 @@ export class SessionRunEngine {
             // abort settlement must still target where the suspended
             // invocation was persisted. register() preserves the original
             // binding when a replayed stream re-emits the same suspension.
+            emitSuspension = !this.#session.suspensions.has({
+              toolCallId: suspToolCallId,
+              runId: suspRunId,
+              threadId: suspThreadId,
+              resourceId: suspResourceId,
+            });
             this.#session.suspensions.register({
               toolCallId: suspToolCallId,
               runId: suspRunId,
@@ -1078,7 +1085,7 @@ export class SessionRunEngine {
         }
         state.isSuspended = true;
 
-        this.#session.emit({
+        const suspensionEvent: AgentControllerEvent = {
           type: 'tool_suspended',
           resourceId: suspResourceId,
           threadId: suspThreadId,
@@ -1088,7 +1095,9 @@ export class SessionRunEngine {
           args: suspArgs,
           suspendPayload: suspPayload,
           resumeSchema: suspResumeSchema,
-        });
+        };
+        if (emitSuspension) this.#session.emit(suspensionEvent);
+        else this.#session.displayState.apply(suspensionEvent);
 
         break;
       }
@@ -1787,7 +1796,13 @@ export class SessionRunEngine {
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
-          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.(), {
+            threadId,
+            resourceId,
+            runId: runId ?? undefined,
+            execution: true,
+          });
+          if (!this.#session.stream.isCurrent({ subscription })) break;
           this.#session.emit({ type: 'agent_start' });
         }
 

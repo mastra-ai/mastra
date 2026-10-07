@@ -12,7 +12,7 @@ import { askUserTool } from '../../tools/builtin/ask-user';
 import { AgentController } from '../agent-controller';
 import { SessionSuspensions } from '../session';
 import { createMockWorkspace } from '../test-utils';
-import type { AgentControllerEvent } from '../types';
+import type { AgentControllerEvent, AgentControllerRequestContext } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -157,6 +157,46 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it('keeps normal execution callbacks bound after navigation and sees later source edits', async () => {
+    const controller = await createSettingsController(new InMemoryStore(), 'run-callbacks');
+    const session = await controller.createSession({ id: 'callbacks', ownerId: 'owner' });
+    const a = await session.thread.create({ id: 'callbacks-a' });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+    const requestContext = await session.machinery.buildRequestContext(undefined, {
+      threadId: a.id,
+      resourceId: session.identity.getResourceId(),
+      execution: true,
+    });
+    const context = requestContext.get('controller') as AgentControllerRequestContext;
+    const b = await session.thread.create({ id: 'callbacks-b' });
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    expect(context.getState()).toMatchObject({ thinkingLevel: 'high' });
+    expect(context.session.modeId).toBe('plan');
+    expect(context.session.modelId).toBe('kimi-for-coding/kimi-for-coding');
+    expect(context.isThreadActive?.()).toBe(false);
+    await context.setState({ thinkingLevel: 'medium' });
+    await context.setThreadSetting?.({ key: 'source-note', value: 'A' });
+    context.emitEvent?.({ type: 'info', message: 'hidden A display' });
+    expect(events.some(event => event.type === 'info')).toBe(false);
+    expect(session.state.get().thinkingLevel).toBe('low');
+    await expect(session.thread.getSettingOn({ threadId: a.id, key: 'source-note' })).resolves.toBe('A');
+    await expect(session.thread.getSettingOn({ threadId: b.id, key: 'source-note' })).resolves.toBeUndefined();
+    await session.thread.switch({ threadId: a.id });
+    await session.state.set({ thinkingLevel: 'high' });
+    expect(context.isThreadActive?.()).toBe(true);
+    expect(context.session.state.get()).toMatchObject({ thinkingLevel: 'high' });
+    await context.updateState?.(state => ({
+      updates: { thinkingLevel: state.thinkingLevel === 'high' ? 'medium' : 'low' },
+      result: undefined,
+    }));
+    expect(session.state.get().thinkingLevel).toBe('medium');
+    await session.thread.clearAndReleaseLock();
+  });
+
   it.each(['ensureId', 'create', 'send'] as const)('preserves startup selections on first %s', async operation => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, `startup-${operation}`);
@@ -1075,6 +1115,17 @@ describe('AgentController thread-derived session state', () => {
       resourceId: 'cross-thread-plan-resource',
     };
     session.suspensions.register({ ...address, toolName: 'submit_plan' });
+    const discoverOwner = vi.spyOn(session.machinery.getAgent(), 'listSuspendedRuns').mockResolvedValue({
+      runs: [
+        {
+          ...address,
+          status: 'suspended',
+          suspendedAt: new Date(0),
+          toolCalls: [{ toolCallId: address.toolCallId, toolName: 'submit_plan', requiresApproval: false }],
+        },
+      ],
+      total: 1,
+    });
     const activeThread = await session.thread.create({ id: 'cross-thread-plan-active' });
     await session.mode.switch({ modeId: 'plan' });
     const resumeToolCall = vi.spyOn(session, 'resumeToolCall').mockResolvedValue();
@@ -1091,8 +1142,19 @@ describe('AgentController thread-derived session state', () => {
     );
     expect(resumeToolCall).toHaveBeenCalledWith({
       address,
-      requestContext: undefined,
+      requestContext: expect.anything(),
       resumeData: { action: 'approved' },
+    });
+    expect(resumeToolCall.mock.calls[0]![0].requestContext?.get('controller')).toMatchObject({
+      threadId: sourceThread.id,
+      resourceId: address.resourceId,
+      session: { modeId: 'build' },
+    });
+    expect(discoverOwner).toHaveBeenCalledWith({
+      threadId: sourceThread.id,
+      resourceId: address.resourceId,
+      page: 0,
+      perPage: 100,
     });
   });
 

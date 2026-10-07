@@ -27,7 +27,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
-import type { RequestContext } from '../request-context';
+import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListMessagesOutput } from '../storage/types';
@@ -46,6 +46,7 @@ import type {
   AgentControllerEventListener,
   AgentControllerMode,
   AgentControllerOMConfig,
+  AgentControllerRequestContext,
   AgentControllerRequestState,
   AgentControllerRequestStateUpdater,
   AgentControllerThinkingLevel,
@@ -389,6 +390,7 @@ export interface ThreadDataStore {
 export interface SessionMachinery {
   /** Resolve the agent that should answer for the session's current mode/model. */
   getAgent(): Agent;
+  getAgents?(): Iterable<Agent>;
   /** Get the ephemeral state associated with an active or suspended run. */
   getRunScope(runId: string): RunScope | undefined;
   /** Open a fresh subscription to a thread's agent event stream. */
@@ -414,13 +416,21 @@ export interface SessionMachinery {
     threadId?: string;
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
-  buildSharedRunOptions(): Record<string, unknown>;
+  buildSharedRunOptions(requestContext?: RequestContext): Record<string, unknown>;
+  onSessionDeleted?(listener: () => void): () => void;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
   /** Resolve the effective request context for a run, layering controller defaults. */
   buildRequestContext(
     requestContext?: RequestContext,
-    scope?: { abortSignal?: AbortSignal; resourceId?: string; threadId?: string; modeId?: string },
+    scope?: {
+      abortSignal?: AbortSignal;
+      resourceId?: string;
+      threadId?: string;
+      modeId?: string;
+      runId?: string;
+      execution?: boolean;
+    },
   ): Promise<RequestContext>;
   /** Authorize an actor-driven operation before it changes session state. */
   authorizeExecute?(requestContext?: RequestContext): Promise<void>;
@@ -2821,14 +2831,18 @@ type StateSource = {
   writtenKeys: Set<string>;
   references: number;
   persistSetting?: PersistSettingFn;
+  selection?: { modeId: string; modelId: string };
 };
+
+/** @internal State implementation shared with controller execution-context wiring. */
+export type { SessionState };
 
 class SessionState<TState = unknown> {
   #state: TState;
   readonly #initialState: TState;
   #updateQueue: Promise<void> = Promise.resolve();
   #source: StateSource;
-  readonly #sources = new Set<StateSource>();
+  readonly #sources = new Set<WeakRef<StateSource>>();
   readonly #getBinding: () => { resourceId: string; threadId: string | null };
   readonly #schema: StandardSchemaWithJSON | undefined;
   readonly #bus: SessionBus;
@@ -2839,6 +2853,7 @@ class SessionState<TState = unknown> {
     bus: SessionBus,
     capturePersistSetting?: () => PersistSettingFn | undefined,
     getBinding: () => { resourceId: string; threadId: string | null } = () => ({ resourceId: '', threadId: null }),
+    private readonly getSelection: () => { modeId: string; modelId: string } = () => ({ modeId: '', modelId: '' }),
   ) {
     this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.#initialState = {
@@ -2860,7 +2875,7 @@ class SessionState<TState = unknown> {
       references: 0,
       persistSetting: this.#capturePersistSetting?.(),
     };
-    this.#sources.add(source);
+    this.#sources.add(new WeakRef(source));
     return source;
   }
 
@@ -2877,24 +2892,68 @@ class SessionState<TState = unknown> {
     return state as TState;
   }
 
+  #pruneSources(): StateSource[] {
+    const sources: StateSource[] = [];
+    for (const reference of this.#sources) {
+      const source = reference.deref();
+      if (!source || (source !== this.#source && source.references === 0)) this.#sources.delete(reference);
+      else sources.push(source);
+    }
+    return sources;
+  }
+
   #release(source: StateSource): void {
     source.references--;
-    if (source !== this.#source && source.references === 0) this.#sources.delete(source);
+    this.#pruneSources();
+  }
+
+  captureSelection(): void {
+    this.#source.selection = this.getSelection();
   }
 
   /** Internal run-lifetime handle; callers release it at the run's terminal boundary. */
-  retain() {
-    const source = this.#source;
-    source.references++;
+  retain(
+    input?: {
+      resourceId: string;
+      threadId: string;
+      preferences: Record<string, unknown>;
+      selection: { modeId: string; modelId: string };
+      persistSetting: PersistSettingFn;
+    },
+    retain = true,
+  ) {
+    let source = input
+      ? this.#pruneSources().find(
+          source => source.resourceId === input.resourceId && source.threadId === input.threadId,
+        )
+      : this.#source;
+    if (!source) {
+      source = this.#newSource({ ...(this.#initialState as Record<string, unknown>), ...input!.preferences });
+      source.resourceId = input!.resourceId;
+      source.threadId = input!.threadId;
+      source.persistSetting = input!.persistSetting;
+      source.selection = input!.selection;
+    }
+    const retainedSource = source;
+    if (source === this.#source) this.captureSelection();
+    if (retain) source.references++;
     let released = false;
     return {
-      get: () => this.#read(source),
-      set: (updates: Partial<TState>) => this.#set(source, updates),
-      update: <TResult>(updater: SessionStateUpdater<TState, TResult>) => this.#update(source, updater),
+      resourceId: source.resourceId,
+      threadId: source.threadId,
+      isActive: () => retainedSource === this.#source,
+      selection: () => (retainedSource === this.#source ? this.getSelection() : retainedSource.selection!),
+      setSelection: (selection: { modeId: string; modelId: string }) => {
+        retainedSource.selection = selection;
+      },
+      emit: (event: AgentControllerEvent) => this.#emitForSource(retainedSource, event),
+      get: () => this.#read(retainedSource),
+      set: (updates: Partial<TState>) => this.#set(retainedSource, updates),
+      update: <TResult>(updater: SessionStateUpdater<TState, TResult>) => this.#update(retainedSource, updater),
       release: () => {
         if (released) return;
         released = true;
-        this.#release(source);
+        if (retain) this.#release(retainedSource);
       },
     };
   }
@@ -2996,12 +3055,12 @@ class SessionState<TState = unknown> {
     const binding = this.#getBinding();
     const previous = this.#source;
     const before = this.get() as Record<string, unknown>;
-    const retained = [...this.#sources].find(
+    const retained = this.#pruneSources().find(
       source => source.resourceId === binding.resourceId && source.threadId === binding.threadId,
     );
     this.#source =
       retained ?? this.#newSource(keys.length === 0 ? before : (this.#initialState as Record<string, unknown>));
-    if (previous !== this.#source && previous.references === 0) this.#sources.delete(previous);
+    if (previous !== this.#source) this.#pruneSources();
     const after = this.get() as Record<string, unknown>;
     const changedKeys = THREAD_DERIVED_STATE_KEYS.filter(key => before[key] !== after[key]);
     if (changedKeys.length > 0) this.#bus.emit({ type: 'state_changed', state: after, changedKeys });
@@ -3985,6 +4044,7 @@ export class Session<TState = unknown> {
         return args => this.thread.setSettingOn({ threadId, ...args });
       },
       () => ({ resourceId: this.identity.getResourceId(), threadId: this.thread.getId() }),
+      () => ({ modeId: this.mode.get(), modelId: this.model.get() }),
     );
     this.state = sessionState;
     this.model = new SessionModel(
@@ -4032,6 +4092,7 @@ export class Session<TState = unknown> {
 
   /** @internal Restore host defaults before hydrating another thread's selection. */
   resetThreadSelection(): void {
+    (this.state as SessionState<TState>).captureSelection();
     this.mode.reset();
     this.model.reset();
   }
@@ -5210,6 +5271,46 @@ export class Session<TState = unknown> {
 
   /** Tool call ids whose response has been claimed and is still being applied. */
   #claimedToolResponses = new Set<string>();
+  #suspensionAgents = new WeakMap<PendingSuspension, Agent>();
+
+  private async resolveSuspensionAgent(address: SuspensionAddress): Promise<Agent> {
+    let suspension = this.suspensions.get(address);
+    const scope = this.machinery.getRunScope(address.runId);
+    const warm = suspension && (scope?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#suspensionAgents.get(suspension));
+    if (warm) return warm;
+    const owners = new Map<Agent, string>();
+    for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
+      const perPage = 100;
+      for (let page = 0; ; page++) {
+        const { runs, total } = await agent.listSuspendedRuns({
+          threadId: address.threadId,
+          resourceId: address.resourceId,
+          page,
+          perPage,
+        });
+        const call = runs
+          .find(
+            run =>
+              run.runId === address.runId && run.threadId === address.threadId && run.resourceId === address.resourceId,
+          )
+          ?.toolCalls.find(call => call.toolCallId === address.toolCallId);
+        if (call?.toolName) {
+          owners.set(agent, call.toolName);
+          break;
+        }
+        if ((page + 1) * perPage >= total) break;
+      }
+    }
+    if (owners.size !== 1) throw new Error("Cannot uniquely identify the suspended run's owning agent");
+    const [agent, toolName] = owners.entries().next().value!;
+    if (!suspension) {
+      this.suspensions.register({ ...address, toolName });
+      suspension = this.suspensions.get(address)!;
+    }
+    this.#suspensionAgents.set(suspension, agent);
+    scope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
+    return agent;
+  }
 
   /**
    * Claim the right to answer `toolCallId` so concurrent requests cannot both be
@@ -5269,10 +5370,10 @@ export class Session<TState = unknown> {
     const address = inputAddress ?? this.suspensions.resolveAddress({ toolCallId, runId });
     if (!address) return;
 
-    const suspension = this.suspensions.get(address);
-    if (!suspension) return;
-
     try {
+      if (!this.suspensions.has(address) && inputAddress) await this.resolveSuspensionAgent(address);
+      const suspension = this.suspensions.get(address);
+      if (!suspension) return;
       if (suspension.toolName === 'submit_plan') {
         await this.handlePlanApprovalResume({
           address,
@@ -5285,8 +5386,12 @@ export class Session<TState = unknown> {
       await this.resumeToolCall({ resumeData, address, requestContext });
     } catch (error) {
       const err = getErrorFromUnknown(error);
+      const sourceIsActive =
+        address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
+      if (!sourceIsActive) throw err;
       this.emit({ type: 'error', error: err });
-      await this.finishAgentRun('error');
+      if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
+        await this.finishAgentRun('error');
     }
   }
 
@@ -5317,21 +5422,28 @@ export class Session<TState = unknown> {
       return;
     }
 
-    const savedModeId = await this.thread.getSettingOn({ threadId: address.threadId, key: MODE_ID_KEY });
-    const sourceModeId = typeof savedModeId === 'string' ? savedModeId : this.mode.getDefault();
+    await this.resolveSuspensionAgent(address);
+    let sourceRequestContext = await this.machinery.buildRequestContext(requestContext, {
+      ...address,
+      execution: true,
+    });
+    const context = sourceRequestContext.get('controller') as AgentControllerRequestContext<TState>;
+    const sourceModeId = context.session.modeId;
     const transitionModeId = this.machinery.resolveTransitionModeId(sourceModeId);
     if (transitionModeId && transitionModeId !== sourceModeId) {
-      const isActiveBinding =
-        address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
-      if (isActiveBinding) {
-        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+      if (context.isThreadActive?.()) {
         await this.mode.switch({ modeId: transitionModeId });
       } else {
-        await this.thread.setSettingOn({ threadId: address.threadId, key: MODE_ID_KEY, value: transitionModeId });
+        await context.setThreadSetting?.({ key: MODE_ID_KEY, value: transitionModeId });
       }
+      sourceRequestContext = await this.machinery.buildRequestContext(sourceRequestContext, {
+        ...address,
+        modeId: transitionModeId,
+        execution: true,
+      });
     }
 
-    await this.resumeToolCall({ resumeData: response, address, requestContext });
+    await this.resumeToolCall({ resumeData: response, address, requestContext: sourceRequestContext });
   }
 
   /**
@@ -5489,6 +5601,75 @@ export class Session<TState = unknown> {
     return { promise, cancel };
   }
 
+  private async observeSourceResume(agent: Agent, address: SuspensionAddress, requestContext: RequestContext) {
+    const markerKey = 'mastra.agentController.resumeAttempt';
+    const attempt = this.machinery.generateId();
+    const observerContext = new RequestContext(requestContext.entries());
+    let disposed = false;
+    let detach = () => {
+      disposed = true;
+    };
+    const removeDeletionListener = this.machinery.onSessionDeleted?.(() => detach());
+    const subscription = await this.machinery
+      .subscribeToThread({ agent, ...address, requestContext: observerContext })
+      .catch(error => {
+        removeDeletionListener?.();
+        throw error;
+      });
+    detach = () => {
+      disposed = true;
+      subscription.unsubscribe();
+    };
+    if (disposed) {
+      detach();
+      removeDeletionListener?.();
+      throw new Error('Session was deleted during resume setup');
+    }
+    requestContext.set(markerKey, attempt);
+    const context = requestContext.get('controller') as AgentControllerRequestContext<TState>;
+    let dispatched = false;
+    const promise = (async () => {
+      try {
+        for await (const chunk of subscription.stream) {
+          if (subscription.__getCurrentRunRequestContext?.()?.get(markerKey) !== attempt) continue;
+          if (chunk.runId && chunk.runId !== address.runId) continue;
+          dispatched = true;
+          if (chunk.type === 'tool-call-suspended') {
+            const next = { ...address, toolCallId: chunk.payload.toolCallId };
+            if (!this.suspensions.has(next)) {
+              this.suspensions.register({ ...next, toolName: chunk.payload.toolName });
+              this.#suspensionAgents.set(this.suspensions.get(next)!, agent);
+              context.emitEvent?.({
+                type: 'tool_suspended',
+                ...next,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
+                resumeSchema: chunk.payload.resumeSchema,
+              });
+            }
+            return;
+          }
+          if (chunk.type === 'error' || chunk.type === 'tripwire' || chunk.type === 'abort') {
+            const error = getErrorFromUnknown(
+              chunk.type === 'error' ? chunk.payload.error : (chunk.payload.reason ?? 'Source run terminated'),
+            );
+            for (const pending of this.suspensions.deleteForRun(address)) {
+              context.emitEvent?.({ type: 'tool_suspension_cancelled', ...pending, reason: error.message });
+            }
+            throw error;
+          }
+          if (chunk.type === 'finish') return;
+        }
+      } finally {
+        subscription.unsubscribe();
+        removeDeletionListener?.();
+      }
+    })();
+    void promise.catch(() => undefined);
+    return { promise, cancel: () => subscription.unsubscribe(), dispatched: () => dispatched };
+  }
+
   /**
    * Resume a suspended tool call through the active thread subscription.
    * Re-supplies the shared run budget so the resumed run doesn't stop mid-task
@@ -5518,30 +5699,36 @@ export class Session<TState = unknown> {
     }
     const { toolCallId, threadId, resourceId } = address;
 
-    // Resume through the agent that suspended the run. A `submit_plan` approval
-    // switches modes before resuming, but suspended snapshots are owned by their
-    // originating agent so another mode's agent cannot reclaim one by run id.
-    // An explicit, authorized run-handoff would be required to transfer ownership.
-    const agent =
-      this.machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.machinery.getAgent();
-
-    // Remove before resuming so a re-suspend during the resumed run can
-    // re-register the same toolCallId without being clobbered by this cleanup.
-    // Drop the matching display-state entry too so the UI stops rendering the
-    // resolved prompt while any other parked suspensions stay visible.
-    this.suspensions.delete(address);
-    this.displayState.deletePendingSuspension(address);
-
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput, { threadId, resourceId });
-    const isActiveBinding = threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
+    const agent = await this.resolveSuspensionAgent(address);
+    const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
+    const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
+      threadId,
+      resourceId,
+      runId: address.runId,
+      abortSignal,
+      execution: true,
+    });
+    const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
-    if (isActiveBinding) {
-      await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId);
-      resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
+    if (sourceIsActive()) {
+      await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
+      if (sourceIsActive())
+        resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
     }
-
+    let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
+    const prompt = [...this.displayState.get().pendingSuspensions.values()].find(
+      entry =>
+        entry.toolCallId === toolCallId &&
+        entry.runId === address.runId &&
+        entry.threadId === threadId &&
+        entry.resourceId === resourceId,
+    );
     try {
-      const sharedOptions = this.machinery.buildSharedRunOptions();
+      observer = await this.observeSourceResume(agent, address, requestContext);
+      this.suspensions.delete(address);
+      this.displayState.deletePendingSuspension(address);
+      const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
       // Interactive builtins suspend to collect user input, not for approval.
       // The resume data is the user's answer (a bare string), which the approval
       // re-check would reject because it cannot carry an `{ approved }` field.
@@ -5559,31 +5746,30 @@ export class Session<TState = unknown> {
         streamOptions: {
           ...sharedOptions,
           memory: { thread: threadId, resource: resourceId },
-          abortSignal: isActiveBinding ? this.run.ensureAbortController().signal : new AbortController().signal,
+          abortSignal,
           requestContext,
-          toolsets: await this.machinery.buildToolsets(requestContext),
+          toolsets,
         },
       });
-      await resumedSubscriptionBoundary?.promise;
-    } finally {
-      resumedSubscriptionBoundary?.cancel();
-      if (isActiveBinding) {
-        const activeThreadId = this.thread.getId();
-        if (activeThreadId) {
-          const activeResourceId = this.identity.getResourceId();
-          const activeRequestContext = await this.machinery.buildRequestContext(requestContextInput, {
-            threadId: activeThreadId,
-            resourceId: activeResourceId,
-          });
-          await this.thread.ensureSubscription(
-            activeThreadId,
-            undefined,
-            activeRequestContext,
-            activeResourceId,
-            () => this.thread.getId() === activeThreadId && this.identity.getResourceId() === activeResourceId,
-          );
-        }
+      if (resolveOnToolEnd && resumedSubscriptionBoundary) {
+        await Promise.race([resumedSubscriptionBoundary.promise, observer.promise]);
+        // The visible caller may acknowledge the tool result before the source
+        // parks again. Its bounded observer still owns that next boundary.
+        observer = undefined;
+      } else {
+        await observer.promise;
+        await resumedSubscriptionBoundary?.promise;
       }
+    } catch (error) {
+      if (!observer?.dispatched()) {
+        this.suspensions.register({ ...address, toolName: suspension.toolName });
+        this.#suspensionAgents.set(this.suspensions.get(address)!, agent);
+        if (prompt && sourceIsActive()) this.displayState.apply({ type: 'tool_suspended', ...prompt });
+      }
+      throw error;
+    } finally {
+      observer?.cancel();
+      resumedSubscriptionBoundary?.cancel();
     }
   }
 

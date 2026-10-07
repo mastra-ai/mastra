@@ -8,25 +8,29 @@
  * answer back into the suspended tool.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { LeasePubSub } from '../../agent/__tests__/thread-stream-test-utils';
 import { createDurableAgent, globalRunRegistry } from '../../agent/durable';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
+import { FGADeniedError } from '../../auth/ee/fga-check';
 import { InMemoryServerCache } from '../../cache';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { createTool } from '../../tools';
 import { askUserTool } from '../../tools/builtin/ask-user';
 
 import { AgentController } from '../agent-controller';
 import { SessionApproval } from '../session';
 import { createMockWorkspace } from '../test-utils';
-import type { AgentControllerEvent } from '../types';
+import type { AgentControllerRequestContext, AgentControllerEvent } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-function createAskUserToolCallStream(input: string, toolCallId = 'call-1') {
+function createAskUserToolCallStream(input: string, toolCallId = 'call-1', toolName = 'ask_user') {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -34,7 +38,7 @@ function createAskUserToolCallStream(input: string, toolCallId = 'call-1') {
       controller.enqueue({
         type: 'tool-call',
         toolCallId,
-        toolName: 'ask_user',
+        toolName,
         input,
         providerExecuted: false,
       });
@@ -103,6 +107,330 @@ async function buildController(id: string, input: string, withMemory = false) {
 }
 
 describe('AgentController: ask_user native suspension', () => {
+  it.each([
+    'warm',
+    'warm-reattach',
+    'warm-setup-navigation',
+    'cold',
+    'cold-durable',
+    'cold-storage-only',
+    'cold-denied',
+    'cold-setup-failure',
+    'cold-execution-failure',
+  ] as const)('isolates repeated source-tool resumes from a running successor (%s)', async recovery => {
+    const storage = new InMemoryStore();
+    const cache = new InMemoryServerCache();
+    let pubsub = new LeasePubSub();
+    pubsub.retain = true;
+    let sourceCalls = 0;
+    const heldStream = Promise.withResolvers<ReadableStreamDefaultController>();
+    const writeEntered = Promise.withResolvers<void>();
+    const releaseWrite = Promise.withResolvers<void>();
+    const observations: { level: unknown; mode: string; model: string; thread: string | null }[] = [];
+    type State = { yolo: boolean; thinkingLevel: string; hostCount: number };
+    const create = async () => {
+      const tool = createTool({
+        id: 'owned_state',
+        description: 'Suspend and inspect source-owned state',
+        inputSchema: z.object({ question: z.string() }),
+        resumeSchema: z.string(),
+        execute: async (input, context) => {
+          if (!context?.agent?.resumeData) {
+            await context?.agent?.suspend?.(input);
+            return;
+          }
+          const controller = context.requestContext!.get('controller') as AgentControllerRequestContext<State>;
+          const state = controller.getState();
+          expect(controller.state.thinkingLevel).toBe(state.thinkingLevel);
+          expect(controller.session.state.get()).toEqual(state);
+          observations.push({
+            level: state.thinkingLevel,
+            mode: controller.session.modeId,
+            model: controller.session.modelId,
+            thread: controller.threadId,
+          });
+          await controller.setState({ thinkingLevel: 'medium' });
+          await controller.session.state.update(async value => {
+            if (recovery === 'warm-reattach' && observations.length === 2) {
+              writeEntered.resolve();
+              await releaseWrite.promise;
+            }
+            return { updates: { thinkingLevel: value.thinkingLevel === 'medium' ? 'high' : 'low' }, result: undefined };
+          });
+          await controller.updateState!(value => ({
+            updates: { hostCount: value.hostCount + 1 },
+            result: undefined,
+            events: [
+              { type: 'info', message: 'source-only' },
+              { type: 'workspace_ready', workspaceId: 'host', workspaceName: 'Host' },
+            ],
+          }));
+          controller.emitEvent?.({ type: 'info', message: 'source-only-direct' });
+          return context.agent.resumeData;
+        },
+      });
+      const source = new Agent({
+        id: `owned-source-${recovery}`,
+        name: 'Source',
+        instructions: 'Ask twice',
+        tools: { owned_state: tool },
+        memory: new MockMemory({ storage }),
+        model: new MastraLanguageModelV2Mock({
+          doStream: async () => {
+            sourceCalls++;
+            if (recovery === 'cold-execution-failure' && sourceCalls > 1) throw new Error('source execution failed');
+            return {
+              stream:
+                sourceCalls <= 2
+                  ? createAskUserToolCallStream(
+                      JSON.stringify({ question: 'Continue?' }),
+                      `owned-${sourceCalls}`,
+                      'owned_state',
+                    )
+                  : createTextStream(),
+            };
+          },
+        }),
+      });
+      const other = new Agent({
+        id: `owned-other-${recovery}`,
+        name: 'Other',
+        instructions: 'Wait',
+        memory: new MockMemory({ storage }),
+        model: new MastraLanguageModelV2Mock({
+          doStream: async () => ({
+            stream: new ReadableStream({
+              start(stream) {
+                stream.enqueue({ type: 'stream-start', warnings: [] });
+                stream.enqueue({ type: 'response-metadata', id: 'held', modelId: 'mock', timestamp: new Date(0) });
+                heldStream.resolve(stream);
+              },
+            }),
+          }),
+        }),
+      });
+      const mastra = new Mastra({
+        storage,
+        cache,
+        pubsub,
+        logger: false,
+        agents: {
+          source: recovery === 'cold-durable' ? createDurableAgent({ agent: source, cache, pubsub }) : source,
+          other,
+        },
+      });
+      const controller = new AgentController<State>({
+        id: `owned-controller-${recovery}`,
+        storage,
+        pubsub,
+        workspace: createMockWorkspace(),
+        initialState: { yolo: true, thinkingLevel: 'low', hostCount: 0 },
+        modes: [
+          {
+            id: 'source',
+            name: 'Source',
+            agent: mastra.getAgent('source'),
+            defaultModelId: 'kimi-for-coding/kimi-for-coding',
+          },
+          { id: 'other', name: 'Other', agent: mastra.getAgent('other'), defaultModelId: 'openai/gpt-5.5' },
+        ],
+        defaultModeId: 'source',
+      });
+      await controller.init();
+      const session = await controller.createSession({
+        id: `owned-session-${recovery}`,
+        ownerId: 'owner',
+        resourceId: `owned-resource-${recovery}`,
+        createInitialThread: false,
+      });
+      return { session, mastra, source: mastra.getAgent('source') };
+    };
+    let fixture = await create();
+    await fixture.session.thread.create({ id: `owned-a-${recovery}` });
+    await fixture.session.state.set({ thinkingLevel: 'high' });
+    const sourceEvents: AgentControllerEvent[] = [];
+    fixture.session.subscribe(event => {
+      sourceEvents.push(event);
+    });
+    await fixture.session.sendMessage({ content: 'Ask' });
+    const address = fixture.session.suspensions.resolveAddress({ toolCallId: 'owned-1' })!;
+    expect(address, JSON.stringify(sourceEvents)).toBeDefined();
+    if (!recovery.startsWith('warm')) {
+      await vi.waitFor(async () =>
+        expect(
+          (await fixture.source.listSuspendedRuns({ threadId: address.threadId, resourceId: address.resourceId }))
+            .total,
+        ).toBe(1),
+      );
+      await fixture.session.thread.detachFromCurrent();
+      pubsub = recovery === 'cold-storage-only' ? new LeasePubSub() : pubsub.restart();
+      agentThreadStreamRuntime.resetForTests();
+      globalRunRegistry.clear();
+      fixture = await create();
+      expect(fixture.mastra.__getRunScope(address.runId)).toBeUndefined();
+      if (recovery === 'cold-storage-only') {
+        expect(fixture.session.suspensions.has(address)).toBe(false);
+      } else {
+        await fixture.session.thread.switch({ threadId: address.threadId });
+        await vi.waitFor(() => expect(fixture.session.suspensions.has(address)).toBe(true));
+      }
+    }
+    const { session } = fixture;
+    const releaseSetup = Promise.withResolvers<void>();
+    let pendingResume: Promise<void> | undefined;
+    if (recovery === 'warm-setup-navigation') {
+      const entered = Promise.withResolvers<void>();
+      const buildToolsets = session.machinery.buildToolsets;
+      vi.spyOn(session.machinery, 'buildToolsets').mockImplementationOnce(async context => {
+        const tools = await buildToolsets(context);
+        entered.resolve();
+        await releaseSetup.promise;
+        return tools;
+      });
+      pendingResume = session.respondToToolSuspension({ address, resumeData: 'first' });
+      await entered.promise;
+    }
+    const threadB = await session.thread.create({ id: `owned-b-${recovery}` });
+    await session.mode.switch({ modeId: 'other' });
+    await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'low' });
+    const running = session.sendMessage({ content: 'Keep running' });
+    const stream = await heldStream.promise;
+    const activeRunId = session.getCurrentRunId();
+    const abortSignal = session.run.getAbortSignal();
+    const display = session.displayState.get();
+    const cleanup = vi.spyOn(session.stream, 'cleanup');
+    let navigated = false;
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    try {
+      if (recovery === 'cold-denied') {
+        const denied = new FGADeniedError(null, { type: 'agent', id: fixture.source.id }, 'agents:execute');
+        const require = vi.fn().mockRejectedValue(denied);
+        new Mastra({
+          agents: { source: fixture.source },
+          storage,
+          cache,
+          pubsub,
+          logger: false,
+          server: { fga: { check: vi.fn().mockResolvedValue(false), require, filterAccessible: vi.fn() } },
+        });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+        await expect(
+          session.respondToToolSuspension({ address, resumeData: 'denied', requestContext }),
+        ).rejects.toThrow(FGADeniedError);
+        expect(require).toHaveBeenCalled();
+        expect(session.suspensions.has(address)).toBe(true);
+        expect(observations).toEqual([]);
+        expect(session.getCurrentRunId()).toBe(activeRunId);
+        expect(session.state.get()).toMatchObject({ thinkingLevel: 'low', hostCount: 0 });
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(session.displayState.get()).toEqual(display);
+        expect(abortSignal?.aborted).toBe(false);
+        return;
+      }
+      if (recovery === 'cold-setup-failure') {
+        const metadataRead = vi
+          .spyOn(session.thread, 'getById')
+          .mockRejectedValueOnce(new Error('source metadata unavailable'));
+        await expect(session.respondToToolSuspension({ address, resumeData: 'first' })).rejects.toThrow(
+          'source metadata unavailable',
+        );
+        metadataRead.mockRestore();
+        expect(session.suspensions.has(address)).toBe(true);
+        expect(observations).toEqual([]);
+        expect(session.getCurrentRunId()).toBe(activeRunId);
+        expect(session.state.get()).toMatchObject({ thinkingLevel: 'low', hostCount: 0 });
+        expect(session.displayState.get()).toEqual(display);
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(abortSignal?.aborted).toBe(false);
+      }
+      if (recovery === 'cold-execution-failure') {
+        await expect(session.respondToToolSuspension({ address, resumeData: 'first' })).rejects.toThrow(
+          'source execution failed',
+        );
+        expect(session.suspensions.has(address)).toBe(false);
+        expect(session.getCurrentRunId()).toBe(activeRunId);
+        expect(session.state.get()).toMatchObject({ thinkingLevel: 'low', hostCount: 1 });
+        expect(session.displayState.get()).toEqual(display);
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(abortSignal?.aborted).toBe(false);
+        expect(events.some(event => event.type === 'agent_end' || event.type === 'error')).toBe(false);
+        return;
+      }
+      releaseSetup.resolve();
+      await (pendingResume ?? session.respondToToolSuspension({ address, resumeData: 'first' }));
+      const second = { ...address, toolCallId: 'owned-2' };
+      expect(session.suspensions.has(second)).toBe(true);
+      const resumed = session.respondToToolSuspension({ address: second, resumeData: 'second' });
+      if (recovery === 'warm-reattach') {
+        await writeEntered.promise;
+        expect(session.thread.getId()).toBe(threadB.id);
+        expect(session.getCurrentRunId()).toBe(activeRunId);
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(abortSignal?.aborted).toBe(false);
+        navigated = true;
+        const switching = session.thread.switch({ threadId: address.threadId });
+        await vi.waitFor(() => expect(session.thread.getId()).toBe(address.threadId));
+        expect(session.state.get().thinkingLevel).toBe('medium');
+        releaseWrite.resolve();
+        await switching;
+        await resumed;
+        await vi.waitFor(() =>
+          expect(events.filter(event => event.type === 'agent_end' && event.reason === 'complete')).toHaveLength(1),
+        );
+        expect(session.state.get()).toMatchObject({ thinkingLevel: 'high', hostCount: 2 });
+        expect(events.filter(event => event.type === 'tool_suspended' && event.toolCallId === 'owned-2')).toHaveLength(
+          1,
+        );
+        await expect(session.thread.getSettingOn({ threadId: threadB.id, key: 'thinkingLevel' })).resolves.toBe('low');
+        return;
+      }
+      await resumed;
+      expect(observations).toEqual(
+        [1, 2].map(() => ({
+          level: 'high',
+          mode: 'source',
+          model: 'kimi-for-coding/kimi-for-coding',
+          thread: address.threadId,
+        })),
+      );
+      expect(session.thread.getId()).toBe(threadB.id);
+      expect(session.mode.get()).toBe('other');
+      expect(session.model.get()).toBe('openai/gpt-5.5');
+      expect(session.state.get()).toMatchObject({ thinkingLevel: 'low', hostCount: 2 });
+      expect(session.getCurrentRunId()).toBe(activeRunId);
+      expect(abortSignal?.aborted).toBe(false);
+      expect(session.run.getAbortSignal()).toBe(abortSignal);
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(session.displayState.get()).toEqual(display);
+      expect(events.filter(event => event.type === 'tool_suspended' && event.toolCallId === 'owned-2')).toHaveLength(1);
+      expect(events.some(event => event.type === 'info' || event.type === 'agent_end' || event.type === 'error')).toBe(
+        false,
+      );
+      expect(events.filter(event => event.type === 'workspace_ready')).toHaveLength(2);
+      await expect(session.thread.getSettingOn({ threadId: address.threadId, key: 'thinkingLevel' })).resolves.toBe(
+        'high',
+      );
+      expect(sourceCalls).toBe(3);
+    } finally {
+      releaseWrite.resolve();
+      if (!navigated) {
+        stream.enqueue({
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        });
+        stream.close();
+      }
+      await running;
+      await session.thread.clearAndReleaseLock();
+      agentThreadStreamRuntime.resetForTests();
+      globalRunRegistry.clear();
+    }
+  });
   it('emits tool_suspended carrying the question payload when ask_user suspends', async () => {
     const { session } = await buildController(
       'emit',
