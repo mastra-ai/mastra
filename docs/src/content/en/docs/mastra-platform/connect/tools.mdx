@@ -18,6 +18,7 @@ import { Agent } from '@mastra/core/agent'
 import { tools } from '@mastra/connect'
 
 export const opsAgent = new Agent({
+  id: 'ops',
   name: 'ops',
   instructions: 'You help the team track work in Linear and GitHub.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -25,7 +26,7 @@ export const opsAgent = new Agent({
 })
 ```
 
-With no options, the agent gets the tools for every connected provider. `tools()` checks the platform for changed connections every 30 seconds. A provider you connect while the app runs shows up without a restart, and one you unlink disappears.
+With no options, the agent gets the tools for every connected provider. The resolver caches them for 30 seconds by default. The first call after the cache expires returns the cached tools and starts a background refresh. Later calls use the refreshed tools once that request finishes, without a restart. Because refreshes depend on resolver calls, an idle app doesn't poll for connection changes.
 
 ## Combine with your own tools
 
@@ -39,6 +40,7 @@ import { weatherTool } from '../tools/weather'
 const connected = tools()
 
 export const opsAgent = new Agent({
+  id: 'ops',
   name: 'ops',
   instructions: 'You help the team track work in Linear and GitHub.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -95,6 +97,7 @@ import { tools } from '@mastra/connect'
 const connected = tools()
 
 export const opsAgent = new Agent({
+  id: 'ops',
   name: 'ops',
   instructions: 'You help the team track work in Linear and GitHub.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -159,4 +162,4 @@ const response = await agent.generate('Summarize my open issues.', {
 })
 ```
 
-Call `connected.refresh()` to load a new connection immediately instead of waiting up to 30 seconds. See [the resolver](/reference/connect/tools#the-resolver) for the other methods.
+Use `await connected.refresh()` to fetch the current connections and wait for the updated tool record instead of using the cached snapshot. See [the resolver](/reference/connect/tools#the-resolver) for the other methods.

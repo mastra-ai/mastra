@@ -21,7 +21,9 @@ Connect stores your accounts on third-party providers like Linear, Notion, Slack
 | Put agents in Slack, Telegram, or Discord | `channels()` | [Channels](/docs/mastra-platform/connect/channels) |
 | Call the provider's SDK from your own code | `credential()` | [Use a raw credential](#use-a-raw-credential) |
 
-Giving an agent a provider normally means setting that provider up yourself: create an OAuth app or API key in the vendor's console, store the credential with your app, keep tokens refreshed, and write or configure a tool for the agent. Connect replaces that setup with one `mastra connect add` per account. Your app never stores provider credentials. Tool calls go to the platform proxy, which adds the credential, refreshes OAuth tokens, and forwards the request to the provider. Adding, replacing, or removing an account happens on the platform and takes effect in the running app without a redeploy.
+Giving an agent a provider's API normally means managing credentials and writing or configuring tools yourself. Connect supplies ready-made tools and manages their credentials on the platform. For supported OAuth providers such as Linear, `mastra connect add` handles authorization without requiring you to create an OAuth app. API key providers still require a key, and [channels](/docs/mastra-platform/connect/channels) can require vendor-side bot or app setup.
+
+Tool calls go to the platform proxy, which adds the credential, refreshes OAuth tokens, and forwards the request to the provider without your app needing to store those credentials. Connection changes take effect as the tool resolver refreshes its cache, without a redeploy.
 
 This page connects Linear and gives an agent its tools.
 
@@ -35,14 +37,6 @@ This page connects Linear and gives an agent its tools.
 ```bash npm2yarn
 npm install @mastra/connect
 ```
-
-## Connect a provider
-
-```bash
-mastra connect add linear
-```
-
-Linear uses OAuth. The CLI opens Linear's consent screen in your browser and waits until the connection is active. [Connections](/docs/mastra-platform/connect/connections) covers API key providers, naming, and removing connections.
 
 ## Configure the environment
 
@@ -61,6 +55,16 @@ MASTRA_PROJECT_ID=your-project-id
 
 See [environment variables](/reference/connect/tools#environment-variables) for regions and the other optional variables.
 
+## Connect a provider
+
+Run this command from the directory containing your `.env` file. The CLI loads `MASTRA_PROJECT_ID` from it:
+
+```bash
+mastra connect add linear
+```
+
+Linear uses OAuth. The CLI opens Linear's consent screen in your browser and waits until the connection is active. [Connections](/docs/mastra-platform/connect/connections) covers API key providers, naming, and removing connections.
+
 ## Give an agent the tools
 
 Pass [`tools()`](/reference/connect/tools) to the agent's `tools` option:
@@ -70,6 +74,7 @@ import { Agent } from '@mastra/core/agent'
 import { tools } from '@mastra/connect'
 
 export const opsAgent = new Agent({
+  id: 'ops',
   name: 'ops',
   instructions: 'You help the team track work in Linear.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -96,8 +101,10 @@ const cred = await credential('c_yourconnectionid')
 
 if (cred.type === 'oauth2') {
   startSdkSession(cred.accessToken)
-} else {
+} else if (cred.type === 'api_key') {
   startSdkSession(cred.apiKey)
+} else if (cred.type === 'two_step') {
+  startSdkSession(cred.token)
 }
 ```
 

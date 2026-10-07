@@ -111,6 +111,7 @@ import { tools } from '@mastra/connect'
 const connected = tools()
 
 export const assistant = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'You help the team from Slack and Discord.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',

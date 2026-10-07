@@ -7,14 +7,16 @@ packages:
 
 # tools()
 
-Returns a resolver for the tools of every provider connected to a Mastra platform project. Pass it to an agent's `tools` option, and Mastra calls it on each `generate()` and `stream()`. The resolver caches the tools and checks the platform for changed connections every `ttlMs`.
+Returns a resolver for the tools of every provider connected to a Mastra platform project. Pass it to an agent's `tools` option, and Mastra calls it on each `generate()` and `stream()`. The resolver caches the tools for `ttlMs` and starts a background refresh when called after the cache expires.
 
 ```typescript title="src/mastra/agents/ops.ts"
 import { Agent } from '@mastra/core/agent'
 import { tools } from '@mastra/connect'
 
 export const opsAgent = new Agent({
+  id: 'ops',
   name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: tools(),
 })
@@ -163,7 +165,7 @@ Every field falls back to an environment variable, so a fully env-configured app
 
 ## The resolver
 
-The returned `ToolsResolver` caches its tools. Within `ttlMs` of the last fetch, it returns the cache. After that, it still returns the cache right away and fetches from the platform in the background (stale-while-revalidate). Connections linked to the project after startup appear within one TTL, and unlinked ones disappear.
+The returned `ToolsResolver` caches its tools. Within `ttlMs` of the last fetch, it returns the cache. The first call after expiry still returns the cache right away and starts a background fetch from the platform (stale-while-revalidate). Later calls use the updated snapshot once the fetch succeeds. The resolver doesn't poll while idle, and refresh failures preserve the cached snapshot. Use `await connected.refresh()` to wait for a fresh tool record.
 
 Call the resolver directly when you need a plain tool record, for example for the `toolsets` option at generate time:
 
