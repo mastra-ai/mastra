@@ -2619,6 +2619,15 @@ describe('validateToolInput - combined fallback corrections (GitHub #25825)', ()
     expect(result.data).toEqual({ args: ['a.py'], parent: null });
   });
 
+  it('applies the prompt alias with a root refinement and keeps nullable fields', () => {
+    const schema = z
+      .object({ prompt: z.string(), parent: z.string().nullable() })
+      .refine(value => value.prompt.length > 0, { message: 'prompt required' });
+    const result = validateToolInput(schema, { query: 'hi', prompt: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hi', parent: null });
+  });
+
   it('reports only remaining issues when corrections are not enough', () => {
     const schema = z.object({ args: z.array(z.string()), note: z.string().optional(), count: z.number() });
     const result = validateToolInput(schema, { args: '["a.py"]', note: null, count: 'x' });
