@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { InMemoryStore, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
@@ -38,6 +39,33 @@ describe('Knowledge', () => {
     await expect(Promise.all([knowledge.reconcile(), knowledge.reconcile()])).resolves.toEqual([result, result]);
     expect(reconcile).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['constructor', 'setLogger', 'addKnowledge'] as const)(
+    'reports a failing startup reconcile to the Mastra logger via %s',
+    async via => {
+      const storage = new InMemoryStore({ id: 'failing-structure' });
+      const error = new Error('reconcile failed');
+      vi.spyOn(storage.stores.knowledge!, 'reconcileStructure').mockRejectedValue(error);
+      const knowledge = new Knowledge({ storage, structure: { scopes: [{ address: 'org:acme', name: 'Acme' }] } });
+      const logger = new ConsoleLogger({ level: 'warn' });
+      vi.spyOn(logger, 'child').mockReturnValue(logger);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      if (via === 'constructor') {
+        new Mastra({ knowledge: { default: knowledge }, logger });
+      } else if (via === 'setLogger') {
+        new Mastra({ knowledge: { default: knowledge }, logger: false }).setLogger({ logger });
+      } else {
+        new Mastra({ logger }).addKnowledge(knowledge, 'default');
+      }
+
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith('Knowledge structure reconciliation failed; call reconcile() to retry', {
+          error,
+        }),
+      );
+    },
+  );
 
   it('applies structured plans with the v2 in-memory storage', async () => {
     const knowledge = new Knowledge({
