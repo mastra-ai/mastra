@@ -7,7 +7,7 @@ packages:
 
 # ToolResultTokenLimiter
 
-The `ToolResultTokenLimiter` is an **output processor** that caps how many tokens of each tool result the model reads. It runs once per result through the [`processToolModelOutput`](/reference/processors/processor-interface) hook, after the tool returns. The stored and streamed result stays whole; only the copy the model reads on later steps is truncated. See [Behavior](#behavior).
+The `ToolResultTokenLimiter` is an **output processor** that caps how many tokens of each tool result the model reads. It runs once per result through the [`processToolModelOutput`](/reference/processors/processor-interface) hook, after the tool returns. The stored and streamed result stays whole. Only the copy the model reads on later steps is truncated. See [Behavior](#behavior).
 
 ## Usage example
 
