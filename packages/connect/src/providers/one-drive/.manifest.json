@@ -1,0 +1,33 @@
+{
+  "providerId": "one-drive",
+  "localId": "one-drive",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-30T14:24:08.502Z",
+  "toolCount": 20,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "604738f26f5661b014a1913607534db105887f484006ae56dee7e8ce51cb51f4",
+    "tools.ts": "8f1ef201875dc7d0b1875da89d02f57cc408e8869e701b4696e51d5438d0fce3",
+    "tools/copy-item.ts": "9b1f65e7cb97ba883cd722bb546a1341d237cbd7feb93c2fa1773d958253f4ec",
+    "tools/create-folder.ts": "f885c00966ec59893eb909d687b10db52f8ef3d19b31dba91b7d3c281baba98d",
+    "tools/create-sharing-link.ts": "ee35057fd59d752798f850f5b2ece84ac8d6e946b312ca619583a7f9f9e13764",
+    "tools/create-upload-session.ts": "bd0cb43137c0ea05ecabe2307bbb1fb5f9bc3fc0a050a86e8fdc9111584eff75",
+    "tools/delete-item.ts": "0cfcd88b12a7026ddf296c9a8717faf0baffc828279c21617a02fb1cf63650b7",
+    "tools/delete-permission.ts": "f86a18d27d2047fbfaa1add1b46b5d563f91a1735256a90a34cbe2d0273ffb6a",
+    "tools/get-drive.ts": "47557b59c3f8ecf88f6a87f1bd86132c61449975b56fa41fd6b3511f6299ecf9",
+    "tools/get-item.ts": "9159c85d044e91da9e03e438a93ca81e53db59fb3f5e2a7f3668889c8eeb52f0",
+    "tools/get-permission.ts": "83d8b6a90312f939fa24569b3996a6f0c6f7e985ec08079088117d0bf0e7db97",
+    "tools/invite-recipients.ts": "13a1c0d5af618b5e0728cb6ba8074832067ea9c5e9758c0ea1c8ba1f0e6f736e",
+    "tools/list-children.ts": "95e6a80fdb7fa6e8a7b91b7c54b8e671d4195a7ea3a797b593f5284a76531da3",
+    "tools/list-drives.ts": "6bd4d5940c7e15ec01b052371f824bb833af796d3ad8efa50c1e0b56297204b0",
+    "tools/list-permissions.ts": "2bf3493342e07b9bc22472bf24e2cb55cfa9d264d988342129838804cf9f0f30",
+    "tools/list-recent-items.ts": "111dfb436f1e845336ac96d3a835851c8be4043517d63234c7b7e6d419acf7d8",
+    "tools/list-shared-items.ts": "5a814877dfd66352518e4f227ac5f77d557e6ca082f6b2da020d70ff218a1d37",
+    "tools/list-versions.ts": "58c1058b2c101a24cec57d8812b4f25c9926f0a9f3d88f84ff61db42cda4cdcf",
+    "tools/move-item.ts": "6e8a4f004ad02cfb6a59fc559b2e38f8bf0f7ac05f640f9b22aa3cfe6af5420e",
+    "tools/search-items.ts": "fba8f5f7aa9037d4d6ddcf477d7b8e1da441d7f58e709204dc16450f9b4f7074",
+    "tools/update-item.ts": "79a3d7cbca75dc5fa396bbdfd9d4fb780fa88196601f0eb85e3755be28556077",
+    "tools/upload-small-file.ts": "1ba7dcfb801f67b9dc762da0005156647e0f34a24fc92bc34aec93abea3ed866"
+  }
+}
