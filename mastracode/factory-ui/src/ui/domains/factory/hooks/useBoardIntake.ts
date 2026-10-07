@@ -26,7 +26,7 @@ import {
   pullRequestCandidate,
 } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
-import { hasLabel } from '../boardItems';
+import { hasLabel, isPersistedCandidate } from '../boardItems';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
 
@@ -266,8 +266,8 @@ export function useBoardIntake({
     // A source materializes once per Factory, so items that already have a card
     // are held back. Only those carded on another board get counted: a card on
     // this board is visible in a column, so it needs no explanation.
-    const fresh = all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-    const elsewhere = all.filter(candidate => elsewhereSourceKeys.has(candidate.sourceKey)).length;
+    const fresh = all.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate));
+    const elsewhere = all.filter(candidate => isPersistedCandidate(elsewhereSourceKeys, candidate)).length;
     return { candidates: fresh, alreadyMaterialized: elsewhere };
   }, [
     knownSourceKeys,
