@@ -173,6 +173,7 @@ function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
 export class MemoryPG extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  override readonly supportsAtomicWorkingMemoryMerge = true;
   readonly supportsObservationalMemoryHistorySearch = true;
 
   /**
@@ -1907,7 +1908,7 @@ export class MemoryPG extends MemoryStorage {
     return this.#getResourceById(this.#db.readClient, resourceId);
   }
 
-  async #getResourceById(client: DbClient, resourceId: string): Promise<StorageResourceType | null> {
+  async #getResourceById(client: DbClient | TxClient, resourceId: string): Promise<StorageResourceType | null> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
     const result = await client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
       `SELECT * FROM ${tableName} WHERE id = $1`,
@@ -1942,6 +1943,59 @@ export class MemoryPG extends MemoryStorage {
     });
 
     return { ...resource, metadata: metadataJson ? JSON.parse(metadataJson) : resource.metadata };
+  }
+
+  override async mergeResourceWorkingMemory({
+    resourceId,
+    merge,
+  }: {
+    resourceId: string;
+    merge: (existing: string | undefined) => string;
+  }): Promise<StorageResourceType> {
+    const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
+
+    const callbackError: { error?: unknown } = {};
+    try {
+      return await this.#db.client.tx(async t => {
+        const now = new Date().toISOString();
+        // Ensure the row exists so concurrent first writes both lock the same row.
+        await t.none(
+          `INSERT INTO ${tableName} (id, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
+          [resourceId, toPgJson({}), now, now, now, now],
+        );
+        await t.one(`SELECT id FROM ${tableName} WHERE id = $1 FOR UPDATE`, [resourceId]);
+
+        const existing = (await this.#getResourceById(t, resourceId))!;
+        let workingMemory: string;
+        try {
+          workingMemory = merge(existing.workingMemory ?? undefined);
+        } catch (error) {
+          callbackError.error = error;
+          throw error;
+        }
+        const updatedAt = new Date();
+        const updatedAtStr = updatedAt.toISOString();
+
+        await t.none(
+          `UPDATE ${tableName} SET "workingMemory" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
+          [workingMemory, updatedAtStr, updatedAtStr, resourceId],
+        );
+
+        return { ...existing, workingMemory, updatedAt };
+      });
+    } catch (error) {
+      if (error === callbackError.error || error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'MERGE_RESOURCE_WORKING_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+    }
   }
 
   async updateResource({
