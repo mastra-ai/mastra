@@ -5118,6 +5118,7 @@ export class Mastra<
       });
     }
 
+    knowledge.__setLogger(this.#logger);
     knowledge.__registerMastra(this);
     if (!knowledge.hasOwnStorage && this.#storage) {
       knowledge.setStorage(this.#storage, this.#storageSource);
@@ -6244,6 +6245,8 @@ export class Mastra<
         this.#workflows?.[key]?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#knowledge).forEach(knowledge => knowledge.__setLogger(this.#logger));
 
     if (this.#serverAdapter) {
       this.#serverAdapter.__setLogger(this.#logger);
