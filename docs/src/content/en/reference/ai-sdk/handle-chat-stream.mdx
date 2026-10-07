@@ -171,6 +171,14 @@ return withSseHeartbeat(createUIMessageStreamResponse({ stream }), 15000)
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      'Whether to stream sub-agent progress as `data-tool-agent` and `data-tool-agent-step` parts when the agent delegates to sub-agents. These parts can include sub-agent reasoning and tool calls and results. Set to `false` if your clients should not receive them.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'onError',
     type: '(error: unknown) => string',
     description:
