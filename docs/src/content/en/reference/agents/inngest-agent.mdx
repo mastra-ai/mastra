@@ -406,7 +406,7 @@ Returns: `boolean`
     type: 'object',
     isOptional: true,
     description:
-      'Additional tool sets available for this run. Toolset tools contain server-side code that cannot be serialized, so they only work when the Inngest worker runs in the same process as the caller. A worker in a separate process throws an error naming the missing tools. Register these tools on the agent instead.',
+      'Additional tool sets available for this run. Toolset tools contain server-side code that cannot be serialized, so they only work when the Inngest worker runs in the same process as the caller. A worker in a separate process throws an error naming the missing tools. Register these tools on the agent instead. The worker matches toolset tools by name, so if a toolset tool shares a name with an agent tool, the agent tool runs.',
   },
   {
     name: 'clientTools',

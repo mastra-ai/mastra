@@ -144,6 +144,12 @@ export class DurableProcessorRebuildError extends Error {
   }
 }
 
+/** True when the registry entry was seeded in this process (not a cross-process placeholder). */
+function isHydratedRegistryEntry(entry: RunRegistryEntry | undefined): boolean {
+  const model = entry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;
+  return !!entry && entry.isPlaceholder !== true && !!model && model.__metadataOnly !== true;
+}
+
 /**
  * Throws when call-time `toolsets` tools named in the durable options are missing
  * after a cross-process rebuild, instead of silently running without them.
@@ -218,9 +224,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // real model instance (every in-process seeding site stores the live model;
   // placeholders and metadata-only stubs do not).
   const globalEntry = globalRunRegistry.get(runId);
-  const registryModel = globalEntry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;
-  const hasHydratedEntry =
-    !!globalEntry && globalEntry.isPlaceholder !== true && !!registryModel && registryModel.__metadataOnly !== true;
+  const hasHydratedEntry = isHydratedRegistryEntry(globalEntry);
   // Prefer the full toolset over `tools`: after the first step `tools` holds the
   // per-step snapshot the model was shown (possibly narrowed by processors such
   // as ToolSearchProcessor), and seeding from it would drop every tool the
@@ -466,7 +470,10 @@ export async function rebuildRunToolsFromMastra(options: {
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
     });
 
-    assertToolsetToolsAvailable(tools, execOptions?.toolsetToolNames, agentId, runId);
+    // A hydrated entry means the caller's process still holds the toolset tools
+    // (e.g. a memoryless run rebuilding only for a save queue), so nothing was lost.
+    const toolsetsLocal = isHydratedRegistryEntry(globalRunRegistry.get(runId));
+    if (!toolsetsLocal) assertToolsetToolsAvailable(tools, execOptions?.toolsetToolNames, agentId, runId);
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
@@ -488,7 +495,9 @@ export async function rebuildRunToolsFromMastra(options: {
     return { tools, workspace, memory, saveQueueManager, requestContext: resolveRequestContext };
   } catch (error) {
     // Falling back would silently drop call-time toolsets, so surface the failure.
-    if ((execOptions?.toolsetToolNames?.length ?? 0) > 0) throw error;
+    if ((execOptions?.toolsetToolNames?.length ?? 0) > 0 && !isHydratedRegistryEntry(globalRunRegistry.get(runId))) {
+      throw error;
+    }
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;
   }
