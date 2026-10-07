@@ -776,6 +776,45 @@ describe('MastraModelOutput', () => {
       expect(toolCalls).toHaveLength(1);
       expect(toolCalls[0]!.payload).toMatchObject({ toolCallId, toolName: 'my-tool', args: {} });
     });
+
+    it('does not record a pending no-args tool-call when the run bails with a tripwire', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'tool-1';
+      const finish = createFinishChunk(runId) as any;
+      finish.payload.stepResult.reason = 'tripwire';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        finish,
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      expect(emitted.filter(c => c.type === 'tool-call')).toHaveLength(0);
+      expect(await output.toolCalls).toHaveLength(0);
+    });
   });
 
   describe('usage raw passthrough', () => {

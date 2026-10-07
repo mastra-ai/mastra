@@ -1064,7 +1064,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               controller.terminate();
               return;
             case 'finish':
-              flushPendingToolCalls(controller);
+              // A tripwire/abort bail ends the run without the final tool-call; don't record a
+              // placeholder no-args call for it.
+              if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
+                self.#pendingToolCalls = {};
+              } else {
+                flushPendingToolCalls(controller);
+              }
               // 'suspended' is not terminal: a resume leg rehydrates the persisted 'suspended'
               // status and must be able to finish as 'success'. Only 'failed' and 'canceled'
               // block the success transition.
