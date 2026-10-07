@@ -75,6 +75,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     threadId: _internal?.threadId,
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
+    fixedMemory: _internal?.fixedMemory,
     threadExists: _internal?.threadExists,
     transportRef: _internal?.transportRef ?? {},
     backgroundTaskManager: _internal?.backgroundTaskManager,

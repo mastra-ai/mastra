@@ -17,6 +17,7 @@ import {
   BACKGROUND_TASK_MANAGER_KEY,
   CURRENT_DATE_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
+  FIXED_MEMORY_KEY,
   GENERATE_ID_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
   MEMORY_CONFIG_KEY,
@@ -53,6 +54,7 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
   if (internal.threadId !== undefined) scope.set(THREAD_ID_KEY, internal.threadId);
   if (internal.resourceId !== undefined) scope.set(RESOURCE_ID_KEY, internal.resourceId);
   if (internal.memory) scope.set(MEMORY_KEY, internal.memory);
+  if (internal.fixedMemory !== undefined) scope.set(FIXED_MEMORY_KEY, internal.fixedMemory);
   if (internal.threadExists !== undefined) scope.set(THREAD_EXISTS_KEY, internal.threadExists);
   if (internal.transportRef) scope.set(TRANSPORT_REF_KEY, internal.transportRef);
   if (internal.backgroundTaskManager) scope.set(BACKGROUND_TASK_MANAGER_KEY, internal.backgroundTaskManager);
