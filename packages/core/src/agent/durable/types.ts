@@ -42,7 +42,7 @@ import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
-import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -209,6 +209,14 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
+  /**
+   * Agent method that started the run ('generate', 'stream', ...). Persisted
+   * so a cold recovery rebuilds the toolset with the same method type the
+   * original run was prepared with (tool factories may vary their output by
+   * method). Snapshots written before this field existed leave it undefined
+   * and consumers fall back to their default.
+   */
+  methodType?: AgentMethodType;
   /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, maxRetries, timeout). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
   /**

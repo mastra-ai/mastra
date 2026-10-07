@@ -746,6 +746,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
+      // Method type the run started with, persisted so a cold recovery
+      // rebuilds tools with the same methodType (tool factories may vary
+      // their output by method).
+      methodType,
       modelSettings: execOptions?.modelSettings as any,
       // Agent-level retry config for the llm-execution step's retry ladder.
       // Single-model agents have no modelList entry to carry maxRetries, so

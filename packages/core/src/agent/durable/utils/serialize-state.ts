@@ -271,6 +271,7 @@ export function serializeDurableOptions(options: {
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
+  methodType?: SerializableDurableOptions['methodType'];
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
   agentMaxRetries?: number;
   agentMaxRetriesConfigured?: boolean;
@@ -314,6 +315,7 @@ export function serializeDurableOptions(options: {
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
+    methodType: options.methodType,
     modelSettings: serializeModelSettings(options.modelSettings),
     agentMaxRetries: options.agentMaxRetries,
     agentMaxRetriesConfigured: options.agentMaxRetriesConfigured,

@@ -1238,6 +1238,10 @@ export class DurableAgent<
         requestContext,
         memoryConfig: workflowInput.state?.memoryConfig,
         autoResumeSuspendedTools: workflowInput.options?.autoResumeSuspendedTools,
+        // Rebuild tools with the method type the original run started with
+        // ('generate' vs 'stream'); snapshots persisted before this field
+        // existed leave it undefined and the default applies.
+        methodType: workflowInput.options?.methodType,
         // Restore call-time client tools persisted on the workflow input so a
         // recovered run keeps the client-executed tools the model was offered.
         clientTools: workflowInput.options?.clientTools as ToolsInput | undefined,

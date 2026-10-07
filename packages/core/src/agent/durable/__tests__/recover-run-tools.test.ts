@@ -15,6 +15,11 @@
  * step runs during recovery — that keeps `rebuildRunToolsFromMastra` from
  * rebuilding the toolset and masking the missing registry entry. Without the
  * src fix the recovered model request carries no tools and this test fails.
+ *
+ * A second test covers the persisted `options.methodType`: a run started via
+ * `generate()` must rebuild its tools on recovery with methodType 'generate'
+ * (tool factories can vary their output by calling method), instead of the
+ * 'stream' default.
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -85,7 +90,7 @@ async function startProcess(captured: any[][]) {
     recovery: { durableAgents: 'auto' },
   });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { durableAgent, workflows, globalRunRegistry };
+  return { durableAgent, workflows, globalRunRegistry, Agent };
 }
 
 function activeStepIds(snapshot: WorkflowRunState | undefined) {
@@ -101,8 +106,8 @@ function isRecoverable({ outer, inner }: Checkpoint): boolean {
   return true;
 }
 
-/** Runs a real stream, copying the workflow store after every snapshot write. */
-async function captureCheckpoints() {
+/** Runs a real stream/generate, copying the workflow store after every snapshot write. */
+async function captureCheckpoints(method: 'stream' | 'generate' = 'stream') {
   // The original process's captures are irrelevant (and always include the
   // tool) — keep them out of the asserted array.
   const discarded: any[][] = [];
@@ -121,6 +126,14 @@ async function captureCheckpoints() {
     return persist(args);
   };
 
+  if (method === 'generate') {
+    // Explicit runId keeps the recovery target deterministic.
+    const runId = 'durable-generate-run';
+    const result = await original.durableAgent.generate('Look something up', { runId });
+    expect(result.text).toBe('done');
+    return { checkpoints, runId };
+  }
+
   const result = await original.durableAgent.stream('Look something up');
   let text = '';
   for await (const chunk of result.fullStream) {
@@ -130,10 +143,15 @@ async function captureCheckpoints() {
   return { checkpoints, runId: result.runId };
 }
 
-/** Recovers from a checkpoint in a fresh process; returns the tools seen. */
-async function recoverAndCapture(checkpoint: Checkpoint, runId: string): Promise<any[][]> {
+/**
+ * Recovers from a checkpoint in a fresh process. Returns the tools the model
+ * saw plus a spy on `Agent.prototype.getToolsForExecution` installed in the
+ * fresh module graph before recovery, so it only observes the recovered run.
+ */
+async function recoverAndCapture(checkpoint: Checkpoint, runId: string) {
   const captured: any[][] = [];
-  const { durableAgent, workflows, globalRunRegistry } = await startProcess(captured);
+  const { durableAgent, workflows, globalRunRegistry, Agent } = await startProcess(captured);
+  const toolsSpy = vi.spyOn(Agent.prototype, 'getToolsForExecution');
   for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
 
   const attempt = (async () => {
@@ -153,7 +171,7 @@ async function recoverAndCapture(checkpoint: Checkpoint, runId: string): Promise
   } finally {
     clearTimeout(timer);
   }
-  return captured;
+  return { captured, toolsSpy };
 }
 
 describe('DurableAgent.recover(runId) tool rehydration (#25890)', () => {
@@ -162,21 +180,27 @@ describe('DurableAgent.recover(runId) tool rehydration (#25890)', () => {
     const recoverable = checkpoints.filter(isRecoverable);
     expect(recoverable.length).toBeGreaterThan(0);
 
-    const sawRegisteredTool = (batches: any[][]) =>
-      batches.some(tools => tools.some(tool => tool?.name === REGISTERED_TOOL));
-
-    const seen: any[][] = [];
-    for (const checkpoint of recoverable) {
-      const captured = await recoverAndCapture(checkpoint, runId);
-      seen.push(...captured);
-      // With the fix the first recoverable checkpoint already rebuilds the
-      // toolset; exit early instead of re-driving every checkpoint.
-      if (sawRegisteredTool(captured)) break;
-    }
+    // With the fix the first recoverable checkpoint already rebuilds the
+    // toolset — recover only recoverable[0] instead of re-driving every
+    // checkpoint until one happens to work.
+    const { captured } = await recoverAndCapture(recoverable[0]!, runId);
 
     // Sanity: recovery re-ran the LLM step and the model was called.
-    expect(seen.length).toBeGreaterThan(0);
+    expect(captured.length).toBeGreaterThan(0);
     // The fix: the agent-registered tool reached the recovered model request.
-    expect(sawRegisteredTool(seen)).toBe(true);
+    expect(captured.some(tools => tools.some(tool => tool?.name === REGISTERED_TOOL))).toBe(true);
+  }, 120_000);
+
+  it('rebuilds tools with the persisted methodType after a generate() run', async () => {
+    const { checkpoints, runId } = await captureCheckpoints('generate');
+    const recoverable = checkpoints.filter(isRecoverable);
+    expect(recoverable.length).toBeGreaterThan(0);
+
+    const { toolsSpy } = await recoverAndCapture(recoverable[0]!, runId);
+
+    // The run started via generate(); recovery must rebuild the toolset with
+    // the same methodType (persisted on the workflow input options) instead of
+    // falling back to the 'stream' default.
+    expect(toolsSpy).toHaveBeenCalledWith(expect.objectContaining({ methodType: 'generate' }));
   }, 120_000);
 });

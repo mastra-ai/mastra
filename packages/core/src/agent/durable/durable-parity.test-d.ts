@@ -137,6 +137,7 @@ type PhantomSerializedKeys = Exclude<
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
   | 'agentMaxRetries' // derived from the agent's maxRetries config
   | 'agentMaxRetriesConfigured' // preserves omitted vs explicitly configured maxRetries
+  | 'methodType' // derived from the calling method (generate/stream), not a caller-supplied option
   | 'instructionsOverride' // derived from instructions
   | 'systemMessage' // derived from system
   | 'transform' // shadow of transform policy (targets only)
