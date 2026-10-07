@@ -128,4 +128,8 @@ The `tool-call-suspended` event carries a `suspendPayload` with the same shape a
 Pass the user's answer to `agent.resumeStream()`:
 
 - **Free-text and single-select:** A `string`.
-- **Multi-select:** A `string[]` of selected option labels.
+- **Multi-select:** A `string[]` of selected option labels and any custom answer.
+
+Factory and Studio offer **Other…** alongside the suggested options. Select it to enter a custom answer, then select **Submit answer** or press Enter. Single-select prompts resume with the trimmed text as a string. Multi-select prompts resume with the selected labels followed by the trimmed custom text. You can submit custom text without selecting a suggested option.
+
+If **Other…** is selected, the text field must contain a non-empty answer. Unselecting **Other…** excludes the custom text from the response. The **Other…** label itself is never included in the resume data.

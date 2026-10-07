@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { fn } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { AskUser } from './ask-user';
 
 const meta: Meta<typeof AskUser> = {
@@ -43,6 +43,33 @@ export const MultiSelect: Story = {
       selectionMode: 'multi_select',
       options: [{ label: 'Unit tests' }, { label: 'Typecheck' }, { label: 'Build' }],
     },
+  },
+};
+
+export const SingleSelectCustomAnswer: Story = {
+  ...SingleSelect,
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('radio', { name: 'Other…' }));
+    const input = canvas.getByRole('textbox', { name: 'Your answer' });
+    await expect(input).toHaveFocus();
+    await userEvent.type(input, 'Staging, using the isolated customer environment.');
+    await userEvent.keyboard('{Enter}');
+    await expect(args.onSubmit).toHaveBeenCalledTimes(1);
+    await expect(args.onSubmit).toHaveBeenCalledWith('Staging, using the isolated customer environment.');
+  },
+};
+
+export const MultiSelectCustomAnswer: Story = {
+  ...MultiSelect,
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Typecheck' }));
+    await userEvent.click(canvas.getByRole('checkbox', { name: 'Other…' }));
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Your answer' }), 'Check the customer environment.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Submit answer' }));
+    await expect(args.onSubmit).toHaveBeenCalledTimes(1);
+    await expect(args.onSubmit).toHaveBeenCalledWith(['Typecheck', 'Check the customer environment.']);
   },
 };
 

@@ -1,6 +1,6 @@
 import { Check, MessageCircleQuestion } from 'lucide-react';
 import { useState } from 'react';
-import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
+import type { ChangeEvent, ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -142,14 +142,73 @@ export interface AskUserProps extends Omit<ComponentProps<typeof AskUserContaine
   footer?: ReactNode;
 }
 
-const validOptions = (options: AskUserPayload['options']): AskUserOption[] =>
+const getValidOptions = (options: AskUserPayload['options']): AskUserOption[] =>
   options?.filter((option): option is AskUserOption =>
     Boolean(option && typeof option.label === 'string' && option.label),
   ) ?? [];
 
-interface AskUserInputProps extends AskUserProps {
+interface AskUserInputProps extends Pick<
+  AskUserProps,
+  'payload' | 'result' | 'isAnswered' | 'isSubmitting' | 'onSubmit' | 'footer'
+> {
   options: AskUserOption[];
 }
+
+// Suggested options use a separate value namespace so their labels cannot
+// collide with the UI-only custom answer choice.
+const customAnswerValue = 'custom';
+
+function getOptionRadioValue(optionLabel: string): string {
+  return `option:${optionLabel}`;
+}
+
+function toggleSelectedOptionLabel(selectedOptionLabels: string[], optionLabel: string): string[] {
+  if (selectedOptionLabels.includes(optionLabel)) {
+    return selectedOptionLabels.filter(selectedLabel => selectedLabel !== optionLabel);
+  }
+  return [...selectedOptionLabels, optionLabel];
+}
+
+interface AskUserAnswerDraft {
+  answerText: string;
+  selectedOptionLabels: string[];
+  isMultiSelect: boolean;
+  isCustomAnswerSelected: boolean;
+}
+
+function getAnswerToSubmit({
+  answerText,
+  selectedOptionLabels,
+  isMultiSelect,
+  isCustomAnswerSelected,
+}: AskUserAnswerDraft): AskUserAnswer | undefined {
+  const trimmedAnswerText = answerText.trim();
+  if (isCustomAnswerSelected && !trimmedAnswerText) return undefined;
+  if (!isMultiSelect) return trimmedAnswerText || undefined;
+
+  const answerLabels = isCustomAnswerSelected ? [...selectedOptionLabels, trimmedAnswerText] : selectedOptionLabels;
+  return answerLabels.length > 0 ? answerLabels : undefined;
+}
+
+const AskUserCustomAnswerInput = ({
+  value,
+  onChange,
+  onKeyDown,
+  disabled,
+}: Pick<ComponentProps<typeof Input>, 'value' | 'onChange' | 'onKeyDown' | 'disabled'>) => (
+  <Field>
+    <FieldLabel>Your answer</FieldLabel>
+    <Input
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      placeholder="Type your answer..."
+      disabled={disabled}
+      size="sm"
+      autoFocus
+    />
+  </Field>
+);
 
 const AskUserInput = ({
   payload,
@@ -159,141 +218,203 @@ const AskUserInput = ({
   isSubmitting = false,
   onSubmit,
   footer,
-  ...props
 }: AskUserInputProps) => {
-  const [text, setText] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [answerText, setAnswerText] = useState('');
+  const [selectedOptionLabels, setSelectedOptionLabels] = useState<string[]>([]);
+  const [isCustomAnswerSelected, setIsCustomAnswerSelected] = useState(false);
 
   if (result || isAnswered) {
     return (
-      <AskUserContainer data-testid="ask-user" {...props}>
-        <AskUserLabel />
-        <AskUserBody>
-          <AskUserQuestion>{payload.question}</AskUserQuestion>
-          {result ? <AskUserOutput result={result} /> : <Badge variant="success">Answered</Badge>}
-        </AskUserBody>
-      </AskUserContainer>
+      <>
+        <AskUserQuestion>{payload.question}</AskUserQuestion>
+        {result ? <AskUserOutput result={result} /> : <Badge variant="success">Answered</Badge>}
+      </>
     );
   }
 
-  const submitText = () => {
-    const answer = text.trim();
-    if (answer && !isSubmitting) onSubmit(answer);
+  const isMultiSelect = options.length > 0 && payload.selectionMode === 'multi_select';
+  const answerToSubmit = getAnswerToSubmit({
+    answerText,
+    selectedOptionLabels,
+    isMultiSelect,
+    isCustomAnswerSelected,
+  });
+  const canSubmitAnswer = !isSubmitting && answerToSubmit !== undefined;
+
+  const handleSubmitAnswer = () => {
+    if (isSubmitting || answerToSubmit === undefined) return;
+    onSubmit(answerToSubmit);
   };
 
-  const handleTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
+  const handleAnswerTextChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setAnswerText(event.target.value);
+  };
+
+  const handleAnswerTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      submitText();
+      handleSubmitAnswer();
     }
+  };
+
+  const handleOptionToggle = (optionLabel: string) => {
+    if (isSubmitting) return;
+    setSelectedOptionLabels(currentLabels => toggleSelectedOptionLabel(currentLabels, optionLabel));
+  };
+
+  const handleCustomAnswerCheckedChange = (checked: boolean) => {
+    if (isSubmitting) return;
+    setIsCustomAnswerSelected(checked);
+  };
+
+  const handleSingleSelectChange = (radioValue: unknown) => {
+    if (isSubmitting) return;
+    if (radioValue === customAnswerValue) {
+      setIsCustomAnswerSelected(true);
+      setSelectedOptionLabels([]);
+      return;
+    }
+
+    const selectedOption = options.find(option => getOptionRadioValue(option.label) === radioValue);
+    if (!selectedOption) return;
+    setIsCustomAnswerSelected(false);
+    setSelectedOptionLabels([selectedOption.label]);
+    onSubmit(selectedOption.label);
   };
 
   if (options.length === 0) {
     return (
-      <AskUserContainer data-testid="ask-user" {...props}>
-        <AskUserLabel />
-        <AskUserBody>
-          <Field>
-            <FieldLabel className="text-subheading">{payload.question}</FieldLabel>
-            <div className="flex items-center gap-2">
-              <Input
-                value={text}
-                onChange={event => setText(event.target.value)}
-                onKeyDown={handleTextKeyDown}
-                placeholder="Type your answer..."
-                disabled={isSubmitting}
-                size="sm"
-              />
-              <AskUserSubmit
-                className="shrink-0 whitespace-nowrap"
-                disabled={isSubmitting || !text.trim()}
-                onClick={submitText}
-              />
-            </div>
-          </Field>
-          {isSubmitting ? <AskUserPending className="mt-2 block" /> : null}
-          {footer}
-        </AskUserBody>
-      </AskUserContainer>
+      <>
+        <Field>
+          <FieldLabel className="text-subheading">{payload.question}</FieldLabel>
+          <div className="flex items-center gap-2">
+            <Input
+              value={answerText}
+              onChange={handleAnswerTextChange}
+              onKeyDown={handleAnswerTextKeyDown}
+              placeholder="Type your answer..."
+              disabled={isSubmitting}
+              size="sm"
+            />
+            <AskUserSubmit
+              className="shrink-0 whitespace-nowrap"
+              disabled={!canSubmitAnswer}
+              onClick={handleSubmitAnswer}
+            />
+          </div>
+        </Field>
+        {isSubmitting ? <AskUserPending className="mt-2 block" /> : null}
+        {footer}
+      </>
     );
   }
 
-  const isMulti = payload.selectionMode === 'multi_select';
+  const customAnswerInput = isCustomAnswerSelected ? (
+    <AskUserCustomAnswerInput
+      value={answerText}
+      onChange={handleAnswerTextChange}
+      onKeyDown={handleAnswerTextKeyDown}
+      disabled={isSubmitting}
+    />
+  ) : undefined;
+
+  const selectedOptionLabel = selectedOptionLabels[0];
+  const selectedOptionValue = selectedOptionLabel === undefined ? '' : getOptionRadioValue(selectedOptionLabel);
+  const selectedRadioValue = isCustomAnswerSelected ? customAnswerValue : selectedOptionValue;
+
+  return (
+    <>
+      {isMultiSelect ? (
+        <Fieldset className="gap-2">
+          <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
+          {options.map(option => (
+            <AskUserOptionRow
+              key={option.label}
+              label={option.label}
+              description={option.description}
+              disabled={isSubmitting}
+              control={
+                <Checkbox
+                  className="mt-0.5"
+                  disabled={isSubmitting}
+                  checked={selectedOptionLabels.includes(option.label)}
+                  onCheckedChange={() => handleOptionToggle(option.label)}
+                />
+              }
+            />
+          ))}
+          <AskUserOptionRow
+            label="Other…"
+            disabled={isSubmitting}
+            control={
+              <Checkbox
+                className="mt-0.5"
+                disabled={isSubmitting}
+                checked={isCustomAnswerSelected}
+                onCheckedChange={handleCustomAnswerCheckedChange}
+              />
+            }
+          />
+          {customAnswerInput}
+          <AskUserSubmit className="mt-1 justify-self-start" disabled={!canSubmitAnswer} onClick={handleSubmitAnswer}>
+            Submit answer
+          </AskUserSubmit>
+        </Fieldset>
+      ) : (
+        <Fieldset
+          className="gap-2"
+          render={
+            <RadioGroup disabled={isSubmitting} value={selectedRadioValue} onValueChange={handleSingleSelectChange} />
+          }
+        >
+          <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
+          {options.map(option => (
+            <AskUserOptionRow
+              key={option.label}
+              label={option.label}
+              description={option.description}
+              disabled={isSubmitting}
+              control={<RadioGroupItem className="mt-0.5" value={getOptionRadioValue(option.label)} />}
+            />
+          ))}
+          <AskUserOptionRow
+            label="Other…"
+            disabled={isSubmitting}
+            control={<RadioGroupItem className="mt-0.5" value={customAnswerValue} />}
+          />
+        </Fieldset>
+      )}
+      {!isMultiSelect && isCustomAnswerSelected ? (
+        <div className="mt-2 grid gap-2">
+          {customAnswerInput}
+          <AskUserSubmit className="justify-self-start" disabled={!canSubmitAnswer} onClick={handleSubmitAnswer} />
+        </div>
+      ) : null}
+      {isSubmitting ? <AskUserPending className="mt-3 block" /> : null}
+      {footer}
+    </>
+  );
+};
+
+export const AskUser = ({ payload, result, isAnswered, isSubmitting, onSubmit, footer, ...props }: AskUserProps) => {
+  const options = getValidOptions(payload.options);
+  const payloadKey = JSON.stringify([payload.question, options.map(option => option.label), payload.selectionMode]);
 
   return (
     <AskUserContainer data-testid="ask-user" {...props}>
       <AskUserLabel />
       <AskUserBody>
-        {isMulti ? (
-          <Fieldset className="gap-2">
-            <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
-            {options.map(option => (
-              <AskUserOptionRow
-                key={option.label}
-                label={option.label}
-                description={option.description}
-                disabled={isSubmitting}
-                control={
-                  <Checkbox
-                    className="mt-0.5"
-                    disabled={isSubmitting}
-                    checked={selected.includes(option.label)}
-                    onCheckedChange={() =>
-                      setSelected(current =>
-                        current.includes(option.label)
-                          ? current.filter(selectedLabel => selectedLabel !== option.label)
-                          : [...current, option.label],
-                      )
-                    }
-                  />
-                }
-              />
-            ))}
-            <AskUserSubmit
-              className="mt-1 justify-self-start"
-              disabled={isSubmitting || selected.length === 0}
-              onClick={() => onSubmit(selected)}
-            >
-              Submit answer
-            </AskUserSubmit>
-          </Fieldset>
-        ) : (
-          <Fieldset
-            className="gap-2"
-            render={
-              <RadioGroup
-                disabled={isSubmitting}
-                value={selected[0] ?? null}
-                onValueChange={value => {
-                  const label = String(value);
-                  setSelected([label]);
-                  onSubmit(label);
-                }}
-              />
-            }
-          >
-            <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
-            {options.map(option => (
-              <AskUserOptionRow
-                key={option.label}
-                label={option.label}
-                description={option.description}
-                disabled={isSubmitting}
-                control={<RadioGroupItem className="mt-0.5" value={option.label} />}
-              />
-            ))}
-          </Fieldset>
-        )}
-        {isSubmitting ? <AskUserPending className="mt-3 block" /> : null}
-        {footer}
+        <AskUserInput
+          key={payloadKey}
+          payload={payload}
+          options={options}
+          result={result}
+          isAnswered={isAnswered}
+          isSubmitting={isSubmitting}
+          onSubmit={onSubmit}
+          footer={footer}
+        />
       </AskUserBody>
     </AskUserContainer>
   );
-};
-
-export const AskUser = ({ payload, ...props }: AskUserProps) => {
-  const options = validOptions(payload.options);
-  const payloadKey = JSON.stringify([payload.question, options.map(option => option.label), payload.selectionMode]);
-
-  return <AskUserInput key={payloadKey} payload={payload} options={options} {...props} />;
 };
