@@ -557,6 +557,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
 export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+  #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
   #threadlessRunFinalizer = new FinalizationRegistry<{
     state: AgentThreadRuntimeState;
     runId: string;
@@ -2296,11 +2297,13 @@ export class AgentThreadStreamRuntime {
       upstreamAbortSignal?.addEventListener('abort', abort, { once: true });
     }
 
-    state.preparedRunsById.set(options.runId, {
+    const preparedRun: PreparedThreadRun = {
       ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
-    });
+    };
+    state.preparedRunsById.set(options.runId, preparedRun);
+    this.#preparedRunsByAbortSignal.set(abortController.signal, preparedRun);
     if (key) this.#ensureThreadControlSubscription(state, pubsub, key);
 
     if (state.abortedRunIds.has(options.runId)) {
@@ -2605,7 +2608,13 @@ export class AgentThreadStreamRuntime {
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string, expectedPreparedRun?: PreparedThreadRun) {
     const preparedRun = state.preparedRunsById.get(runId);
-    if (expectedPreparedRun && preparedRun !== expectedPreparedRun) return;
+    if (expectedPreparedRun && preparedRun !== expectedPreparedRun) {
+      expectedPreparedRun.cleanup();
+      if (expectedPreparedRun.finalizerToken) {
+        this.#threadlessRunFinalizer.unregister(expectedPreparedRun.finalizerToken);
+      }
+      return;
+    }
     preparedRun?.cleanup();
     if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
@@ -3901,13 +3910,22 @@ export class AgentThreadStreamRuntime {
     runId: string,
     pubsub?: PubSub,
     failedRun?: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>,
+    expectedAbortSignal?: AbortSignal,
   ) {
     const state = this.#getState(pubsub);
     // Queued startups have their own catch path, which must restore input before draining anything else.
     if (state.threadRunsById.has(runId) || state.startingQueuedRunIds.has(runId)) return;
-    const key = state.threadKeysByRunId.get(runId) ?? state.preparedRunsById.get(runId)?.threadKey;
+    const preparedRun = state.preparedRunsById.get(runId);
+    const expectedPreparedRun = expectedAbortSignal
+      ? this.#preparedRunsByAbortSignal.get(expectedAbortSignal)
+      : undefined;
+    if (expectedAbortSignal && preparedRun !== expectedPreparedRun) {
+      if (expectedPreparedRun) this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
+      return;
+    }
+    const key = state.threadKeysByRunId.get(runId) ?? preparedRun?.threadKey;
     if (!key) {
-      this.#cleanupPreparedRun(state, runId);
+      this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
       return;
     }
     try {
@@ -3920,7 +3938,7 @@ export class AgentThreadStreamRuntime {
       const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
       if (wasAborted && failedRun && target?.threadId) {
         // Failed preparation never registers a completion watcher. Recover pending input before idle work.
-        this.#cleanupPreparedRun(state, runId);
+        this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
         void this.#drainPendingSignals(state, pubsub, key, {
           ...failedRun,
           threadId: target.threadId,
@@ -3931,7 +3949,7 @@ export class AgentThreadStreamRuntime {
         void this.#drainPendingIdleSignals(state, pubsub, key);
       }
     } finally {
-      this.#cleanupPreparedRun(state, runId);
+      this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
       this.#releaseUnusedThreadControlSubscription(state, key);
     }
   }

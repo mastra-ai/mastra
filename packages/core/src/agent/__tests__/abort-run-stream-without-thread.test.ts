@@ -235,8 +235,9 @@ describe('Agent.abortRunStream without a thread', () => {
       model,
     });
     const runId = 'duplicate-threadless-run';
+    const firstController = new AbortController();
 
-    const firstStream = await agent.stream('first', { runId });
+    const firstStream = await agent.stream('first', { runId, abortSignal: firstController.signal });
     const firstText = firstStream.text;
     await runs[0]!.startedPromise;
     const secondStream = await agent.stream('second', { runId });
@@ -247,11 +248,29 @@ describe('Agent.abortRunStream without a thread', () => {
     await firstText;
     await firstStream._waitUntilFinished();
     await Promise.resolve();
+    firstController.abort();
 
+    expect(runs[0]!.observedAbort()).toBe(false);
     expect(agent.abortRunStream(runId)).toBe(true);
     await secondText;
     await secondStream._waitUntilFinished();
     expect(runs[1]!.observedAbort()).toBe(true);
+  });
+
+  it('does not let an earlier failed setup clean up a newer thread-less run', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'failed-setup-threadless-run';
+    const firstCaller = new AbortController();
+    const firstOptions = runtime.prepareRunOptions({ runId, abortSignal: firstCaller.signal }, pubsub);
+    const secondOptions = runtime.prepareRunOptions({ runId }, pubsub);
+
+    runtime.releaseThreadRunReservation(runId, pubsub, undefined, firstOptions.abortSignal);
+    firstCaller.abort();
+
+    expect(firstOptions.abortSignal?.aborted).toBe(false);
+    expect(runtime.abortRun(runId, pubsub)).toBe(true);
+    expect(secondOptions.abortSignal?.aborted).toBe(true);
   });
 
   it('removes a thread-less prepared run when its unconsumed output is collected', async () => {
