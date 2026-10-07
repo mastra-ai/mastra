@@ -123,6 +123,12 @@ export interface CommitFactoryRuleEvaluationInput {
   decisions: Record<string, unknown>[];
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   now: Date;
+  /**
+   * `'abort'` writes nothing when the work item changed since `expectedRevision`
+   * and returns `stale`, so a later commit under the same identity evaluates
+   * again. By default a stale evaluation is stored as a rejected outcome.
+   */
+  onStale?: 'abort';
 }
 
 export type CommitFactoryRuleEvaluationResult =
@@ -1905,9 +1911,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
+  commitRuleEvaluation(
+    input: CommitFactoryRuleEvaluationInput & { onStale: 'abort' },
+  ): Promise<CommitFactoryRuleEvaluationResult | { status: 'stale' }>;
+  commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult>;
+  async commitRuleEvaluation(
+    input: CommitFactoryRuleEvaluationInput,
+  ): Promise<CommitFactoryRuleEvaluationResult | { status: 'stale' }> {
     const commit = () =>
-      this.storage.withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
+      this.storage.withTransaction<CommitFactoryRuleEvaluationResult | { status: 'stale' }>(async ops => {
         const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -1977,6 +1989,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
         const item = itemRow ? toRow(itemRow) : null;
         const stale = item !== null && item.revision !== input.expectedRevision;
+        if (stale && input.onStale === 'abort') return { status: 'stale' as const };
         const outcome = stale ? 'rejected' : input.outcome.status;
         const code = stale ? 'stale' : (input.outcome.code ?? null);
         const reason = stale

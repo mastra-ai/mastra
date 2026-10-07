@@ -964,6 +964,23 @@ describe('webhook route', () => {
     expect(await res.json()).toEqual({ error: 'bad_request', message: 'Malformed JSON payload' });
   });
 
+  it('fails the delivery when rule ingress stays stale so a redelivery is evaluated again', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'stale' }));
+    const res = await buildApp(null, { ingestFactoryEvent }).request(
+      signedGithubWebhookRequest('issues', {
+        action: 'closed',
+        repository: { full_name: 'octo/hello' },
+        issue: { number: 12, title: 'Fix flaky test', html_url: 'https://github.com/octo/hello/issues/12' },
+        sender: { login: 'ada' },
+        installation: { id: 7 },
+      }),
+    );
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'stale' });
+  });
+
   it('accepts and ignores a valid unsupported event', async () => {
     const logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const res = await buildApp(null).request(signedGithubWebhookRequest('installation', { action: 'created' }));

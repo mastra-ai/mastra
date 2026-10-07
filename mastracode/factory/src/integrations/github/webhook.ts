@@ -52,7 +52,8 @@ export interface ParsedGithubWebhook {
 export type GithubWebhookResult =
   | { status: 202; body: { ok: true; ignored?: true } }
   | { status: 400; body: { error: 'bad_request'; message: string } }
-  | { status: 401; body: { error: 'unauthorized'; message: string } };
+  | { status: 401; body: { error: 'unauthorized'; message: string } }
+  | { status: 503; body: { error: 'stale'; message: string } };
 
 export interface GithubWebhookNotification {
   action: string;
@@ -576,7 +577,14 @@ export async function handleGithubWebhook(
   console.info('[GitHub Webhook]', metadata);
 
   if (options.ingestFactoryEvent) {
-    await options.ingestFactoryEvent(parsed);
+    const ingested = await options.ingestFactoryEvent(parsed);
+    // Nothing was stored for a stale evaluation, so a redelivery of this event is evaluated again.
+    if ((ingested as { status?: string } | undefined)?.status === 'stale') {
+      return {
+        status: 503,
+        body: { error: 'stale', message: 'The work item kept changing during rule evaluation; redeliver this event.' },
+      };
+    }
   }
 
   if (!options.controller) {

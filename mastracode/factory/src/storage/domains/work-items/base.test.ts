@@ -811,6 +811,34 @@ describe('WorkItemsStorage', () => {
     expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('superseded');
   });
 
+  it('stores a stale evaluation as rejected unless the caller asks to abort on stale', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const commit = (identity: string, onStale?: 'abort') =>
+      storage.commitRuleEvaluation({
+        ...scope,
+        workItemId: created.item.id,
+        ingress: { identity, triggerType: 'test' },
+        configVersion: 'rules-v1',
+        expectedRevision: created.item.revision - 1,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: identity }],
+        causalChain: [],
+        now: new Date(),
+        ...(onStale ? { onStale } : {}),
+      });
+
+    const stored = await commit('default-stale');
+    expect(stored).toMatchObject({ status: 'committed', result: { status: 'rejected', code: 'stale', decisions: [] } });
+    expect(await commit('default-stale')).toMatchObject({ status: 'replayed', result: { code: 'stale' } });
+
+    expect(await commit('abort-stale', 'abort')).toEqual({ status: 'stale' });
+    expect(await commit('abort-stale')).toMatchObject({ status: 'committed', result: { code: 'stale' } });
+    expect(await storage.listDeferredDecisions('org1', 'p1')).toHaveLength(0);
+  });
+
   it('pages each status on its own newest-first keyset', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
