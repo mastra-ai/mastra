@@ -4,11 +4,12 @@ import { SourceError, groupingColumn } from "../../data-sources/source.ts";
 import { DataExplorer } from "../analysis/explorer.ts";
 import { WorkspaceError, WorkspaceStore } from "./store.ts";
 import type { Workspace, WorkspaceAction, WorkspaceSnapshot, Correction } from "./contracts.ts";
-import { workspaceId, threadId } from "./contracts.ts";
+import { workspaceId, threadId, overviewFor, savedCardTurn } from "./contracts.ts";
 import { validateCatalog, validateComposition } from "../ui/catalog.ts";
 import type { ComponentDeclaration, ComponentBinding } from "../ui/catalog.ts";
 import type { Session } from "../analysis/workflow.ts";
 import type { Question } from "../analysis/contracts.ts";
+import { humanAnswer } from "../ui/format.ts";
 
 export class WorkspaceEngine {
   readonly explorer: DataExplorer;
@@ -47,6 +48,15 @@ export class WorkspaceEngine {
       filters: {},
       messages: [],
     };
+    workspace.messages = workspace.messages.map((message) => {
+      if (message.role !== "assistant") return message;
+      const results = workspace.results.filter(
+        (result) => `${result.requestId}-answer` === message.id,
+      );
+      return results.length
+        ? { ...message, content: results.map((result) => humanAnswer(result.data)).join("\n") }
+        : message;
+    });
     const savedSource = workspace.source;
     if (
       ["id", "version", "datasetVersion", "metricVersion"].some(
@@ -61,6 +71,7 @@ export class WorkspaceEngine {
           "Saved data/source versions changed. Restore the matching dataset or start a separate workspace; saved facts have not been rebound.",
       };
     let recovered = false;
+    workspace.source = source;
     const components = workspace.components
       .map((binding) => {
         try {
@@ -93,6 +104,9 @@ export class WorkspaceEngine {
       return {
         catalog,
         workspace: { ...workspace, components },
+        ...(latest.question
+          ? { lastRequest: { question: latest.question, requestId: latest.requestId } }
+          : {}),
         status:
           latest.status === "running" && this.#active.has(workspaceId) ? "working" : "incomplete",
         message:
@@ -108,7 +122,10 @@ export class WorkspaceEngine {
         : `Saved revision ${workspace.revision}.`,
     };
   }
-  validateAction(action: WorkspaceAction, workspace: Workspace) {
+  validateAction(
+    action: Exclude<WorkspaceAction, { type: "dismiss" | "back" }>,
+    workspace: Workspace,
+  ) {
     const binding = workspace.components.find((component) => component.id === action.componentId);
     const entry =
       binding &&
@@ -136,7 +153,7 @@ export class WorkspaceEngine {
       if (!group || !column || !table?.rows.some((row) => row[column.key] === action.label))
         throw new WorkspaceError("invalid-input", "Drill into a verified category or month.");
       if (group === "month") {
-        const start = action.label;
+        const start = `${action.label.slice(0, 7)}-01`;
         const date = new Date(`${start}T00:00:00Z`);
         date.setUTCMonth(date.getUTCMonth() + 1);
         if (!request.period)
@@ -235,7 +252,33 @@ export class WorkspaceEngine {
         "invalid-input",
         "Correct an existing accepted view with a new question and reason.",
       );
-    const interaction = action ? this.validateAction(action, initial.workspace) : undefined;
+    if (
+      (action?.type === "dismiss" || action?.type === "back") &&
+      !canonical.components.some((item) => item.id === action.componentId)
+    )
+      throw new WorkspaceError("invalid-input", "This view is no longer available.");
+    const previousView =
+      action?.type === "back" ? overviewFor(canonical, action.componentId) : undefined;
+    if (action?.type === "back") {
+      if (!previousView || previousView.binding.id !== action.componentId)
+        throw new WorkspaceError("invalid-input", "No saved overview is available for this view.");
+      try {
+        validateComposition(
+          { components: [previousView.binding] },
+          [previousView.result],
+          this.catalog,
+        );
+      } catch {
+        throw new WorkspaceError(
+          "invalid-input",
+          "Restore the overview's registered component before returning to it.",
+        );
+      }
+    }
+    const interaction =
+      action && action.type !== "dismiss" && action.type !== "back"
+        ? this.validateAction(action, initial.workspace)
+        : undefined;
     const previous = this.#active.get(workspaceId);
     if (previous) {
       previous.controller.abort(new SourceError("cancelled", "Superseded by a newer interaction."));
@@ -266,8 +309,50 @@ export class WorkspaceEngine {
     this.#active.set(workspaceId, { requestId: question.requestId, controller, completion });
     let committed: Workspace | undefined;
     try {
+      if (action?.type === "dismiss" || action?.type === "back") {
+        const components = previousView
+          ? canonical.components.map((item) =>
+              item.id === action.componentId ? previousView.binding : item,
+            )
+          : canonical.components.filter((item) => item.id !== action.componentId);
+        const drillBack = new Map(Object.entries(canonical.drillBack ?? {}));
+        drillBack.delete(action.componentId);
+        const next: Workspace = {
+          ...canonical,
+          revision: question.baseRevision + 1,
+          components,
+          messages: initial.workspace.messages,
+          results: [
+            ...canonical.results.filter(
+              (result) => result.resultId !== previousView?.result.resultId,
+            ),
+            ...(previousView ? [previousView.result] : []),
+          ].filter((result) => components.some((item) => item.resultId === result.resultId)),
+          cardTurns: Object.fromEntries(
+            Object.entries(canonical.cardTurns ?? {}).filter(
+              ([id]) => previousView || id !== action.componentId,
+            ),
+          ),
+          drillBack: Object.fromEntries(drillBack),
+          filters: previousView ? previousView.filters : components.length ? canonical.filters : {},
+        };
+        this.store.commit(question.baseRevision, next, question.requestId, {
+          status: "complete",
+          revision: next.revision,
+        });
+        committed = next;
+        return {
+          duplicate: false,
+          snapshot: this.snapshot(),
+          outcome: {
+            status: "complete",
+            message: previousView ? "Overview restored." : "View removed.",
+          },
+        };
+      }
       await this.synchronizeConversation(canonical);
       const outcome = await this.explorer.analyze(question, {
+        ...(correction ? { correctionComponentId: correction.componentId } : {}),
         ...(!interaction
           ? {
               accepted: {
@@ -344,11 +429,12 @@ export class WorkspaceEngine {
           controller.signal.throwIfAborted();
           if (
             correction &&
-            !session.composition.components.some((item) => item.id === correction.componentId)
+            (session.composition.components.length !== 1 ||
+              session.composition.components[0]?.id !== correction.componentId)
           )
             throw new SourceError(
               "invalid-composition",
-              "The correction must replace its referenced accepted view.",
+              "The correction must replace only its referenced accepted view.",
             );
           const replacements = new Map(
             session.composition.components.map((component) => [component.id, component]),
@@ -365,8 +451,17 @@ export class WorkspaceEngine {
           if (components.length > 24)
             throw new SourceError(
               "budget-exceeded",
-              "This workspace has reached 24 cards. Reuse a card ID for refinements.",
+              "This workspace has reached 24 cards. Refine an existing view with a follow-up question.",
             );
+          const drillBack = new Map(Object.entries(canonical.drillBack ?? {}));
+          if (!interaction)
+            for (const binding of session.composition.components) drillBack.delete(binding.id);
+          if (action?.type === "drill" && interaction)
+            drillBack.set(action.componentId, {
+              binding: interaction.binding,
+              result: interaction.result,
+              filters: canonical.filters,
+            });
           const next: Workspace = {
             ...initial.workspace,
             revision: question.baseRevision + 1,
@@ -381,6 +476,12 @@ export class WorkspaceEngine {
             source: this.explorer.describe(),
             components,
             results,
+            drillBack: Object.fromEntries(drillBack),
+            cardTurns: Object.fromEntries(
+              components.map((component) => {
+                return [component.id, savedCardTurn(canonical, component.id) ?? question.requestId];
+              }),
+            ),
             filters: interaction?.filters ?? initial.workspace.filters,
             ...(action?.type === "drill" ? { drill: action.label } : {}),
             messages: [
@@ -389,7 +490,7 @@ export class WorkspaceEngine {
               {
                 id: `${question.requestId}-answer`,
                 role: "assistant" as const,
-                content: session.results.map((result) => result.explanation).join("\n"),
+                content: session.results.map((result) => humanAnswer(result.data)).join("\n"),
               },
             ].slice(-40),
           };

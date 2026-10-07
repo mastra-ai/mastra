@@ -43,3 +43,25 @@ export function referenceFixture(path: string = ":memory:") {
   `);
   return { db, metadata };
 }
+
+/** Fixed subscription lifecycles for first-activation cohort expectations. */
+export function cohortFixture(path: string = ":memory:") {
+  const fixture = referenceFixture(path);
+  fixture.db.exec(`
+    DELETE FROM subscription_history;
+    DELETE FROM subscriptions;
+    INSERT INTO accounts VALUES (5,'E','Americas'),(6,'F','EMEA'),(7,'G','APAC'),(8,'H','EMEA');
+    INSERT INTO subscriptions VALUES (1,1),(2,1),(3,2),(4,3),(5,4),(6,5),(7,6),(8,7),(9,8);
+    INSERT INTO subscription_history VALUES
+      (1,'2024-12-01',0),(1,'2025-01-10',6000),(2,'2025-01-10',4000),
+      (1,'2025-02-01',0),(2,'2025-02-01',10000),
+      (2,'2025-02-10',0),(1,'2025-02-15',7000),
+      (3,'2025-01-20',5000),
+      (4,'2025-01-02',50000),(4,'2025-01-20',0),(4,'2025-02-05',50000),
+      (5,'2025-02-02',9000),(5,'2025-03-01',0),(5,'2025-03-20',9000),
+      (6,'2025-03-01',10000),(6,'2025-04-01',0),
+      (7,'2024-12-01',10000),(7,'2025-01-05',0),(7,'2025-02-01',10000),
+      (8,'2025-01-05',0),(9,'2025-04-01',5000);
+  `);
+  return fixture;
+}

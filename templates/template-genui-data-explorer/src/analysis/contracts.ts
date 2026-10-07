@@ -4,8 +4,14 @@ import {
   failureCodes,
   tableColumnSchema,
   groupingColumn,
+  matrixAxesSchema,
+  hasAvailableData,
 } from "../../data-sources/source.ts";
-import type { AnalysisResult, SourceCapability } from "../../data-sources/source.ts";
+import type {
+  AnalysisResult,
+  SourceCapability,
+  SourceDescriptor,
+} from "../../data-sources/source.ts";
 
 export const LIMITS = Object.freeze({
   steps: 8,
@@ -48,9 +54,10 @@ export const representationSchema = z.strictObject({
   metric: z.string().min(1).max(80),
   unit: z.string().min(1).max(80),
   status: z.enum(["available", "unavailable"]),
-  role: z.enum(["scalar", "series", "ranked", "records"]),
+  role: z.enum(["scalar", "series", "ranked", "records", "matrix"]),
   columns: z.array(tableColumnSchema).max(50),
   grouping: z.string().min(1).max(80).optional(),
+  axes: matrixAxesSchema.optional(),
   compatibleComponents: z
     .array(
       z.object({
@@ -61,17 +68,18 @@ export const representationSchema = z.strictObject({
     )
     .optional(),
 });
-export function representation(result: VerifiedResult) {
+export function representation(result: VerifiedResult, descriptor: SourceDescriptor) {
   const table = result.data.table;
   const grouping = table && groupingColumn(table);
   return representationSchema.parse({
     resultId: result.resultId,
     metric: result.data.metric,
     unit: result.data.unit,
-    status: result.data.status,
+    status: hasAvailableData(result.data, descriptor) ? "available" : "unavailable",
     role: table?.kind ?? "scalar",
     columns: table?.columns ?? [],
     ...(grouping ? { grouping: grouping.key } : {}),
+    ...(table?.axes ? { axes: table.axes } : {}),
   });
 }
 export type TerminalStatus =

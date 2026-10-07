@@ -17,6 +17,8 @@ export default defineConfig({
     reuseExistingServer: false,
     env: {
       NEXT_TELEMETRY_DISABLED: "1",
+      NEXT_DIST_DIRECTORY: ".next/browser",
+      NEXT_TSCONFIG_PATH: "tests/tsconfig.app.json",
       COPILOTKIT_TELEMETRY_DISABLED: "true",
       AGENT_PORT: "4112",
       WEB_PORT: "3100",

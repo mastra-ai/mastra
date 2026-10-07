@@ -10,6 +10,17 @@ export const workspaceSchema = z.strictObject({
   source: sourceDescriptorSchema,
   results: z.array(verifiedResultSchema),
   components: z.array(componentSchema),
+  cardTurns: z.record(z.string(), z.string()).optional(),
+  drillBack: z
+    .record(
+      z.string(),
+      z.strictObject({
+        binding: componentSchema,
+        result: verifiedResultSchema,
+        filters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+      }),
+    )
+    .optional(),
   filters: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
   drill: z.string().optional(),
   corrections: z
@@ -26,9 +37,21 @@ export const workspaceSchema = z.strictObject({
   ),
 });
 export type Workspace = z.infer<typeof workspaceSchema>;
+export function overviewFor(workspace: Workspace, componentId: string) {
+  const entries = workspace.drillBack;
+  return entries && Object.hasOwn(entries, componentId) ? entries[componentId] : undefined;
+}
+export function savedCardTurn(workspace: Workspace, componentId: string) {
+  const turns = workspace.cardTurns;
+  if (turns && Object.hasOwn(turns, componentId)) return turns[componentId];
+  const binding = workspace.components.find((item) => item.id === componentId);
+  return workspace.results.find((item) => item.resultId === binding?.resultId)?.requestId;
+}
 export const workspaceId = "local-workspace";
 export const threadId = "local-thread";
 export const actionSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("dismiss"), componentId: z.string().min(1).max(128) }),
+  z.strictObject({ type: z.literal("back"), componentId: z.string().min(1).max(128) }),
   z.strictObject({
     type: z.literal("filter"),
     componentId: z.string(),
@@ -59,6 +82,7 @@ export const requestProperties = z.strictObject({
   correction: correctionSchema.optional(),
 });
 export interface WorkspaceSnapshot {
+  lastRequest?: { question: string; requestId: string } | undefined;
   catalog?: { id: string; version: string; defaults: { pageSize: number } }[] | undefined;
   workspace: Workspace;
   status: "saved" | "working" | "incomplete" | "recovery-required";

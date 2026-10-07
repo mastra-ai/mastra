@@ -3,7 +3,7 @@ import "@copilotkit/react-ui/v2/styles.css";
 import "./style.css";
 export const metadata = {
   title: "Mastra GenUI Data Explorer",
-  description: "Verified synthetic SaaS analytics in a persistent generative workspace.",
+  description: "Verified example SaaS analytics in a persistent generative workspace.",
 };
 export default function Layout({ children }: { children: ReactNode }) {
   return (

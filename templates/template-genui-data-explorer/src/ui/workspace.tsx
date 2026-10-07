@@ -1,20 +1,36 @@
 "use client";
-import { useState, useSyncExternalStore, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useId,
+  useSyncExternalStore,
+  useEffect,
+  createContext,
+  useContext,
+} from "react";
 import {
   CopilotKit,
   CopilotChat,
+  CopilotChatInput,
+  CopilotChatAssistantMessage,
   useAgent,
   useCopilotKit,
   useRenderTool,
 } from "@copilotkit/react-core/v2";
 import { z } from "zod";
-import { workspaceSchema, threadId } from "../workspace/contracts.ts";
+import { workspaceSchema, threadId, overviewFor, savedCardTurn } from "../workspace/contracts.ts";
 import type { WorkspaceAction, WorkspaceSnapshot } from "../workspace/contracts.ts";
-import { compositionSchema, components } from "./catalog.ts";
+import { components } from "./catalog.ts";
 import type { ComponentDeclaration } from "./catalog.ts";
 import { RegisteredView } from "./renderers.tsx";
+import { periodLabel, viewTitle } from "./format.ts";
+import type {
+  CopilotChatInputProps,
+  CopilotChatAssistantMessageProps,
+} from "@copilotkit/react-core/v2";
 
 const snapshotSchema = z.strictObject({
+  lastRequest: z.strictObject({ question: z.string(), requestId: z.string() }).optional(),
   workspace: workspaceSchema,
   status: z.enum(["saved", "working", "incomplete", "recovery-required"]),
   message: z.string(),
@@ -98,6 +114,16 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
   });
   const { copilotkit } = useCopilotKit();
   const [notice, setNotice] = useState<string>();
+  const [dismissedFeedback, setDismissedFeedback] = useState<string>();
+  const [theme, setTheme] = useState("light");
+  useEffect(() => {
+    const selected =
+      localStorage.getItem("explorer-theme") ??
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setTheme(selected);
+    document.documentElement.dataset.theme = selected;
+    document.documentElement.classList.toggle("dark", selected === "dark");
+  }, []);
   const [correction, setCorrection] = useState<{ componentId: string; reason: string }>();
   useEffect(() => {
     const subscription = agent.subscribe({
@@ -106,6 +132,7 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
         if (parsed.success) {
           copilotkit.setProperties({ baseRevision: parsed.data.workspace.revision });
           setCorrection(undefined);
+          setNotice(undefined);
         }
       },
     });
@@ -117,18 +144,7 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
   }, [agent, isReady, copilotkit, initial]);
   const parsed = snapshotSchema.safeParse(agent.state);
   const snapshot = parsed.success ? parsed.data : initial;
-  useRenderTool({
-    name: "compose",
-    parameters: compositionSchema,
-    render: ({ status }) => (
-      <p role="status">
-        {status === "complete"
-          ? "Composition prepared; only saved cards appear in the workspace."
-          : "Validating composition…"}
-      </p>
-    ),
-  });
-  useRenderTool({ name: "*", render: () => <p>Reading and verifying source data…</p> });
+  useRenderTool({ name: "*", render: () => null });
   useEffect(() => {
     if (snapshot.status !== "saved") return;
     const frame = requestAnimationFrame(() => {
@@ -164,170 +180,382 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
     }
   };
   const correct = (componentId: string, reason: string) => {
+    setNotice(undefined);
+    setDismissedFeedback(undefined);
     const correction = { componentId, reason };
     setCorrection(correction);
     copilotkit.setProperties({ baseRevision: snapshot.workspace.revision, correction });
   };
-  const declaration = (id: string): ComponentDeclaration | undefined => {
-    const registered = components.find((entry) => entry.id === id);
-    const configured = snapshot.catalog?.find((entry) => entry.id === id);
-    return registered
-      ? { ...registered, enabled: true, ...(configured ? { defaults: configured.defaults } : {}) }
-      : undefined;
+  const feedbackKey = `${snapshot.workspace.revision}:${snapshot.status}:${snapshot.message}:${notice ?? ""}:${correction?.componentId ?? ""}`;
+  const clearCorrection = () => {
+    setCorrection(undefined);
+    copilotkit.setProperties({ baseRevision: snapshot.workspace.revision });
   };
   return (
-    <>
-      <header>
-        <h1>Mastra GenUI Data Explorer</h1>
-        <p>
-          Ask about synthetic SaaS Sales. Mastra chooses registered views from verified source data.
-          Completed cards and context survive reload and restart.
-        </p>
+    <ViewContext.Provider
+      value={{
+        snapshot,
+        act,
+        correct,
+        correction,
+        notice,
+        dismissFeedback: () => {
+          setDismissedFeedback(feedbackKey);
+          clearCorrection();
+        },
+        feedbackVisible:
+          dismissedFeedback !== feedbackKey &&
+          (Boolean(notice) ||
+            Boolean(correction) ||
+            snapshot.status !== "saved" ||
+            snapshot.message.startsWith("A saved renderer changed.")),
+        isRunning: agent.isRunning,
+      }}
+    >
+      <header className="app-header">
+        <div>
+          <h1>Mastra GenUI Data Explorer</h1>
+          <p>Ask about Sales. Explore the results with charts, comparisons and records.</p>
+        </div>
+        <button
+          onClick={() => {
+            const selected = theme === "dark" ? "light" : "dark";
+            setTheme(selected);
+            document.documentElement.dataset.theme = selected;
+            document.documentElement.classList.toggle("dark", selected === "dark");
+            localStorage.setItem("explorer-theme", selected);
+          }}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </button>
       </header>
       <main>
-        <section className="workspace" aria-label="Analytics workspace">
-          <div role="status" className="notice" data-status={snapshot.status}>
-            {notice ?? snapshot.message}
-            <p>
-              Revision {snapshot.workspace.revision} ·{" "}
-              {snapshot.status === "saved" ? "Saved locally" : "Last complete revision preserved"}
-            </p>
-            <button onClick={() => location.reload()}>Reload saved workspace</button>
-            {correction && (
-              <label>
-                Correction reason
-                <input
-                  aria-label="Correction reason"
-                  maxLength={300}
-                  value={correction.reason}
-                  onChange={(event) => correct(correction.componentId, event.target.value)}
-                />
-                <p>
-                  Ask a follow-up that replaces this accepted view. The reason is saved with an
-                  accepted correction.
-                </p>
-              </label>
-            )}
+        <section className="chat" aria-label="Copilot conversation">
+          <div className="conversation-status" role="status">
+            Revision {snapshot.workspace.revision} ·{" "}
+            {snapshot.status === "saved" ? "Saved locally" : "Last complete revision preserved"}
           </div>
-          {snapshot.status === "recovery-required" ? (
-            <p role="alert">
-              Saved results are unavailable until the matching dataset is restored.
-            </p>
-          ) : snapshot.workspace.components.length === 0 ? (
-            <div className="empty">
-              <h2>Your workspace starts with a question</h2>
-              <p>
-                Try monthly bookings, a ranked segment comparison, or closed-opportunity records.
-              </p>
-            </div>
-          ) : (
-            snapshot.workspace.components.map((binding) => {
-              const result = snapshot.workspace.results.find(
-                (result) => result.resultId === binding.resultId,
-              );
-              const entry = declaration(binding.component);
-              if (!result || !entry)
-                return (
-                  <article className="card" key={binding.id}>
-                    <p role="alert">
-                      This saved component is unavailable. Restore its configuration.
-                    </p>
-                  </article>
-                );
-              const filters =
-                Object.entries(result.data.request.filters ?? {})
-                  .map(([key, value]) => `${key}=${value}`)
-                  .join(", ") || "None";
-              return (
-                <article
-                  className="card"
-                  key={`${binding.id}-${binding.resultId}`}
-                  data-component={binding.component}
-                  data-result={binding.resultId}
-                >
-                  <h2>{binding.properties.title}</h2>
-                  {binding.properties.scenario && (
-                    <p>Illustrative scenario · not guaranteed revenue</p>
-                  )}
-                  <RegisteredView
-                    binding={binding}
-                    result={result}
-                    declaration={entry}
-                    act={(action) => {
-                      void act(action);
-                    }}
-                  />
-                  <div className="controls">
-                    <button
-                      onClick={() =>
-                        correct(binding.id, "Correct the interpretation of this accepted view.")
-                      }
-                    >
-                      Correct this view
-                    </button>
-                    {entry.actions.includes("filter") && (
-                      <label>
-                        Segment filter
-                        <select
-                          aria-label={`Segment filter ${binding.properties.title}`}
-                          value={String(result.data.request.filters?.segment ?? "")}
-                          onChange={(event) => {
-                            void act({
-                              type: "filter",
-                              componentId: binding.id,
-                              field: "segment",
-                              ...(event.target.value ? { value: event.target.value } : {}),
-                            });
-                          }}
-                        >
-                          <option value="">All segments</option>
-                          <option>SMB</option>
-                          <option>Mid-market</option>
-                          <option>Enterprise</option>
-                        </select>
-                      </label>
-                    )}
-                    {entry.actions.includes("compare") && (
-                      <button
-                        onClick={() => {
-                          void act({
-                            type: "compare",
-                            componentId: binding.id,
-                            segment: "Enterprise",
-                          });
-                        }}
-                      >
-                        Compare Enterprise
-                      </button>
-                    )}
-                  </div>
-                  <div className="provenance">
-                    <p>{result.explanation}</p>
-                    <p>
-                      Filters: {filters} · Source {result.data.provenance.sourceId} · Dataset{" "}
-                      {result.data.provenance.datasetVersion} · Definition{" "}
-                      {result.data.provenance.metricVersion} · Request {result.requestId}
-                    </p>
-                    {result.data.period && (
-                      <p>
-                        UTC coverage {result.data.period.start} to {result.data.period.end}{" "}
-                        (exclusive). No categories omitted.
-                      </p>
-                    )}
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </section>
-        <aside className="chat" aria-label="Copilot conversation">
           <CopilotChat
             agentId="workspace-agent"
             threadId={threadId}
             labels={{ chatInputPlaceholder: "Ask about Sales…" }}
+            input={ConversationInputSlot}
+            onSubmitMessage={() => {
+              setNotice(undefined);
+              setDismissedFeedback(undefined);
+            }}
+            onError={() =>
+              setNotice(
+                "The request could not finish. Check the local server and connection, then retry.",
+              )
+            }
+            messageView={{
+              assistantMessage: ConversationAnswerSlot,
+              children: ({ messageElements }) => (
+                <div className="conversation-messages">
+                  <EarlierViews />
+                  {snapshot.workspace.messages.length === 0 && (
+                    <div className="empty">
+                      <h2>Start with a question</h2>
+                      <p>
+                        Try “Show a chart of last month sales” or “Compare bookings by segment”.
+                      </p>
+                    </div>
+                  )}
+                  {messageElements}
+                  {snapshot.status === "incomplete" && (
+                    <div className="failed-turn" data-turn={snapshot.lastRequest?.requestId}>
+                      {snapshot.lastRequest && (
+                        <p className="failed-question">{snapshot.lastRequest.question}</p>
+                      )}
+                      <p role="alert">{snapshot.message}</p>
+                    </div>
+                  )}
+                </div>
+              ),
+            }}
           />
-        </aside>
+        </section>
       </main>
-    </>
+    </ViewContext.Provider>
   );
 }
+interface ViewState {
+  snapshot: WorkspaceSnapshot;
+  act: (action: WorkspaceAction) => Promise<void>;
+  correct: (componentId: string, reason: string) => void;
+  correction?: { componentId: string; reason: string } | undefined;
+  notice?: string | undefined;
+  feedbackVisible: boolean;
+  dismissFeedback: () => void;
+  isRunning: boolean;
+}
+const ViewContext = createContext<ViewState | undefined>(undefined);
+function useView() {
+  const view = useContext(ViewContext);
+  if (!view) throw new Error("Conversation views require a workspace.");
+  return view;
+}
+function ConversationInput(props: CopilotChatInputProps) {
+  const { snapshot, notice, correction, correct, feedbackVisible, dismissFeedback, isRunning } =
+    useView();
+  const submitting = useRef(false);
+  const [applying, setApplying] = useState(false);
+  const busy = isRunning || applying;
+  const applyCorrection = async () => {
+    const reason = correction?.reason.trim();
+    if (!correction || !reason || busy || submitting.current || !props.onSubmitMessage) return;
+    submitting.current = true;
+    setApplying(true);
+    correct(correction.componentId, reason);
+    try {
+      await props.onSubmitMessage(reason);
+    } finally {
+      submitting.current = false;
+      setApplying(false);
+    }
+  };
+  return (
+    <div className="composer-area">
+      {isRunning && (
+        <p className="run-status" role="status">
+          Reading the source and preparing your view…
+        </p>
+      )}
+      {feedbackVisible && (
+        <div
+          className="notice"
+          role={snapshot.status === "incomplete" || notice ? "alert" : "status"}
+          data-status={snapshot.status}
+        >
+          <button
+            className="close-feedback"
+            aria-label="Close feedback"
+            disabled={busy}
+            onClick={dismissFeedback}
+          >
+            ×
+          </button>
+          <p>
+            {notice ??
+              (correction
+                ? "Describe what to change, then apply the correction to this view."
+                : snapshot.message)}
+          </p>
+          {correction && (
+            <form
+              className="correction-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void applyCorrection();
+              }}
+            >
+              <label>
+                Correction reason
+                <input
+                  aria-label="Correction reason"
+                  placeholder="For example, show bookings for last month"
+                  maxLength={300}
+                  disabled={busy}
+                  value={correction.reason}
+                  onChange={(event) => correct(correction.componentId, event.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={busy || !correction.reason.trim() || !props.onSubmitMessage}
+              >
+                {busy ? "Applying correction…" : "Apply correction"}
+              </button>
+            </form>
+          )}
+          {snapshot.status !== "saved" && (
+            <button onClick={() => location.reload()}>Reload saved workspace</button>
+          )}
+        </div>
+      )}
+      <CopilotChatInput
+        {...props}
+        isRunning={Boolean(props.isRunning) || applying}
+        {...(props.onSubmitMessage
+          ? {
+              onSubmitMessage: (value: string) => {
+                if (!submitting.current) return props.onSubmitMessage?.(value);
+              },
+            }
+          : {})}
+      />
+    </div>
+  );
+}
+function ConversationAnswer(props: CopilotChatAssistantMessageProps) {
+  const { snapshot } = useView();
+  const turn = props.message.id.replace(/-answer$/, "");
+  const bindings =
+    snapshot.status === "recovery-required"
+      ? []
+      : snapshot.workspace.components.filter(
+          (item) => savedCardTurn(snapshot.workspace, item.id) === turn,
+        );
+  if (!bindings.length) return <CopilotChatAssistantMessage {...props} toolbarVisible={false} />;
+  return (
+    <div className="visual-answer" data-turn={turn}>
+      {bindings.map((binding) => (
+        <ResultCard key={`${binding.id}-${binding.resultId}`} componentId={binding.id} />
+      ))}
+    </div>
+  );
+}
+function EarlierViews() {
+  const { snapshot } = useView();
+  if (snapshot.status === "recovery-required")
+    return (
+      <p role="alert">Saved results are unavailable until the matching dataset is restored.</p>
+    );
+  const visibleTurns = new Set(
+    snapshot.workspace.messages
+      .filter((item) => item.role === "assistant")
+      .map((item) => item.id.replace(/-answer$/, "")),
+  );
+  const earlier = snapshot.workspace.components.filter(
+    (item) => !visibleTurns.has(savedCardTurn(snapshot.workspace, item.id) ?? ""),
+  );
+  return earlier.length ? (
+    <section aria-label="Earlier saved views">
+      <h2>Earlier saved views</h2>
+      {earlier.map((item) => (
+        <ResultCard key={`${item.id}-${item.resultId}`} componentId={item.id} />
+      ))}
+    </section>
+  ) : null;
+}
+function ResultCard({ componentId }: { componentId: string }) {
+  const { snapshot, act, correct, isRunning } = useView();
+  const [collapsed, setCollapsed] = useState(false);
+  const bodyId = useId();
+  const binding = snapshot.workspace.components.find((item) => item.id === componentId);
+  const result = snapshot.workspace.results.find((item) => item.resultId === binding?.resultId);
+  const registered = components.find((item) => item.id === binding?.component);
+  const configured = snapshot.catalog?.find((item) => item.id === binding?.component);
+  if (!binding || !result || !registered)
+    return <p role="alert">This saved view is unavailable. Restore its configuration.</p>;
+  const capability = snapshot.workspace.source.capabilities.find(
+    (item) => item.metric === result.data.metric,
+  );
+  const entry: ComponentDeclaration = {
+    ...registered,
+    actions: registered.actions.filter(
+      (action) => action !== "drill" || capability?.fields.includes("records"),
+    ),
+    enabled: true,
+    ...(configured ? { defaults: configured.defaults } : {}),
+  };
+  const title = viewTitle(result.data);
+  const titled = { ...binding, properties: { ...binding.properties, title } };
+  return (
+    <article className="card" data-component={binding.component} data-result={binding.resultId}>
+      <div className="card-heading">
+        <div>
+          <h2>{title}</h2>
+          <p className="period">{periodLabel(result.data)}</p>
+          {Object.keys(result.data.request.filters ?? {}).length > 0 && (
+            <p className="cohort-label">
+              {Object.entries(result.data.request.filters ?? {})
+                .map(([field, value]) =>
+                  field === "ownerId" ? `Sales representative ${value}` : String(value),
+                )
+                .join(" · ")}
+            </p>
+          )}
+        </div>
+        <button
+          aria-label={`${collapsed ? "Expand" : "Collapse"} ${title}`}
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          {collapsed ? "Expand" : "Collapse"}
+        </button>
+      </div>
+      <div id={bodyId} hidden={collapsed}>
+        {binding.properties.scenario && <p>Illustrative scenario · not guaranteed revenue</p>}
+        <RegisteredView
+          binding={titled}
+          result={result}
+          declaration={entry}
+          act={(action) => {
+            void act(action);
+          }}
+        />
+        <div className="controls">
+          {overviewFor(snapshot.workspace, binding.id) && (
+            <button
+              disabled={isRunning}
+              onClick={() => {
+                void act({ type: "back", componentId: binding.id });
+              }}
+            >
+              Back to overview
+            </button>
+          )}
+          <button
+            disabled={isRunning}
+            title="Describe a change and apply it to update this view. Source records remain unchanged."
+            onClick={() => correct(binding.id, "")}
+          >
+            Correct this view
+          </button>
+          {entry.actions.includes("filter") && capability?.filters.includes("segment") && (
+            <label>
+              Segment filter
+              <select
+                aria-label={`Segment filter ${title}`}
+                disabled={isRunning}
+                value={String(result.data.request.filters?.segment ?? "")}
+                onChange={(event) => {
+                  void act({
+                    type: "filter",
+                    componentId: binding.id,
+                    field: "segment",
+                    ...(event.target.value ? { value: event.target.value } : {}),
+                  });
+                }}
+              >
+                <option value="">All segments</option>
+                <option>SMB</option>
+                <option>Mid-market</option>
+                <option>Enterprise</option>
+              </select>
+            </label>
+          )}
+          {entry.actions.includes("compare") && capability?.filters.includes("segment") && (
+            <button
+              disabled={isRunning}
+              onClick={() => {
+                void act({ type: "compare", componentId: binding.id, segment: "Enterprise" });
+              }}
+            >
+              Compare Enterprise
+            </button>
+          )}
+        </div>
+        <details className="source-details">
+          <summary>Source details</summary>
+          <p>{capability?.description}</p>
+          <p>Source: {snapshot.workspace.source.title}</p>
+          {Object.keys(result.data.request.filters ?? {}).length > 0 && (
+            <p>
+              {Object.entries(result.data.request.filters ?? {})
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(" · ")}
+            </p>
+          )}
+        </details>
+      </div>
+    </article>
+  );
+}
+
+const ConversationInputSlot = Object.assign(ConversationInput, CopilotChatInput);
+const ConversationAnswerSlot = Object.assign(ConversationAnswer, CopilotChatAssistantMessage);

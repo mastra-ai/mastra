@@ -6,13 +6,36 @@ import { randomUUID } from "node:crypto";
 import { Mastra } from "@mastra/core/mastra";
 import { RequestContext } from "@mastra/core/request-context";
 import type { MastraModelConfig } from "@mastra/core/llm";
-import { sourceDescriptorSchema, SourceError } from "../../data-sources/source.ts";
+import {
+  sourceDescriptorSchema,
+  SourceError,
+  hasAvailableData,
+} from "../../data-sources/source.ts";
 import type { DataSource, SourceDescriptor } from "../../data-sources/source.ts";
 import { analyticalWorkflow, bounded, sessionFrom } from "./workflow.ts";
 import type { Session } from "./workflow.ts";
 import { explorerAgent } from "../mastra/agent.ts";
 import { LIMITS, questionSchema } from "./contracts.ts";
 import type { AnalysisEvent, Outcome, VerifiedResult } from "./contracts.ts";
+
+/** An explicit conversion target takes precedence over references to an existing view. */
+function requestedRepresentation(question: string) {
+  const command = [
+    ...question.matchAll(/\b(?:show|display|render|draw|create|make|give|list|inspect)\b/gi),
+  ].at(-1);
+  const output = question
+    .slice(command ? command.index + command[0].length : 0)
+    .replace(
+      /\b(?:behind|from|in|on|using|underlying)\s+(?:this|that|the|previous|saved|existing)\s+(?:chart|graph|plot|matrix|heatmap)\b/gi,
+      "",
+    );
+  const first = /\b(table|records|rows|chart|graph|plot|matrix|heatmap)\b/i.exec(output)?.[1];
+  const target =
+    /\b(?:as|in|into|to)\s+(?:(?:a|an|the)\s+)?(table|chart|graph|plot|matrix|heatmap)\b/i.exec(
+      output,
+    )?.[1];
+  return (target ?? first)?.toLowerCase();
+}
 
 export class DataExplorer {
   readonly mastra: Mastra;
@@ -64,6 +87,7 @@ export class DataExplorer {
       signal?: AbortSignal;
       onEvent?: (event: AnalysisEvent) => void;
       accepted?: { components: readonly ComponentBinding[]; results: readonly VerifiedResult[] };
+      correctionComponentId?: string;
       filters?: import("../../data-sources/source.ts").AnalysisRequest["filters"];
       execute?: (
         context: RequestContext,
@@ -196,7 +220,19 @@ export class DataExplorer {
           options.accepted.components,
           options.accepted.results,
           this.#catalog,
+          this.#descriptor,
         );
+      if (options.correctionComponentId) {
+        const target = session.accepted?.components.find(
+          (component) => component.id === options.correctionComponentId,
+        );
+        if (!target)
+          throw new SourceError(
+            "invalid-composition",
+            "The correction target is not an accepted view.",
+          );
+        session.correctionTarget = target;
+      }
       emit({ type: "progress", stage: "planning" });
       const generated = await bounded(
         options.execute
@@ -218,11 +254,12 @@ export class DataExplorer {
         outcome = {
           status: "clarification-required",
           results: [],
-          message:
-            "Choose an advertised metric and a covered period. No verified result was produced.",
+          message: `I could not select a supported analysis. Try one of these source examples: ${this.#descriptor.examples.map((example) => example.title).join("; ")}.`,
         };
       else {
-        const unavailable = session.results.find((result) => result.data.status === "unavailable");
+        const unavailable = session.results.find(
+          (result) => !hasAvailableData(result.data, this.#descriptor),
+        );
         outcome = {
           status: unavailable
             ? unavailable.data.denominator === 0
@@ -233,6 +270,32 @@ export class DataExplorer {
           message: session.results.map((result) => result.explanation).join("\n"),
         };
         if (!unavailable) {
+          const requestedView = requestedRepresentation(question.question);
+          if (
+            session.composition &&
+            ["matrix", "heatmap"].includes(requestedView ?? "") &&
+            !session.composition.components.some(
+              (binding) =>
+                this.#catalog.find((entry) => entry.id === binding.component)?.kind === "heatmap",
+            )
+          )
+            throw new SourceError(
+              "unsupported",
+              "This analysis did not produce a verified matrix for a heatmap. Ask for a supported customer retention cohort or another registered view.",
+            );
+          if (
+            session.composition &&
+            ["chart", "graph", "plot"].includes(requestedView ?? "") &&
+            !session.composition?.components.some((binding) =>
+              ["line", "bar", "heatmap"].includes(
+                this.#catalog.find((entry) => entry.id === binding.component)?.kind ?? "",
+              ),
+            )
+          )
+            throw new SourceError(
+              "unsupported",
+              "This analysis did not produce chart data. Ask for a metric with a supported month or category grouping. Metrics without a grouping capability can be displayed as a total or rate.",
+            );
           await options.onComplete?.(session);
           controller.signal.throwIfAborted();
           this.#lastComplete.set(question.workspaceId, structuredClone(session.results));

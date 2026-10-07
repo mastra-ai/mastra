@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { referenceFixture } from "../fixtures/reference.ts";
+import { referenceFixture, cohortFixture } from "../fixtures/reference.ts";
 import {
   bookings,
   conversion,
@@ -12,6 +12,8 @@ import {
   monthlyCustomerChurn,
   revenueChurn,
   trailingCustomerChurn,
+  churnSeries,
+  customerCohorts,
 } from "../../data-sources/sales/churn-metrics.ts";
 import { safeInteger } from "../../data-sources/sales/contracts.ts";
 
@@ -75,6 +77,51 @@ it("counts accounts, first cancellation and capped gross MRR loss", () => {
   }
 });
 
+it("monthly churn keeps independent opening populations and gaps instead of adding rates", () => {
+  const { db, metadata } = referenceFixture();
+  try {
+    const period = { start: "2025-01-01", end: "2025-04-01" };
+    const customers = churnSeries(db, metadata, period, "customerChurn");
+    expect(customers.rows).toEqual([
+      {
+        month: "2025-01-01",
+        numerator: 1,
+        denominator: 3,
+        value: (1 / 3) * 100,
+        reactivatedCustomers: 1,
+      },
+      { month: "2025-02-01", numerator: 1, denominator: 2, value: 50, reactivatedCustomers: 0 },
+      { month: "2025-03-01", numerator: 0, denominator: 1, value: 0, reactivatedCustomers: 0 },
+    ]);
+    expect(customerChurn(db, metadata, period)).toMatchObject({ numerator: 2, denominator: 3 });
+    const revenue = churnSeries(db, metadata, period, "revenueChurn");
+    expect(revenue.rows).toMatchObject([
+      { numerator: 30000, denominator: 40000, value: 75 },
+      { numerator: 10000, denominator: 13000, value: (10000 / 13000) * 100 },
+      { numerator: 0, denominator: 3000, value: 0 },
+    ]);
+    expect(revenueChurn(db, metadata, period)).toMatchObject({
+      numerator: 40000,
+      denominator: 40000,
+    });
+    expect(() =>
+      churnSeries(db, metadata, { start: "2025-01-02", end: "2025-04-01" }, "customerChurn"),
+    ).toThrow("complete calendar months");
+    db.exec(
+      "DELETE FROM subscription_history; INSERT INTO subscription_history VALUES (1,'2025-02-10',10000)",
+    );
+    expect(churnSeries(db, metadata, period, "customerChurn").rows).toEqual([
+      { month: "2025-03-01", numerator: 0, denominator: 1, value: 0, reactivatedCustomers: 0 },
+    ]);
+    expect(customerChurn(db, metadata, period)).toMatchObject({
+      status: "unavailable",
+      denominator: 0,
+    });
+  } finally {
+    db.close();
+  }
+});
+
 it("distinguishes empty denominators from unsupported dates and zero totals", () => {
   const { db, metadata } = referenceFixture();
   try {
@@ -132,6 +179,94 @@ it("rejects invalid filters and unsafe monetary totals", () => {
     expect(() => bookings(db, metadata, { start: "2025-01-01", end: "2026-10-01" })).toThrow(
       "safe integer",
     );
+  } finally {
+    db.close();
+  }
+});
+
+it("continuous cohorts keep first activation members and never restore cancelled accounts", () => {
+  const { db, metadata } = cohortFixture();
+  const period = { start: "2025-01-01", end: "2025-04-01" };
+  try {
+    const retention = customerCohorts(db, metadata, period);
+    expect(retention).toMatchObject({ value: 40, numerator: 2, denominator: 5, cohortCount: 3 });
+    expect(retention.table?.rows).toEqual([
+      {
+        cohort: "2025-01-01",
+        age: 0,
+        numerator: 2,
+        denominator: 3,
+        value: (2 / 3) * 100,
+        reactivatedCustomers: 0,
+      },
+      {
+        cohort: "2025-01-01",
+        age: 1,
+        numerator: 1,
+        denominator: 3,
+        value: (1 / 3) * 100,
+        reactivatedCustomers: 2,
+      },
+      {
+        cohort: "2025-01-01",
+        age: 2,
+        numerator: 1,
+        denominator: 3,
+        value: (1 / 3) * 100,
+        reactivatedCustomers: 2,
+      },
+      {
+        cohort: "2025-02-01",
+        age: 0,
+        numerator: 1,
+        denominator: 1,
+        value: 100,
+        reactivatedCustomers: 0,
+      },
+      {
+        cohort: "2025-02-01",
+        age: 1,
+        numerator: 0,
+        denominator: 1,
+        value: 0,
+        reactivatedCustomers: 1,
+      },
+      {
+        cohort: "2025-03-01",
+        age: 0,
+        numerator: 1,
+        denominator: 1,
+        value: 100,
+        reactivatedCustomers: 0,
+      },
+    ]);
+    const churn = customerCohorts(db, metadata, period, "cohortChurn");
+    expect(churn).toMatchObject({ value: 60, numerator: 3, denominator: 5 });
+    expect(churn.table?.rows.map((row) => row.numerator)).toEqual([1, 2, 2, 0, 1, 0]);
+    const january = customerCohorts(db, metadata, { start: period.start, end: "2025-02-01" });
+    expect(january).toMatchObject({ numerator: 2, denominator: 3 });
+    expect(january.table?.rows).toHaveLength(1);
+    expect(customerCohorts(db, metadata, { start: "2025-02-01", end: period.end })).toMatchObject({
+      numerator: 1,
+      denominator: 2,
+    });
+    expect(() => customerCohorts(db, metadata, { start: "2025-01-02", end: period.end })).toThrow(
+      "complete calendar months",
+    );
+    expect(customerCohorts(db, metadata, { start: "2020-01-01", end: "2020-04-01" })).toMatchObject(
+      { status: "unavailable", value: null, table: undefined },
+    );
+    // Removing the later cancellation proves the same-day subscription transfer was not churn.
+    db.exec(
+      "DELETE FROM subscription_history WHERE subscription_id=2 AND effective_at='2025-02-10'",
+    );
+    expect(customerCohorts(db, metadata, period).table?.rows[1]?.numerator).toBe(2);
+    db.exec("DELETE FROM subscription_history");
+    expect(customerCohorts(db, metadata, period)).toMatchObject({
+      status: "unavailable",
+      denominator: 0,
+      table: { rows: [] },
+    });
   } finally {
     db.close();
   }

@@ -12,7 +12,7 @@ leads to individual records, and each answer suggests what to examine next. Gene
 that exploration conversational, with the agent choosing a useful view for each question and
 preserving context as the user follows up.
 
-The synthetic Sales example provides concrete questions about pipeline, conversion, growth, and
+The Sales example provides concrete questions about pipeline, conversion, growth, and
 churn. The same approach could be adapted to other domains:
 
 - **Finance:** compare spending across departments and inspect the transactions behind a variance.
@@ -24,7 +24,7 @@ These are adaptation ideas, not bundled datasets or supported analyses. Each nee
 source and metric definitions.
 
 **Current status:** the local browser workspace uses the official CopilotKit/AG-UI Mastra integration,
-verified synthetic Sales analytics, configurable React views and durable local conversation/workspace
+verified Sales analytics, configurable React views and durable local conversation/workspace
 storage. This candidate has not been accepted or published in the Mastra template catalog.
 
 ## Prerequisites
@@ -45,12 +45,26 @@ storage. This candidate has not been accepted or published in the Mastra templat
 2. **Configure the model**
    - Run `cp .env.example .env` and fill in the key described under Prerequisites.
 3. **Start the local workspace**
-   - Run `npm run dev`. The launcher initializes the synthetic dataset once, starts both local
+   - Run `npm run dev`. The launcher initializes the example dataset once, starts both local
      services and stops them together on exit. Anonymous Mastra/Next/CopilotKit telemetry is disabled.
    - Open [the workspace](http://127.0.0.1:3000), ask “Show monthly bookings over the last twelve
      complete months”, and inspect the agent-selected trend or table and verified source explanation.
 
 ## Try it out
+
+The conversation fills the workspace width. Each accepted answer renders registered cards under the
+question that created them, with formatted USD values and calendar dates. Technical calculation
+evidence stays on the server; **Source details** exposes the
+metric definition when needed.
+
+- Use **Dark mode** or **Light mode** in the header. The dark palette is inspired by Dracula; the choice persists in this browser.
+- Use **Collapse** and **Expand** to fold a card while keeping its question and answer together. This changes only the current presentation and makes no model call.
+- Hover a chart point or select its month/category button to see its value. **Inspect selected records**
+  opens the underlying rows. Registered React renderers own these interactions.
+- **Correct this view** opens a dismissible feedback panel above the chat input.
+  Describe the interpretation to change, then choose **Apply correction** or press Enter. The reason is sent directly as a chat request; the accepted correction replaces that card without editing source records.
+- Unsupported and failed questions show a visible response beside the attempted question. The last
+  accepted cards remain available.
 
 - Ask for monthly bookings, then select SMB in the card's segment filter. The server recomputes
   the filtered totals and series before replacing that card.
@@ -58,6 +72,7 @@ storage. This candidate has not been accepted or published in the Mastra templat
   own filters and provenance.
 - Use **Inspect** beside a month or category in the accessible table to read the underlying closed
   opportunity records. Records and grouped values reconcile to the published aggregate.
+- **Back to overview** restores the saved chart, period and filters after inspection without a model call or another source read. The return view survives reload/restart; an inspection saved by an older version may not have an overview to restore.
 - Ask for a ranked segment comparison or closed-opportunity records. The agent selects a different
   registered composition; unrelated cards remain available.
 - Reload the browser or stop and restart `npm run dev`, then follow up on the previous analysis.
@@ -114,11 +129,13 @@ components and context durably with revision checks.
 
 `src/ui/catalog.ts` is the shared declaration surface: each entry declares its stable ID/version,
 enabled flag, semantic kind, data roles, compatible units, supported actions, Zod properties schema
-and defaults. Only enabled entries appear in the agent's serializable catalog. The analyze tool exposes verified role, typed columns, grouping key and units without raw rows.
+and defaults. Only enabled entries appear in the agent's serializable catalog. The analyze tool exposes verified role, typed columns, grouping key, matrix axes and units without raw rows.
 Server-owned accepted-card IDs, versions and bindings are supplied as bounded context for refinement
 after reload or restart. Server composition
 validation resolves every result ID against verified results and checks roles, units, axes, sorted
 dates and forecast labels. Client messages and state cannot add tools, authorize SQL or publish facts.
+After analysis, the compose tool schema constrains result IDs, enabled renderer versions and axes to
+the verified results. Line/bar bindings omit the heatmap value axis; final server validation still applies.
 
 Change `enabled` or `defaults.pageSize` in the declaration to remove a view or configure its table.
 To add a view, extend the catalog with its schema and add the corresponding React entry in
@@ -129,6 +146,13 @@ switch. Increase the declaration version when its saved property contract change
 Grouped source tables may name their grouping column with `grouping`; without it, exactly one
 date column (series) or category column (ranked) must identify the group. Chart axes and accessible
 drill controls resolve that same source-owned binding, so column names are replaceable.
+
+Cohort matrices have explicit source-owned `axes: { x, y, value }`: x is an integer month age,
+y is a cohort date, and value is a percentage column. The heatmap binds exactly those keys. Matrix
+validation rejects duplicate coordinates, missing observed ages, future ages, changing cohort sizes
+and a period-end rate that does not reconcile to the final cohort observations. A table can display
+the same matrix as an alternative. Heatmap clicks and keyboard cohort/month selectors inspect the
+verified cell without replacing the overview or calling the model.
 
 Charts use verified source series, with explicit zero bookings months; conversion months without
 closed deals are gaps. Tables retain all available columns, paginate locally and provide keyboard
@@ -143,11 +167,11 @@ when available; accepted original bindings remain stored for recovery after conf
 `describe()`, `execute(request, context)`,
 and `close()`. Each source declares its own metadata, version, coverage, capabilities, accepted fields
 and filters, and example requests. Grouped capabilities declare `groupings` entries with a bounded
-source-owned `field` and `kind: "series" | "ranked"`; unsupported groupings fail before any read. Descriptors declare the metric version; capabilities must have unique IDs and
+source-owned `field` and `kind: "series" | "ranked" | "matrix"`; unsupported groupings fail before any read. Descriptors declare the metric version; capabilities must have unique IDs and
 explicit `calculation: "total" | "percentage"` semantics. Percentage capabilities use percent units;
 total capabilities use non-percent units.
 Metric IDs are source-owned strings; a custom source does not
-need Sales metrics, SQLite, or a synthetic dataset. Results contain a value, units, numerator and
+need Sales metrics, SQLite, or an example dataset. Results contain a value, units, numerator and
 denominator where relevant, an unavailable reason, the executed request, and source/dataset/metric
 provenance. Optional details carry the Sales example's rows, forecast assumptions and churn breakdowns.
 Each available result includes actual redacted `provenance.operations` with `kind`, `statement` and
@@ -206,7 +230,7 @@ seed, USD currency, UTC timezone, schema, generator, and metric versions. Later 
 values before consulting the wall clock, even when another seed is supplied. The default seed is
 1729; the programmatic initializer permits an unsigned 32-bit seed for a new file.
 
-All names and records are synthetic. The source contains 432 opportunities, six representatives,
+The included names and records belong to the example dataset. The source contains 432 opportunities, six representatives,
 120 accounts, multiple regions and segments, and opening subscription balances before the first
 reported month. Every month includes won/lost deals, open pipeline, and effective history. The same
 seed, anchor, and version reproduce the same logical facts; binary file identity is not the
@@ -214,12 +238,44 @@ reproducibility contract.
 
 ## Metric contract
 
+“Sales” in the included example means **bookings**, the contract value of closed-won opportunities.
+For example, ask “Show a chart of last month sales”, “Compare bookings by segment over the last twelve
+complete months”, or “Show the same analysis for SMB”. The agent selects supported requests and
+registered views; the source performs the calculation. Wording and view selection can vary, while
+identical effective requests must produce the same verified facts.
+
+Customer and gross revenue churn support whole-period rates and calendar-month trends. Ask
+“Show monthly customer churn for the last 12 complete months” or “Chart gross revenue churn by month”.
+Each monthly row uses its own opening population. A month without opening customers or MRR is a gap,
+not a zero rate. Rates are never added or averaged to derive the whole-period churn rate. Monthly
+requests require complete calendar-month bounds within the saved source coverage. The monthly view
+can remain available even when the whole-period opening population is empty.
+
+Charts use Apache ECharts with tooltips, zoom, keyboard point selection, responsive sizing and
+animations that respect reduced-motion preferences. Verified tables remain available below the chart.
+Customer cohorts use each account's first positive combined subscription MRR to determine its first
+activation month. Their size stays fixed. **Continuous retention** ends permanently at the first
+complete account cancellation; later reactivations are reported separately. Month 0 is the end of
+the activation month, so it may already be below 100%. Same-day subscription transfers are atomic.
+Accounts activated before the selected cohort period do not enter its cohorts. Blank cells represent
+ages not observed before the requested exclusive end, and months without new activations have no cohort.
+
+Ask “Show a customer retention cohort heatmap for the last 12 complete months”, “Show a cohort chart
+of customer churn for the last 12 complete months”, or “Show retention cohorts in a table”.
+`cohortRetention` returns retained customers / fixed cohort size; `cohortChurn` returns customers with a
+first complete cancellation / that same size. The overall rate uses all selected cohort members at
+the requested period end; it does not average matrix cells or compare cohorts at equal ages. The
+heatmap supports tooltips and cell selection, retaining its overview. Opportunity segment filters,
+revenue-retention cohorts and causal explanations are outside these subscription capabilities.
+A cohort heatmap requires a source-owned matrix; an aggregate cannot satisfy that request.
+
 Dates use start-inclusive/end-exclusive periods, except an as-of date includes its entire UTC day.
 Opportunity snapshots retain the stage, contract value, expected close, owner, and segment known on
 their effective date. Region is a fixed account attribute in this dataset. Money uses integer USD
 cents. Unsafe integer totals fail explicitly. Filters accept owner ID, segment, region, and stage;
 booking/conversion filters use the closing snapshot, while pipeline/forecast filters use the as-of
-snapshot. Subscription metrics currently apply to the whole account cohort.
+snapshot. Subscription metrics do not support opportunity filters. Monthly churn uses opening populations;
+activation-cohort retention/churn uses the fixed members activated in the selected period.
 
 | Metric                  | Definition                                                                                                                                                                                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -266,7 +322,7 @@ try {
 }
 ```
 
-Operational entry points, initialization, schema creation, and synthetic generation live under
+Operational entry points, initialization, schema creation, and example generation live under
 `scripts/` at the template root. Generic source contracts/selection/inspection live under
 `data-sources/`; the Sales read-only access, calendar, metric definitions and adapter live under
 `data-sources/sales/`. Runtime source code does not depend on operational scripts.
@@ -296,7 +352,7 @@ stays visible. Retry with a new request ID after restoring service or write perm
 stores to conceal an error. The local demo uses one fixed workspace, thread and server-owned identity;
 it is not a multi-user deployment or an authentication system.
 
-The saved workspace is bounded to 24 cards and 1 MiB; reuse card IDs or request fewer records if that
+The saved workspace is bounded to 24 cards and 1 MiB; remove a card, reuse card IDs or request fewer records if that
 budget is reached. HTTP accepts only local Hosts/same-origin browser requests, bounded 2 MiB uploads
 and fixed loopback upstreams. Provider keys never enter client bundles, messages or source operations.
 
@@ -346,13 +402,14 @@ The data layer uses Node.js standard libraries (Node.js MIT; bundled SQLite publ
 template contribution convention. The analytical runtime uses Mastra agents, tools, workflows and
 RequestContext; tests use the official eval assertions and reporter. The native CLI (`mastra` 1.32.1)
 and local observability (`@mastra/observability` 1.18.3) use Apache-2.0 and declared `latest` ranges.
-The lockfile pins core 1.74.0 and evals 1.10.5 for reproducible installation. Zod 4.6.5 (MIT) is the direct shared schema
-dependency. Development dependencies are TypeScript 5.9.3 (Apache-2.0),
+The lockfile pins core 1.74.0 and evals 1.10.5 for reproducible installation. Zod 4.6.4 (MIT) is the direct shared schema
+dependency. The lockfile isolates Zod 3.25.76 for the older AI SDK utilities under Mastra Client; application schemas remain on Zod 4. Development dependencies are TypeScript 5.9.3 (Apache-2.0),
 Vitest 4.1.0, `@types/node` 24.19.1, and oxfmt 0.71.0 (MIT). The standalone NPM lockfile records exact
 resolved versions for all packages; `npm ci` reproduces those versions.
 CopilotKit, AG-UI core/client, React and Next use MIT licenses. The Mastra AG-UI adapter, RxJS,
 Mastra client, Memory and LibSQL integrations use Apache-2.0. Playwright and TypeScript are Apache-2.0; React
-type declarations are MIT. See the lockfile and installed package license metadata for exact
+type declarations are MIT. Apache ECharts 6.1.0 uses Apache-2.0; its zrender 6.1.0 dependency uses
+BSD-3-Clause, and tslib uses 0BSD. See the lockfile and installed package license metadata for exact
 transitive dependencies.
 
 The analytical runtime factory is `createExplorer()` in `src/analysis/create.ts`. It resolves the registered
@@ -364,7 +421,10 @@ A replacement adapter must return the executed request and matching source, data
 provenance. Capability-bound schemas verify the declared calculation: totals have no denominator and
 use safe integer numerators; percent ratios also expose a nonnegative safe integer
 denominator and compute `numerator / denominator × 100`. Zero denominators return an unavailable
-value with a reason. The generic workflow validates schemas, identity, versions, periods, filters,
+value with a reason. Grouped percentages default to partition reconciliation; declare
+`groupedCalculation: "independent"` for observations with distinct opening populations. Every row still
+requires verified calculation operands, and independent series require unique ordered dates inside
+the requested period. The generic workflow validates schemas, identity, versions, periods, filters,
 units, completeness and calculation operands before publishing facts. All record collections share
 the row budget. Explanations use checked operands and trusted versioned capability descriptions;
 result-supplied narrative assumptions are excluded from verified result details. Other detail values

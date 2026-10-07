@@ -1,5 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
-import { resultSchemaFor, resultRecordCount, SourceError } from "../../data-sources/source.ts";
+import {
+  resultSchemaFor,
+  resultRecordCount,
+  groupingColumn,
+  SourceError,
+} from "../../data-sources/source.ts";
 import type { AnalysisRequest, SourceDescriptor } from "../../data-sources/source.ts";
 
 /** Connector output acquires authority only after identity, completeness and calculation checks. */
@@ -68,13 +73,39 @@ export function verifySourceResult(
     throw new SourceError("invalid-result", "The requested grouped data or records are missing.");
   if (data.table) {
     const table = data.table;
+    if (table.rows.length && !data.provenance.operations.length)
+      throw new SourceError("invalid-result", "Grouped facts require actual source operations.");
+    const valueKey = table.kind === "matrix" ? table.axes!.value : "value";
+    if (table.kind === "series" && capability.groupedCalculation === "independent") {
+      const axis = groupingColumn(table)!;
+      const labels = table.rows.map((row) => String(row[axis.key]));
+      if (
+        !data.period ||
+        new Set(labels).size !== labels.length ||
+        labels.some((label) => label < data.period!.start || label >= data.period!.end) ||
+        labels.some((label, index) => index > 0 && label <= labels[index - 1]!)
+      )
+        throw new SourceError(
+          "invalid-result",
+          "Independent observations need unique ordered dates inside the requested period.",
+        );
+    }
+    if (
+      data.period &&
+      descriptor.coverage &&
+      (data.period.start < descriptor.coverage.start || data.period.end > descriptor.coverage.end)
+    )
+      throw new SourceError(
+        "invalid-result",
+        "Grouped observations must be inside the advertised history.",
+      );
     if (table.omitted !== 0)
       throw new SourceError(
         "incomplete-result",
         "Partial tables cannot represent complete results.",
       );
     if (
-      table.columns.find((column) => column.key === "value")?.unit !== capability.unit &&
+      table.columns.find((column) => column.key === valueKey)?.unit !== capability.unit &&
       table.kind !== "records"
     )
       throw new SourceError("invalid-result", "Table units do not match the metric.");
@@ -104,7 +135,7 @@ export function verifySourceResult(
         "invalid-result",
         "Closed records do not reconcile to the verified counts.",
       );
-    const values = table.rows.map((row) => row.value);
+    const values = table.rows.map((row) => row[valueKey]);
     if (values.some((value) => typeof value !== "number" || !Number.isFinite(value)))
       throw new SourceError("invalid-result", "Table values must be finite numbers.");
     if (table.kind !== "records") {
@@ -115,7 +146,7 @@ export function verifySourceResult(
           !Number.isSafeInteger(row.numerator) ||
           !Number.isSafeInteger(row.denominator) ||
           (capability.calculation === "percentage" ? row.denominator < 1 : row.denominator < 0) ||
-          row.value !==
+          row[valueKey] !==
             (capability.calculation === "total"
               ? row.numerator
               : (row.numerator / row.denominator) * 100)
@@ -134,6 +165,7 @@ export function verifySourceResult(
       );
     if (
       capability.calculation === "percentage" &&
+      capability.groupedCalculation !== "independent" &&
       table.kind !== "records" &&
       (table.rows.reduce(
         (sum, row) => sum + (typeof row.numerator === "number" ? row.numerator : 0),

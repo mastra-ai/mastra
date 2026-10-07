@@ -2,7 +2,7 @@
   "name": "template-genui-data-explorer",
   "version": "0.1.0",
   "private": true,
-  "description": "Reproducible synthetic SaaS Sales analytics for a candidate Mastra generative UI data explorer.",
+  "description": "Reproducible example SaaS Sales analytics for a candidate Mastra generative UI data explorer.",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node --experimental-strip-types scripts/build-mastra.ts && NEXT_TELEMETRY_DISABLED=1 next build",
@@ -35,11 +35,12 @@
     "@mastra/libsql": "1.25.0",
     "@mastra/memory": "1.35.0",
     "@mastra/observability": "latest",
+    "echarts": "6.1.0",
     "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "rxjs": "7.8.1",
-    "zod": "4.6.5"
+    "zod": "4.6.4"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

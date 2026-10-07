@@ -7,8 +7,13 @@ import { inspectSource } from "../../data-sources/inspect.ts";
 import { SalesSource } from "../../data-sources/sales/source.ts";
 import { prepareSource, sources } from "../../scripts/sources.ts";
 import { ReferenceSource } from "../fixtures/reference-source.ts";
-import { referenceFixture } from "../fixtures/reference.ts";
-import { analysisRequestSchema, analysisToolSchema } from "../../data-sources/source.ts";
+import { referenceFixture, cohortFixture } from "../fixtures/reference.ts";
+import {
+  analysisRequestSchema,
+  analysisToolSchema,
+  hasAvailableData,
+} from "../../data-sources/source.ts";
+import { verifySourceResult } from "../../src/analysis/verification.ts";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -20,6 +25,49 @@ async function scratch() {
   directories.push(directory);
   return directory;
 }
+
+it("monthly subscription series verify independent rows without changing the whole-period rate", async () => {
+  const path = join(await scratch(), "monthly.sqlite");
+  const fixture = referenceFixture(path);
+  fixture.db.close();
+  const source = new SalesSource(path);
+  const period = { start: "2025-01-01", end: "2025-04-01" };
+  try {
+    for (const metric of ["customerChurn", "revenueChurn"]) {
+      const request = { metric, period, groupBy: "month" };
+      const actual = await source.execute(request);
+      expect(actual.table?.rows).toHaveLength(3);
+      expect(() =>
+        verifySourceResult(actual, request, source.describe(), 1048576, 1000),
+      ).not.toThrow();
+      const repeated = structuredClone(actual);
+      repeated.table!.rows.push({ ...repeated.table!.rows[0]! });
+      expect(() => verifySourceResult(repeated, request, source.describe(), 1048576, 1000)).toThrow(
+        "unique ordered dates",
+      );
+      const noRead = structuredClone(actual);
+      noRead.provenance.operations = [];
+      expect(() => verifySourceResult(noRead, request, source.describe(), 1048576, 1000)).toThrow();
+      const forged = structuredClone(actual);
+      forged.table!.rows[0]!.value = 999;
+      expect(() => verifySourceResult(forged, request, source.describe(), 1048576, 1000)).toThrow(
+        "Grouped calculation failed",
+      );
+    }
+    const actual = await source.execute({ metric: "customerChurn", period, groupBy: "month" });
+    expect(actual).toMatchObject({ numerator: 2, denominator: 3, value: (2 / 3) * 100 });
+    expect(hasAvailableData(actual, source.describe())).toBe(true);
+    await expect(
+      source.execute({
+        metric: "customerChurn",
+        period: { start: "2025-01-02", end: period.end },
+        groupBy: "month",
+      }),
+    ).rejects.toThrow("complete calendar months");
+  } finally {
+    source.close();
+  }
+});
 
 it("absent optional fields preserve source semantics without allowing unknown or unsupported values", async () => {
   const path = join(await scratch(), "optional-fields.sqlite");
@@ -199,5 +247,85 @@ it("Sales adapter preserves independent values, provenance and historical reques
   } finally {
     await sales.close();
     await reference.close();
+  }
+});
+
+it("cohort matrices reconcile period-end populations and reject missing, future or inconsistent cells", async () => {
+  const path = join(await scratch(), "cohorts.sqlite");
+  cohortFixture(path).db.close();
+  const source = new SalesSource(path);
+  const period = { start: "2025-01-01", end: "2025-04-01" };
+  try {
+    for (const metric of ["cohortRetention", "cohortChurn"]) {
+      const request = { metric, period, groupBy: "cohort" };
+      const actual = await source.execute(request);
+      expect(actual).toMatchObject({
+        numerator: metric === "cohortRetention" ? 2 : 3,
+        denominator: 5,
+        table: { kind: "matrix", axes: { x: "age", y: "cohort", value: "value" } },
+      });
+      expect(actual.table?.rows).toHaveLength(6);
+      expect(() =>
+        verifySourceResult(actual, request, source.describe(), 1048576, 1000),
+      ).not.toThrow();
+      for (const defect of [
+        "missing",
+        "future",
+        "population",
+        "value",
+        "date",
+        "order",
+        "duplicate",
+        "total",
+        "incomplete",
+      ]) {
+        const forged = structuredClone(actual);
+        const rows = forged.table!.rows;
+        if (defect === "missing") rows.splice(1, 1);
+        if (defect === "future") rows[5]!.age = 1;
+        if (defect === "population") rows[1]!.denominator = 4;
+        if (defect === "value") rows[1]!.value = 999;
+        if (defect === "date") rows[0]!.cohort = "2024-12-01";
+        if (defect === "order") rows.reverse();
+        if (defect === "duplicate") rows.push({ ...rows[0]! });
+        if (defect === "total") {
+          forged.numerator = 1;
+          forged.value = 20;
+        }
+        if (defect === "incomplete") forged.table!.omitted = 1;
+        expect(
+          () => verifySourceResult(forged, request, source.describe(), 1048576, 1000),
+          defect,
+        ).toThrow();
+      }
+      // Value column names remain source-owned instead of being fixed in the renderer/workflow.
+      const aliased = structuredClone(actual);
+      aliased.table!.axes!.value = "share";
+      aliased.table!.columns = aliased.table!.columns.map((column) =>
+        column.key === "value" ? { ...column, key: "share" } : column,
+      );
+      aliased.table!.rows = aliased.table!.rows.map(({ value, ...row }) => ({
+        ...row,
+        share: value ?? 0,
+      }));
+      expect(() =>
+        verifySourceResult(aliased, request, source.describe(), 1048576, 1000),
+      ).not.toThrow();
+    }
+    await expect(
+      source.execute({ metric: "cohortRetention", period, groupBy: "month" }),
+    ).rejects.toThrow("grouping");
+    await expect(
+      source.execute({ metric: "cohortChurn", period, filters: { segment: "SMB" } }),
+    ).rejects.toThrow("Unsupported fields");
+    const uncovered = await source.execute({
+      metric: "cohortRetention",
+      period: { start: "2020-01-01", end: "2020-04-01" },
+      groupBy: "cohort",
+    });
+    expect(uncovered.status).toBe("unavailable");
+    expect(uncovered).not.toHaveProperty("table");
+  } finally {
+    source.close();
   }
 });

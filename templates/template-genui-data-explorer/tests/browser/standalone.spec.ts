@@ -155,7 +155,7 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
     }
     const workspace = await saved();
     expect(workspace.components.map((item) => item.component)).toEqual(["line", "bar", "table"]);
-    await expect(page.getByRole("img", { name: /Monthly Sales/ })).toBeVisible();
+    await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
     await expect(page.getByRole("table").last()).toBeVisible();
     const db = new DatabaseSync(join(data, "sales.sqlite"), { readOnly: true });
     const result = db
@@ -262,6 +262,42 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
     await page.getByPlaceholder("Ask about Sales…").press("Enter");
     await expect.poll(async () => (await saved()).revision).toBe(4);
     await cancelAfterRead(await saved());
+    await page
+      .getByPlaceholder("Ask about Sales…")
+      .fill("Show a customer retention cohort heatmap");
+    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await expect.poll(async () => (await saved()).revision).toBe(5);
+    const heatmap = page.locator('[data-component="heatmap"]');
+    await expect(heatmap.getByRole("img")).toBeVisible();
+    await expect(heatmap.locator(".echart svg")).toBeVisible();
+    expect(
+      (await saved()).results.find((result) => result.data.metric === "cohortRetention")?.data.table
+        ?.kind,
+    ).toBe("matrix");
+    await heatmap
+      .locator(".echart")
+      .evaluate((element) => element.scrollIntoView({ block: "start" }));
+    await heatmap
+      .locator(".echart")
+      .screenshot({ path: testInfo.outputPath("production-cohort.png") });
+    await page
+      .getByPlaceholder("Ask about Sales…")
+      .fill("Show monthly customer churn for the last 12 complete months");
+    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await expect.poll(async () => (await saved()).revision).toBe(6);
+    await expect(
+      page.getByRole("heading", { name: "Monthly customer churn", exact: true }),
+    ).toBeVisible();
+    const churn = (await saved()).results.find((result) => result.data.metric === "customerChurn");
+    expect(churn?.data.table?.kind).toBe("series");
+    const churnEnd = workspace.source.coverage!.end;
+    const churnStart = new Date(`${churnEnd}T00:00:00Z`);
+    churnStart.setUTCMonth(churnStart.getUTCMonth() - 12);
+    expect(churn?.data.request.period).toEqual({
+      start: churnStart.toISOString().slice(0, 10),
+      end: churnEnd,
+    });
+    expect(churn?.data.table?.rows).toHaveLength(12);
     await stop();
     const traces = new DatabaseSync(join(data, "traces.sqlite"), { readOnly: true });
     const tables = traces

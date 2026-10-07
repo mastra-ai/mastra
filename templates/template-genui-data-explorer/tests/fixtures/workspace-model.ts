@@ -57,6 +57,7 @@ export function workspaceModel(
     choose?: (question: string) => {
       plan?: AnalysisRequest;
       component?: string;
+      cardId?: string;
       scenario?: boolean;
     };
     plan?: AnalysisRequest;
@@ -93,7 +94,15 @@ export function workspaceModel(
     const metadata = tools.length ? verifiedRepresentation(tools[0]) : undefined;
     const role = metadata?.role ?? (records ? "records" : ranked ? "ranked" : "series");
     const declaration = context?.catalog.find(
-      (entry) => entry.kind === (role === "series" ? "line" : role === "ranked" ? "bar" : "table"),
+      (entry) =>
+        entry.kind ===
+        (role === "series"
+          ? "line"
+          : role === "ranked"
+            ? "bar"
+            : role === "matrix"
+              ? "heatmap"
+              : "table"),
     );
     const component =
       selected?.component ??
@@ -103,6 +112,17 @@ export function workspaceModel(
     const previous = context?.accepted.components.find(
       (binding) => binding.representation.role === role && binding.component === component,
     );
+    const correctionLine = call.prompt
+      .filter((message) => message.role === "system")
+      .map((message) => message.content)
+      .join("\n")
+      .split("\n")
+      .find((line) => line.startsWith("Correction target: "));
+    const correctionTarget = correctionLine
+      ? acceptedWorkspaceSchema.shape.components.element.parse(
+          JSON.parse(correctionLine.slice("Correction target: ".length)),
+        )
+      : undefined;
     const capability = context?.source.capabilities.find((capability) =>
       capability.groupings?.some((group) => group.kind === "series"),
     );
@@ -140,6 +160,8 @@ export function workspaceModel(
             components: [
               {
                 id:
+                  correctionTarget?.id ??
+                  selected?.cardId ??
                   options.cardId ??
                   (context ? (previous?.id ?? randomUUID()) : `card-${component}`),
                 component,
@@ -160,6 +182,13 @@ export function workspaceModel(
                         y: metadata?.columns.find(
                           (column) => column.type === "number" && column.unit === metadata.unit,
                         )?.key,
+                      }
+                    : {}),
+                  ...((declaration?.kind ?? component) === "heatmap"
+                    ? {
+                        x: metadata?.axes?.x,
+                        y: metadata?.axes?.y,
+                        value: metadata?.axes?.value,
                       }
                     : {}),
                   ...(selected?.scenario ? { scenario: true } : {}),

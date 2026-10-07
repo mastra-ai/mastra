@@ -62,10 +62,12 @@ export class WorkspaceStore {
       ...(typeof row.response === "string" ? { response: JSON.parse(row.response) } : {}),
     };
   }
-  latest(workspaceId: string): { requestId: string; status: string; message?: string } | undefined {
+  latest(
+    workspaceId: string,
+  ): { requestId: string; status: string; message?: string; question?: string } | undefined {
     const row = this.#db
       .prepare(
-        "SELECT request_id,status,response FROM requests WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1",
+        "SELECT request_id,status,response,payload FROM requests WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1",
       )
       .get(workspaceId);
     if (!row || typeof row.request_id !== "string" || typeof row.status !== "string")
@@ -79,7 +81,20 @@ export class WorkspaceStore {
       typeof response.message === "string"
         ? response.message
         : undefined;
-    return { requestId: row.request_id, status: row.status, ...(message ? { message } : {}) };
+    const payload: unknown = typeof row.payload === "string" ? JSON.parse(row.payload) : undefined;
+    const question =
+      payload &&
+      typeof payload === "object" &&
+      "question" in payload &&
+      typeof payload.question === "string"
+        ? payload.question
+        : undefined;
+    return {
+      requestId: row.request_id,
+      status: row.status,
+      ...(message ? { message } : {}),
+      ...(question ? { question } : {}),
+    };
   }
   begin(workspaceId: string, requestId: string, payload: string): void {
     try {

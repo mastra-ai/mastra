@@ -5,15 +5,310 @@ import { it, expect } from "vitest";
 import { MastraAgent } from "@ag-ui/mastra";
 import type { BaseEvent } from "@ag-ui/core";
 import { createWorkspace } from "../../src/workspace/create.ts";
-import { components, validateComposition } from "../../src/ui/catalog.ts";
+import { components, validateComposition, compositionInputSchema } from "../../src/ui/catalog.ts";
+import { z } from "zod";
 import { workspaceId, threadId } from "../../src/workspace/contracts.ts";
-import { referenceFixture } from "../fixtures/reference.ts";
+import { referenceFixture, cohortFixture } from "../fixtures/reference.ts";
 import { ReferenceSource } from "../fixtures/reference-source.ts";
 import { workspaceModel } from "../fixtures/workspace-model.ts";
 import { deterministicOpenAI } from "../fixtures/openai-server.ts";
 import { DataExplorer } from "../../src/analysis/explorer.ts";
 import { SalesSource } from "../../data-sources/sales/source.ts";
 import { analysisModel } from "../fixtures/analysis-model.ts";
+
+it("card removal is durable, revision-checked and independent of model calls", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workspace-dismiss-"));
+  const salesPath = join(dir, "sales.sqlite");
+  referenceFixture(salesPath).db.close();
+  const provider = workspaceModel();
+  const settings = {
+    settings: { path: salesPath },
+    workspacePath: join(dir, "workspace.sqlite"),
+    memoryPath: join(dir, "memory.sqlite"),
+    model: provider.model,
+  };
+  let app = await createWorkspace(settings);
+  try {
+    const question = {
+      workspaceId,
+      threadId,
+      requestId: "original",
+      baseRevision: 0,
+      question: "Show monthly bookings",
+    };
+    await app.engine.run(question, new AbortController(), async (requestContext, session) => {
+      const result = await app.engine.explorer.agent.generate(question.question, {
+        requestContext,
+        abortSignal: session.controller.signal,
+      });
+      return { finishReason: result.finishReason };
+    });
+    const original = app.engine.snapshot().workspace;
+    expect(original.revision).toBe(1);
+    expect(original.cardTurns?.[original.components[0]!.id]).toBe("original");
+    expect(original.messages.at(-1)?.content).toContain("$360.00");
+    expect(original.messages.at(-1)?.content).not.toContain("USD cents");
+    const action = { type: "dismiss" as const, componentId: original.components[0]!.id };
+    const calls = provider.calls.length;
+    const dismiss = { ...question, requestId: "dismiss", baseRevision: 1 };
+    const execute = async () => {
+      throw new Error("Dismissal must not call the model.");
+    };
+    const result = await app.engine.run(dismiss, new AbortController(), execute, action);
+    expect(result.snapshot.workspace.components).toEqual([]);
+    expect(result.snapshot.workspace.results).toEqual([]);
+    expect(result.snapshot.workspace.messages).toEqual(original.messages);
+    expect(provider.calls).toHaveLength(calls);
+    expect((await app.engine.run(dismiss, new AbortController(), execute, action)).duplicate).toBe(
+      true,
+    );
+    await expect(
+      app.engine.run({ ...dismiss, requestId: "stale" }, new AbortController(), execute, action),
+    ).rejects.toThrow("older revision");
+    await app.engine.close();
+    await app.storage.close();
+    app = await createWorkspace(settings);
+    expect(app.engine.snapshot().workspace).toMatchObject({
+      revision: 2,
+      components: [],
+      results: [],
+    });
+  } finally {
+    await app.engine.close();
+    await app.storage.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("record inspection restores the saved overview and filters after restart without another read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workspace-back-"));
+  const path = join(dir, "sales.sqlite");
+  referenceFixture(path).db.close();
+  const provider = workspaceModel({ cardId: "constructor" });
+  let reads = 0;
+  const settings = {
+    settings: { path },
+    workspacePath: join(dir, "workspace.sqlite"),
+    memoryPath: join(dir, "memory.sqlite"),
+    model: provider.model,
+    registrations: [
+      {
+        id: "sales",
+        open: () => {
+          const source = new SalesSource(path);
+          return {
+            describe: () => source.describe(),
+            execute: (...args: Parameters<SalesSource["execute"]>) => {
+              reads++;
+              return source.execute(...args);
+            },
+            close: () => source.close(),
+          };
+        },
+      },
+    ],
+  };
+  let app = await createWorkspace(settings);
+  const question = {
+    workspaceId,
+    threadId,
+    requestId: "overview",
+    baseRevision: 0,
+    question: "Show monthly bookings",
+  };
+  const execute: Parameters<typeof app.engine.run>[2] = async (requestContext, session) => {
+    const result = await app.engine.explorer.agent.generate(question.question, {
+      requestContext,
+      abortSignal: session.controller.signal,
+    });
+    return { finishReason: result.finishReason };
+  };
+  const noModel = async () => {
+    throw new Error("Saved overview restoration must not call the model.");
+  };
+  try {
+    await app.engine.run(question, new AbortController(), execute);
+    const id = app.engine.snapshot().workspace.components[0]!.id;
+    await expect(
+      app.engine.run(
+        { ...question, requestId: "no-backup", baseRevision: 1 },
+        new AbortController(),
+        noModel,
+        { type: "back", componentId: id },
+      ),
+    ).rejects.toThrow("No saved overview");
+    await app.engine.run(
+      { ...question, requestId: "filter", baseRevision: 1 },
+      new AbortController(),
+      noModel,
+      { type: "filter", componentId: id, field: "segment", value: "SMB" },
+    );
+    const overview = app.engine.snapshot().workspace;
+    await app.engine.run(
+      { ...question, requestId: "inspect", baseRevision: 2 },
+      new AbortController(),
+      noModel,
+      { type: "drill", componentId: id, label: "2025-03-01" },
+    );
+    const inspected = app.engine.snapshot().workspace;
+    expect(inspected.results[0]?.data.table?.rows.map((row) => row.opportunityId)).toEqual([1]);
+    expect(inspected.drillBack?.[id]?.binding).toEqual(overview.components[0]);
+    expect(inspected.drillBack?.[id]?.result).toEqual(overview.results[0]);
+    await app.engine.close();
+    await app.storage.close();
+    app = await createWorkspace(settings);
+    const calls = provider.calls.length;
+    const sourceReads = reads;
+    const back = { ...question, requestId: "back", baseRevision: 3 };
+    const action = { type: "back" as const, componentId: id };
+    const restored = await app.engine.run(back, new AbortController(), noModel, action);
+    expect(restored.snapshot.workspace.components).toEqual(overview.components);
+    expect(restored.snapshot.workspace.results).toEqual(overview.results);
+    expect(restored.snapshot.workspace.filters).toEqual({ segment: "SMB" });
+    expect(restored.snapshot.workspace.messages).toEqual(inspected.messages);
+    expect(restored.snapshot.workspace.drillBack).toEqual({});
+    expect(provider.calls).toHaveLength(calls);
+    expect(reads).toBe(sourceReads);
+    expect((await app.engine.run(back, new AbortController(), noModel, action)).duplicate).toBe(
+      true,
+    );
+    await expect(
+      app.engine.run({ ...back, requestId: "stale-back" }, new AbortController(), noModel, action),
+    ).rejects.toThrow("older revision");
+    await expect(
+      app.engine.run(
+        { ...back, requestId: "no-overview", baseRevision: 4 },
+        new AbortController(),
+        noModel,
+        action,
+      ),
+    ).rejects.toThrow("No saved overview");
+    expect(app.engine.snapshot().workspace.revision).toBe(4);
+  } finally {
+    await app.engine.close();
+    await app.storage.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("references to existing charts do not block requested record and table views", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "chart-refinement-"));
+  const path = join(dir, "sales.sqlite");
+  referenceFixture(path).db.close();
+  const provider = workspaceModel({
+    choose: (question) => ({
+      component: "table",
+      plan: {
+        metric: "bookings",
+        period: { start: "2025-03-01", end: "2025-04-01" },
+        ...(/records|rows/i.test(question) ? { records: true } : { groupBy: "month" }),
+      },
+    }),
+  });
+  const explorer = new DataExplorer(new SalesSource(path), provider.model, { catalog: components });
+  try {
+    for (const question of [
+      "Show the records behind this chart",
+      "Show the data behind this chart in a table",
+      "Show this chart as a table",
+      "Show this heatmap as a table",
+      "From this graph, show the records",
+      "Show the data behind this chart",
+      "Convert this chart into a table",
+      "Show the records in the chart",
+    ]) {
+      let published = false;
+      const result = await explorer.analyze(
+        { workspaceId, threadId, requestId: question, baseRevision: 0, question },
+        {
+          onComplete: () => {
+            published = true;
+          },
+        },
+      );
+      expect(result.status, question).toBe("complete");
+      expect(published, question).toBe(true);
+      expect(result.results[0]?.data.value).toBe(12000);
+    }
+    const result = await explorer.analyze({
+      workspaceId,
+      threadId,
+      requestId: "chart-output",
+      baseRevision: 0,
+      question: "Show a chart of bookings for March 2025",
+    });
+    expect(result.status).toBe("unsupported");
+    expect(result.message).toContain("did not produce chart data");
+  } finally {
+    await explorer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("chart capability checks reject aggregate substitutes and preserve supported filtered cohorts", async () => {
+  const provider = workspaceModel({
+    choose: (question) =>
+      /churn/i.test(question)
+        ? {
+            component: "metric",
+            plan: { metric: "customerChurn", period: { start: "2025-03-01", end: "2025-04-01" } },
+          }
+        : {
+            component: "line",
+            plan: {
+              metric: "bookings",
+              period: { start: "2025-03-01", end: "2025-04-01" },
+              groupBy: "month",
+              filters: { segment: "Enterprise" },
+            },
+          },
+  });
+  const dir = await mkdtemp(join(tmpdir(), "cohort-request-"));
+  const path = join(dir, "sales.sqlite");
+  referenceFixture(path).db.close();
+  const explorer = new DataExplorer(new SalesSource(path), provider.model, { catalog: components });
+  try {
+    let published = false;
+    const question = {
+      workspaceId,
+      threadId,
+      requestId: "cohort",
+      baseRevision: 0,
+      question: "show a cohort chart of churn for last 12 months",
+    };
+    const result = await explorer.analyze(question, {
+      onComplete: () => {
+        published = true;
+      },
+    });
+    expect(result.status).toBe("unsupported");
+    expect(result.message).toContain("did not produce chart data");
+    expect(published).toBe(false);
+    expect(explorer.lastComplete(workspaceId)).toEqual([]);
+    const supported = await explorer.analyze({
+      ...question,
+      requestId: "filtered-cohort",
+      question: "Show a bookings chart for the Enterprise cohort grouped by month in March 2025",
+    });
+    expect(supported.status).toBe("complete");
+    expect(supported.results[0]?.data.request).toMatchObject({
+      groupBy: "month",
+      filters: { segment: "Enterprise" },
+    });
+    const saved = explorer.lastComplete(workspaceId);
+    const heatmap = await explorer.analyze({
+      ...question,
+      requestId: "heatmap",
+      question: "Show a bookings heatmap for March 2025",
+    });
+    expect(heatmap.status).toBe("unsupported");
+    expect(heatmap.message).toContain("did not produce a verified matrix");
+    expect(explorer.lastComplete(workspaceId)).toEqual(saved);
+  } finally {
+    await explorer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 it("a verified scalar cannot complete a visual request without composition", async () => {
   const provider = analysisModel([
@@ -103,6 +398,77 @@ it("OpenAI optional null arguments produce a verified composed result", async ()
     expect(filtered.status).toBe("complete");
     expect(filtered.results[0]?.data.request.filters).toStrictEqual({ segment: "SMB" });
     expect(filtered.results[0]?.data.value).toBe(36000);
+    let churnComposition: unknown;
+    const churn = await explorer.analyze(
+      {
+        workspaceId,
+        threadId,
+        requestId: "monthly-customer-churn",
+        baseRevision: 0,
+        question: "Show monthly customer churn for the last 12 complete months",
+      },
+      {
+        onComplete: (session) => {
+          churnComposition = session.composition;
+        },
+      },
+    );
+    expect(churn.status, churn.message).toBe("complete");
+    expect(churn.results[0]?.data.request).toEqual({
+      metric: "customerChurn",
+      period: { start: "2025-10-01", end: "2026-10-01" },
+      groupBy: "month",
+    });
+    expect(churn.results[0]?.data.table?.rows).toHaveLength(12);
+    const valid = validateComposition(churnComposition, churn.results, components);
+    const binding = valid.components[0]!;
+    expect(binding).toMatchObject({ component: "line", properties: { x: "month", y: "value" } });
+    const schema = compositionInputSchema(churn.results, components);
+    expect(schema.safeParse(valid).success).toBe(true);
+    for (const invalid of [
+      { ...binding, component: "heatmap" },
+      { ...binding, component: "bar" },
+      { ...binding, version: "unregistered" },
+      { ...binding, resultId: "forged" },
+      { ...binding, properties: { ...binding.properties, x: "period" } },
+      { ...binding, properties: { ...binding.properties, y: "numerator" } },
+      { ...binding, properties: { ...binding.properties, value: "value" } },
+    ])
+      expect(schema.safeParse({ components: [invalid] }).success).toBe(false);
+    const candidateSchema = z
+      .object({
+        properties: z.object({
+          components: z.object({
+            items: z.object({
+              anyOf: z.array(
+                z.object({
+                  properties: z.object({
+                    component: z.object({ const: z.string() }),
+                    version: z.object({ const: z.string() }),
+                    resultId: z.object({ const: z.string() }),
+                    properties: z.object({ properties: z.record(z.string(), z.unknown()) }),
+                  }),
+                }),
+              ),
+            }),
+          }),
+        }),
+      })
+      .parse(provider.compositionSchemas.at(-1));
+    const candidates = candidateSchema.properties.components.items.anyOf;
+    expect(
+      candidates.every((candidate) => candidate.properties.resultId.const === binding.resultId),
+    ).toBe(true);
+    expect(candidates.every((candidate) => candidate.properties.version.const === "1")).toBe(true);
+    expect(candidates.map((candidate) => candidate.properties.component.const)).not.toContain(
+      "heatmap",
+    );
+    const line = candidates.find((candidate) => candidate.properties.component.const === "line")!;
+    expect(line.properties.properties.properties).toMatchObject({
+      x: { const: "month" },
+      y: { enum: ["value"] },
+    });
+    expect(line.properties.properties.properties).not.toHaveProperty("value");
   } finally {
     await explorer.close();
     await new Promise<void>((resolve, reject) =>
@@ -605,4 +971,109 @@ it("workspace factory reuses configured non-SQL registrations and source setting
     await rm(dir, { recursive: true, force: true });
   }
   expect(reference.closed).toBe(true);
+});
+
+it("Mastra composes verified continuous-retention and cumulative-churn cohorts as registered heatmaps", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cohort-composition-"));
+  const path = join(dir, "sales.sqlite");
+  cohortFixture(path).db.close();
+  const period = { start: "2025-01-01", end: "2025-04-01" };
+  const provider = workspaceModel({
+    choose: (question) => ({
+      component: /table/i.test(question) ? "table" : "heatmap",
+      plan: {
+        metric: /churn/i.test(question) ? "cohortChurn" : "cohortRetention",
+        period,
+        groupBy: "cohort",
+      },
+    }),
+  });
+  const explorer = new DataExplorer(new SalesSource(path), provider.model, { catalog: components });
+  try {
+    for (const question of [
+      "Show a cohort retention heatmap",
+      "Show a cohort chart of churn",
+      "Show customer retention cohorts in a table",
+    ]) {
+      let composed = false;
+      const outcome = await explorer.analyze(
+        { workspaceId, threadId, requestId: question, baseRevision: 0, question },
+        {
+          onComplete: (session) => {
+            expect(session.composition?.components[0]).toMatchObject({
+              component: /table/i.test(question) ? "table" : "heatmap",
+            });
+            if (!/table/i.test(question))
+              expect(session.composition?.components[0]?.properties).toMatchObject({
+                x: "age",
+                y: "cohort",
+                value: "value",
+              });
+            composed = true;
+          },
+        },
+      );
+      expect(outcome.status, outcome.message).toBe("complete");
+      expect(composed).toBe(true);
+      expect(outcome.results[0]?.data.value).toBe(/churn/i.test(question) ? 60 : 40);
+    }
+    const prompt = JSON.stringify(provider.calls);
+    expect(prompt).toContain('"role":"matrix"');
+    expect(prompt).not.toContain('"reactivatedCustomers":2');
+  } finally {
+    await explorer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("result-bound composition preserves custom properties without axes and object refinements", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "custom-composition-"));
+  const path = join(dir, "sales.sqlite");
+  referenceFixture(path).db.close();
+  const custom = {
+    ...components.find((entry) => entry.id === "metric")!,
+    id: "audited-metric",
+    properties: z
+      .strictObject({
+        title: z.string(),
+        options: z.strictObject({ emphasis: z.enum(["verified", "audited"]) }),
+      })
+      .refine((value) => value.title === "Verified metric", "Use the registered metric label."),
+  };
+  const provider = workspaceModel({
+    component: custom.id,
+    properties: { title: "Verified metric", options: { emphasis: "audited" } },
+  });
+  const explorer = new DataExplorer(new SalesSource(path), provider.model, { catalog: [custom] });
+  let composition: unknown;
+  try {
+    const outcome = await explorer.analyze(
+      {
+        workspaceId,
+        threadId,
+        requestId: "custom-refinement",
+        baseRevision: 0,
+        question: "Show verified bookings",
+      },
+      {
+        onComplete: (session) => {
+          composition = session.composition;
+        },
+      },
+    );
+    expect(outcome.status, outcome.message).toBe("complete");
+    const accepted = validateComposition(composition, outcome.results, [custom]);
+    const schema = compositionInputSchema(outcome.results, [custom]);
+    expect(schema.safeParse(accepted).success).toBe(true);
+    const binding = accepted.components[0]!;
+    for (const properties of [
+      { title: "Unregistered metric label", options: { emphasis: "audited" } },
+      { title: "Verified metric", options: { emphasis: "made up" } },
+      { title: "Verified metric", options: { emphasis: "audited" }, x: "month" },
+    ])
+      expect(schema.safeParse({ components: [{ ...binding, properties }] }).success).toBe(false);
+  } finally {
+    await explorer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

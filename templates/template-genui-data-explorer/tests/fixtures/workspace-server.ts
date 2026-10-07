@@ -1,18 +1,20 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { referenceFixture } from "./reference.ts";
+import { referenceFixture, cohortFixture } from "./reference.ts";
 import { workspaceModel } from "./workspace-model.ts";
 import { createWorkspace } from "../../src/workspace/create.ts";
 process.env.COPILOTKIT_TELEMETRY_DISABLED = "true";
 const { workspaceServer } = await import("./server.ts");
 import { SalesSource } from "../../data-sources/sales/source.ts";
+import { groupingColumn } from "../../data-sources/source.ts";
 import { components } from "../../src/ui/catalog.ts";
 
 const directory = process.env.TEST_DIRECTORY;
 if (!directory) throw new Error("A test directory is required.");
 const salesPath = join(directory, "sales.sqlite");
 if (!existsSync(salesPath)) {
-  const fixture = referenceFixture(salesPath);
+  const fixture =
+    process.env.COHORT_DATA === "true" ? cohortFixture(salesPath) : referenceFixture(salesPath);
   fixture.db.exec(
     "INSERT INTO opportunities VALUES (6,2,'2025-01-01'); INSERT INTO opportunity_history VALUES (6,'2025-03-15','won',6000,'2025-03-15',2,'Enterprise');",
   );
@@ -21,6 +23,48 @@ if (!existsSync(salesPath)) {
 let calls = 0;
 writeFileSync(join(directory, "calls.json"), "0");
 const provider = workspaceModel({
+  ...(process.env.CARD_ID ? { cardId: process.env.CARD_ID } : {}),
+  choose: (question) => {
+    if (/second monthly trend/i.test(question)) return { component: "line", cardId: "second-line" };
+    if (/monthly.*churn|churn.*by month/i.test(question))
+      return {
+        component: "line",
+        cardId: /revenue/i.test(question) ? "revenue-churn" : "customer-churn",
+        plan: {
+          metric: /revenue/i.test(question) ? "revenueChurn" : "customerChurn",
+          period: { start: "2025-01-01", end: "2025-04-01" },
+          groupBy: "month",
+        },
+      };
+    if (/cohort|heatmap/i.test(question))
+      return {
+        component: /table/i.test(question) ? "table" : "heatmap",
+        cardId: /churn/i.test(question) ? "cohort-churn" : "cohort-retention",
+        plan: {
+          metric: /churn/i.test(question) ? "cohortChurn" : "cohortRetention",
+          period: {
+            start: "2025-01-01",
+            end: /shorter/i.test(question) ? "2025-03-01" : "2025-04-01",
+          },
+          groupBy: "cohort",
+        },
+      };
+    if (/last month sales/i.test(question))
+      return {
+        component: "line",
+        plan: {
+          metric: "bookings",
+          period: { start: "2026-09-01", end: "2026-10-01" },
+          groupBy: "month",
+        },
+      };
+    if (/customer churn.*24 months/i.test(question))
+      return {
+        component: "metric",
+        plan: { metric: "customerChurn", period: { start: "2024-10-01", end: "2026-10-01" } },
+      };
+    return {};
+  },
   delayMs: 2500,
   invalid: process.env.INVALID_COMPOSITION === "true",
   schemaDriven: process.env.ALTERNATIVE_GROUPING === "true",
@@ -40,7 +84,8 @@ const catalog = components.map((entry) => ({
   defaults: { pageSize: 2 },
 }));
 const alternative = process.env.ALTERNATIVE_GROUPING === "true";
-const source = alternative ? new SalesSource(salesPath) : undefined;
+const monthEnd = process.env.MONTH_END_DATES === "true";
+const source = alternative || monthEnd ? new SalesSource(salesPath) : undefined;
 const app = await createWorkspace({
   ...(source
     ? {
@@ -55,7 +100,7 @@ const app = await createWorkspace({
                 context?: import("../../data-sources/source.ts").SourceExecutionContext,
               ) => {
                 const result = await source.execute(request, context);
-                if (result.table && result.table.kind !== "records") {
+                if (alternative && result.table && result.table.kind !== "records") {
                   result.table.grouping = "calendarTick";
                   result.table.columns = result.table.columns.map((column) =>
                     column.key === "label" ? { ...column, key: "calendarTick" } : column,
@@ -64,6 +109,15 @@ const app = await createWorkspace({
                     calendarTick: label ?? null,
                     ...row,
                   }));
+                }
+                if (monthEnd && result.table?.kind === "series") {
+                  const column = groupingColumn(result.table);
+                  if (column)
+                    result.table.rows = result.table.rows.map((row) => {
+                      const date = new Date(`${String(row[column.key])}T00:00:00Z`);
+                      date.setUTCMonth(date.getUTCMonth() + 1, 0);
+                      return { ...row, [column.key]: date.toISOString().slice(0, 10) };
+                    });
                 }
                 return result;
               },

@@ -150,7 +150,7 @@ test("copilot_workspace_filters_drills_and_compares", async ({ page }, testInfo)
   const compared = await saved(page);
   expect(compared.components).toHaveLength(2);
   expect(compared.results.map((result) => result.data.value)).toEqual([36000, 6000]);
-  const drill = page.getByRole("button", { name: "Inspect 2025-03-01", exact: true }).first();
+  const drill = page.getByRole("button", { name: "Inspect Mar 1, 2025", exact: true }).first();
   await drill.focus();
   await drill.press("Enter");
   await revision(page, 4);
@@ -169,6 +169,226 @@ test("copilot_workspace_filters_drills_and_compares", async ({ page }, testInfo)
   expect(followup.components).toHaveLength(3);
   await expect(page.getByRole("table").first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("workspace.png"), fullPage: true });
+});
+
+test("corrections submit directly by button or Enter and preserve accepted views on rejection", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await ask(page, "Show monthly bookings", 1);
+  await ask(page, "Show a second monthly trend", 2);
+  await ask(page, "Show ranked segment bookings", 3);
+  const initial = await saved(page);
+  const original = initial.components.find((item) => item.id === "second-line")!;
+  const unrelated = initial.components.filter((item) => item.id !== original.id);
+  await page
+    .locator(`[data-result="${original.resultId}"]`)
+    .getByRole("button", { name: "Correct this view" })
+    .click();
+  const reason = page.getByLabel("Correction reason");
+  const apply = page.getByRole("button", { name: "Apply correction", exact: true });
+  await expect(apply).toBeDisabled();
+  await reason.fill("   ");
+  await expect(apply).toBeDisabled();
+  await reason.fill("Show a chart of last month sales");
+  await expect(apply).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath("correction-form.png"), fullPage: true });
+  await apply.click();
+  await revision(page, 4);
+  const corrected = await saved(page);
+  expect(corrected.components).toHaveLength(3);
+  expect(corrected.components.filter((item) => item.id !== original.id)).toEqual(unrelated);
+  const updated = corrected.components.find((item) => item.id === original.id)!;
+  expect(updated.resultId).not.toBe(original.resultId);
+  expect(
+    corrected.results.find((item) => item.resultId === updated.resultId)?.data.request.period,
+  ).toEqual({ start: "2026-09-01", end: "2026-10-01" });
+  expect(corrected.corrections).toMatchObject([
+    { componentId: original.id, reason: "Show a chart of last month sales" },
+  ]);
+  expect(
+    corrected.messages.filter((item) => item.role === "user").map((item) => item.content),
+  ).toEqual([
+    "Show monthly bookings",
+    "Show a second monthly trend",
+    "Show ranked segment bookings",
+    "Show a chart of last month sales",
+  ]);
+  await expect(reason).toHaveCount(0);
+  const prompt = JSON.parse(await readFile(join(directory, "prompt.json"), "utf8"));
+  expect(JSON.stringify(prompt)).toContain('Correction target: {\\"id\\":\\"second-line\\"');
+  await page
+    .locator(`[data-result="${updated.resultId}"]`)
+    .getByRole("button", { name: "Correct this view" })
+    .click();
+  await reason.fill("Why did sales fall?");
+  await reason.press("Enter");
+  await expect(page.locator('[data-status="incomplete"]')).toContainText(
+    "These descriptive data do not establish causes",
+  );
+  expect((await saved(page)).components).toEqual(corrected.components);
+  expect((await saved(page)).messages).toEqual(corrected.messages);
+  expect((await saved(page)).corrections).toEqual(corrected.corrections);
+  await page
+    .locator(`[data-result="${updated.resultId}"]`)
+    .getByRole("button", { name: "Correct this view" })
+    .click();
+  await reason.fill("Show slow monthly bookings");
+  // Two submit events before React rerenders still produce only one accepted correction.
+  await reason.evaluate((input) => {
+    const form = input.closest("form")!;
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await expect(page.getByRole("button", { name: "Applying correction…" })).toBeDisabled();
+  await expect(reason).toBeDisabled();
+  await revision(page, 5);
+  const retried = await saved(page);
+  expect(retried.corrections).toHaveLength(2);
+  expect(retried.components).toHaveLength(3);
+  await page.reload();
+  expect((await saved(page)).corrections).toEqual(retried.corrections);
+  await expect(page.getByRole("img", { name: /Monthly bookings/ })).toHaveCount(2);
+  await ask(page, "Show ranked segment bookings", 6);
+  await expect(page.getByText(/Conversation history does not match/)).toHaveCount(0);
+});
+
+test("inline views format answers, collapse without removing the conversation and persist dark mode", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await ask(page, "Show a chart of last month sales", 1);
+  const first = await saved(page);
+  expect(first.results[0]?.data.request).toMatchObject({
+    metric: "bookings",
+    period: { start: "2026-09-01", end: "2026-10-01" },
+    groupBy: "month",
+  });
+  const turn = first.messages[0]!.id;
+  const answer = page.locator(`[data-turn="${turn}"]`);
+  await expect(
+    answer.getByRole("heading", { name: "Monthly bookings", exact: true }),
+  ).toBeVisible();
+  await expect(answer.getByText("Sep 1, 2026 – Sep 30, 2026", { exact: true })).toBeVisible();
+  await answer
+    .getByRole("group", { name: "Chart points" })
+    .getByRole("button", { name: "Sep 2026" })
+    .click();
+  await expect(answer.locator(".chart-selection")).toContainText("$0.00");
+  await expect(page.getByText("Text summary", { exact: true })).toHaveCount(0);
+  await expect(answer).not.toContainText("USD cents");
+  const width = await page
+    .getByLabel("Copilot conversation")
+    .evaluate((element) => element.getBoundingClientRect().width);
+  expect(width).toBeGreaterThan(1000);
+  const inset = await page.locator(".card").evaluate((card) => {
+    const chat = card.closest(".chat");
+    if (!chat) throw new Error("Missing conversation surface");
+    return card.getBoundingClientRect().left - chat.getBoundingClientRect().left;
+  });
+  expect(inset).toBeGreaterThan(20);
+  const calls = await readFile(join(directory, "calls.json"), "utf8");
+  await page.getByRole("button", { name: "Collapse Monthly bookings", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Expand Monthly bookings", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(answer.getByRole("img")).toBeHidden();
+  await expect(page.getByText("Show a chart of last month sales", { exact: true })).toBeVisible();
+  expect((await saved(page)).components).toEqual(first.components);
+  expect((await saved(page)).revision).toBe(1);
+  expect(await readFile(join(directory, "calls.json"), "utf8")).toBe(calls);
+  await page.screenshot({ path: testInfo.outputPath("conversation-light.png"), fullPage: true });
+  await page.getByRole("button", { name: "Expand Monthly bookings", exact: true }).click();
+  await expect(answer.getByRole("img")).toBeVisible();
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "Correct this view" }).click();
+  await expect(page.getByLabel("Correction reason")).toBeVisible();
+  await page.getByRole("button", { name: "Close feedback" }).click();
+  await expect(page.getByLabel("Correction reason")).toHaveCount(0);
+  await page.getByRole("button", { name: "Collapse Monthly bookings", exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath("conversation-dark.png"), fullPage: true });
+  await page.getByRole("button", { name: "Expand Monthly bookings", exact: true }).click();
+  const colors = await page.locator(".card").evaluate((card) => {
+    const chat = card.closest(".chat");
+    if (!chat) throw new Error("Missing conversation surface");
+    return {
+      card: getComputedStyle(card).backgroundColor,
+      chat: getComputedStyle(chat).backgroundColor,
+    };
+  });
+  expect(colors.card).not.toBe(colors.chat);
+  await stop();
+  await start();
+  await page.reload();
+  await expect(page.locator(".card")).toHaveCount(1);
+  await ask(page, "show a cohort chart of churn for last 12 months", 2);
+  await expect(
+    page.getByRole("heading", {
+      name: "Cumulative customer churn by activation cohort",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await ask(page, "Show customer churn for last 24 months", 3);
+  await expect(page.getByRole("heading", { name: "Customer churn", exact: true })).toBeVisible();
+  await expect(page.locator('[data-component="metric"] .period')).toHaveText(
+    "Oct 1, 2024 – Sep 30, 2026",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('[data-component="metric"]')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+});
+
+test("inspection returns to the saved filtered overview after restart without model calls", async ({
+  page,
+}) => {
+  await stop();
+  await start({ CARD_ID: "constructor" });
+  await page.goto("/");
+  await ask(page, "Show monthly bookings", 1);
+  await expect(page.getByRole("button", { name: "Back to overview", exact: true })).toHaveCount(0);
+  await page.getByLabel("Segment filter Monthly bookings").selectOption("SMB");
+  await revision(page, 2);
+  const overview = await saved(page);
+  const calls = await readFile(join(directory, "calls.json"), "utf8");
+  await page.getByRole("button", { name: "Inspect Mar 1, 2025", exact: true }).click();
+  await revision(page, 3);
+  await expect(page.getByRole("heading", { name: "Bookings records", exact: true })).toBeVisible();
+  await stop();
+  await start({ CARD_ID: "constructor" });
+  await page.reload();
+  const restartedCalls = await readFile(join(directory, "calls.json"), "utf8");
+  await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+  await revision(page, 4);
+  await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
+  await expect(page.getByLabel("Segment filter Monthly bookings")).toHaveValue("SMB");
+  const restored = await saved(page);
+  expect(restored.components).toEqual(overview.components);
+  expect(restored.results).toEqual(overview.results);
+  expect(await readFile(join(directory, "calls.json"), "utf8")).toBe(restartedCalls);
+  expect(Number(calls)).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Back to overview", exact: true })).toHaveCount(0);
+});
+
+test("filter replacement resets table pagination", async ({ page }) => {
+  await stop();
+  const db = new DatabaseSync(join(directory, "sales.sqlite"));
+  db.exec("UPDATE accounts SET name='Synthetic account 2' WHERE id=2");
+  db.close();
+  await start();
+  await page.goto("/");
+  await ask(page, "Show bookings records", 1);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+  await page.getByLabel("Segment filter Bookings records").selectOption("Enterprise");
+  await revision(page, 2);
+  await expect(page.getByText("Page 1 of 1", { exact: true })).toBeVisible();
+  await expect(page.getByRole("table")).toContainText("$60.00");
+  await expect(page.getByRole("table")).toContainText("Example account 2");
+  await expect(page.locator(".card")).not.toContainText("Synthetic");
 });
 
 test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
@@ -223,7 +443,9 @@ test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
   await start({ INVALID_COMPOSITION: "true" });
   await page.reload();
   const request = input(await saved(page), "invalid-view");
-  expect(await forged(page, request)).toContain("Invalid UI composition");
+  const rejected = await forged(page, request);
+  expect(rejected).toContain("Tool input validation failed for compose");
+  expect(rejected).toContain("No validated UI composition was selected");
   expect((await saved(page)).revision).toBe(2);
 });
 
@@ -316,9 +538,7 @@ test("configured_catalog_drives_dynamic_copilot_compositions", async ({ page }) 
     "bar",
     "table",
   ]);
-  await expect(
-    page.getByRole("heading", { name: "Closed opportunities", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bookings records", exact: true })).toBeVisible();
   await stop();
   await start({ DISABLE_LINE: "true", CUSTOM_COMPONENT: "true" });
   await page.reload();
@@ -335,7 +555,9 @@ test("configured_catalog_drives_dynamic_copilot_compositions", async ({ page }) 
     .click();
   await revision(page, 5);
   await expect(
-    page.locator('[data-component="compact"]').filter({ hasText: "Comparison: Enterprise" }),
+    page
+      .locator('[data-component="compact"]')
+      .filter({ has: page.locator(".cohort-label", { hasText: "Enterprise" }) }),
   ).toContainText("$60.00");
   if (!binding) throw new Error();
   expect(
@@ -375,12 +597,12 @@ test("configured_catalog_drives_dynamic_copilot_compositions", async ({ page }) 
     .locator('[data-component="line"]')
     .filter({
       has: page.getByRole("heading", {
-        name: current?.properties.title ?? "Missing title",
+        name: "Monthly bookings",
         exact: true,
       }),
     })
     .first();
-  await card.getByRole("button", { name: "Inspect 2025-03-01", exact: true }).click();
+  await card.getByRole("button", { name: "Inspect Mar 1, 2025", exact: true }).click();
   await revision(page, 7);
   const drilled = await saved(page);
   const drilledBinding = drilled.components.find((binding) => binding.id === trend.id);
@@ -396,4 +618,154 @@ test("configured_catalog_drives_dynamic_copilot_compositions", async ({ page }) 
     ),
   ).toBe(records?.data.value);
   expect(drilled.components).toHaveLength(accepted.components.length);
+});
+
+test("monthly churn uses interactive ECharts and keeps verified views across theme changes and restart", async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await ask(page, "Show monthly customer churn", 1);
+  const card = page.locator('[data-component="line"]').first();
+  await expect(
+    card.getByRole("heading", { name: "Monthly customer churn", exact: true }),
+  ).toBeVisible();
+  await expect(card.locator(".echart svg")).toBeVisible();
+  await expect(card.getByRole("button", { name: /Inspect/ })).toHaveCount(0);
+  await card.getByRole("button", { name: "Jan 2025", exact: true }).click();
+  await expect(card.getByRole("status")).toContainText("33.33%");
+  await expect(card.locator("table")).toContainText("Starting customers");
+  const before = await saved(page);
+  expect(before.results[0]?.data.table?.rows).toHaveLength(3);
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await expect(card.locator(".echart svg")).toBeVisible();
+  await card.getByRole("button", { name: "Collapse Monthly customer churn", exact: true }).click();
+  await expect(card.locator(".echart")).toBeHidden();
+  await card.getByRole("button", { name: "Expand Monthly customer churn", exact: true }).click();
+  await expect(card.locator(".echart svg")).toBeVisible();
+  await expect
+    .poll(async () =>
+      card.locator(".echart").evaluate((chart) => {
+        const svg = chart.querySelector("svg");
+        return Math.abs(Number(svg?.getAttribute("width")) - chart.clientWidth);
+      }),
+    )
+    .toBeLessThan(2);
+  await page.screenshot({ path: testInfo.outputPath("echarts-monthly-dark.png"), fullPage: true });
+  await stop();
+  await start();
+  await page.reload();
+  await expect(card.locator(".echart svg")).toBeVisible();
+  expect((await saved(page)).results).toEqual(before.results);
+  await ask(page, "Show monthly revenue churn", 2);
+  const revenue = page.locator('[data-component="line"]').last();
+  await revenue.getByRole("button", { name: "Jan 2025", exact: true }).click();
+  await expect(revenue.getByRole("status")).toContainText("75.00%");
+  await expect(revenue.locator("table")).toContainText("$300.00");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(revenue.locator(".echart svg")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  expect(errors).toEqual([]);
+});
+
+test("cohort heatmaps show continuous retention, inspect cells and preserve targeted corrections after restart", async ({
+  page,
+}, testInfo) => {
+  await stop();
+  await rm(join(directory, "sales.sqlite"));
+  await start({ COHORT_DATA: "true" });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await ask(page, "Show monthly customer churn", 1);
+  const monthly = (await saved(page)).components.find(
+    (component) => component.id === "customer-churn",
+  );
+  await ask(page, "Show a customer retention cohort heatmap", 2);
+  const card = page.locator('[data-component="heatmap"]').first();
+  await expect(
+    card.getByRole("heading", {
+      name: "Continuous customer retention by activation cohort",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(card.getByRole("img")).toBeVisible();
+  await expect(card.locator(".echart svg")).toBeVisible();
+  await card.locator(".echart svg").getByText("67%", { exact: true }).click();
+  await expect(card.getByRole("status")).toContainText("66.67%");
+  await card.getByLabel("Activation cohort", { exact: true }).selectOption("2025-01-01");
+  await card.getByLabel("Month since activation", { exact: true }).selectOption("1");
+  await expect(card.getByRole("status")).toContainText("33.33%");
+  await expect(card.getByRole("status")).toContainText("Retained customers: 1 / 3");
+  await card.getByLabel("Activation cohort", { exact: true }).selectOption("2025-03-01");
+  await expect(
+    card.getByLabel("Month since activation", { exact: true }).getByRole("option"),
+  ).toHaveCount(1);
+  await expect(card.getByRole("status")).toContainText("100.00%");
+  const original = await saved(page);
+  const retention = original.results.find((result) => result.data.metric === "cohortRetention");
+  expect(retention?.data).toMatchObject({ value: 40, numerator: 2, denominator: 5 });
+  expect(retention?.data.table?.rows).toHaveLength(6);
+  await card.locator(".echart").evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await card.locator(".echart").screenshot({ path: testInfo.outputPath("cohort-light.png") });
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await card.locator(".echart").screenshot({ path: testInfo.outputPath("cohort-dark.png") });
+  await card.getByRole("button", { name: "Correct this view", exact: true }).click();
+  await page.getByLabel("Correction reason").fill("Show this cohort heatmap for a shorter period");
+  await page.getByRole("button", { name: "Apply correction", exact: true }).click();
+  await revision(page, 3);
+  const corrected = await saved(page);
+  expect(corrected.components.find((component) => component.id === monthly?.id)).toEqual(monthly);
+  expect(corrected.components).toHaveLength(2);
+  expect(
+    corrected.results.find((result) => result.data.metric === "cohortRetention")?.data.table?.rows,
+  ).toHaveLength(3);
+  await stop();
+  await start({ COHORT_DATA: "true" });
+  await page.reload();
+  await expect(card.getByRole("img")).toBeVisible();
+  expect((await saved(page)).results).toEqual(corrected.results);
+  await ask(page, "show a cohort chart of churn for last 12 months", 4);
+  const churn = page.locator('[data-component="heatmap"]').last();
+  await expect(
+    churn.getByRole("heading", {
+      name: "Cumulative customer churn by activation cohort",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await churn.getByLabel("Activation cohort", { exact: true }).selectOption("2025-01-01");
+  await churn.getByLabel("Month since activation", { exact: true }).selectOption("1");
+  await expect(churn.getByRole("status")).toContainText("66.67%");
+  await expect(churn.getByRole("status")).toContainText("Churned customers: 2 / 3");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(churn.getByRole("img")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  expect(errors).toEqual([]);
+});
+
+test("monthly ECharts preserves verified connector dates and point values", async ({ page }) => {
+  await stop();
+  await start({ MONTH_END_DATES: "true" });
+  await page.goto("/");
+  await ask(page, "Show monthly bookings", 1);
+  const chart = page.locator('[data-component="line"]');
+  await expect(chart.locator(".echart svg").getByText("Mar 2025", { exact: true })).toBeVisible();
+  await chart.getByRole("button", { name: "Mar 2025", exact: true }).click();
+  await expect(chart.getByRole("status")).toContainText("$180.00");
+  expect((await saved(page)).results[0]?.data.table?.rows[0]?.label).toBe("2025-03-31");
+  await chart.getByRole("button", { name: "Inspect selected records", exact: true }).click();
+  await revision(page, 2);
+  const drilled = (await saved(page)).results[0]?.data;
+  expect(drilled?.request.period).toEqual({ start: "2025-03-01", end: "2025-04-01" });
+  expect(drilled?.table?.rows).toHaveLength(2);
+  expect(drilled?.value).toBe(18000);
+  await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+  await revision(page, 3);
+  await expect(chart.getByRole("heading", { name: "Monthly bookings", exact: true })).toBeVisible();
 });

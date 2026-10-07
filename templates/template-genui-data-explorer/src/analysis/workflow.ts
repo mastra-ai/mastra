@@ -28,6 +28,7 @@ export interface Session {
   filters?: AnalysisRequest["filters"];
   composition?: import("../ui/catalog.ts").Composition;
   accepted?: import("../ui/catalog.ts").AcceptedWorkspace;
+  correctionTarget?: import("../ui/catalog.ts").AcceptedWorkspace["components"][number];
   failure?: SourceError;
   workflowRunId?: string;
 }

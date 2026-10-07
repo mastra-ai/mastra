@@ -22,10 +22,22 @@ import {
   salesGrowth,
   filterClause,
 } from "./opportunity-metrics.ts";
-import { customerChurn, revenueChurn } from "./churn-metrics.ts";
+import { customerChurn, revenueChurn, churnSeries, customerCohorts } from "./churn-metrics.ts";
 
 const opportunityFilters = ["ownerId", "segment", "region", "stage"] as const;
 const capabilities: SourceDescriptor["capabilities"] = [
+  ...["cohortRetention", "cohortChurn"].map(
+    (metricId): SourceDescriptor["capabilities"][number] => ({
+      metric: metricId,
+      description: `First activation month per account with a fixed cohort size. Continuous retention ends at the first complete cancellation; reactivation stays separate. ${metricId === "cohortRetention" ? "Retained" : "Cumulatively churned"} customers / cohort size at each completed month end. Month 0 is activation month end. The overall rate observes selected cohorts at the requested period end, not an average of matrix cells.`,
+      unit: "percent",
+      calculation: "percentage" as const,
+      fields: ["period", "groupBy"],
+      groupings: [{ field: "cohort", kind: "matrix" as const }],
+      groupedCalculation: "independent" as const,
+      filters: [],
+    }),
+  ),
   {
     metric: "bookings",
     description:
@@ -78,18 +90,24 @@ const capabilities: SourceDescriptor["capabilities"] = [
   },
   {
     metric: "customerChurn",
-    description: "First full account cancellation in the opening cohort; reactivation separate.",
+    description:
+      "First full account cancellation in the opening cohort; reactivation separate. Monthly rates use each month's opening accounts, never a sum or mean of monthly rates. No starting accounts means a gap.",
     unit: "percent",
     calculation: "percentage",
-    fields: ["period"],
+    fields: ["period", "groupBy"],
+    groupings: [{ field: "month", kind: "series" }],
+    groupedCalculation: "independent",
     filters: [],
   },
   {
     metric: "revenueChurn",
-    description: "Opening-cohort gross MRR losses, capped per account at opening MRR.",
+    description:
+      "Opening-cohort gross MRR losses, capped per account at opening MRR. Monthly rates use each month's opening MRR, never a sum or mean of monthly rates. No opening MRR means a gap.",
     unit: "percent",
     calculation: "percentage",
-    fields: ["period"],
+    fields: ["period", "groupBy"],
+    groupings: [{ field: "month", kind: "series" }],
+    groupedCalculation: "independent",
     filters: [],
   },
 ];
@@ -160,12 +178,12 @@ export class SalesSource implements DataSource {
     const prompts = samplePrompts(this.#metadata);
     this.#descriptor = {
       id: "sales",
-      title: "Synthetic B2B SaaS Sales",
+      title: "B2B SaaS Sales",
       version: "sales-sqlite-v1",
       datasetVersion: `${metadata.generator}:${metadata.schema}:${metadata.seed}:${metadata.anchor}`,
       coverage,
       asOf: metadata.asOf,
-      metadata: { ...metadata, synthetic: true },
+      metadata: { ...metadata },
       metricVersion: metadata.metrics,
       capabilities,
       examples: [
@@ -177,6 +195,22 @@ export class SalesSource implements DataSource {
         { title: prompts[0]!, request: { metric: "growth", period } },
         { title: prompts[1]!, request: { metric: "customerChurn", period } },
         { title: "Gross MRR churn", request: { metric: "revenueChurn", period } },
+        {
+          title: "Continuous customer retention by activation cohort",
+          request: { metric: "cohortRetention", period, groupBy: "cohort" },
+        },
+        {
+          title: "Cumulative customer churn by activation cohort",
+          request: { metric: "cohortChurn", period, groupBy: "cohort" },
+        },
+        {
+          title: "Monthly customer churn",
+          request: { metric: "customerChurn", period, groupBy: "month" },
+        },
+        {
+          title: "Monthly gross revenue churn",
+          request: { metric: "revenueChurn", period, groupBy: "month" },
+        },
         {
           title: prompts[2]!,
           request: { metric: "pipeline", asOf: metadata.asOf },
@@ -277,6 +311,7 @@ export class SalesSource implements DataSource {
     const metadata = this.#metadata;
     let result: MetricResult;
     let details: AnalysisResult["details"];
+    let table: ResultTable | undefined;
     switch (request.metric) {
       case "bookings":
         result = bookings(db, metadata, requestPeriod(request.period, "period"), filters);
@@ -321,9 +356,24 @@ export class SalesSource implements DataSource {
         };
         break;
       }
+      case "cohortRetention":
+      case "cohortChurn": {
+        const cohorts = customerCohorts(
+          db,
+          metadata,
+          requestPeriod(request.period, "period"),
+          request.metric,
+        );
+        result = cohorts;
+        if (request.groupBy) table = cohorts.table;
+        details = { convention: cohorts.convention, cohortCount: cohorts.cohortCount };
+        break;
+      }
       case "customerChurn": {
         const churn = customerChurn(db, metadata, requestPeriod(request.period, "period"));
         result = churn;
+        if (request.groupBy && (result.status === "available" || result.denominator === 0))
+          table = churnSeries(db, metadata, result.period, "customerChurn");
         details = {
           reactivatedCustomers: churn.reactivatedCustomers,
           convention: churn.convention,
@@ -333,6 +383,8 @@ export class SalesSource implements DataSource {
       case "revenueChurn": {
         const churn = revenueChurn(db, metadata, requestPeriod(request.period, "period"));
         result = churn;
+        if (request.groupBy && (result.status === "available" || result.denominator === 0))
+          table = churnSeries(db, metadata, result.period, "revenueChurn");
         details = {
           cancellationLossCents: churn.cancellationLossCents,
           cancellationOnlyPercent: churn.cancellationOnlyPercent,
@@ -343,8 +395,10 @@ export class SalesSource implements DataSource {
       default:
         throw new Error("Unsupported Sales metric.");
     }
-    const table =
-      result.status === "available" && (request.groupBy || request.records)
+    table ??=
+      result.status === "available" &&
+      (request.groupBy || request.records) &&
+      (request.metric === "bookings" || request.metric === "conversion")
         ? this.closedTable(db, request, filters)
         : undefined;
     return {

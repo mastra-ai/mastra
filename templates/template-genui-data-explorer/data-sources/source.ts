@@ -7,6 +7,17 @@ export type AnalysisRequest = z.infer<typeof analysisRequestSchema>;
 export type SourceDescriptor = z.infer<typeof sourceDescriptorSchema>;
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;
 
+/** An unavailable period rate can still have independently available monthly observations. */
+export function hasAvailableData(data: AnalysisResult, descriptor: SourceDescriptor) {
+  return (
+    data.status === "available" ||
+    (descriptor.capabilities.find((capability) => capability.metric === data.metric)
+      ?.groupedCalculation === "independent" &&
+      data.denominator === 0 &&
+      Boolean(data.table?.rows.length))
+  );
+}
+
 /** Read-only analyses advertised by a source; no shared business metric is mandatory. */
 export interface DataSource {
   describe(): SourceDescriptor;
@@ -145,13 +156,17 @@ export const sourceCapabilitySchema = z
     description: z.string().min(1),
     unit: z.string().min(1),
     calculation: z.enum(["total", "percentage"]),
+    groupedCalculation: z.enum(["partition", "independent"]).optional(),
     fields: z.array(
       z.enum(["period", "baseline", "horizon", "asOf", "filters", "groupBy", "records"]),
     ),
     filters: z.array(z.string()),
     groupings: z
       .array(
-        z.strictObject({ field: z.string().min(1).max(80), kind: z.enum(["series", "ranked"]) }),
+        z.strictObject({
+          field: z.string().min(1).max(80),
+          kind: z.enum(["series", "ranked", "matrix"]),
+        }),
       )
       .max(30)
       .optional(),
@@ -162,11 +177,22 @@ export const sourceCapabilitySchema = z
   )
   .refine(
     (capability) =>
+      capability.groupedCalculation !== "independent" || capability.calculation === "percentage",
+    "Independent observations are supported only for percentage calculations.",
+  )
+  .refine(
+    (capability) =>
       !capability.fields.includes("groupBy") ||
       (Boolean(capability.groupings?.length) &&
         new Set(capability.groupings?.map((group) => group.field)).size ===
           capability.groupings?.length),
     "Grouped capabilities require unique declared grouping fields and roles.",
+  )
+  .refine(
+    (capability) =>
+      !capability.groupings?.some((group) => group.kind === "matrix") ||
+      (capability.calculation === "percentage" && capability.groupedCalculation === "independent"),
+    "Cohort matrices require independent percentage observations.",
   );
 export type SourceCapability = z.infer<typeof sourceCapabilitySchema>;
 export const sourceDescriptorSchema = z
@@ -193,21 +219,68 @@ export const tableColumnSchema = z.strictObject({
   type: z.enum(["date", "category", "number", "id"]),
   unit: z.string().min(1).max(80).optional(),
 });
+export const matrixAxesSchema = z.strictObject({
+  x: z.string().min(1).max(80),
+  y: z.string().min(1).max(80),
+  value: z.string().min(1).max(80),
+});
 export const resultTableSchema = z
   .strictObject({
-    kind: z.enum(["series", "ranked", "records"]),
+    kind: z.enum(["series", "ranked", "records", "matrix"]),
     columns: z.array(tableColumnSchema).min(1).max(50),
     grouping: z.string().min(1).max(80).optional(),
+    axes: matrixAxesSchema.optional(),
     rows: z.array(z.record(z.string(), scalarSchema)).max(1000),
     omitted: z.number().int().nonnegative(),
   })
   .superRefine((table, ctx) => {
-    if (table.kind === "records" ? table.grouping !== undefined : !groupingColumn(table))
+    if (
+      table.kind === "records" || table.kind === "matrix"
+        ? table.grouping !== undefined
+        : !groupingColumn(table)
+    )
       ctx.addIssue({
         code: "custom",
         message:
           "Grouped tables need an explicit grouping key or one unambiguous date/category column; records have no grouping.",
       });
+    if (table.kind === "matrix") {
+      const axes = table.axes;
+      const x = table.columns.find((column) => column.key === axes?.x);
+      const y = table.columns.find((column) => column.key === axes?.y);
+      const value = table.columns.find((column) => column.key === axes?.value);
+      if (
+        !axes ||
+        !x ||
+        !y ||
+        !value ||
+        new Set([x.key, y.key, value.key]).size !== 3 ||
+        x.type !== "number" ||
+        y.type !== "date" ||
+        value.type !== "number"
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "Matrices require distinct age, cohort-date and numeric value axes.",
+        });
+      if (axes) {
+        const cells = new Set<string>();
+        for (const row of table.rows) {
+          const coordinate = JSON.stringify([row[axes.x], row[axes.y]]);
+          if (
+            cells.has(coordinate) ||
+            !Number.isSafeInteger(row[axes.x]) ||
+            Number(row[axes.x]) < 0
+          )
+            ctx.addIssue({
+              code: "custom",
+              message: "Matrix coordinates must be unique with nonnegative integer ages.",
+            });
+          cells.add(coordinate);
+        }
+      }
+    } else if (table.axes)
+      ctx.addIssue({ code: "custom", message: "Matrix axes are only supported for matrix data." });
     const keys = table.columns.map((column) => column.key);
     if (new Set(keys).size !== keys.length)
       ctx.addIssue({ code: "custom", message: "Table column keys must be unique." });
@@ -235,7 +308,7 @@ export const resultTableSchema = z
 export type ResultTable = z.infer<typeof resultTableSchema>;
 /** One source-owned grouping binding drives chart axes and drill membership. */
 export function groupingColumn(table: ResultTable) {
-  if (table.kind === "records") return undefined;
+  if (table.kind === "records" || table.kind === "matrix") return undefined;
   const columns = table.columns.filter(
     (column) => column.type === (table.kind === "series" ? "date" : "category"),
   );
@@ -285,6 +358,73 @@ export const analysisResultSchema = z
     }),
   })
   .superRefine((value, context) => {
+    const table = value.table;
+    if (table?.kind === "matrix" && table.axes) {
+      const period = value.period;
+      const groups = new Map<string, { size: number; ages: Set<number>; final: number }>();
+      let previous = "";
+      let valid = Boolean(period?.start.endsWith("-01") && period.end.endsWith("-01"));
+      for (const row of table.rows) {
+        const cohort = row[table.axes.y];
+        const age = row[table.axes.x];
+        if (
+          !period ||
+          typeof cohort !== "string" ||
+          typeof age !== "number" ||
+          typeof row.numerator !== "number" ||
+          typeof row.denominator !== "number"
+        ) {
+          valid = false;
+          continue;
+        }
+        const months =
+          (Number(period.end.slice(0, 4)) - Number(cohort.slice(0, 4))) * 12 +
+          Number(period.end.slice(5, 7)) -
+          Number(cohort.slice(5, 7));
+        const key = `${cohort}:${String(age).padStart(6, "0")}`;
+        const group = groups.get(cohort) ?? {
+          size: row.denominator,
+          ages: new Set<number>(),
+          final: 0,
+        };
+        if (
+          !cohort.endsWith("-01") ||
+          cohort < period.start ||
+          cohort >= period.end ||
+          age >= months ||
+          key <= previous ||
+          !Number.isSafeInteger(row.numerator) ||
+          !Number.isSafeInteger(row.denominator) ||
+          row.denominator < 1 ||
+          row.numerator < 0 ||
+          row.numerator > row.denominator ||
+          group.size !== row.denominator
+        )
+          valid = false;
+        previous = key;
+        group.ages.add(age);
+        if (age === months - 1) group.final = row.numerator;
+        groups.set(cohort, group);
+      }
+      let numerator = 0;
+      let denominator = 0;
+      for (const [cohort, group] of groups) {
+        const months = period
+          ? (Number(period.end.slice(0, 4)) - Number(cohort.slice(0, 4))) * 12 +
+            Number(period.end.slice(5, 7)) -
+            Number(cohort.slice(5, 7))
+          : 0;
+        if (group.ages.size !== months) valid = false;
+        numerator += group.final;
+        denominator += group.size;
+      }
+      if (!valid || numerator !== value.numerator || denominator !== value.denominator)
+        context.addIssue({
+          code: "custom",
+          message:
+            "Cohort matrices need complete ordered month observations, fixed populations and a reconciled period-end rate.",
+        });
+    }
     if (
       value.denominator !== null &&
       (!Number.isSafeInteger(value.denominator) || value.denominator < 0)

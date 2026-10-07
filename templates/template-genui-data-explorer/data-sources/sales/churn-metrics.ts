@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { coverageReason, shiftMonths } from "./calendar.ts";
 import { metric, safeInteger, resultInteger, resultText } from "./contracts.ts";
 import type { DatasetMetadata, Period } from "./contracts.ts";
+import type { ResultTable } from "../source.ts";
 
 interface History {
   accountId: number;
@@ -18,13 +19,13 @@ interface Cohort {
   cancellationLossCents: number;
 }
 
-function cohort(db: DatabaseSync, period: Period): Cohort {
+function subscriptionAccounts(db: DatabaseSync, end: string) {
   const history = db
     .prepare(`SELECT s.account_id AS accountId, h.subscription_id AS subscriptionId,
     h.effective_at AS effectiveAt, h.mrr_cents AS mrrCents
     FROM subscription_history h JOIN subscriptions s ON s.id=h.subscription_id
     WHERE h.effective_at < ? ORDER BY s.account_id, h.effective_at, h.subscription_id`)
-    .all(period.end)
+    .all(end)
     .map((row) => ({
       accountId: resultInteger(row.accountId),
       subscriptionId: resultInteger(row.subscriptionId),
@@ -37,6 +38,10 @@ function cohort(db: DatabaseSync, period: Period): Cohort {
     rows.push(entry);
     accounts.set(entry.accountId, rows);
   }
+  return accounts;
+}
+
+function cohort(accounts: ReadonlyMap<number, readonly History[]>, period: Period): Cohort {
   const result: Cohort = {
     openingCustomers: 0,
     openingMrrCents: 0,
@@ -59,7 +64,7 @@ function cohort(db: DatabaseSync, period: Period): Cohort {
     let remaining = opening;
     const dates = new Map<string, History[]>();
     for (const row of rows)
-      if (row.effectiveAt >= period.start) {
+      if (row.effectiveAt >= period.start && row.effectiveAt < period.end) {
         const events = dates.get(row.effectiveAt) ?? [];
         events.push(row);
         dates.set(row.effectiveAt, events);
@@ -97,7 +102,7 @@ function cohort(db: DatabaseSync, period: Period): Cohort {
 
 export function customerChurn(db: DatabaseSync, metadata: DatasetMetadata, period: Period) {
   const reason = coverageReason(metadata, period);
-  const counts = reason ? null : cohort(db, period);
+  const counts = reason ? null : cohort(subscriptionAccounts(db, period.end), period);
   return {
     ...metric(
       metadata,
@@ -123,6 +128,60 @@ export function monthlyCustomerChurn(
   return customerChurn(db, metadata, { start: monthStart, end: shiftMonths(monthStart, 1) });
 }
 
+/** Each row has its own opening population; it is not a partition of the period rate. */
+export function churnSeries(
+  db: DatabaseSync,
+  metadata: DatasetMetadata,
+  period: Period,
+  metricId: "customerChurn" | "revenueChurn",
+): ResultTable {
+  const reason = coverageReason(metadata, period);
+  if (reason) throw new Error(reason);
+  if (!period.start.endsWith("-01") || !period.end.endsWith("-01"))
+    throw new Error("Monthly churn requires complete calendar months, with first-of-month bounds.");
+  const accounts = subscriptionAccounts(db, period.end);
+  const rows: ResultTable["rows"] = [];
+  for (let month = period.start; month < period.end; month = shiftMonths(month, 1)) {
+    const counts = cohort(accounts, { start: month, end: shiftMonths(month, 1) });
+    const numerator =
+      metricId === "customerChurn" ? counts.churnedCustomers : counts.grossLossCents;
+    const denominator =
+      metricId === "customerChurn" ? counts.openingCustomers : counts.openingMrrCents;
+    // No starting population means no rate. Preserve that month as a chart gap.
+    if (denominator === 0) continue;
+    rows.push({
+      month,
+      value: (numerator / denominator) * 100,
+      numerator,
+      denominator,
+      reactivatedCustomers: counts.reactivatedCustomers,
+    });
+  }
+  return {
+    kind: "series",
+    grouping: "month",
+    omitted: 0,
+    columns: [
+      { key: "month", label: "Month", type: "date" },
+      { key: "value", label: "Churn", type: "number", unit: "percent" },
+      {
+        key: "numerator",
+        label: metricId === "customerChurn" ? "Churned customers" : "Gross MRR lost",
+        type: "number",
+        ...(metricId === "revenueChurn" ? { unit: "USD cents" } : {}),
+      },
+      {
+        key: "denominator",
+        label: metricId === "customerChurn" ? "Starting customers" : "Opening MRR",
+        type: "number",
+        ...(metricId === "revenueChurn" ? { unit: "USD cents" } : {}),
+      },
+      { key: "reactivatedCustomers", label: "Reactivated customers", type: "number" },
+    ],
+    rows,
+  };
+}
+
 export function trailingCustomerChurn(
   db: DatabaseSync,
   metadata: DatasetMetadata,
@@ -133,7 +192,7 @@ export function trailingCustomerChurn(
 
 export function revenueChurn(db: DatabaseSync, metadata: DatasetMetadata, period: Period) {
   const reason = coverageReason(metadata, period);
-  const counts = reason ? null : cohort(db, period);
+  const counts = reason ? null : cohort(subscriptionAccounts(db, period.end), period);
   return {
     ...metric(
       metadata,
@@ -149,5 +208,121 @@ export function revenueChurn(db: DatabaseSync, metadata: DatasetMetadata, period
       : (counts.cancellationLossCents / counts.openingMrrCents) * 100,
     convention:
       "Gross subscription cancellations and contractions in the opening account cohort, capped per account at opening MRR; expansion excluded.",
+  };
+}
+
+interface Lifecycle {
+  activation: string;
+  cancellation?: string;
+  reactivation?: string;
+}
+
+/** Account-level changes on one date are atomic, including transfers between subscriptions. */
+function activationLifecycle(rows: readonly History[]): Lifecycle | undefined {
+  const balances = new Map<number, number>();
+  const dates = new Map<string, History[]>();
+  for (const row of rows) {
+    const events = dates.get(row.effectiveAt) ?? [];
+    events.push(row);
+    dates.set(row.effectiveAt, events);
+  }
+  let lifecycle: Lifecycle | undefined;
+  let before = 0;
+  for (const [date, events] of dates) {
+    for (const event of events) balances.set(event.subscriptionId, event.mrrCents);
+    const after = [...balances.values()].reduce((sum, value) => safeInteger(sum + value), 0);
+    if (!lifecycle && after > 0) lifecycle = { activation: date };
+    if (lifecycle && before > 0 && after === 0) lifecycle.cancellation ??= date;
+    if (lifecycle?.cancellation && before === 0 && after > 0) lifecycle.reactivation ??= date;
+    before = after;
+  }
+  return lifecycle;
+}
+
+/** Continuous retention uses a fixed first-activation cohort and never restores cancelled members. */
+export function customerCohorts(
+  db: DatabaseSync,
+  metadata: DatasetMetadata,
+  period: Period,
+  metricId: "cohortRetention" | "cohortChurn" = "cohortRetention",
+) {
+  const reason = coverageReason(metadata, period);
+  if (!period.start.endsWith("-01") || !period.end.endsWith("-01"))
+    throw new Error(
+      "Customer cohorts require complete calendar months, with first-of-month bounds.",
+    );
+  const cohorts = new Map<string, Lifecycle[]>();
+  if (!reason)
+    for (const rows of subscriptionAccounts(db, period.end).values()) {
+      const lifecycle = activationLifecycle(rows);
+      if (!lifecycle || lifecycle.activation < period.start) continue;
+      const month = `${lifecycle.activation.slice(0, 7)}-01`;
+      const members = cohorts.get(month) ?? [];
+      members.push(lifecycle);
+      cohorts.set(month, members);
+    }
+  const matrixRows: ResultTable["rows"] = [];
+  let numerator = 0;
+  let denominator = 0;
+  for (const [month, members] of [...cohorts].toSorted(([a], [b]) => a.localeCompare(b))) {
+    denominator += members.length;
+    for (
+      let age = 0, end = shiftMonths(month, 1);
+      end <= period.end;
+      age++, end = shiftMonths(end, 1)
+    ) {
+      const churned = members.filter(
+        (member) => member.cancellation && member.cancellation < end,
+      ).length;
+      const count = metricId === "cohortRetention" ? members.length - churned : churned;
+      matrixRows.push({
+        cohort: month,
+        age,
+        value: (count / members.length) * 100,
+        numerator: count,
+        denominator: members.length,
+        reactivatedCustomers: members.filter(
+          (member) => member.reactivation && member.reactivation < end,
+        ).length,
+      });
+      if (end === period.end) numerator += count;
+    }
+  }
+  const table: ResultTable = {
+    kind: "matrix",
+    omitted: 0,
+    axes: { x: "age", y: "cohort", value: "value" },
+    columns: [
+      { key: "cohort", label: "First activation cohort", type: "date" },
+      { key: "age", label: "Months since activation", type: "number" },
+      {
+        key: "value",
+        label: metricId === "cohortRetention" ? "Continuous retention" : "Cumulative churn",
+        type: "number",
+        unit: "percent",
+      },
+      {
+        key: "numerator",
+        label: metricId === "cohortRetention" ? "Retained customers" : "Churned customers",
+        type: "number",
+      },
+      { key: "denominator", label: "Cohort size", type: "number" },
+      { key: "reactivatedCustomers", label: "Reactivated customers (separate)", type: "number" },
+    ],
+    rows: matrixRows,
+  };
+  return {
+    ...metric(
+      metadata,
+      period,
+      reason ? null : numerator,
+      reason ? null : denominator,
+      reason,
+      "percent",
+    ),
+    table: reason ? undefined : table,
+    cohortCount: reason ? null : cohorts.size,
+    convention:
+      "First activation month per account; retention ends at the first complete account cancellation. Reactivation is separate. Month 0 is activation month end; the overall rate observes all selected cohort members at the requested period end.",
   };
 }

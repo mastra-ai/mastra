@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { representation, representationSchema } from "../analysis/contracts.ts";
 import { groupingColumn, SourceError } from "../../data-sources/source.ts";
+import type { SourceDescriptor } from "../../data-sources/source.ts";
 import type { VerifiedResult } from "../analysis/contracts.ts";
 
 export const componentProperties = z.strictObject({
@@ -25,20 +26,34 @@ export const componentProperties = z.strictObject({
     .max(80)
     .optional()
     .describe(
-      "Charts only: exact returned grouping column key, not its label. Otherwise absent/null.",
+      "Line/bar: exact grouping key. Heatmap: exact returned axes.x key. Otherwise absent/null.",
     ),
   y: z
     .string()
     .max(80)
     .optional()
-    .describe("Charts only: exact numeric column key with the metric unit. Otherwise absent/null."),
+    .describe(
+      "Line/bar: numeric key with metric unit. Heatmap: exact returned axes.y key. Otherwise absent/null.",
+    ),
+  value: z
+    .string()
+    .max(80)
+    .optional()
+    .describe("Heatmaps only: exact matrix value axis key. Otherwise absent/null."),
   scenario: z.boolean().optional(),
   options: z
     .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
     .optional(),
 });
 export const componentSchema = z.strictObject({
-  id: z.string().min(1).max(80),
+  id: z
+    .string()
+    .min(1)
+    .max(80)
+    .refine(
+      (id) => id !== "__proto__",
+      "The __proto__ ID is reserved because saved card metadata cannot serialize it.",
+    ),
   component: z.string().min(1).max(80),
   version: z.string().min(1).max(80),
   resultId: z.string().min(1),
@@ -63,11 +78,12 @@ export function acceptedWorkspace(
   bindings: readonly ComponentBinding[],
   results: readonly VerifiedResult[],
   entries: readonly ComponentDeclaration[],
+  descriptor: SourceDescriptor,
 ): AcceptedWorkspace {
   const components = bindings.map((binding) => {
     validateComposition({ components: [binding] }, results, entries);
     const result = results.find((result) => result.resultId === binding.resultId)!;
-    return { ...binding, representation: representation(result) };
+    return { ...binding, representation: representation(result, descriptor) };
   });
   const context = acceptedWorkspaceSchema.parse({ revision, components });
   if (Buffer.byteLength(JSON.stringify(context)) > 65536)
@@ -84,8 +100,8 @@ export interface ComponentDeclaration {
   version: string;
   description: string;
   enabled: boolean;
-  kind: "metric" | "line" | "bar" | "table" | "comparison";
-  roles: readonly ("scalar" | "series" | "ranked" | "records")[];
+  kind: "metric" | "line" | "bar" | "table" | "comparison" | "heatmap";
+  roles: readonly ("scalar" | "series" | "ranked" | "records" | "matrix")[];
   units: readonly string[];
   actions: readonly ("filter" | "drill" | "compare")[];
   properties: z.ZodType;
@@ -94,6 +110,19 @@ export interface ComponentDeclaration {
 
 /** Serializable capabilities and renderers share these declarations. Extend in renderers.tsx. */
 export const components: readonly ComponentDeclaration[] = [
+  {
+    id: "heatmap",
+    kind: "heatmap",
+    version: "1",
+    description:
+      "Customer retention or cumulative churn by first activation cohort and completed month age. Bind x, y and value exactly to verified matrix axes. Unobserved months remain blank.",
+    enabled: true,
+    roles: ["matrix"],
+    units: ["percent"],
+    actions: [],
+    properties: componentProperties,
+    defaults: { pageSize: 12 },
+  },
   {
     id: "compact",
     kind: "metric",
@@ -154,7 +183,7 @@ export const components: readonly ComponentDeclaration[] = [
     description:
       "Accessible paginated verified records or grouped data; all columns remain available.",
     enabled: true,
-    roles: ["scalar", "series", "ranked", "records"],
+    roles: ["scalar", "series", "ranked", "records", "matrix"],
     units: ["USD cents", "percent"],
     actions: ["filter", "drill", "compare"],
     properties: componentProperties,
@@ -182,11 +211,13 @@ export function validateCatalog(entries: readonly ComponentDeclaration[]) {
       !entry.description ||
       ids.has(entry.id) ||
       !(entry.properties instanceof z.ZodType) ||
-      !["metric", "line", "bar", "table", "comparison"].includes(entry.kind) ||
+      !["metric", "line", "bar", "table", "comparison", "heatmap"].includes(entry.kind) ||
       !entry.roles.length ||
       !entry.units.length ||
       entry.units.some((unit) => typeof unit !== "string" || !unit.trim() || unit.length > 80) ||
-      entry.roles.some((role) => !["scalar", "series", "ranked", "records"].includes(role)) ||
+      entry.roles.some(
+        (role) => !["scalar", "series", "ranked", "records", "matrix"].includes(role),
+      ) ||
       entry.actions.some((action) => !["filter", "drill", "compare"].includes(action)) ||
       !Number.isInteger(entry.defaults.pageSize) ||
       entry.defaults.pageSize < 1 ||
@@ -205,6 +236,61 @@ export function agentCatalog(entries: readonly ComponentDeclaration[]) {
     ...entry,
     properties: z.toJSONSchema(properties),
   }));
+}
+/** Constrain model choices to the actual verified result/renderer bindings for this step. */
+export function compositionInputSchema(
+  results: readonly VerifiedResult[],
+  entries: readonly ComponentDeclaration[],
+) {
+  const catalog = validateCatalog(entries);
+  const candidates = results.flatMap((result) =>
+    catalog.flatMap((entry) => {
+      const table = result.data.table;
+      if (!entry.roles.includes(table?.kind ?? "scalar") || !entry.units.includes(result.data.unit))
+        return [];
+      const registered =
+        entry.properties instanceof z.ZodObject ? entry.properties : componentProperties;
+      let properties: z.ZodObject = z.strictObject(
+        Object.fromEntries(
+          Object.entries(registered.shape).filter(([key]) => !["x", "y", "value"].includes(key)),
+        ),
+      );
+      if (entry.kind === "heatmap") {
+        if (!table?.axes || table.kind !== "matrix") return [];
+        properties = properties.safeExtend({
+          x: z.literal(table.axes.x),
+          y: z.literal(table.axes.y),
+          value: z.literal(table.axes.value),
+        });
+      } else if (entry.kind === "line" || entry.kind === "bar") {
+        const x = table && groupingColumn(table);
+        const values = table?.columns.filter(
+          (column) => column.type === "number" && column.unit === result.data.unit,
+        );
+        if (!x || !values?.length) return [];
+        properties = properties.safeExtend({
+          x: z.literal(x.key),
+          y: z.enum(values.map((column) => column.key)),
+        });
+      }
+      if (result.data.metric === "forecast")
+        properties = properties.safeExtend({ scenario: z.literal(true) });
+      properties = properties.refine((value) => entry.properties.safeParse(value).success, {
+        message: "Properties must satisfy the registered view contract.",
+      });
+      return [
+        componentSchema.extend({
+          component: z.literal(entry.id),
+          version: z.literal(entry.version),
+          resultId: z.literal(result.resultId),
+          properties,
+        }),
+      ];
+    }),
+  );
+  if (!candidates.length)
+    throw new SourceError("invalid-composition", "No enabled view supports the verified results.");
+  return compositionSchema.extend({ components: z.array(z.union(candidates)).min(1).max(12) });
 }
 export function validateComposition(
   input: unknown,
@@ -228,6 +314,20 @@ export function validateComposition(
       throw new Error("Component data role or unit is incompatible.");
     if (result.data.metric === "forecast" && binding.properties.scenario !== true)
       throw new Error("Forecast views must explicitly identify an illustrative scenario.");
+    if (entry.kind === "heatmap") {
+      if (
+        !table ||
+        table.kind !== "matrix" ||
+        !table.axes ||
+        table.omitted !== 0 ||
+        binding.properties.x !== table.axes.x ||
+        binding.properties.y !== table.axes.y ||
+        binding.properties.value !== table.axes.value ||
+        table.columns.find((column) => column.key === table.axes?.value)?.unit !== result.data.unit
+      )
+        throw new Error("Heatmaps must bind the complete verified matrix axes and metric unit.");
+    } else if (binding.properties.value)
+      throw new Error("A value axis is only supported by heatmap components.");
     if (entry.kind === "line" || entry.kind === "bar") {
       const x = table?.columns.find((column) => column.key === binding.properties.x);
       const y = table?.columns.find((column) => column.key === binding.properties.y);
@@ -257,7 +357,7 @@ export function validateComposition(
         )
       )
         throw new Error("Time axes must be strictly ordered.");
-    } else if (binding.properties.x || binding.properties.y)
+    } else if (entry.kind !== "heatmap" && (binding.properties.x || binding.properties.y))
       throw new Error("Axis properties are only supported by chart components.");
   }
   return composition;
