@@ -7,6 +7,10 @@ import { ContextMenu } from '@/ds/components/ContextMenu/context-menu';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/utils/cn';
 
+// Layer the raised-container fill over the opaque card material. The cover must
+// stay opaque so the sleeve controls cannot show through while it retracts.
+const attachmentSurfaceStyle = cn(raisedSurfaceStyle, 'bg-linear-to-b from-fill to-fill');
+
 export interface ComposerAttachmentProps {
   name: string;
   children: ReactNode;
@@ -80,7 +84,7 @@ export function ComposerAttachment({
         data-slot="composer-attachment"
         title={name}
         className={cn(
-          raisedSurfaceStyle,
+          attachmentSurfaceStyle,
           'group/attachment relative h-17 shrink-0 rounded-(--attachment-radius) [--attachment-radius:var(--radius-xl)] [--attachment-thumbnail-size:--spacing(15)]',
           // Concentric corners: the inner radius is the outer radius minus its inset.
           '[--attachment-action-inset:--spacing(1)] [--attachment-action-radius:max(0px,calc(var(--attachment-radius)-var(--attachment-action-inset)))] [--attachment-action-width:--spacing(9)] [--attachment-sleeve-width:calc(var(--attachment-action-width)+2*var(--attachment-action-inset))]',
@@ -106,7 +110,7 @@ export function ComposerAttachment({
           ref={contentRef}
           data-slot="composer-attachment-cover"
           className={cn(
-            raisedSurfaceStyle,
+            attachmentSurfaceStyle,
             surfaceStateLayerStyle,
             'absolute inset-0 z-10 flex min-w-0 items-center overflow-hidden rounded-[inherit]',
             'motion-safe:transition-[right,border-radius] motion-safe:duration-normal motion-safe:ease-out-custom',
