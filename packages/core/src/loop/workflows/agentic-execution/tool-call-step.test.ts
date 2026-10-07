@@ -116,6 +116,74 @@ describe('createToolCallStep delegated run identity provenance', () => {
     );
   });
 
+  it('does not merge an earlier suspended message into the current response when resuming', async () => {
+    const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource' });
+    messageList.add(
+      {
+        id: 'earlier-assistant',
+        role: 'assistant',
+        createdAt: new Date(1000),
+        content: {
+          format: 2,
+          metadata: {
+            suspendedTools: { 'call-a': { toolCallId: 'call-a', toolName: 'workflow-test', runId: 'inner-a' } },
+          },
+          parts: [
+            { type: 'text', text: 'Here is a food carousel' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'carousel-1', toolName: 'carousel', args: {}, result: {} },
+            },
+          ],
+        },
+      },
+      'memory',
+    );
+    messageList.add({ id: 'user-2', role: 'user', content: 'yes' }, 'input');
+    messageList.add(
+      {
+        id: 'current-assistant',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Resuming' }] },
+      },
+      'response',
+    );
+
+    let unsaved: any[] = [];
+    const flushMessages = vi.fn(async (list: MessageList) => {
+      unsaved = list.drainUnsavedMessages();
+    });
+    const toolCallStep = createToolCallStep({
+      tools: { 'workflow-test': { execute: vi.fn(async () => ({ ok: true })) } },
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      _internal: { saveQueueManager: { flushMessages }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'resume-call',
+          toolName: 'workflow-test',
+          args: { resumeData: { answer: 'yes' }, suspendedToolCallId: 'call-a', suspendedToolRunId: 'inner-a' },
+        },
+      }),
+    );
+
+    expect(flushMessages).toHaveBeenCalled();
+    const all = messageList.get.all.db();
+    const current = all.find(m => m.id === 'current-assistant')!;
+    expect(current.content.parts).toEqual([expect.objectContaining({ type: 'text', text: 'Resuming' })]);
+    const earlier = all.find(m => m.id === 'earlier-assistant')!;
+    expect(earlier.content.metadata?.suspendedTools).toBeUndefined();
+    const carouselOwners = unsaved.filter(m =>
+      m.content.parts.some((p: any) => p.toolInvocation?.toolCallId === 'carousel-1'),
+    );
+    expect(carouselOwners.map(m => m.id)).toEqual(['earlier-assistant']);
+  });
+
   it('derives the delegated run from the claimed suspended call instead of a sibling run claim', async () => {
     const runResume = async (suspendedToolCallId: string, suspendedToolRunId: string) => {
       const execute = vi.fn(async () => ({ ok: true }));
@@ -2636,7 +2704,7 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
       expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-a' }) }),
       expect.objectContaining({ data: expect.objectContaining({ toolCallId: 'wf-call-b', resumed: true }) }),
     ]);
-    expect(messageList.add).toHaveBeenCalledWith([message], 'response');
+    expect(messageList.add).toHaveBeenCalledWith([message], 'response', { merge: false });
     expect(flushMessages).toHaveBeenCalledTimes(1);
   });
 
