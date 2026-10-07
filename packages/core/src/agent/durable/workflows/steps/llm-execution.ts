@@ -1478,6 +1478,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   const resultProviderExecuted = inferProviderExecuted(resultPayload.providerExecuted, resultToolDef);
 
                   if (effectiveOutputProcessors.length > 0) {
+                    let processorPhase: 'processToolResult' | 'processToolModelOutput' = 'processToolResult';
                     try {
                       await getToolResultRunner().runProcessToolResult({
                         steps: (inputData as any).accumulatedSteps ?? [],
@@ -1502,6 +1503,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
                         resultPayload.result = postProcessorResult;
                       }
+                      processorPhase = 'processToolModelOutput';
                       resultPayload.providerMetadata = await applyToolModelOutputProcessors(getToolResultRunner(), {
                         steps: (inputData as any).accumulatedSteps ?? [],
                         messageList,
@@ -1531,7 +1533,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         toolResultTripwire = error;
                         break;
                       }
-                      logger?.error?.('Error in processToolResult processors:', error);
+                      logger?.error?.(`Error in ${processorPhase} processors:`, error);
                       throw error;
                     }
                   }

@@ -1734,6 +1734,7 @@ export function createDurableToolCallStep() {
             agentName: initData.agentId,
             processorStates: registryEntry.processorStates,
           });
+          let processorPhase: 'processToolResult' | 'processToolModelOutput' = 'processToolResult';
           try {
             await resultProcessorRunner.runProcessToolResult({
               // The accumulated StepResult[] is not reconstructable at
@@ -1775,6 +1776,7 @@ export function createDurableToolCallStep() {
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
+            processorPhase = 'processToolModelOutput';
             providerMetadata = (await applyToolModelOutputProcessors(resultProcessorRunner, {
               steps: [],
               stepNumber: 0,
@@ -1827,7 +1829,7 @@ export function createDurableToolCallStep() {
             // engine emits or persists the raw value; this engine substitutes
             // an error placeholder for both emission and persistence and
             // keeps the run alive.
-            logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
+            logger?.warn?.(`[DurableAgent] ${processorPhase} failed for tool "${toolName}": ${processorError}`);
             result = { error: 'Tool result processing failed' };
           }
         }

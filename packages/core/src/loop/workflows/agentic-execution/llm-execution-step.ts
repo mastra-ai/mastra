@@ -1019,6 +1019,7 @@ async function processOutputStream<OUTPUT = undefined>({
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
           if (outputProcessors && outputProcessors.length > 0) {
+            let processorPhase: 'processToolResult' | 'processToolModelOutput' = 'processToolResult';
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
@@ -1043,6 +1044,7 @@ async function processOutputStream<OUTPUT = undefined>({
               if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
               }
+              processorPhase = 'processToolModelOutput';
               const nextProviderMetadata = await applyToolModelOutputProcessors(getToolResultProcessorRunner(), {
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
                 messageList,
@@ -1077,7 +1079,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 runState.setState({ hasErrored: true });
                 break;
               }
-              logger?.error('Error in processToolResult processors:', error);
+              logger?.error(`Error in ${processorPhase} processors:`, error);
               throw error;
             }
           }
