@@ -202,6 +202,58 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
+    it('should fetch only the requested page for unfiltered queries', async () => {
+      const logs = Array.from({ length: 2 }, (_, index) =>
+        JSON.stringify({ msg: `message${index + 3}`, time: index + 3 }),
+      );
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: 5 }, { result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ page: 2, perPage: 2 });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
+        ['LLEN', 'test-logs'],
+        ['LRANGE', 'test-logs', 2, 3],
+      ]);
+      expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
+      expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
+    });
+
+    it('should scan run ID queries in bounded ranges', async () => {
+      const firstChunk = Array.from({ length: 1000 }, (_, index) =>
+        JSON.stringify({
+          msg: index === 999 ? 'wanted1' : `other${index}`,
+          runId: index === 999 ? 'test-run-id' : 'other-run-id',
+          time: index,
+        }),
+      );
+      fetchMock
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([{ result: firstChunk }]),
+          }),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve([{ result: [JSON.stringify({ msg: 'wanted2', runId: 'test-run-id', time: 1000 })] }]),
+          }),
+        );
+
+      const result = await transport.listLogsByRunId({ runId: 'test-run-id', page: 2, perPage: 1 });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, 999]]);
+      expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual([['LRANGE', 'test-logs', 1000, 1999]]);
+      expect(result).toMatchObject({ total: 2, page: 2, perPage: 1, hasMore: false });
+      expect(result.logs[0]?.msg).toBe('wanted2');
+    });
+
     it('should return empty array for listLogs', async () => {
       const logs = await transport.listLogs();
       expect(logs).toEqual({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false });
