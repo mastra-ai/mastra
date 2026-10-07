@@ -78,10 +78,7 @@ export const AskUserOptionRow = ({
     <FieldLabel
       // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
       aria-disabled={disabled || undefined}
-      className={cn(
-        'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2 data-disabled:opacity-50',
-        className,
-      )}
+      className={cn('state-layer flex items-start gap-2.5 rounded-lg px-3 py-2 data-disabled:opacity-50', className)}
       {...props}
     >
       {control}

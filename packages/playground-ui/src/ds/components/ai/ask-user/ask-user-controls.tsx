@@ -172,7 +172,6 @@ export function AskUserCustomAnswer({
       onClick={handleRowClick}
       className={cn(
         'items-start gap-2.5 rounded-lg px-3 py-2 data-disabled:opacity-50',
-        'bg-fill',
         !context.isCustomAnswerSelected && 'state-layer',
         className,
       )}
