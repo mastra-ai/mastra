@@ -26,7 +26,7 @@ import {
 
 const responseJudge = new Classifier({
   id: 'response-judge',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     quality: {
       type: 'score',
@@ -239,7 +239,7 @@ Failures while the scorer runs reject `scorer.run()` with a `ScorerRunError` who
 - `question`: The selected question key.
 - `answer`: The exact typed choice, score, or boolean answer, including optional probabilities.
 - `usage`: Normalized classifier token usage.
-- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the evaluation model.
+- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the decision model.
 - `response`: Safe response identity with `id`, `timestamp`, and `modelId`.
 
 Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.decide()` directly when you need the full raw response.

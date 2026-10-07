@@ -134,7 +134,7 @@ import { agent } from './agent'
 
 const approvalClassifier = new Classifier({
   id: 'tool-approval-classifier',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     requiresApproval: {
       type: 'boolean',
@@ -158,7 +158,7 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-The example sends argument names rather than values because the classifier forwards its state to the configured evaluation model. If the decision requires argument values, redact sensitive data first or use an evaluation model and provider that meet the protected tool's data-handling requirements.
+The example sends argument names rather than values because the classifier forwards its state to the configured decision model. If the decision requires argument values, redact sensitive data first or use a decision model and provider that meet the protected tool's data-handling requirements.
 
 Returning `true` pauses the tool call for human approval. It doesn't approve or decline the call automatically. Choose a threshold that matches the risk of the tools available to the agent. If this `requireToolApproval` function throws, it defaults to requiring approval.
 
