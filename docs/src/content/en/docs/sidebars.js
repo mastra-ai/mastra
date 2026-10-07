@@ -640,14 +640,19 @@ const sidebars = {
           label: 'Guides',
           link: {
             type: 'doc',
-            id: 'guides/multi-agent-systems',
+            id: 'guides/overview',
           },
           collapsed: true,
           customProps: {
             contextualSidebar: true,
-            contextualSidebarLabel: 'Multi-agent systems',
+            contextualSidebarLabel: 'Guides',
           },
           items: [
+            {
+              type: 'doc',
+              id: 'guides/multi-agent-systems',
+              label: 'Multi-agent systems',
+            },
             {
               type: 'doc',
               id: 'guides/context-engineering',

@@ -237,7 +237,7 @@ export class MastraCodeAcpAgent implements Agent {
       const thread = await runtime.session.thread.create();
       await runtime.session.thread.switch({ threadId: thread.id });
       const defaultModelId = credentialedDefaultModel(available, runtime.session.model.get() ?? '');
-      if (defaultModelId) await runtime.session.model.switch({ modelId: defaultModelId });
+      if (defaultModelId) await runtime.session.model.switch(defaultModelId);
       const models: NewSessionResponse['models'] = {
         currentModelId: runtime.session.model.get() ?? '',
         availableModels: includeCurrentModel(
@@ -372,9 +372,9 @@ export class MastraCodeAcpAgent implements Agent {
     return options;
   }
 
-  private thinkingLevel(entry: SessionEntry): ThinkingLevelSetting {
+  private thinkingLevel(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
     const level = entry.getThinkingLevel?.() ?? 'off';
-    const levels = getAvailableThinkingLevelsForModel(entry.session.model.get() ?? '');
+    const levels = getAvailableThinkingLevelsForModel(modelId);
     return levels.includes(level) ? level : 'xhigh';
   }
 
@@ -391,7 +391,10 @@ export class MastraCodeAcpAgent implements Agent {
         throw RequestError.invalidParams(undefined, 'Unknown session configuration selection');
       }
       if (params.configId === 'model') {
-        await entry.session.model.switch({ modelId: String(params.value) });
+        const modelId = String(params.value);
+        await entry.session.model.switch(modelId, {
+          ...(entry.getThinkingLevel ? { thinkingLevel: this.thinkingLevel(entry, modelId) } : {}),
+        });
       } else if (params.configId === 'mode') {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {
@@ -513,7 +516,7 @@ export class MastraCodeAcpAgent implements Agent {
           'Model is unavailable or its provider is not configured. Refresh the model list.',
         );
       }
-      await entry.session.model.switch({ modelId: params.modelId });
+      await entry.session.model.switch(params.modelId);
     });
   }
 }

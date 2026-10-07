@@ -312,6 +312,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "modelSettings",
+      "providerOptions",
       "requestContext",
       "runId",
       "toolCallId"
@@ -332,6 +334,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "modelSettings",
+      "providerOptions",
       "reason",
       "requestContext",
       "runId",
@@ -6298,6 +6302,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /channels/:platform/:agentId/reconcile": {
+    "method": "POST",
+    "path": "/channels/:platform/:agentId/reconcile",
+    "pathParams": [
+      "platform",
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /channels/:platform/:agentId/disconnect": {
     "method": "POST",
     "path": "/channels/:platform/:agentId/disconnect",
@@ -6681,9 +6700,8 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
-      "modeId",
       "modelId",
-      "scope"
+      "thinkingLevel"
     ],
     "hasQuery": true,
     "hasBody": true,

@@ -81,6 +81,9 @@
     },
     "@dotenvx/dotenvx": {
       "undici": "8.11.2"
+    },
+    "oxfmt": {
+      "tinypool": "2.1.2"
     }
   }
 }

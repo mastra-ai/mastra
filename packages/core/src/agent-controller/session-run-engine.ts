@@ -1322,11 +1322,15 @@ export class SessionRunEngine {
             });
           }
 
+          // A retrying marker reports one failed attempt of a cycle OM is still working on;
+          // only the cycle's final failure may stop the run.
+          const retrying = Object.hasOwn(payload, 'retrying') && payload.retrying === true;
           if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+            !retrying &&
+            (!Object.hasOwn(payload, 'failurePolicy') ||
+              !Object.hasOwn(payload, 'failureKind') ||
+              payload.failurePolicy !== 'continue' ||
+              payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model'))
           ) {
             this.abortForOmFailure({ operationType, stage: 'run', error });
             return { message: state.currentMessage };

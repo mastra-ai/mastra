@@ -74,3 +74,7 @@ export const connectChannelResponseSchema = channelConnectResultSchema;
 export const disconnectChannelResponseSchema = z.object({
   success: z.boolean(),
 });
+
+export const reconcileChannelResponseSchema = channelInstallationInfoSchema
+  .nullable()
+  .describe('The reconciled installation, or null when the agent has none (or the platform does not reconcile)');

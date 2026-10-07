@@ -3,16 +3,14 @@ import type { DataMessagePart } from '../tool-card';
 import { parseToolArgs, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ActivityHeadline } from '@/ds/components/ai/activity';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { presentTool, ToolCallArguments, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
 
-export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface FileTreeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: unknown;
@@ -62,15 +60,19 @@ export const FileTreeBadge = ({
   const hasBody = Boolean(tree) || needsApproval;
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="file-tree-badge"
-      header={
-        <ActivityHeadline
-          icon={<ToolIcon aria-hidden />}
-          label={label}
-          detail={options.length > 0 ? `${detail} (${options.join(', ')})` : detail}
-        />
-      }
+      icon={<ToolIcon aria-hidden />}
+      title={label}
+      detail={options.length > 0 ? `${detail} (${options.join(', ')})` : detail}
       status={status}
       extraInfo={
         (summary || workspace?.filesystem) && (
@@ -97,16 +99,8 @@ export const FileTreeBadge = ({
         <>
           {needsApproval && <ToolCallArguments toolName={toolName} args={parsedArgs} data-testid="tool-args" />}
           {tree && <ToolCallOutput text={tree} />}
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
         </>
       )}
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

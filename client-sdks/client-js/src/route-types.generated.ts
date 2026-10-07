@@ -157,7 +157,7 @@ type InputShared_Auxiliary_254 =
           };
     };
 
-type InputShared_Auxiliary_679 =
+type InputShared_Auxiliary_682 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -202,19 +202,19 @@ type InputShared_Auxiliary_679 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_679[];
+      args: InputShared_Auxiliary_682[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_679;
+      arg: InputShared_Auxiliary_682;
     };
 
-type InputShared_Auxiliary_753 = {
+type InputShared_Auxiliary_756 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_753[] | undefined;
+  children?: InputShared_Auxiliary_756[] | undefined;
 };
 
 type Shared_Auxiliary_764 = {
@@ -948,6 +948,12 @@ type InputShared_Type_34 =
   | {
       type: 'prompt_block_ref';
       id: string;
+      rules?:
+        | {
+            operator: 'AND' | 'OR';
+            conditions: InputShared_Type_33[];
+          }
+        | undefined;
     }
   | {
       type: 'prompt_block';
@@ -1774,7 +1780,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_679[];
+  predicates: InputShared_Auxiliary_682[];
 };
 
 type InputShared_Type_89 = {
@@ -1788,7 +1794,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_679;
+  predicate: InputShared_Auxiliary_682;
 };
 
 type InputShared_Type_90 =
@@ -2415,6 +2421,7 @@ type Shared_Type_11 =
   | {
       type: 'prompt_block_ref';
       id: string;
+      rules?: Shared_Type_10 | undefined;
     }
   | {
       type: 'prompt_block';
@@ -4551,6 +4558,21 @@ type Shared_Type_99 = {
   updatedAt: number;
 };
 
+type Shared_Type_100 = {
+  /** Installation identifier */
+  id: string;
+  /** Platform identifier */
+  platform: string;
+  /** Connected agent identifier */
+  agentId: string;
+  /** Installation status */
+  status: 'active' | 'pending';
+  /** Platform-specific display name */
+  displayName?: string | undefined;
+  /** Installation timestamp */
+  installedAt?: Date | undefined;
+};
+
 // ============================================================================
 // Route: GET /agents
 // ============================================================================
@@ -5349,6 +5371,14 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5490,6 +5520,14 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
   reason?: string | undefined;
 };
 
@@ -14416,6 +14454,12 @@ export type PostMcpServerIdResourcesRead_Response = {
     uri: string;
     text?: string | undefined;
     blob?: string | undefined;
+    mimeType?: string | undefined;
+    _meta?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
   }[];
 };
 
@@ -18377,7 +18421,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_753[] | undefined;
+  files?: InputShared_Auxiliary_756[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18435,7 +18479,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_753[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_756[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19213,6 +19257,7 @@ export type GetSystemPackages_Response = {
   isDev: boolean;
   cmsEnabled: boolean;
   liveKitConnectionRouteEnabled: boolean;
+  liveKitRecordingRouteEnabled?: boolean | undefined;
   editorSource?: ('code' | 'db') | undefined;
   editorSourceCapabilities?:
     | {
@@ -22236,20 +22281,7 @@ export type GetChannelsPlatformInstallations_PathParams = {
   platform: string;
 };
 
-export type GetChannelsPlatformInstallations_Response = {
-  /** Installation identifier */
-  id: string;
-  /** Platform identifier */
-  platform: string;
-  /** Connected agent identifier */
-  agentId: string;
-  /** Installation status */
-  status: 'active' | 'pending';
-  /** Platform-specific display name */
-  displayName?: string | undefined;
-  /** Installation timestamp */
-  installedAt?: Date | undefined;
-}[];
+export type GetChannelsPlatformInstallations_Response = Shared_Type_100[];
 
 export type GetChannelsPlatformInstallations_Request = Simplify<
   (GetChannelsPlatformInstallations_PathParams extends never
@@ -22328,14 +22360,38 @@ export interface PostChannelsPlatformConnect_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /channels/:platform/:agentId/disconnect
+// Route: POST /channels/:platform/:agentId/reconcile
 // ============================================================================
-export type PostChannelsPlatformAgentIdDisconnect_PathParams = {
+export type PostChannelsPlatformAgentIdReconcile_PathParams = {
   /** Channel platform identifier (e.g., "slack") */
   platform: string;
   /** Agent identifier */
   agentId: string;
 };
+
+export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_100 | null;
+
+export type PostChannelsPlatformAgentIdReconcile_Request = Simplify<
+  (PostChannelsPlatformAgentIdReconcile_PathParams extends never
+    ? {}
+    : { params: PostChannelsPlatformAgentIdReconcile_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostChannelsPlatformAgentIdReconcile_RouteContract {
+  pathParams: PostChannelsPlatformAgentIdReconcile_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostChannelsPlatformAgentIdReconcile_Request;
+  response: PostChannelsPlatformAgentIdReconcile_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /channels/:platform/:agentId/disconnect
+// ============================================================================
+export type PostChannelsPlatformAgentIdDisconnect_PathParams = PostChannelsPlatformAgentIdReconcile_PathParams;
 
 export type PostChannelsPlatformAgentIdDisconnect_Response = PostAuthRefresh_Response;
 
@@ -23247,8 +23303,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdModel_QueryParams =
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
   modelId: string;
-  scope?: ('global' | 'thread') | undefined;
-  modeId?: string | undefined;
+  thinkingLevel?: ('off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max') | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdModel_Response =
@@ -24241,6 +24296,7 @@ export interface RouteTypes {
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
+  'POST /channels/:platform/:agentId/reconcile': PostChannelsPlatformAgentIdReconcile_RouteContract;
   'POST /channels/:platform/:agentId/disconnect': PostChannelsPlatformAgentIdDisconnect_RouteContract;
   'GET /agent-controller': GetAgentController_RouteContract;
   'GET /agent-controller/:controllerId/modes': GetAgentControllerControllerIdModes_RouteContract;
@@ -24628,6 +24684,9 @@ export interface Client {
   };
   '/channels/:platform/:agentId/disconnect': {
     POST: PostChannelsPlatformAgentIdDisconnect_RouteContract;
+  };
+  '/channels/:platform/:agentId/reconcile': {
+    POST: PostChannelsPlatformAgentIdReconcile_RouteContract;
   };
   '/channels/:platform/connect': {
     POST: PostChannelsPlatformConnect_RouteContract;

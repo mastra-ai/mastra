@@ -13,6 +13,17 @@
      comes from size and tone. Factory card titles are the exception: their 550
      and 600 weights preserve the existing emphasis of work-item and candidate
      titles when those styles move into shared roles. */
+  /* Large welcome pages share a responsive headline and introduction. */
+  --text-hero: clamp(2rem, 3.9vw, 3.25rem);
+  --text-hero--line-height: 110%;
+  --text-hero--font-weight: 500;
+  --text-hero--letter-spacing: 0.01em;
+
+  --text-lead: clamp(1rem, 1.5vw, 1.25rem);
+  --text-lead--line-height: 140%;
+  --text-lead--font-weight: 400;
+  --text-lead--letter-spacing: 0.01em;
+
   --text-display: 1.375rem; /* 22px — onboarding hero */
   --text-display--line-height: 127%;
   --text-display--font-weight: 500;
@@ -64,6 +75,11 @@
   --text-caption: 0.75rem; /* 12px — secondary and supporting copy */
   --text-caption--line-height: 150%;
   --text-caption--font-weight: 400;
+
+  --text-eyebrow: 0.75rem; /* 12px — small-caps section labels */
+  --text-eyebrow--line-height: 150%;
+  --text-eyebrow--font-weight: 500;
+  --text-eyebrow--letter-spacing: 0.08em;
 
   --text-meta: 0.625rem; /* 10px — badges, keycaps, micro labels */
   --text-meta--line-height: 160%;

@@ -6,7 +6,6 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
-  ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
@@ -327,10 +326,7 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
         tone="muted"
         className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
       >
-        <span className="starter-shimmer">
-          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
-          do for you today?
-        </span>
+        What can <span className="font-medium text-foreground">{agentName || 'this agent'}</span> do for you today?
       </Txt>
     </div>
   );
@@ -422,14 +418,14 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       {(preparationError || draftStatus?.error) && (
-        <p role="alert" className="text-caption">
+        <Txt variant="caption" role="alert">
           {preparationError || draftStatus?.error}
-        </p>
+        </Txt>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="text-caption">
+        <Txt variant="caption" role="status" className="sr-only">
           Restoring draft…
-        </p>
+        </Txt>
       )}
       <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
         <Composer
@@ -439,11 +435,9 @@ const AgentComposer = ({
             void submit();
           }}
         >
-          <ComposerAttachments>
-            <ChatComposerAttachments />
-          </ComposerAttachments>
           <ComposerRing busy={isRunning}>
             <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ChatComposerAttachments />
               <ComposerInput
                 ref={textareaRef}
                 value={text}
@@ -468,7 +462,7 @@ const AgentComposer = ({
               {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
               <ComposerActions>
                 <ComposerActionRow
-                  canExecute={canExecuteAgent && !draftStatus?.restoring}
+                  canExecute={canExecuteAgent}
                   agentId={agentId}
                   runOptionsSlot={runOptionsSlot}
                   showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
