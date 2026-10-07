@@ -37,7 +37,7 @@ overrides:
   '@fastify/forwarded@<=3.0.1': 3.0.2
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
+  hono@<4.13.11: 4.13.11
   better-auth: ^1.6.26
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
@@ -60,7 +60,7 @@ importers:
     devDependencies:
       '@hono/otel':
         specifier: ^1.1.0
-        version: 1.1.0(hono@4.13.8)
+        version: 1.1.0(hono@4.13.11)
       '@types/node':
         specifier: ^20.19.30
         version: 20.19.30
@@ -96,7 +96,7 @@ importers:
         version: 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.0))
       '@hono/otel':
         specifier: ^1.1.0
-        version: 1.1.0(hono@4.13.8)
+        version: 1.1.0(hono@4.13.11)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -160,13 +160,13 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.8)
+        version: 1.19.17(hono@4.13.11)
       '@hono/otel':
         specifier: ^1.1.0
-        version: 1.1.0(hono@4.13.8)
+        version: 1.1.0(hono@4.13.11)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.3(hono@4.13.8)
+        version: 0.5.3(hono@4.13.11)
       '@mastra/core':
         specifier: link:../../../../../packages/core
         version: link:../../../../../packages/core
@@ -195,8 +195,8 @@ importers:
         specifier: ^17.2.3
         version: 17.2.3
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -221,10 +221,10 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.8)
+        version: 1.19.17(hono@4.13.11)
       '@hono/otel':
         specifier: ^1.1.0
-        version: 1.1.0(hono@4.13.8)
+        version: 1.1.0(hono@4.13.11)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
         version: link:../instrumentation
@@ -235,8 +235,8 @@ importers:
         specifier: ^0.221.0
         version: 0.221.0(@opentelemetry/api@1.9.0)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@types/node':
         specifier: ^20.19.30
@@ -255,10 +255,10 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.8)
+        version: 1.19.17(hono@4.13.11)
       '@hono/otel':
         specifier: ^1.1.0
-        version: 1.1.0(hono@4.13.8)
+        version: 1.1.0(hono@4.13.11)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
         version: link:../instrumentation
@@ -269,8 +269,8 @@ importers:
         specifier: ^0.221.0
         version: 0.221.0(@opentelemetry/api@1.9.0)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@types/node':
         specifier: ^20.19.30
@@ -491,17 +491,17 @@ packages:
     resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/otel@1.1.0':
     resolution: {integrity: sha512-3lXExGP+odVTF3W1kTHgRGw4d4xdiYpeRs8dnTwfnHfw5uGEXgUzmkB4/ZQd3tDxYRt7eUhnWuBk5ChV97eqkA==}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/swagger-ui@0.5.3':
     resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -1203,8 +1203,8 @@ packages:
     resolution: {integrity: sha512-+CqsMbHPiSTdtSO14O51eMNlrp9N79gmeqmXeouJOhfucAedHw9noVe/n5uJk3tbKE6a+6ZCQg3RPhVhHByAIw==}
     engines: {node: '>=18'}
 
-  hono@4.13.8:
-    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
+  hono@4.13.11:
+    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
     engines: {node: '>=16.9.0'}
 
   http-proxy-agent@5.0.0:
@@ -1883,19 +1883,19 @@ snapshots:
       protobufjs: 8.8.0
       yargs: 18.2.0
 
-  '@hono/node-server@1.19.17(hono@4.13.8)':
+  '@hono/node-server@1.19.17(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/otel@1.1.0(hono@4.13.8)':
+  '@hono/otel@1.1.0(hono@4.13.11)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/semantic-conventions': 1.38.0
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/swagger-ui@0.5.3(hono@4.13.8)':
+  '@hono/swagger-ui@0.5.3(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -2659,7 +2659,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  hono@4.13.8: {}
+  hono@4.13.11: {}
 
   http-proxy-agent@5.0.0:
     dependencies:

@@ -300,6 +300,40 @@ describe('DurableAgent structured output', () => {
       cleanup();
     });
 
+    it('should preserve structured output when observing a completed run', async () => {
+      const expectedOutput = {
+        answer: 'ok',
+        n: 2,
+      };
+      const baseAgent = new Agent({
+        id: 'observe-structured-output-agent',
+        name: 'Observe Structured Output Agent',
+        instructions: 'Return the requested structured output',
+        model: createChunkedStructuredOutputModel(expectedOutput) as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const producer = await durableAgent.stream('Return the answer', {
+        structuredOutput: {
+          schema: z.object({
+            answer: z.string(),
+            n: z.number(),
+          }),
+        },
+      });
+      const producerOutput = await producer.output.getFullOutput();
+
+      const observer = await durableAgent.observe(producer.runId, { offset: 0 });
+      const observerOutput = await observer.output.getFullOutput();
+
+      expect(producerOutput.object).toEqual(expectedOutput);
+      expect(observerOutput.text).toBe(producerOutput.text);
+      expect(observerOutput.finishReason).toBe('stop');
+      expect(observerOutput.object).toEqual(producerOutput.object);
+
+      observer.cleanup();
+    });
+
     it('should handle complex nested object schemas in stream', async () => {
       const expectedOutput = {
         user: {
