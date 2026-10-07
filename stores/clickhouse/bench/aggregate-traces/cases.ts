@@ -570,6 +570,11 @@ export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>([
   'urollup',
   'snidx',
   'arch',
+  'hourly',
+  'hk',
+  'nord',
+  'arch2',
+  'arch3',
 ]);
 
 export interface ProjectScope {

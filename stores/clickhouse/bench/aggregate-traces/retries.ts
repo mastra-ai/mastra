@@ -17,11 +17,11 @@ import type { ClickHouseSettings } from '@clickhouse/client';
 import { CASES, compileCase, timeRangeFor } from './cases';
 import { BenchClient, TIERS } from './client';
 import { installOutputRedaction } from './env';
-import { LAB, labAdmin, labCredentials, loadLabSelection } from './lab';
+import { LAB, labAdmin, labCredentials, loadLabSelection, sqlString } from './lab';
 import { USAGE_COST_NAMES, USAGE_ROLLUP_COLUMNS } from './scope';
 
 const db = LAB.database;
-const q = (v: string) => `'${v.replace(/'/g, "\\'")}'`;
+const q = sqlString;
 const COST_IN = `name IN (${USAGE_COST_NAMES.map(q).join(', ')})`;
 const USAGE_IN = `name IN (${USAGE_ROLLUP_COLUMNS.map(c => q(c.name)).join(', ')})`;
 const ROW_FIELDS = `organizationId, projectId, cityHash64(traceId) AS traceHash, metricId, timestamp,

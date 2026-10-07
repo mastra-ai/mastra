@@ -260,3 +260,52 @@ describe('schema variants (lab)', () => {
     expect(compile('F0', 'rio').query).not.toContain('LIMIT 1 BY dedupeKey');
   });
 });
+
+describe('dashboard rollup and lean per-trace path (lab)', () => {
+  const tr = timeRangeFor({ id: '30d', ms: 30 * 86_400_000 }, TO);
+  const compile = (id: string, variant: Parameters<typeof compileCase>[1]) =>
+    compileCase(
+      CASES.find(c => c.id === id)!,
+      variant,
+      LITERALS,
+      tr,
+      SCOPE,
+    );
+
+  it('hourly answers additive token/cost queries from the hourly rollup alone', () => {
+    const q = compile('E4', 'hourly').query;
+    expect(q.startsWith('WITH facts AS (')).toBe(true);
+    expect(q).toContain('FROM mastra_usage_hourly');
+    expect(q).not.toMatch(/mastra_trace_roots|mastra_metric_events|LEFT JOIN/);
+    expect(q).toMatch(/organizationId = \{trace_query_\d+:String\} AND projectId = \{bench_project_id:String\}/);
+    const grouped = /grouped AS \(([\s\S]*?)FROM facts/.exec(q)?.[1] ?? '';
+    expect(grouped).toContain('sum(n)');
+    expect(grouped).not.toMatch(/count\(\)|countIf\(/);
+    expect(compile('T2', 'hourly').query).toContain('nullIf(sum(usageN), 0)');
+  });
+
+  it('hourly refuses queries that need per-trace data', () => {
+    expect(() => compile('T3', 'hourly')).toThrow(/groupBy uses threadId/);
+    expect(() => compile('E2', 'hourly')).toThrow(/not additive/);
+    expect(() => compile('F3', 'hourly')).toThrow(/per-trace data/);
+    const c = compile('E4', 'base');
+    const quarterHour = { ...c, query: c.query.replaceAll('86400000', '900000') };
+    expect(() => applyVariant(quarterHour, 'hourly')).toThrow(/whole hours/);
+  });
+
+  it('hk keys traceId sets and the usage join by cityHash64', () => {
+    const q = compile('E4', 'arch2').query;
+    expect(q).toContain('cityHash64(traceId) AS traceHash');
+    expect(q).toContain('ON u.traceHash = cityHash64(r.traceId)');
+    expect(q).not.toMatch(/\btraceId IN \(/);
+    expect(q).not.toContain('LIMIT 1 BY traceId');
+  });
+
+  it('arch3 reads usage from the root row and drops the usage join', () => {
+    const q = compile('E4', 'arch3').query;
+    expect(q).toContain('FROM mastra_trace_roots_u');
+    expect(q).not.toMatch(/usage AS \(|LEFT JOIN|\bu\./);
+    expect(q).toMatch(/if\(r\.hasUsage = 1, r\.u\d, NULL\) AS t0/);
+    expect(compile('F0', 'arch3').query).toBe(compile('F0', 'arch2').query);
+  });
+});

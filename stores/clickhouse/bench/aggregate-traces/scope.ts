@@ -104,7 +104,12 @@ export type Variant =
   | 'rio'
   | 'urollup'
   | 'snidx'
-  | 'arch';
+  | 'arch'
+  | 'hourly'
+  | 'hk'
+  | 'nord'
+  | 'arch2'
+  | 'arch3';
 
 /** Lab-only tables created by `lab.ts derive` (memory track 3); see `ROLLUP_DDL`. */
 export const USAGE_ROLLUP_TABLE = 'mastra_trace_usage';
@@ -112,6 +117,12 @@ export const SPAN_NAME_INDEX_TABLE = 'mastra_trace_span_names';
 /** Rollup column holding the per-trace sum of each usage metric, by name. */
 export const USAGE_ROLLUP_COLUMNS = TRACE_AGGREGATE_USAGE_METRIC_NAMES.map((name, i) => ({ name, column: `u${i}` }));
 export const USAGE_COST_NAMES: readonly string[] = TRACE_AGGREGATE_COST_METRIC_NAMES;
+/** Pre-summed per (tenant, hour, low-cardinality root dimensions); see `ROLLUP_DDL`. */
+export const HOURLY_TABLE = 'mastra_usage_hourly';
+/** `mastra_trace_roots` plus per-trace usage columns (u0.., cost, priced, ...), as if written at trace end. */
+export const ROOTS_USAGE_TABLE = 'mastra_trace_roots_u';
+export const HOURLY_DIMENSIONS = ['entityType', 'entityName', 'environment', 'serviceName', 'executionSource'] as const;
+const HOUR_MS = 3_600_000;
 
 /** Variants that only change per-query settings. They may only tighten the tier's limits. */
 export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | number>>> = {
@@ -150,6 +161,14 @@ export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | n
  *   (rows of one trace are adjacent) instead of sorting every root row by traceId. Picks the lowest dedupeKey among
  *   duplicates that share startedAt, which is every duplicate of a retried root write
  * - `arch`: `shape` + `rio`, plus whichever of `urollup` / `snidx` apply
+ * - `hk`: key every per-trace set and join by `cityHash64(traceId)` (UInt64) instead of the traceId string
+ * - `nord`: no root dedupe (`LIMIT 1 BY traceId`); only correct if root writes are idempotent
+ * - `arch2`: `arch` + `hk` + `nord`
+ * - `arch3`: `arch2`, reading usage from columns on the root row (`mastra_trace_roots_u`) instead of joining the rollup
+ * - `hourly`: answer the whole query from `mastra_usage_hourly` (counts, error counts and token/cost sums per tenant,
+ *   hour and root dimension). Only for queries whose filters and groupBy use those dimensions, whose interval is a
+ *   whole number of hours, and whose measures are additive (count, errorRate, token/cost sum/avg); anything else
+ *   (relations, percentiles, distinct counts, threadId/userId/metadata) throws and stays on the per-trace path
  */
 export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Variant): CompiledClickHouseTraceQuery {
   switch (variant) {
@@ -217,6 +236,20 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
       return spanNameIndex(compiled);
     case 'rio':
       return readInOrderDedupe(singleRootDedupe(compiled));
+    case 'hourly':
+      return hourlyRollup(compiled);
+    case 'hk':
+      return hashedKeys(compiled);
+    case 'nord':
+      return rewriteEach(compiled, 'nord', [
+        [/\n\s*ORDER BY (?:startedAt, )?traceId, dedupeKey\n\s*LIMIT 1 BY traceId/g, ''],
+      ]);
+    case 'arch2':
+      return applyVariant(hashedKeys(applyVariant(compiled, 'arch')), 'nord');
+    case 'arch3': {
+      const out = applyVariant(compiled, 'arch2');
+      return out.query.includes('usage AS (') ? usageOnRoot(out) : out;
+    }
     case 'arch': {
       let out = readInOrderDedupe(applyVariant(compiled, 'shape'));
       if (out.query.includes('usage AS (')) out = usageRollup(out);
@@ -394,4 +427,170 @@ function readInOrderDedupe(compiled: CompiledClickHouseTraceQuery): CompiledClic
   return rewriteEach(compiled, 'rio', [
     [/ORDER BY traceId, dedupeKey(\n\s+LIMIT 1 BY traceId)/g, 'ORDER BY startedAt, traceId, dedupeKey$1'],
   ]);
+}
+
+const HOURLY_CTES = new Set([
+  'current_roots',
+  'root_scope',
+  'candidates',
+  'usage',
+  'facts',
+  'grouped',
+  'ranked',
+  'expanded',
+]);
+
+function hourlyRollup(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const q = compiled.query;
+  const fail = (why: string): never => {
+    throw new RewriteError(`Variant hourly: ${why}`);
+  };
+  for (const [, name] of q.matchAll(/(?:^WITH |^)(\w+) AS \(/gm)) {
+    if (!HOURLY_CTES.has(name!)) fail(`needs per-trace data (${name})`);
+  }
+  const dims = new Set<string>(HOURLY_DIMENSIONS);
+  const onlyDims = (expr: string, what: string) => {
+    for (const [, col] of expr.matchAll(/\br\.(\w+)/g)) if (!dims.has(col!)) fail(`${what} uses ${col}`);
+  };
+
+  const cand = /candidates AS \(\n\s+SELECT \*\n\s+FROM root_scope r\n\s+WHERE ([\s\S]*?)\n {2}\),/.exec(q);
+  if (!cand) fail('unexpected candidates CTE');
+  const filter = cand![1]!;
+  onlyDims(filter, 'filter');
+
+  // Token aliases (t0..) in facts → hourly columns, via the metric name each usage sum reads.
+  const usageCols = new Map<string, string>();
+  for (const [, p, alias] of q.matchAll(/sumIf\(value, name = (\{trace_query_\d+:String\})\) AS (t\d+)/g)) {
+    const col = USAGE_ROLLUP_COLUMNS.find(c => c.name === paramValue(compiled, p!));
+    if (!col) fail('usage metric not in the rollup');
+    usageCols.set(alias!, col!.column);
+  }
+  if (q.includes('usage AS (')) {
+    const costParams =
+      /name IN \((\{trace_query_\d+:String\}), (\{trace_query_\d+:String\})\) AND isNotNull\(estimatedCost\)/.exec(q);
+    const names = costParams ? [paramValue(compiled, costParams[1]!), paramValue(compiled, costParams[2]!)] : [];
+    if (names.length !== USAGE_COST_NAMES.length || names.some(n => !USAGE_COST_NAMES.includes(String(n)))) {
+      fail('cost metric names differ from the rollup');
+    }
+  }
+
+  const start = q.indexOf('facts AS (\n');
+  const end = q.indexOf('\n  )', start);
+  const body =
+    /^facts AS \(\n\s+SELECT ([\s\S]*?)\n\s+FROM candidates r(?:\n\s+LEFT JOIN usage u ON u\.traceId = r\.traceId)?$/.exec(
+      q.slice(start, end),
+    );
+  if (start < 0 || !body) fail('unexpected facts CTE');
+  const kept: string[] = [];
+  for (const item of body![1]!.split(/,\n\s+/)) {
+    const alias = / AS (\w+)$/.exec(item)?.[1];
+    if (alias && /^d\d+$/.test(alias)) {
+      onlyDims(item, 'groupBy');
+      kept.push(item);
+    } else if (alias === 'bucket') {
+      const width = /\) \* (\d+), 'UTC'\) AS bucket$/.exec(item)?.[1];
+      if (!width || Number(width) % HOUR_MS !== 0) fail('interval is not whole hours');
+      kept.push(item.replace(/\br\.startedAt\b/g, 'r.hour'));
+    }
+  }
+
+  const { from, to } = windowParams(q);
+  for (const p of [from, to]) {
+    const v = paramValue(compiled, p);
+    if (Date.parse(`${String(v).replace(' ', 'T')}Z`) % HOUR_MS !== 0) fail('time range is not hour-aligned');
+  }
+  const t = [...usageCols].map(([alias, col]) => `if(r.usageN > 0, r.${col}, NULL) AS ${alias}`);
+  const facts = `facts AS (
+    SELECT ${[
+      ...kept,
+      'r.n AS n',
+      'r.errN AS errN',
+      'r.usageN AS usageN',
+      'r.pricedN AS pricedN',
+      'r.coveredN AS coveredN',
+      ...t,
+      'if(r.pricedN > 0, r.cost, NULL) AS traceCost',
+      'if(r.pricedN > 0, r.unitMin, NULL) AS unitMin',
+      'if(r.pricedN > 0, r.unitMax, NULL) AS unitMax',
+    ].join(',\n      ')}
+    FROM (
+      SELECT hour, ${HOURLY_DIMENSIONS.join(', ')},
+        ${['n', 'errN', 'usageN', 'pricedN', 'coveredN', ...USAGE_ROLLUP_COLUMNS.map(c => c.column), 'cost'].map(c => `sum(${c}) AS ${c}`).join(', ')},
+        min(unitMin) AS unitMin, max(unitMax) AS unitMax
+      FROM ${HOURLY_TABLE}
+      WHERE organizationId = ${tenantParam(q)} AND projectId = {${PROJECT_PARAM}:String}
+        AND hour >= ${from} AND hour < ${to}
+      GROUP BY hour, ${HOURLY_DIMENSIONS.join(', ')}
+    ) r
+    WHERE ${filter}
+  )`;
+
+  let rest = q.slice(end + '\n  )'.length);
+  const at = rest.indexOf('FROM facts');
+  if (at < 0 || rest.indexOf('FROM facts', at + 1) >= 0) fail('expected one aggregation over facts');
+  const segStart = rest.lastIndexOf('SELECT ', at);
+  let seg = rest.slice(segStart, at);
+  const subs: Array<[RegExp, string]> = [
+    [/\bcount\(\)/g, 'sum(n)'],
+    [/\bcountIf\(isError\)/g, 'sum(errN)'],
+    [/\bcountIf\(covered\)/g, 'sum(coveredN)'],
+    [/\bcountIf\(usageBearing\)/g, 'sum(usageN)'],
+    [/\bavgOrNull\(traceCost\)/g, '(sumOrNull(traceCost) / nullIf(sum(pricedN), 0))'],
+    [/\bavgOrNull\(([t\d +]+)\)/g, '(sumOrNull($1) / nullIf(sum(usageN), 0))'],
+  ];
+  for (const [re, by] of subs) seg = seg.replace(re, by);
+  if (/durationMs|traceSeed|uniq|quantile|countIf\(|avg|\bisError\b|usageBearing|covered\b/.test(seg)) {
+    fail('measure is not additive');
+  }
+  rest = rest.slice(0, segStart) + seg + rest.slice(at);
+  return { ...compiled, query: `WITH ${facts}${rest}` };
+}
+
+function hashedKeys(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  let query = compiled.query;
+  let sets = 0;
+  query = query.replace(
+    /(\b(?:\w+\.)?traceId) IN \((\s*)SELECT (\w+\.)?traceId\b/g,
+    (_m, outer: string, ws: string, inner = '') => {
+      sets++;
+      return `cityHash64(${outer}) IN (${ws}SELECT cityHash64(${inner}traceId)`;
+    },
+  );
+  if (sets === 0) throw new RewriteError('Variant hk: no traceId sets');
+  if (query.includes('usage AS (')) {
+    const out = rewriteEach({ ...compiled, query }, 'hk', [
+      [/(usage AS \(\n\s+SELECT )traceId,/g, '$1cityHash64(traceId) AS traceHash,'],
+      [/(usage AS \([\s\S]*?)GROUP BY traceId\n/g, '$1GROUP BY traceHash\n'],
+      [/ON u\.traceId = r\.traceId/g, 'ON u.traceHash = cityHash64(r.traceId)'],
+    ]);
+    query = out.query;
+  }
+  return { ...compiled, query };
+}
+
+/** Expects the `urollup` form of the usage CTE (`sum(uN) AS tM`). */
+function usageOnRoot(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const q = compiled.query;
+  const start = q.indexOf('usage AS (');
+  const end = q.indexOf('\n  ),', start);
+  if (start < 0 || end < 0) throw new RewriteError('Variant arch3: no usage CTE');
+  const block = q.slice(start, end);
+  const cols = new Map([...block.matchAll(/sum\((u\d+)\) AS (t\d+)/g)].map(([, col, alias]) => [alias!, col!]));
+  if (cols.size === 0) throw new RewriteError('Variant arch3: usage CTE is not the rollup form');
+  let query = q.slice(0, start) + q.slice(end + '\n  ),'.length).replace(/^\n/, '');
+  const fixed: Array<[RegExp, string | ((m: string, g: string) => string)]> = [
+    [/\bFROM mastra_trace_roots\b/g, `FROM ${ROOTS_USAGE_TABLE}`],
+    [/\n\s+LEFT JOIN usage u ON [^\n]+/g, ''],
+    [/\bu\.(hasUsage|cost|priced|pricingFailure|unitMin|unitMax)\b/g, 'r.$1'],
+    [/\bu\.(t\d+)\b/g, (_m, alias) => `r.${cols.get(alias) ?? fail(alias)}`],
+  ];
+  for (const [re, by] of fixed) {
+    if (!re.test(query)) throw new RewriteError(`Variant arch3: no match for ${re}`);
+    query = query.replace(re, by as string);
+  }
+  if (/\busage\b|\bu\./.test(query)) throw new RewriteError('Variant arch3: usage reference left');
+  return { ...compiled, query };
+  function fail(alias: string): never {
+    throw new RewriteError(`Variant arch3: unknown usage alias ${alias}`);
+  }
 }

@@ -53,7 +53,7 @@ npx tsx bench/aggregate-traces/floor.ts --buckets small,p99 --probes F0,F0-shape
 npx tsx bench/aggregate-traces/lab.ts calibrate   # read-only, aggregate-only queries on the replica
 npx tsx bench/aggregate-traces/lab.ts up && npx tsx bench/aggregate-traces/lab.ts load
 npx tsx bench/aggregate-traces/lab.ts pull        # replace the 15 projects with pseudonymized replica rows (see below)
-npx tsx bench/aggregate-traces/lab.ts derive      # usage rollup + span-name index tables (Track 3)
+npx tsx bench/aggregate-traces/lab.ts derive      # usage rollup, span-name index, usage on roots, hourly rollup [--tables ...]
 npx tsx bench/aggregate-traces/lab.ts bloom       # traceId bloom-filter skip indexes
 npx tsx bench/aggregate-traces/lab.ts equiv       # variants return the same rows as compiled
 npx tsx bench/aggregate-traces/floor.ts --lab --buckets small,p99 --probes F3,F3-shape,F3-arch
@@ -65,9 +65,9 @@ npx tsx bench/aggregate-traces/lab.ts down
 memory), never reads payload columns (they are regenerated locally at calibrated widths), and keeps timestamps,
 numbers and enum-like columns. Pulled rows stay in the docker volume; only hashed literals reach the gitignored `results/`.
 
-Query-shape variants (`rs`, `r1`, `rio`, `sp`, `shape`, plus the diagnostic `nodedupe`/`nocm`/`final`) and schema
-variants (`urollup`, `snidx`, `arch`; lab tables only) are string rewrites in [scope.ts](./scope.ts) that fail closed
-when their anchor is missing; see EXPERIMENTS.md X17–X21.
+Query-shape variants (`rs`, `r1`, `rio`, `sp`, `shape`, `hk`, `nord`, plus the diagnostic `nodedupe`/`nocm`/`final`)
+and schema variants (`urollup`, `snidx`, `arch`, `arch2`, `arch3`, `hourly`; lab tables only) are string rewrites in
+[scope.ts](./scope.ts) that fail closed when their anchor is missing; see EXPERIMENTS.md X17–X28.
 
 ## Safety model
 

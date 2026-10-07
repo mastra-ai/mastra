@@ -33,6 +33,9 @@ import {
   USAGE_COST_NAMES,
   USAGE_ROLLUP_COLUMNS,
   USAGE_ROLLUP_TABLE,
+  HOURLY_DIMENSIONS,
+  HOURLY_TABLE,
+  ROOTS_USAGE_TABLE,
 } from './scope';
 import type { Variant } from './scope';
 
@@ -925,7 +928,9 @@ async function pull(scale: number, only?: string[]): Promise<void> {
 // derive / bloom (local schema experiments, memory track 3)
 // ---------------------------------------------------------------------------
 
-const q = (v: string) => `'${v.replace(/'/g, "\\'")}'`;
+/** ClickHouse string literal for a trusted constant: backslashes first, then quotes. */
+export const sqlString = (v: string) => `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+const q = sqlString;
 const COST_IN = `name IN (${USAGE_COST_NAMES.map(q).join(', ')})`;
 
 /**
@@ -933,6 +938,9 @@ const COST_IN = `name IN (${USAGE_COST_NAMES.map(q).join(', ')})`;
  * are their bodies); here they are backfilled day by day, so a trace whose rows span days has several partial rows,
  * as an MV would leave before merges.
  */
+/** Payload columns no aggregate reads; left empty in the usage-on-root copy to keep the backfill small. */
+const ROOT_PAYLOAD = ['input', 'output', 'attributes', 'requestContext'];
+
 export const ROLLUP_DDL = {
   [USAGE_ROLLUP_TABLE]: `CREATE TABLE ${LAB.database}.${USAGE_ROLLUP_TABLE} (
     organizationId String, projectId String, traceId String,
@@ -947,6 +955,25 @@ export const ROLLUP_DDL = {
   [SPAN_NAME_INDEX_TABLE]: `CREATE TABLE ${LAB.database}.${SPAN_NAME_INDEX_TABLE} (
     organizationId String, projectId String, name String, traceId String, endedAt DateTime64(3, 'UTC')
   ) ENGINE = ReplacingMergeTree PARTITION BY toDate(endedAt) ORDER BY (organizationId, projectId, name, traceId)`,
+  // Trace roots with per-trace usage on the row, as if the writer stored it at trace end.
+  [ROOTS_USAGE_TABLE]: [
+    `CREATE TABLE ${LAB.database}.${ROOTS_USAGE_TABLE} AS ${LAB.database}.mastra_trace_roots`,
+    `ALTER TABLE ${LAB.database}.${ROOTS_USAGE_TABLE} ADD COLUMN hasUsage UInt8,
+      ${USAGE_ROLLUP_COLUMNS.map(c => `ADD COLUMN ${c.column} Float64`).join(', ')}, ADD COLUMN cost Float64,
+      ADD COLUMN priced UInt8, ADD COLUMN pricingFailure UInt8, ADD COLUMN unitMin String, ADD COLUMN unitMax String`,
+  ],
+  [HOURLY_TABLE]: `CREATE TABLE ${LAB.database}.${HOURLY_TABLE} (
+    organizationId String, projectId String, hour DateTime64(3, 'UTC'),
+    entityType LowCardinality(Nullable(String)), entityName Nullable(String), environment LowCardinality(Nullable(String)),
+    serviceName LowCardinality(Nullable(String)), executionSource LowCardinality(Nullable(String)),
+    ${['n', 'errN', 'usageN', 'pricedN', 'coveredN'].map(c => `${c} SimpleAggregateFunction(sum, UInt64)`).join(', ')},
+    ${USAGE_ROLLUP_COLUMNS.map(c => `${c.column} SimpleAggregateFunction(sum, Float64)`).join(', ')},
+    cost SimpleAggregateFunction(sum, Float64),
+    unitMin SimpleAggregateFunction(min, Nullable(String)),
+    unitMax SimpleAggregateFunction(max, Nullable(String))
+  ) ENGINE = AggregatingMergeTree PARTITION BY toYYYYMM(hour)
+  ORDER BY (organizationId, projectId, hour, ${HOURLY_DIMENSIONS.join(', ')})
+  SETTINGS allow_nullable_key = 1`,
 };
 
 export const ROLLUP_SELECT = {
@@ -968,9 +995,51 @@ export const ROLLUP_SELECT = {
     FROM ${LAB.database}.mastra_span_events
     WHERE isNotNull(traceId) AND toDate(endedAt) = {d:Date}
     GROUP BY organizationId, projectId, name, traceId`,
+  // One row per (tenant, hour, root dimensions): trace counts plus usage summed over the hour's traces. In production
+  // this needs usage on the root row when it is written (trace end); here it reads the deduped roots and the usage
+  // rollup above, so it must be derived after that table.
+  [ROOTS_USAGE_TABLE]: `SELECT r.* EXCEPT (${ROOT_PAYLOAD.join(', ')}), ifNull(u.hasUsage, 0), ${USAGE_ROLLUP_COLUMNS.map(c => `ifNull(u.${c.column}, 0)`).join(', ')},
+      ifNull(u.cost, 0), ifNull(u.priced, 0), ifNull(u.failed, 0), ifNull(u.unitMin, ''), ifNull(u.unitMax, '')
+    FROM ${LAB.database}.mastra_trace_roots r
+    LEFT JOIN (
+      SELECT organizationId, projectId, traceId, toUInt8(1) AS hasUsage,
+        ${USAGE_ROLLUP_COLUMNS.map(c => `sum(${c.column}) AS ${c.column}`).join(', ')}, sum(cost) AS cost,
+        toUInt8(sum(pricedRows) > 0) AS priced, toUInt8(sum(failedRows) > 0) AS failed,
+        ifNull(min(unitMin), '') AS unitMin, ifNull(max(unitMax), '') AS unitMax
+      FROM ${LAB.database}.${USAGE_ROLLUP_TABLE}
+      WHERE traceId IN (SELECT traceId FROM ${LAB.database}.mastra_trace_roots WHERE toDate(startedAt) = {d:Date})
+      GROUP BY organizationId, projectId, traceId
+    ) u ON u.organizationId = r.organizationId AND u.projectId = ifNull(r.projectId, '') AND u.traceId = r.traceId
+    WHERE toDate(r.startedAt) = {d:Date}`,
+  [HOURLY_TABLE]: `SELECT r.organizationId AS organizationId, ifNull(r.projectId, '') AS projectId,
+      toStartOfHour(r.startedAt) AS hour, ${HOURLY_DIMENSIONS.map(d => `r.${d} AS ${d}`).join(', ')},
+      count() AS n, countIf(isNotNull(r.error)) AS errN, countIf(u.hasUsage) AS usageN,
+      countIf(u.hasUsage AND u.priced) AS pricedN, countIf(u.hasUsage AND u.priced AND NOT u.failed) AS coveredN,
+      ${USAGE_ROLLUP_COLUMNS.map(c => `sumIf(u.${c.column}, u.hasUsage) AS ${c.column}`).join(', ')},
+      sumIf(u.cost, u.hasUsage AND u.priced) AS cost,
+      minIf(u.unitMin, u.hasUsage AND u.priced) AS unitMin, maxIf(u.unitMax, u.hasUsage AND u.priced) AS unitMax
+    FROM (
+      SELECT * FROM ${LAB.database}.mastra_trace_roots WHERE toDate(startedAt) = {d:Date}
+      ORDER BY traceId, dedupeKey LIMIT 1 BY traceId
+    ) r
+    LEFT JOIN (
+      SELECT organizationId, projectId, traceId, toUInt8(1) AS hasUsage,
+        ${USAGE_ROLLUP_COLUMNS.map(c => `sum(${c.column}) AS ${c.column}`).join(', ')}, sum(cost) AS cost,
+        sum(pricedRows) > 0 AS priced, sum(failedRows) > 0 AS failed,
+        ifNull(min(unitMin), '') AS unitMin, ifNull(max(unitMax), '') AS unitMax
+      FROM ${LAB.database}.${USAGE_ROLLUP_TABLE}
+      WHERE traceId IN (SELECT traceId FROM ${LAB.database}.mastra_trace_roots WHERE toDate(startedAt) = {d:Date})
+      GROUP BY organizationId, projectId, traceId
+    ) u ON u.organizationId = r.organizationId AND u.projectId = ifNull(r.projectId, '') AND u.traceId = r.traceId
+    GROUP BY organizationId, projectId, hour, ${HOURLY_DIMENSIONS.join(', ')}`,
 };
 
-const DERIVED_SOURCE = { [USAGE_ROLLUP_TABLE]: 'mastra_metric_events', [SPAN_NAME_INDEX_TABLE]: 'mastra_span_events' };
+const DERIVED_SOURCE = {
+  [USAGE_ROLLUP_TABLE]: ['mastra_metric_events', 'timestamp'],
+  [SPAN_NAME_INDEX_TABLE]: ['mastra_span_events', 'endedAt'],
+  [ROOTS_USAGE_TABLE]: ['mastra_trace_roots', 'startedAt'],
+  [HOURLY_TABLE]: ['mastra_trace_roots', 'startedAt'],
+} as const;
 
 async function tableSizes(admin: ReturnType<typeof labAdmin>, tables: string[]) {
   return (
@@ -983,15 +1052,15 @@ async function tableSizes(admin: ReturnType<typeof labAdmin>, tables: string[]) 
   ).json<{ table: string; rows: string; bytes: string }>();
 }
 
-async function derive(): Promise<void> {
+async function derive(only?: string[]): Promise<void> {
   const admin = labAdmin();
   const db = LAB.database;
   try {
     for (const [table, ddl] of Object.entries(ROLLUP_DDL)) {
-      const source = DERIVED_SOURCE[table as keyof typeof DERIVED_SOURCE];
-      const time = source === 'mastra_metric_events' ? 'timestamp' : 'endedAt';
+      if (only && !only.includes(table)) continue;
+      const [source, time] = DERIVED_SOURCE[table as keyof typeof DERIVED_SOURCE];
       await admin.command({ query: `DROP TABLE IF EXISTS ${db}.${table}` });
-      await admin.command({ query: ddl });
+      for (const statement of [ddl].flat()) await admin.command({ query: statement });
       const days = await (
         await admin.query({
           query: `SELECT DISTINCT toDate(${time}) AS d FROM ${db}.${source} ORDER BY d`,
@@ -1001,7 +1070,7 @@ async function derive(): Promise<void> {
       const started = performance.now();
       for (const { d } of days) {
         await admin.command({
-          query: `INSERT INTO ${db}.${table} ${ROLLUP_SELECT[table as keyof typeof ROLLUP_SELECT]} SETTINGS max_threads = 2`,
+          query: `INSERT INTO ${db}.${table}${table === ROOTS_USAGE_TABLE ? ` (* EXCEPT (${ROOT_PAYLOAD.join(', ')}))` : ''} ${ROLLUP_SELECT[table as keyof typeof ROLLUP_SELECT]} SETTINGS max_threads = 2, max_block_size = 1024, min_insert_block_size_rows = 8192, min_insert_block_size_bytes = 67108864, max_insert_threads = 1`,
           query_params: { d },
         });
       }
@@ -1214,6 +1283,7 @@ async function main(): Promise<void> {
       batches: { type: 'string', default: '8' },
       variants: { type: 'string' },
       projects: { type: 'string' },
+      tables: { type: 'string' },
     },
   });
   const command = positionals[0];
@@ -1230,7 +1300,7 @@ async function main(): Promise<void> {
     }
   }
   if (command === 'load') return load(Number(values.scale), Number(values.batches));
-  if (command === 'derive') return derive();
+  if (command === 'derive') return derive((values.tables as string | undefined)?.split(','));
   if (command === 'bloom') return bloom();
   if (command === 'pull') return pull(Number(values.scale), (values.projects as string | undefined)?.split(','));
   throw new Error('usage: lab.ts calibrate|up|load|pull|derive|bloom|compact|equiv|down');

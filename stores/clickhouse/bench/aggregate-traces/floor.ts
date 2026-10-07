@@ -17,6 +17,7 @@ import { labCredentials, loadLabSelection } from './lab';
 import { loadSelection } from './profile';
 import type { Bucket, SelectedProject } from './profile';
 import { PREFLIGHT_FILE, RESULTS_DIR } from './run';
+import { applyVariant } from './scope';
 import type { Variant } from './scope';
 
 const FLOOR_FILE = `${RESULTS_DIR}/floor.jsonl`;
@@ -293,13 +294,15 @@ export const PROBES: Probe[] = [
       .filter(v => (v === 'sp' ? caseId === 'F3' : v === 'nodedupe' ? caseId === 'E4' : true))
       .map((v): Probe => ({ id: `${caseId}-${v}`, note: `${caseId} 30d, variant ${v}`, sql: compiled(caseId, 30, v) })),
   ),
-  ...['F0', 'F3', 'E4'].map(
-    (caseId): Probe => ({
-      id: `${caseId}-shape-pf8`,
-      note: `${caseId} 30d, all shape changes + prefetch limit 8`,
-      sql: compiled(caseId, 30, 'shape'),
-      settings: { filesystem_prefetches_limit: 8 },
-    }),
+  ...['F0', 'F3', 'E4'].flatMap(caseId =>
+    [4, 8, 16, 32].map(
+      (limit): Probe => ({
+        id: `${caseId}-shape-pf${limit}`,
+        note: `${caseId} 30d, all shape changes + prefetch limit ${limit}`,
+        sql: compiled(caseId, 30, 'shape'),
+        settings: { filesystem_prefetches_limit: limit },
+      }),
+    ),
   ),
   // Root dedupe in sort-key order (compiler-only, so it can run on prod), alone and with the prefetch limit.
   ...['F0', 'F3', 'E1', 'E3', 'E4'].flatMap((caseId): Probe[] => [
@@ -341,6 +344,37 @@ export const PROBES: Probe[] = [
       return probes;
     }),
   ),
+  // Per-trace path after `arch` (lab only): UInt64 trace keys, no root dedupe, both.
+  ...['F0', 'F3', 'E1', 'E3', 'E4', 'T1', 'T3', 'T4'].flatMap((caseId): Probe[] => [
+    ...(['hk', 'nord'] as const).map(
+      (extra): Probe => ({
+        id: `${caseId}-arch-${extra}`,
+        note: `${caseId} 30d, arch + ${extra}`,
+        sql: (p, to) => {
+          const c = compiled(caseId, 30, 'arch')(p, to);
+          const out = applyVariant({ query: c.query, query_params: c.params }, extra);
+          return { query: out.query, params: c.params };
+        },
+      }),
+    ),
+    { id: `${caseId}-arch2`, note: `${caseId} 30d, arch + hk + nord`, sql: compiled(caseId, 30, 'arch2') },
+    { id: `${caseId}-arch3`, note: `${caseId} 30d, arch2 + usage on the root row`, sql: compiled(caseId, 30, 'arch3') },
+  ]),
+  // One day of a 30-day query: the per-query peak if the window were split into daily queries and merged.
+  ...['F3', 'E4', 'T1', 'T3'].flatMap((caseId): Probe[] =>
+    (['base', 'shape'] as const).map(v => ({
+      id: `${caseId}-${v}-1d`,
+      note: `${caseId} 1d, ${v}`,
+      sql: compiled(caseId, 1, v),
+    })),
+  ),
+  // Dashboard rollup (lab only, `lab.ts derive --tables mastra_usage_hourly`).
+  ...['F0', 'E1', 'E4', 'T1', 'T2'].flatMap((caseId): Probe[] => [
+    ...(caseId !== 'T2'
+      ? []
+      : [{ id: `${caseId}-base`, note: `${caseId} as compiled, 30d`, sql: compiled(caseId, 30) }]),
+    { id: `${caseId}-hourly`, note: `${caseId} 30d from the hourly rollup`, sql: compiled(caseId, 30, 'hourly') },
+  ]),
   ...SETTINGS.filter(([sid]) => sid === 'lean' || sid === 't1').map(
     ([sid, settings, note]): Probe => ({
       id: `read-all-${sid}`,
