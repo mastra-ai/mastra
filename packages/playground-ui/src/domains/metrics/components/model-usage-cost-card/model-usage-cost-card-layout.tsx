@@ -16,7 +16,7 @@ export function ModelUsageCostCardLayout({ summary, actions, children }: ModelUs
         {summary}
         {actions && <MetricsCard.Actions>{actions}</MetricsCard.Actions>}
       </MetricsCard.TopBar>
-      <div className="h-80 min-w-0">{children}</div>
+      <div className="h-65 min-w-0">{children}</div>
     </MetricsCard>
   );
 }

@@ -15,7 +15,7 @@ export function TokenUsageTimelineCardLayout({ description, actions, children }:
         <MetricsCard.TitleAndDescription title="Token Usage over Time" description={description} />
         {actions && <MetricsCard.Actions>{actions}</MetricsCard.Actions>}
       </MetricsCard.TopBar>
-      <div className="h-80 min-w-0">{children}</div>
+      <div className="h-65 min-w-0">{children}</div>
     </MetricsCard>
   );
 }

@@ -14,7 +14,7 @@ export function MemoryCardLayout({ summary, children }: MemoryCardLayoutProps) {
         <MetricsCard.TitleAndDescription title="Memory" description="Thread and resource consumption." />
         {summary}
       </MetricsCard.TopBar>
-      <div className="h-80 min-w-0">{children}</div>
+      <div className="h-65 min-w-0">{children}</div>
     </MetricsCard>
   );
 }
