@@ -164,5 +164,17 @@ describe('sub-agent delegation auto-resume persistence', () => {
     for (const toolCallId of ['lookup-1', 'delegate-1', 'delegate-2', 'delegate-3', 'ask-1', 'ask-2']) {
       expect(owners.get(toolCallId)?.length).toBe(1);
     }
+
+    const memoryStore = await storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessages({ threadId: 'thread-1', perPage: false });
+    const supervisorGroups = messages
+      .filter(message => message.role === 'assistant')
+      .map(message =>
+        ((message.content as any)?.parts ?? [])
+          .filter((p: any) => p.type === 'tool-invocation')
+          .map((p: any) => p.toolInvocation.toolCallId),
+      )
+      .filter(ids => ids.length > 0);
+    expect(supervisorGroups).toEqual([['lookup-1', 'delegate-1'], ['delegate-2'], ['delegate-3']]);
   });
 });
