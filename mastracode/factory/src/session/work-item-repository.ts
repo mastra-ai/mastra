@@ -57,6 +57,14 @@ export async function resolveWorkItemRepository(args: {
   const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
   const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;
 
+  // The provider id survives repository renames, so it outranks a possibly stale slug.
+  if (externalRepositorySignal !== undefined) {
+    const matches = linked.filter(repository => repository.externalId === externalRepositorySignal);
+    if (matches.length === 1) {
+      return { status: 'resolved', projectRepositoryId: matches[0]!.projectRepositoryId, slug: matches[0]!.slug };
+    }
+  }
+
   if (repositorySignal) {
     const match = linked.find(repository => repository.slug === repositorySignal);
     return match
@@ -65,10 +73,6 @@ export async function resolveWorkItemRepository(args: {
   }
 
   if (externalRepositorySignal !== undefined) {
-    const matches = linked.filter(repository => repository.externalId === externalRepositorySignal);
-    if (matches.length === 1) {
-      return { status: 'resolved', projectRepositoryId: matches[0]!.projectRepositoryId, slug: matches[0]!.slug };
-    }
     return {
       status: 'unlinked',
       hint: `Source-control repository ${externalRepositorySignal} is not linked to this Factory.`,

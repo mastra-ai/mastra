@@ -54,6 +54,31 @@ describe('resolveWorkItemRepository', () => {
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/one' });
   });
 
+  it('resolves a renamed repository by its provider id when the stored slug is stale', async () => {
+    const { sourceControl, project, repositories } = await seedRepositories(['acme/renamed', 'acme/two']);
+    const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
+
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 1 } },
+      }),
+    ).resolves.toEqual({
+      status: 'resolved',
+      projectRepositoryId: repositories[0]!.projectRepository.id,
+      slug: 'acme/renamed',
+    });
+    await expect(
+      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'acme/old-name', gitlabProjectId: '2' } } }),
+    ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/two' });
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 99 } },
+      }),
+    ).resolves.toEqual({ status: 'unlinked', hint: 'Repository acme/old-name is not linked to this Factory.' });
+  });
+
   it('uses a Linear project mapping and resolves an unattributed single-repository item', async () => {
     const { sourceControl, project, repositories } = await seedRepositories(['acme/one', 'acme/two']);
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
