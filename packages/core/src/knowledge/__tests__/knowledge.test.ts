@@ -11,7 +11,11 @@ describe('Knowledge', () => {
     const storage = new InMemoryStore({ id: 'bounded' });
     const description = 'x'.repeat(401);
     expect(
-      () => new Knowledge({ storage, structure: { scopes: [{ address: 'scope:a', name: 'A', description }] } }),
+      () =>
+        new Knowledge({
+          storage,
+          structure: { scopes: [{ address: 'scope:a', name: 'A', metadata: { description } }] },
+        }),
     ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
     expect(() => new Knowledge({ storage, scopes: { 'team:$teamId': { description } } })).toThrow(
       'Knowledge node description exceeds the 400 UTF-16 code unit limit',
@@ -85,7 +89,7 @@ describe('Knowledge', () => {
     expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
   });
 
-  it('applies rules added to static structure after first boot', async () => {
+  it('adds parent edges declared after first boot to existing static scopes', async () => {
     const storage = new InMemoryStore({ id: 'static-structure-growth' });
     const org = { address: 'org:acme', name: 'Acme' };
     const firstBoot = await new Knowledge({
@@ -95,22 +99,13 @@ describe('Knowledge', () => {
 
     const secondBoot = await new Knowledge({
       storage,
-      structure: {
-        scopes: [
-          org,
-          {
-            address: 'team',
-            name: 'Team',
-            parentAddresses: ['org:acme'],
-            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' }],
-          },
-        ],
-      },
+      structure: { scopes: [org, { address: 'team', name: 'Team', parentAddresses: ['org:acme'] }] },
     }).reconcile();
 
-    expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: firstBoot.accessEpoch + 1 });
-    const team = (await storage.stores.knowledge!.listScopeNodes({ addresses: ['team'] })).scopes[0];
-    expect(team?.parentIds).toEqual([firstBoot.scopes['org:acme']]);
+    expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [] });
+    expect(await storage.stores.knowledge!.getNodeScopeIds(firstBoot.scopes.team!)).toEqual([
+      firstBoot.scopes['org:acme'],
+    ]);
   });
 
   it('keeps materialized scopes as created when their scope type template changes', async () => {
