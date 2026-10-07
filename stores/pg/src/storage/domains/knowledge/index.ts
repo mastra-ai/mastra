@@ -101,6 +101,7 @@ import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
+import { isDuplicateSchemaError } from '../../db/pg-errors';
 import { getSchemaSnapshot } from '../../db/schema-snapshot';
 
 const loadKnowledgeCore = createKnowledgeCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
@@ -511,6 +512,13 @@ export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): 
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
+const KNOWLEDGE_DEPENDENTS_MESSAGE =
+  'Knowledge storage cannot be replaced: other database objects (views, materialized views, or foreign keys) depend on the existing Knowledge tables. Drop or detach them first; `dangerouslyReset()` removes only Knowledge tables and will not drop them.';
+
+function isDependentObjectsError(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === '2BP01';
+}
+
 export class KnowledgePG extends KnowledgeStorage {
   static readonly MANAGED_TABLES = KNOWLEDGE_TABLE_NAMES;
 
@@ -626,20 +634,26 @@ export class KnowledgePG extends KnowledgeStorage {
    */
   async #initializeCanonicalSchema(): Promise<{ tables: string[]; indexes: string[] }> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
+    // Only create a missing schema: CREATE SCHEMA IF NOT EXISTS needs CREATE on the database even when the
+    // schema exists, which roles granted only schema privileges lack. Done outside the transaction because a
+    // lost race with store init raises an error that would abort it.
+    if (this.#schemaName) {
+      const schemaName = parseSchemaName(this.#schemaName);
+      const present = await this.#client.oneOrNone('SELECT 1 FROM pg_namespace WHERE nspname = $1', [schemaName]);
+      if (!present) {
+        await this.#client.none(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`).catch(error => {
+          if (!isDuplicateSchemaError(error)) throw error;
+        });
+      }
+    }
     return this.#client.tx(async client => {
       const tx = createExecutor(client, this.#schemaName);
       // Key on the resolved schema so stores naming it explicitly and stores relying on search_path serialize together.
+      // With no schema selected the key is NULL and nothing locks, but table creation then fails before any write.
       await tx.execute({
         sql: `SELECT pg_advisory_xact_lock(hashtext('mastra-knowledge-init:' || COALESCE(?, current_schema())))`,
         args: [this.#schemaName ?? null],
       });
-      // Only create a missing schema: CREATE SCHEMA IF NOT EXISTS needs CREATE on the database even when the
-      // schema exists, which roles granted only schema privileges lack.
-      if (this.#schemaName) {
-        const schemaName = parseSchemaName(this.#schemaName);
-        const present = await client.oneOrNone('SELECT 1 FROM pg_namespace WHERE nspname = $1', [schemaName]);
-        if (!present) await client.none(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-      }
       const existing = await tx.execute({
         sql: `SELECT table_name AS "tableName" FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
         args: [this.#schemaName ?? null],
@@ -649,6 +663,7 @@ export class KnowledgePG extends KnowledgeStorage {
       let dropped: { tables: string[]; indexes: string[] } = { tables: [], indexes: [] };
       if (names.size > 0) {
         const replaced = await this.#replaceEmptyPublishedV1(tx);
+        if (replaced === 'dependents') throw new KnowledgeSchemaError(KNOWLEDGE_DEPENDENTS_MESSAGE);
         if (!replaced) {
           throw new KnowledgeSchemaError(
             `Knowledge schema reset required: the existing Knowledge schema has no completion marker. ${KNOWLEDGE_RESET_GUIDANCE}`,
@@ -675,8 +690,9 @@ export class KnowledgePG extends KnowledgeStorage {
    * indexes are the only Knowledge objects in this store's schema, drop it so canonical storage can
    * initialize; replacing it loses nothing. Rows, partial or unfamiliar tables, views, triggers, and
    * extra indexes all leave the database untouched. Runs inside the caller's first-boot transaction.
+   * Returns `'dependents'` when other objects depend on the tables, since a reset cannot remove them either.
    */
-  async #replaceEmptyPublishedV1(tx: Executor): Promise<{ tables: string[]; indexes: string[] } | null> {
+  async #replaceEmptyPublishedV1(tx: Executor): Promise<{ tables: string[]; indexes: string[] } | 'dependents' | null> {
     const schema = this.#schemaName ?? null;
     const relations = await tx.execute({
       sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
@@ -704,11 +720,16 @@ export class KnowledgePG extends KnowledgeStorage {
     for (const name of indexNames) {
       if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return null;
     }
-    const dependents = await tx.execute({
-      sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) UNION ALL SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
-      args: [schema, tables, schema, tables],
+    const views = await tx.execute({
+      sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) LIMIT 1`,
+      args: [schema, tables],
     });
-    if (dependents.rows.length > 0) return null;
+    if (views.rows.length > 0) return 'dependents';
+    const triggers = await tx.execute({
+      sql: `SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
+      args: [schema, tables],
+    });
+    if (triggers.rows.length > 0) return null;
     // Block writers from an older release until the drop commits, so a row cannot land after the emptiness check.
     await tx.execute(`LOCK TABLE ${tables.map(table => `"${table}"`).join(', ')} IN ACCESS EXCLUSIVE MODE`);
     for (const table of tables) {
@@ -718,11 +739,8 @@ export class KnowledgePG extends KnowledgeStorage {
       await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
     } catch (error) {
       // Dependents the catalog checks above cannot see (other roles' views, materialized views, foreign keys).
-      if ((error as { code?: string }).code !== '2BP01') throw error;
-      const { KnowledgeSchemaError } = await loadKnowledgeCore();
-      throw new KnowledgeSchemaError(
-        `Knowledge schema reset required: other database objects depend on the existing Knowledge tables. ${KNOWLEDGE_RESET_GUIDANCE}`,
-      );
+      if (isDependentObjectsError(error)) return 'dependents';
+      throw error;
     }
     return { tables, indexes: indexNames };
   }
@@ -732,7 +750,13 @@ export class KnowledgePG extends KnowledgeStorage {
     const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
       .map(table => `${schema}"${table}"`)
       .join(', ');
-    await this.#client.query(`DROP TABLE IF EXISTS ${tables}`);
+    try {
+      await this.#client.query(`DROP TABLE IF EXISTS ${tables}`);
+    } catch (error) {
+      if (!isDependentObjectsError(error)) throw error;
+      const { KnowledgeSchemaError } = await loadKnowledgeCore();
+      throw new KnowledgeSchemaError(KNOWLEDGE_DEPENDENTS_MESSAGE);
+    }
     await this.init();
   }
 
