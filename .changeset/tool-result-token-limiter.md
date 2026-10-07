@@ -18,3 +18,5 @@ const agent = new Agent({
 ```
 
 Added the `processToolModelOutput` processor hook. It runs once per tool result, after `processToolResult` and `toModelOutput`, and changes only what the model reads. `processToolResult` still changes the result itself.
+
+`TokenLimiterProcessor` now counts the `toModelOutput` copy of a tool result when one exists, since that is what the model reads.
