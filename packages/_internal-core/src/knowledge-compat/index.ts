@@ -48,6 +48,121 @@ export const KNOWLEDGE_TABLE_NAMES = [
 /** Knowledge v1 tables with no canonical equivalent; an explicit schema reset drops them. */
 export const RETIRED_KNOWLEDGE_TABLE_NAMES = ['mastra_knowledge_cursors'] as const;
 
+/**
+ * Columns of the tables published v1 adapters created for every app, empty unless the app used
+ * Knowledge. Every non-retired table must be present with only these columns before an adapter treats
+ * the layout as safely replaceable.
+ */
+export const PUBLISHED_KNOWLEDGE_V1_COLUMNS: ReadonlyMap<string, readonly string[]> = new Map([
+  [
+    TABLE_KNOWLEDGE_NODES,
+    [
+      'id',
+      'type',
+      'name',
+      'canonicalName',
+      'kind',
+      'content',
+      'description',
+      'scope',
+      'scopeKey',
+      'version',
+      'mergedInto',
+      'createdAt',
+      'updatedAt',
+    ],
+  ],
+  [
+    TABLE_KNOWLEDGE_RECORDS,
+    [
+      'id',
+      'node',
+      'text',
+      'scope',
+      'scopeKey',
+      'sourceThreadId',
+      'capturedAt',
+      'when',
+      'maxScope',
+      'metadata',
+      'deletedAt',
+      'deletedBy',
+    ],
+  ],
+  [TABLE_KNOWLEDGE_MENTIONS, ['sourceType', 'sourceId', 'recordId']],
+  [
+    TABLE_KNOWLEDGE_ACTIVITY,
+    ['id', 'action', 'recordType', 'recordId', 'scope', 'scopeKey', 'sourceThreadId', 'createdAt'],
+  ],
+  [
+    TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+    [
+      'id',
+      'idempotencyKey',
+      'documentId',
+      'documentType',
+      'operation',
+      'scope',
+      'scopeKey',
+      'status',
+      'attempts',
+      'availableAt',
+      'claimedAt',
+      'claimedBy',
+      'createdAt',
+      'completedAt',
+    ],
+  ],
+  ['mastra_knowledge_cursors', ['sourceThreadId', 'agent', 'lastKnowledgeId', 'updatedAt']],
+]);
+
+/** Published v1 columns added after the first release, so older layouts legitimately lack them. */
+const PUBLISHED_KNOWLEDGE_V1_LATER_COLUMNS: ReadonlyMap<string, readonly string[]> = new Map([
+  [TABLE_KNOWLEDGE_NODES, ['description']],
+]);
+
+/**
+ * True when `columnsByTable` (every Knowledge-prefixed table and its columns) is exactly a published
+ * v1 layout: all non-retired v1 tables present, no other tables, and each with only published columns.
+ * PostgreSQL adapters also created a `<column>Z` timestamptz shadow beside each timestamp column; pass
+ * `timestampShadows` to accept those.
+ */
+export function isPublishedKnowledgeV1Layout(
+  columnsByTable: ReadonlyMap<string, readonly string[]>,
+  { timestampShadows = false }: { timestampShadows?: boolean } = {},
+): boolean {
+  for (const [table, expected] of PUBLISHED_KNOWLEDGE_V1_COLUMNS) {
+    const columns = columnsByTable.get(table);
+    const actual = timestampShadows
+      ? columns?.filter(column => !(column.endsWith('Z') && expected.includes(column.slice(0, -1))))
+      : columns;
+    if (!actual) {
+      if ((RETIRED_KNOWLEDGE_TABLE_NAMES as readonly string[]).includes(table)) continue;
+      return false;
+    }
+    const later = PUBLISHED_KNOWLEDGE_V1_LATER_COLUMNS.get(table) ?? [];
+    if (!actual.every(column => expected.includes(column))) return false;
+    if (!expected.every(column => later.includes(column) || actual.includes(column))) return false;
+  }
+  return [...columnsByTable.keys()].every(table => PUBLISHED_KNOWLEDGE_V1_COLUMNS.has(table));
+}
+
+/** Indexes published v1 adapters created on {@link PUBLISHED_KNOWLEDGE_V1_COLUMNS} tables. */
+export const PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES: ReadonlySet<string> = new Set([
+  'idx_knowledge_nodes_identity',
+  'idx_knowledge_nodes_scope',
+  'idx_knowledge_records_node_latest',
+  'idx_knowledge_records_thread_latest',
+  'idx_knowledge_mentions_record',
+  'idx_knowledge_activity_latest',
+  'idx_knowledge_outbox_idempotency',
+  'idx_knowledge_outbox_claim',
+]);
+
+/** Appended to schema errors so callers learn the one supported way forward. */
+export const KNOWLEDGE_RESET_GUIDANCE =
+  'Existing Knowledge data is not migrated. To replace it, call `await storage.stores.knowledge.dangerouslyReset()`, which deletes every Knowledge row and nothing else.';
+
 /** Mirrors `StorageColumn` from `@mastra/core/storage`. */
 export interface KnowledgeStorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
