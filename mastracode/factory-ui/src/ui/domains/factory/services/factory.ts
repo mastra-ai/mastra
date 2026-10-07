@@ -8,6 +8,8 @@
  */
 
 export interface GithubIssue {
+  /** GitHub repository id; numbers repeat across a project's repositories. */
+  repositoryId?: number;
   number: number;
   title: string;
   url: string;
@@ -21,6 +23,8 @@ export interface GithubIssue {
 }
 
 export interface GithubPullRequest {
+  /** GitHub repository id; numbers repeat across a project's repositories. */
+  repositoryId?: number;
   number: number;
   title: string;
   url: string;
