@@ -1776,6 +1776,30 @@ describe('Agent Routes Authorization', () => {
       expect(execution).toHaveBeenCalled();
     });
 
+    it.each([
+      { route: APPROVE_TOOL_CALL_ROUTE, method: 'approveToolCall' },
+      { route: DECLINE_TOOL_CALL_ROUTE, method: 'declineToolCall' },
+    ] as const)('$method forwards providerOptions and modelSettings', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      const providerOptions = { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } };
+      const modelSettings = { temperature: 0.2 };
+
+      await (route.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+        providerOptions,
+        modelSettings,
+      });
+      expect(execution).toHaveBeenCalledWith(expect.objectContaining({ providerOptions, modelSettings }));
+    });
+
     it('waits for the snapshot to move to the next suspended tool call', async () => {
       await persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-1' });
       const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
