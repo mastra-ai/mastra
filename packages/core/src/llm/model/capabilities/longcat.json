@@ -1,3 +1,10 @@
 {
-  "temperature": ["LongCat-2.0"]
+  "temperature": ["LongCat-2.0"],
+  "reasoning": {
+    "LongCat-2.0": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }
