@@ -208,9 +208,11 @@ Warm median MiB, n = 3; `nh2` lists show list / lookup:
   `nh2+rs+nopf` still needs ~260 MiB to dedupe 450k roots. It reads 7–51 MB.
 - Ascending `topn2` (O1) skips most of the floor even with prefetch on (37–61 MiB): its pass reads in order, which
   doesn't use the prefetched read pool.
-- What's left at p99 (31–91 MiB) tracks the response: the 101 returned rows carry 1–5 MB of blobs, and the table
-  is sorted by `(startedAt, traceId, dedupeKey)` with no tenant prefix, so every granule a lookup touches holds
-  other tenants' blob rows too (a hydrate for 101 keys on the 25-trace project reads ~92k rows).
+- What's left at p99 (31–91 MiB) tracks the response: the 101 returned rows carry 1–5 MB of blobs. The replica's
+  `mastra_trace_roots` is already sorted by `(organizationId, projectId, startedAt, traceId, dedupeKey)` (Platform
+  DDL; the OSS DDL has no tenant prefix), and the lookup filters on all of it, so it reads only the project's
+  granules. It still reads at least one granule per part per daily partition the winners span (a hydrate for 101
+  keys on the 25-trace project reads ~92k rows).
 
 **Equivalence** (`rs`, `nh2+rs`, `topn2`, `nh2+topn2`): p90 30d on T0, T1, T3, T7, T9, T10, O1, O2, K1, K2, D1;
 p99 and heavy p99 30d on T0, T1, T4, O1, K2; largest 7d on T0, O1, K2. 0 mismatches. Where base itself fails
@@ -352,8 +354,9 @@ remote reads in flight, not bytes. Thread count at `pf8`, T0 30d, list / lookup:
   slower than base cold; it's faster everywhere (T0 p99: 12.5 s vs 22 s).
 - Lookup: at 2+ threads the heavy project's lookup stays at 46–55 MiB whatever else changes: `nopf@2` 49,
   `bs@2` 55, `rb` (128 KiB read buffers) 52. One thread for the lookup only (`t1@2`) gets it to 39 MiB at
-  +10 s cold. It reads 21 MB to return 101 traces' blobs: the granules around the winners belong to other
-  traces and tenants (no tenant prefix in the sort key, see QX05).
+  +10 s cold. It reads 21 MB to return 101 traces' blobs: whole granules of the project's other traces, in
+  every part and day the winners span. The sort key is already tenant-prefixed on the replica (see QX05), so
+  that is not the cause.
 - `rb` looked like a 2× win on its first cold rep (list 36 → 18 MiB); the warm medians are identical to plain
   `pf8`. Dead end.
 
@@ -383,4 +386,6 @@ Best stack per mode at 4 threads and `pf8` (warm median MiB, n = 2–5; cold s, 
 - Against the target (40 MB ≈ 38 MiB up to p99, 200 MB at the largest): the largest project is inside 200
   everywhere (37–92 MiB). Up to p99, lists and pages are at 24–38 MiB; the keyset lookups (43–54), T7 at p99
   (42–44) and delta (53–55) are 1.1–1.4× over. Getting those under 38 MiB costs either one thread for the lookup
-  (`t1@2`, +10 s cold) or a schema change (tenant-prefixed sort key / narrow list table, §5 of the plan).
+  (`t1@2`, +10 s cold), an untested partition bound on the lookup (`endedAt` within the winners' range, so it
+  opens fewer daily partitions), or a narrow list table (§5 of the plan). A tenant-prefixed sort key is not an
+  option: the replica already has one.
