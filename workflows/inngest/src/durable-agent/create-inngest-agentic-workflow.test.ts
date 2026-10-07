@@ -1,13 +1,21 @@
 import { DurableAgentDefaults } from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
+import { Mastra } from '@mastra/core/mastra';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { MockStore } from '@mastra/core/storage';
 import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { InngestExecutionEngine } from '../execution-engine';
 
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
@@ -401,46 +409,54 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
     }
   });
 
-  it('prunes agent instructions from persisted step results (#25977)', () => {
-    const inngest = new Inngest({ id: 'inngest-agentic-workflow-prune-tests' });
-    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
-    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+  it.each(['suspended', 'success'] as const)(
+    'prunes agent instructions from the persisted %s snapshot (#25977)',
+    async status => {
+      const inngest = new Inngest({ id: 'inngest-agentic-workflow-prune-tests' });
+      let handler: any;
+      vi.spyOn(inngest, 'createFunction').mockImplementation(((config: any, fn: any) => {
+        handler = fn;
+        return { id: config.id } as any;
+      }) as any);
+      const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+      const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { [workflow.id]: workflow } });
+      workflow.__registerMastra(mastra);
+      workflow.getFunction();
 
-    const instructions = 'SECRET SYSTEM PROMPT';
-    const state = () => ({ agentSpanData: { attributes: { instructions } } });
-    const snapshot = {
-      runId: 'run-1',
-      status: 'success',
-      value: {},
-      context: {
-        input: state(),
-        'init-iteration-state': { status: 'success', payload: state(), prevOutput: state(), output: state() },
-        [InngestDurableStepIds.AGENTIC_EXECUTION]: {
-          status: 'success',
-          payload: state(),
-          prevOutput: state(),
-          output: state(),
+      const instructions = 'SECRET SYSTEM PROMPT';
+      const state = () => ({ agentSpanData: { attributes: { instructions } } });
+      const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+        status,
+        result: status === 'success' ? {} : undefined,
+        steps: {
+          input: state(),
+          'init-iteration-state': { status: 'success', payload: state(), output: state() },
+          [InngestDurableStepIds.AGENTIC_EXECUTION]: {
+            status,
+            payload: state(),
+            ...(status === 'success' ? { output: state() } : { suspendPayload: {} }),
+          },
+          ...(status === 'success' ? { 'map-final-output': { status: 'success', payload: state(), output: {} } } : {}),
         },
-        'map-final-output': { status: 'success', payload: state(), prevOutput: state(), output: {} },
-      },
-      activePaths: [],
-      activeStepsPath: {},
-      serializedStepGraph: [],
-      suspendedPaths: {},
-      resumeLabels: {},
-      waitingPaths: {},
-      timestamp: Date.now(),
-    };
+      } as any);
 
-    for (const wf of [workflow, iterationWorkflow]) {
-      expect(typeof wf.options.pruneSnapshot).toBe('function');
-      const pruned = wf.options.pruneSnapshot({ snapshot: structuredClone(snapshot), workflowStatus: 'success' });
-      const { input, ...stepResults } = pruned.context;
+      const runId = `prune-${status}`;
+      await handler({
+        event: { data: { inputData: state(), runId } },
+        step: { run: vi.fn(async (_id: string, cb: () => Promise<unknown>) => cb()) },
+        attempt: 0,
+      });
+      expect(execute).toHaveBeenCalled();
+
+      const store = await mastra.getStorage()!.getStore('workflows');
+      const snapshot = (await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId }))!;
+      expect(snapshot.status).toBe(status);
+      const { input, ...stepResults } = snapshot.context as any;
       expect(input.agentSpanData.attributes.instructions).toBe(instructions);
-      expect(Object.keys(stepResults)).toHaveLength(3);
+      expect(stepResults[InngestDurableStepIds.AGENTIC_EXECUTION]).toBeDefined();
       expect(JSON.stringify(stepResults)).not.toContain(instructions);
-    }
-  });
+    },
+  );
 });
 
 describe('Inngest per-step processor history (#25193)', () => {
