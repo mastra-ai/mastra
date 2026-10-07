@@ -15,7 +15,7 @@ import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError } from 
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
-import { resolveExtractors } from './extractor';
+import { resolveExtractors, withoutRequiredSections } from './extractor';
 import { withOmInternalThreadId } from './internal-request-context';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ObserverAttachmentFilter } from './observer-agent';
@@ -635,7 +635,8 @@ export class ObserverRunner {
       return { results, usage: totalUsage };
     }
 
-    const agent = this.createAgent(resolvedModel.model, true, undefined, activeExtractors);
+    const batchExtractors = withoutRequiredSections(activeExtractors);
+    const agent = this.createAgent(resolvedModel.model, true, undefined, batchExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
@@ -648,7 +649,7 @@ export class ObserverRunner {
         priorMetadataByThread,
         undefined,
         this.observationConfig.threadTitle,
-        activeExtractors,
+        batchExtractors,
         { attachmentFilter: multiThreadAttachmentFilter, timeZone },
       ),
     ];
@@ -717,7 +718,7 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    let parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
+    let parsed = parseMultiThreadObserverOutput(result.text, batchExtractors);
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
@@ -725,7 +726,7 @@ export class ObserverRunner {
         `[OM:callMultiThreadObserver] degenerate repetition detected, retrying once. ${describeDegenerateOutput(result.text, 2000)}`,
       );
       result = await doGenerate();
-      parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
+      parsed = parseMultiThreadObserverOutput(result.text, batchExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(
@@ -754,7 +755,7 @@ export class ObserverRunner {
       true,
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
-      activeExtractors,
+      batchExtractors,
     );
     this.lastExchange = {
       systemPrompt,
@@ -798,7 +799,7 @@ export class ObserverRunner {
         threadTitle: builtIns.threadTitle ?? threadResult.threadTitle,
         extractedValues,
         extractionFailures,
-        extractors: activeExtractors,
+        extractors: batchExtractors,
       });
     }
 

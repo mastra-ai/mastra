@@ -50,7 +50,14 @@ export interface ExtractorConfig<T = unknown> {
   onExtracted?: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
   /** Retry with JSON prompt injection when native structured output returns an empty object. */
   retryStructuredExtractionOnEmptyObject?: boolean;
+  /** Require an inline section in every observer/reflector output. A missing section is recorded as an extraction failure. */
+  required?: boolean;
 }
+
+/** Sentinel a required inline section uses to signal that no update is needed. */
+export const UNCHANGED_EXTRACTOR_VALUE = 'UNCHANGED';
+// Tolerate common model variations (case, quotes, trailing punctuation) so a near-miss never overwrites a value.
+const UNCHANGED_PATTERN = new RegExp(`^[\\s\`'"*]*${UNCHANGED_EXTRACTOR_VALUE}[\\s\`'"*.!]*$`, 'i');
 
 const BUILT_IN_SLUGS = new Set(['current-task', 'suggested-response', 'thread-title']);
 
@@ -131,6 +138,7 @@ export class Extractor<T = unknown> {
   readonly metadataKeyPath: string | false;
   readonly onExtracted?: ExtractorConfig<T>['onExtracted'];
   readonly retryStructuredExtractionOnEmptyObject: boolean;
+  readonly required: boolean;
   /** @internal */
   readonly internal: boolean;
   private readonly instructionsConfig: ExtractorConfigValue<string>;
@@ -175,6 +183,7 @@ export class Extractor<T = unknown> {
     this.metadataKeyPath = isHook ? false : (config.metadataKeyPath ?? `extracted.${slug}`);
     this.onExtracted = config.onExtracted;
     this.retryStructuredExtractionOnEmptyObject = config.retryStructuredExtractionOnEmptyObject ?? false;
+    this.required = config.required ?? false;
     this.internal = internal;
   }
 
@@ -201,6 +210,7 @@ export class Extractor<T = unknown> {
         metadataKeyPath: this.metadataKeyPath,
         onExtracted: this.onExtracted,
         retryStructuredExtractionOnEmptyObject: this.retryStructuredExtractionOnEmptyObject,
+        required: this.required,
       },
       this.internal,
     );
@@ -336,6 +346,15 @@ export function parseExtractedValues(output: string, extractors: readonly Extrac
     const tagMatch = [...output.matchAll(tagRegex)].at(-1);
     const rawValue = tagMatch?.[1]?.trim();
     if (!rawValue) {
+      if (extractor.required) {
+        failures.push({
+          slug: extractor.slug,
+          error: `Observer output did not include the required <${extractor.slug}> section`,
+        });
+      }
+      continue;
+    }
+    if (extractor.required && UNCHANGED_PATTERN.test(rawValue)) {
       continue;
     }
     try {
@@ -360,6 +379,18 @@ export function stripExtractorSections(output: string, extractors: readonly Extr
   return stripped;
 }
 
+/**
+ * Batched multi-thread observer calls share one output across threads, so a per-thread required
+ * section would duplicate resource-level values and record spurious failures. Treat them as optional there.
+ */
+export function withoutRequiredSections(extractors: readonly Extractor<any>[]): Extractor<any>[] {
+  return extractors.map(extractor =>
+    extractor.required
+      ? Object.assign(Object.create(Object.getPrototypeOf(extractor)), extractor, { required: false })
+      : extractor,
+  );
+}
+
 export function buildExtractorOutputSections(extractors: readonly Extractor<any>[]): string {
   const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
   if (inlineExtractors.length === 0) {
@@ -370,12 +401,19 @@ export function buildExtractorOutputSections(extractors: readonly Extractor<any>
     .map(
       extractor => `<${extractor.slug}>
 ${extractor.instructions}
-Include this section when the observations contain relevant information for <${extractor.slug}>. Write only that information inside the tag.
+${
+  extractor.required
+    ? `This section is REQUIRED: always output <${extractor.slug}>. If nothing needs to change, write exactly ${UNCHANGED_EXTRACTOR_VALUE} inside the tag.`
+    : `Include this section when the observations contain relevant information for <${extractor.slug}>. Write only that information inside the tag.`
+}
 </${extractor.slug}>`,
     )
     .join('\n\n');
 
-  return `Additional optional XML sections:\nIf the observations include information relevant to any of these tags, output that tag after <observations> and include the relevant information.\n${sections}`;
+  const heading = inlineExtractors.some(extractor => extractor.required)
+    ? 'Additional XML sections:\nOutput these tags after <observations>, following the instructions in each tag.'
+    : 'Additional optional XML sections:\nIf the observations include information relevant to any of these tags, output that tag after <observations> and include the relevant information.';
+  return `${heading}\n${sections}`;
 }
 
 function renderPriorValue(value: unknown): string {
