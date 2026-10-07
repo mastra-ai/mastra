@@ -445,6 +445,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // route fails closed with 404. Behavior is covered by
       // packages/server/src/server/handlers/agent-controller.test.ts.
       '/agent-controller',
+      // Knowledge importer webhooks resolve a registered Knowledge instance and a
+      // webhook-triggered importer. The generic test context registers neither,
+      // so the route fails closed with 404. Behavior is covered by
+      // packages/server/src/server/handlers/knowledge-imports.test.ts.
+      '/knowledge',
     ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
