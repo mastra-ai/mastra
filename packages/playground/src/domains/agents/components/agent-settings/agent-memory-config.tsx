@@ -6,9 +6,9 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useMemoryConfig } from '@mastra/react/hooks/memory';
 import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 
 interface MemoryConfigSection {
   title: string;
@@ -110,7 +110,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
         ),
         value: (
           <Badge
-            variant={item.value === true ? 'green' : 'neutral'}
+            variant={item.value === true ? 'success' : 'neutral'}
             indicator={typeof item.value === 'boolean' ? 'dot' : undefined}
             className="h-auto min-h-5 min-w-0 break-words whitespace-normal"
           >
@@ -123,10 +123,11 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
 }
 
 export function AgentMemoryConfig({ agentId }: { agentId: string }) {
-  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(
-    agentId,
-    useEntityRequestContext('agent', agentId)[0],
-  );
+  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   if (isLoading) return <Skeleton className="h-28 w-full" />;
 

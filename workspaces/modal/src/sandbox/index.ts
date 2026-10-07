@@ -158,6 +158,7 @@ export class ModalSandbox extends MastraSandbox {
       ...base,
       ...(options.id !== undefined && { id: options.id }),
       ...(options.env !== undefined && { env: options.env }),
+      ...(options.workingDirectory !== undefined && { workingDirectory: options.workingDirectory }),
       ...(options.idleTimeoutMinutes !== undefined && { timeoutMs: options.idleTimeoutMinutes * 60_000 }),
     });
   }

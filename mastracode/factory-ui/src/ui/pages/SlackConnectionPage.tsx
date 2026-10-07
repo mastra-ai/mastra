@@ -6,6 +6,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -115,11 +116,11 @@ export function SlackConnectionSettings() {
   return (
     <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
-        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption" role="status">
           Loading Slack connection…
         </Txt>
       ) : accountsQuery.error ? (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
         </Txt>
       ) : accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable ? (
@@ -133,16 +134,21 @@ export function SlackConnectionSettings() {
               type="button"
               disabled={!canConnect}
               onClick={connectSlack}
-              className="group hover:bg-fill focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
             >
               <SettingsRow
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
-                <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  className="group-hover:text-foreground flex items-center gap-2"
+                >
                   Connect Slack
                   <ChevronRight aria-hidden="true" />
-                </span>
+                </Txt>
               </SettingsRow>
             </button>
           </SettingsContainer>
@@ -170,7 +176,7 @@ export function SlackConnectionSettings() {
                       </span>
                     }
                     description={
-                      <Txt as="span" variant="meta" className="text-placeholder">
+                      <Txt tone="faint" as="span" variant="meta">
                         Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
                       </Txt>
                     }
@@ -251,13 +257,13 @@ export function SlackConnectionSettings() {
                   description={
                     <span>
                       Slack messages from{' '}
-                      <strong className="font-medium">
+                      <Txt as="strong" variant="label">
                         <IdentityWithTooltip
                           label={account.externalUserName ?? account.externalUserId}
                           idLabel="Slack user ID"
                           id={account.externalUserId}
                         />
-                      </strong>{' '}
+                      </Txt>{' '}
                       will no longer start or continue Factory sessions.
                     </span>
                   }

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -170,11 +169,14 @@ describe('feedback tabs delete', () => {
 
   it('keeps the confirmation open after a failed deletion so it can be retried', async () => {
     const onDelete = vi.fn();
+    // The client retries 5xx on its own, so fail every attempt until the user retries —
+    // failing only the first call let the automatic retry succeed and close the dialog.
+    let failDeletes = true;
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
       http.delete(FEEDBACK_URL, () => {
         onDelete();
-        return onDelete.mock.calls.length === 1
+        return failDeletes
           ? HttpResponse.json({ error: 'Delete failed' }, { status: 500 })
           : HttpResponse.json({ success: true });
       }),
@@ -183,14 +185,18 @@ describe('feedback tabs delete', () => {
     render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
     fireEvent.click(await screen.findByRole('button', { name: 'Feedback actions' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete feedback' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-
-    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
-
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
 
-    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onDelete).toHaveBeenCalled());
+    // The button reads "Deleting…" until the failed request (and its retries) settle.
+    const retryButton = await screen.findByRole('button', { name: 'Delete' }, { timeout: 5000 });
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+
+    failDeletes = false;
+    const failedAttempts = onDelete.mock.calls.length;
+    fireEvent.click(retryButton);
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(failedAttempts + 1));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
   });
 

@@ -1,5 +1,6 @@
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -13,11 +14,13 @@ function formatChange(changePct: number) {
 
 export function MetricsKpiCardChange({
   changePct,
+  comparison,
   prevValue,
   lowerIsBetter,
   className,
 }: {
   changePct: number;
+  comparison: string;
   prevValue?: string;
   lowerIsBetter?: boolean;
   className?: string;
@@ -25,16 +28,24 @@ export function MetricsKpiCardChange({
   const isGood = lowerIsBetter ? changePct < 0 : changePct >= 0;
   const Icon = changePct >= 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
   const formattedChange = formatChange(changePct);
+  const description = prevValue ? `${comparison} (${prevValue})` : comparison;
 
   return (
-    <div className={cn('flex items-center gap-1.5', className)}>
-      <Badge variant={isGood ? 'green' : 'red'} emphasis="muted" size="xs" icon={<Icon />} className="tabular-nums">
-        {formattedChange}
-      </Badge>
-      <span className="text-meta text-placeholder">
-        vs prior period
-        {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
-      </span>
-    </div>
+    <Tooltip>
+      <TooltipTrigger render={<span tabIndex={0} className={cn('inline-flex rounded-full', className)} />}>
+        <Badge
+          variant={isGood ? 'success' : 'destructive'}
+          emphasis="subtle"
+          size="xs"
+          icon={<Icon />}
+          className="tabular-nums"
+          aria-hidden="true"
+        >
+          {formattedChange}
+        </Badge>
+        <span className="sr-only">{`${formattedChange} ${description}`}</span>
+      </TooltipTrigger>
+      <TooltipContent>{description}</TooltipContent>
+    </Tooltip>
   );
 }

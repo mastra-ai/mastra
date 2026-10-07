@@ -56,6 +56,7 @@ function createSessionDouble() {
     },
     state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
+    subagents: { model: { set: vi.fn(async () => void calls.push('subagent')) } },
   };
   return { session: session as unknown as FactorySessionHandle, double: session, calls };
 }
@@ -261,7 +262,29 @@ describe('hydrateFactorySession', () => {
       reflectionThreshold: 7,
       observeAttachments: true,
     });
-    expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(double.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5', agentType });
+    }
+  });
+
+  it('can derive the memory fallback from a user model without changing the factory run model', async () => {
+    const { session, double } = createSessionDouble();
+    const memorySettings = { get: vi.fn(async () => null) };
+
+    await hydrateFactorySession(session, {
+      orgId: 'org-1',
+      factoryProjectId: 'proj-1',
+      defaultModelId: 'openai/gpt-5.6',
+      observationalMemoryModelId: 'deepseek/deepseek-chat',
+      memorySettings: memorySettings as never,
+    });
+
+    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(double.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(double.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(double.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
   });
 
   it('leaves the session on its default model when the project has none', async () => {
@@ -270,6 +293,7 @@ describe('hydrateFactorySession', () => {
     await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
+    expect(double.subagents.model.set).not.toHaveBeenCalled();
     // The org seed is the one state write that always happens: knowledge
     // capture scopes on it, and it must land even when nothing else does.
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
@@ -313,6 +337,27 @@ describe('hydrateFactorySession', () => {
     warn.mockRestore();
   });
 
+  it('applies the remaining subagent models when one fails', async () => {
+    const { session, double } = createSessionDouble();
+    double.subagents.model.set.mockRejectedValueOnce(new Error('explore unavailable'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await hydrateFactorySession(session, {
+      orgId: 'org-1',
+      factoryProjectId: 'proj-1',
+      defaultModelId: 'openai/gpt-5.6',
+    });
+
+    expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'plan' });
+    expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'execute' });
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default subagent model', {
+      agentType: 'explore',
+      modelId: 'openai/gpt-5.6',
+      error: 'explore unavailable',
+    });
+    warn.mockRestore();
+  });
+
   it('still applies the default model when memory settings fail to load', async () => {
     const { session, double } = createSessionDouble();
     const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
@@ -328,7 +373,7 @@ describe('hydrateFactorySession', () => {
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply observational-memory settings', {
       error: 'storage down',
     });
-    expect(double.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
+    expect(double.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
     warn.mockRestore();
   });
 });

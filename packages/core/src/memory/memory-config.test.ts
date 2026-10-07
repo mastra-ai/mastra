@@ -179,6 +179,32 @@ describe('MastraMemory config serialization', () => {
     });
   });
 
+  it('should serialize per-provider activateAfterIdle for observational memory', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          activateAfterIdle: { default: 'auto', anthropic: '1h' },
+          model: 'test-model',
+        },
+      },
+    });
+
+    const serialized = memory.getConfig().observationalMemory;
+    expect(serialized).toEqual({
+      scope: 'thread',
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+      model: 'test-model',
+      shareTokenBudget: undefined,
+      temporalMarkers: undefined,
+      retrieval: undefined,
+    });
+    expect(JSON.parse(JSON.stringify(serialized))).toMatchObject({
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+    });
+  });
+
   it('should serialize temporalMarkers for observational memory', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),

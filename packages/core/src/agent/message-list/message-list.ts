@@ -32,7 +32,16 @@ import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
-import { downloadAssetsFromMessages } from './prompt/download-assets';
+import { downloadAssetsFromMessages, getAssetUrl } from './prompt/download-assets';
+import type { AssetDownloadCache } from './prompt/download-assets';
+import { isSendableFileData } from './prompt/image-utils';
+import {
+  getMessageAttachmentUrls,
+  getUnavailableAttachmentUrls,
+  unavailableAttachmentPlaceholder,
+  withUnavailableAttachmentPlaceholders,
+  withUnavailableAttachmentUrls,
+} from './prompt/unavailable-attachments';
 import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
@@ -46,7 +55,7 @@ import type {
 } from './state';
 import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
@@ -250,6 +259,15 @@ function prefixFingerprint(parts: MastraMessagePart[], index: number): BoundaryT
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
+  // Derived lookup state for `this.messages` so adding a message doesn't scan the whole list.
+  // Trusted only while `messages` is still the same array at the same length; anything else
+  // (reassignment, splice, external pushes) makes getMessageIndex() rebuild it.
+  private messageIndex?: {
+    messages: MastraDBMessage[];
+    length: number;
+    byId: Map<string, MastraDBMessage[]>;
+    sorted: boolean;
+  };
 
   // passed in by dev in input or context
   private systemMessages: AIV4Type.CoreSystemMessage[] = [];
@@ -286,6 +304,11 @@ export class MessageList {
   private get userContextMessagesPersisted() {
     return this.stateManager.getContextMessagesPersisted();
   }
+
+  // Each attachment is downloaded at most once per MessageList (i.e. per run).
+  private assetDownloads: AssetDownloadCache = new Map();
+  // Attachment URLs newly found unavailable, by message id, awaiting persistence.
+  private unavailableAttachmentUpdates = new Map<string, Set<string>>();
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
@@ -535,13 +558,15 @@ export class MessageList {
   }
 
   public serialize(): SerializedMessageListState {
-    return this.stateManager.serializeAll({
+    const state = this.stateManager.serializeAll({
       messages: this.messages,
       systemMessages: this.systemMessages,
       taggedSystemMessages: this.taggedSystemMessages,
       memoryInfo: this.memoryInfo,
       agentNetworkAppend: this._agentNetworkAppend,
     });
+    const lastStepBoundary = this.#locateLastStepBoundary();
+    return lastStepBoundary ? { ...state, lastStepBoundary } : state;
   }
 
   /**
@@ -583,6 +608,16 @@ export class MessageList {
     this._agentNetworkAppend = data.agentNetworkAppend;
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
+    }
+    this.#lastStepBoundary = undefined;
+    if (state.lastStepBoundary) {
+      const { messageId, partIndex } = state.lastStepBoundary;
+      const parts = this.messages.find(m => m.id === messageId)?.content.parts;
+      const part = parts?.[partIndex];
+      if (parts && part?.type === 'step-start') {
+        this.#rememberBoundaryFingerprint(messageId, parts, part);
+        this.#lastStepBoundary = part;
+      }
     }
     return this;
   }
@@ -896,9 +931,7 @@ export class MessageList {
           this.promptConversionMode,
         );
 
-        const messages = [...systemMessages, ...modelMessages];
-
-        return ensureGeminiCompatibleMessages(messages, this.logger);
+        return [...systemMessages, ...modelMessages];
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -913,12 +946,17 @@ export class MessageList {
            * @see https://github.com/mastra-ai/mastra/issues/23082
            */
           targetProvider?: string;
+          /**
+           * Replace user attachments that fail to download with a text placeholder
+           * instead of failing the whole prompt, and record them as unavailable.
+           */
+          skipUnavailableAttachments?: boolean;
         } = {
           downloadConcurrency: 10,
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        const promptMessages = this.getMessagesForModelPrompt();
+        const promptMessages = this.getMessagesForModelPrompt().map(withUnavailableAttachmentPlaceholders);
         const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
@@ -974,11 +1012,24 @@ export class MessageList {
           this.messages,
         );
 
+        // Attachments that failed to download while building this prompt.
+        const unavailableUrls = new Set<string>();
         const downloadedAssets = await downloadAssetsFromMessages({
           messages: modelMessages,
           downloadConcurrency: options?.downloadConcurrency,
           downloadRetries: options?.downloadRetries,
           supportedUrls: options?.supportedUrls,
+          cache: this.assetDownloads,
+          // Invalid inline content gets the placeholder below; don't try to decode it first.
+          isUnavailable: url => url.startsWith('data:') && !isSendableFileData(url),
+          onUnavailable: (url, error) => {
+            const isDataUrl = url.startsWith('data:');
+            // A network download failure goes to error processors and fallback models first.
+            if (!isDataUrl && !options?.skipUnavailableAttachments) throw error;
+            unavailableUrls.add(url);
+            if (!isDataUrl) this.recordUnavailableAttachment(url);
+            this.logger?.warn(`Skipping an attachment that could not be downloaded: ${error.message}`);
+          },
         });
 
         let messages = [...systemMessages, ...modelMessages];
@@ -1005,6 +1056,19 @@ export class MessageList {
               const convertedContent = message.content
                 .map(part => {
                   if (part.type === 'image' || part.type === 'file') {
+                    const assetUrl = getAssetUrl(part);
+                    const data = part.type === 'image' ? part.image : part.data;
+                    const unsendable = typeof data === 'string' && !isSendableFileData(data, part.mediaType);
+                    if (unsendable) {
+                      const shown = data.startsWith('data:')
+                        ? `${data.slice(0, data.indexOf(',') + 1)}<${data.length} chars>`
+                        : `${part.mediaType ?? part.type} <${data.length} chars>`;
+                      this.logger?.warn(`Skipping an attachment that is not a URL or valid file content: ${shown}`);
+                    }
+                    if (unsendable || (assetUrl && unavailableUrls.has(assetUrl))) {
+                      const name = (part.type === 'file' && part.filename) || part.mediaType || part.type;
+                      return { type: 'text' as const, text: unavailableAttachmentPlaceholder(name) };
+                    }
                     return convertImageFilePart(part, downloadedAssets);
                   }
                   return part;
@@ -1038,8 +1102,6 @@ export class MessageList {
 
         messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
 
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
         return messages
           .filter(message => message != null)
           .map(aiV5ModelMessageToV2PromptMessage)
@@ -1058,6 +1120,7 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
+        skipUnavailableAttachments?: boolean;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
     aiV7: {
@@ -1070,6 +1133,7 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
         targetProvider?: string;
+        skipUnavailableAttachments?: boolean;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
@@ -1090,9 +1154,7 @@ export class MessageList {
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
         const coreMessages = this.all.aiV4.core();
-        const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
-
-        return ensureGeminiCompatibleMessages(messages, this.logger);
+        return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -1100,11 +1162,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        let messages = [...systemMessages, ...coreMessages];
-
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
-        return messages.map(aiV4CoreMessageToV1PromptMessage);
+        return [...systemMessages, ...coreMessages].map(aiV4CoreMessageToV1PromptMessage);
       },
     },
   };
@@ -1292,6 +1350,36 @@ export class MessageList {
         ),
     },
   };
+
+  private recordUnavailableAttachment(url: string) {
+    for (const message of this.messages) {
+      if (
+        message.role !== 'user' ||
+        getUnavailableAttachmentUrls(message).includes(url) ||
+        !getMessageAttachmentUrls(message).includes(url)
+      ) {
+        continue;
+      }
+      message.content.metadata = withUnavailableAttachmentUrls(message.content.metadata, [url]);
+      const urls = this.unavailableAttachmentUpdates.get(message.id) ?? new Set<string>();
+      urls.add(url);
+      this.unavailableAttachmentUpdates.set(message.id, urls);
+    }
+  }
+
+  /**
+   * Returns and clears the attachments newly recorded as unavailable while building
+   * prompts. The in-memory messages already carry the record; callers persist it for
+   * messages that were loaded from storage.
+   */
+  public drainUnavailableAttachmentUpdates(): { messageId: string; urls: string[] }[] {
+    const updates = [...this.unavailableAttachmentUpdates].map(([messageId, urls]) => ({
+      messageId,
+      urls: [...urls],
+    }));
+    this.unavailableAttachmentUpdates.clear();
+    return updates;
+  }
 
   public drainUnsavedMessages(): MastraDBMessage[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
@@ -1858,6 +1946,7 @@ export class MessageList {
     const boundary = appended ? stampPart({ type: 'step-start' as const }) : stampPart(lastPart);
     if (appended) lastMsg.content.parts.push(boundary);
     this.#rememberBoundaryFingerprint(lastMsg.id, lastMsg.content.parts, boundary);
+    this.#lastStepBoundary = boundary;
 
     // Ensure the mutated message is persisted. The reused branch stamps too, so it needs this as
     // much as the appended one does. When the reused marker was already stamped there is nothing
@@ -1876,6 +1965,33 @@ export class MessageList {
    * to tell a recovered boundary from a same-millisecond marker that merely took its place.
    */
   #boundaryFingerprints = new WeakMap<MastraStepStartPart, BoundaryCheckpoint>();
+
+  #lastStepBoundary: MastraStepStartPart | undefined;
+
+  /**
+   * The parts of `message` written by the current loop iteration: those after the boundary the
+   * latest `openStepBoundary()` opened, or all of them when that boundary is not in `message`
+   * (a first iteration opens none, and a later one may have started a new message).
+   * Intra-response `step-start` markers are not boundaries, so this never splits a single response.
+   */
+  public partsSinceStepBoundary(message: MastraDBMessage): MastraMessagePart[] {
+    const parts = message.content.parts ?? [];
+    const boundary = this.#lastStepBoundary;
+    if (!boundary) return parts;
+    const index = findBoundaryIndex(parts, boundary, message.id, this.#boundaryFingerprints.get(boundary));
+    return index === -1 ? parts : parts.slice(index + 1);
+  }
+
+  #locateLastStepBoundary(): { messageId: string; partIndex: number } | undefined {
+    const boundary = this.#lastStepBoundary;
+    if (!boundary) return undefined;
+    const checkpoint = this.#boundaryFingerprints.get(boundary);
+    for (const message of this.messages) {
+      const partIndex = findBoundaryIndex(message.content.parts ?? [], boundary, message.id, checkpoint);
+      if (partIndex !== -1) return { messageId: message.id, partIndex };
+    }
+    return undefined;
+  }
 
   #rememberBoundaryFingerprint(messageId: string, parts: MastraMessagePart[], boundary: MastraStepStartPart) {
     const index = parts.indexOf(boundary);
@@ -2060,8 +2176,57 @@ export class MessageList {
     );
   }
 
+  private getMessageIndex() {
+    const index = this.messageIndex;
+    if (index && index.messages === this.messages && index.length === this.messages.length) return index;
+
+    const byId = new Map<string, MastraDBMessage[]>();
+    for (const message of this.messages) {
+      const withId = byId.get(message.id);
+      if (withId) withId.push(message);
+      else byId.set(message.id, [message]);
+    }
+    this.messageIndex = { messages: this.messages, length: this.messages.length, byId, sorted: false };
+    return this.messageIndex;
+  }
+
+  private getMessagesWithId(id: string): readonly MastraDBMessage[] {
+    return this.getMessageIndex().byId.get(id) ?? [];
+  }
+
   private getMessageById(id: string) {
-    return this.messages.find(m => m.id === id);
+    return this.getMessagesWithId(id)[0];
+  }
+
+  private appendMessage(message: MastraDBMessage) {
+    const index = this.getMessageIndex();
+    const previous = this.messages.at(-1);
+    this.messages.push(message);
+    index.length = this.messages.length;
+    index.sorted &&= !previous || previous.createdAt.getTime() <= message.createdAt.getTime();
+    const withId = index.byId.get(message.id);
+    if (withId) withId.push(message);
+    else index.byId.set(message.id, [message]);
+  }
+
+  private replaceMessageAt(position: number, message: MastraDBMessage) {
+    const index = this.getMessageIndex();
+    const previous = this.messages[position]!;
+    this.messages[position] = message;
+    index.sorted = false;
+
+    const previousWithId = index.byId.get(previous.id)?.filter(m => m !== previous) ?? [];
+    if (previousWithId.length) index.byId.set(previous.id, previousWithId);
+    else index.byId.delete(previous.id);
+    const withId = index.byId.get(message.id);
+    if (withId) withId.push(message);
+    else index.byId.set(message.id, [message]);
+  }
+
+  // make sure messages are always stored in order of when they were created!
+  private sortMessages() {
+    this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    this.getMessageIndex().sorted = true;
   }
 
   private shouldReplaceMessage(message: MastraDBMessage): { exists: boolean; shouldReplace?: boolean; id?: string } {
@@ -2151,12 +2316,10 @@ export class MessageList {
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
-    const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
     const latestMessage = this.messages.at(-1);
-    const latestMessageIndex = this.messages.length - 1;
-    const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
+    const latestMessageIsAfterSealedBoundary = !latestMessage || !MessageMerger.isSealed(latestMessage);
 
-    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+    const replacementTarget = exists && id ? this.getMessageById(id) : undefined;
 
     // Stored history loads as the base layer, underneath whatever this run already holds.
     // When a stored row shares an id with a live message (client input, or a response part
@@ -2203,16 +2366,17 @@ export class MessageList {
         MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
       }
       this.stateManager.removeMessage(replacementTarget);
-      this.messages[replacementIndex] = messageV2;
+      this.replaceMessageAt(replacementIndex, messageV2);
       this.pushMessageToSource(messageV2, 'memory');
       this.pushMessageToSource(messageV2, replacementTargetSource);
       this.updateLastCreatedAt(messageV2);
-      this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      this.sortMessages();
       return this;
     }
 
     if (messageSource === `memory`) {
-      for (const existingMessage of this.messages) {
+      // messagesAreEqual only matches stored messages that share the incoming id
+      for (const existingMessage of this.getMessagesWithId(messageV2.id)) {
         // don't double store any messages
         if (messagesAreEqual(existingMessage, messageV2)) {
           return;
@@ -2249,6 +2413,8 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
+        // Scan on demand rather than caching: observational memory seals messages in place.
+        const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
         const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
 
         // If the existing message is sealed (e.g., after observation), don't replace it.
@@ -2303,7 +2469,7 @@ export class MessageList {
             if (messageV2.createdAt <= existingMessage.createdAt) {
               messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
             }
-            this.messages.push(messageV2);
+            this.appendMessage(messageV2);
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else if (existingIsAtOrBeforeSealedBoundary) {
@@ -2311,7 +2477,7 @@ export class MessageList {
           if (messageV2.createdAt <= existingMessage.createdAt) {
             messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
           }
-          this.messages.push(messageV2);
+          this.appendMessage(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting =
@@ -2328,27 +2494,34 @@ export class MessageList {
             this.updateLastCreatedAt(existingMessage);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
-            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            this.sortMessages();
             return this;
           }
           // The replaced object must not linger in its old source set, otherwise a
           // client-echoed input message replaced by its stored copy would be re-persisted.
           this.stateManager.removeMessage(existingMessage);
-          this.messages[existingIndex] = messageV2;
+          this.replaceMessageAt(existingIndex, messageV2);
         }
       } else if (!exists) {
-        this.messages.push(messageV2);
+        this.appendMessage(messageV2);
       }
 
       this.pushMessageToSource(messageV2, messageSource);
+    }
+
+    // Appending in createdAt order keeps the list sorted, and then the newest message is last,
+    // so there's no need to walk and re-sort the whole list after every add.
+    if (this.getMessageIndex().sorted) {
+      const newestMessage = this.messages.at(-1);
+      if (newestMessage) this.updateLastCreatedAt(newestMessage);
+      return this;
     }
 
     for (const storedMessage of this.messages) {
       this.updateLastCreatedAt(storedMessage);
     }
 
-    // make sure messages are always stored in order of when they were created!
-    this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    this.sortMessages();
 
     return this;
   }

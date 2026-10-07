@@ -1,4 +1,5 @@
 import { ChartTooltip } from '@mastra/playground-ui/components/ChartTooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 export function ChartCard({
@@ -20,13 +21,25 @@ export function ChartCard({
     <div className={`flex flex-col rounded-lg border border-border bg-background ${className}`}>
       <div className="flex shrink-0 items-start justify-between px-4 py-3">
         <div>
-          <h3 className="text-subheading text-foreground">{title}</h3>
-          {description && <p className="mt-0.5 text-caption text-placeholder">{description}</p>}
+          <Txt as="h3" variant="subheading" tone="ink">
+            {title}
+          </Txt>
+          {description && (
+            <Txt variant="caption" tone="faint" className="mt-0.5">
+              {description}
+            </Txt>
+          )}
         </div>
         {summary && (
           <div className="text-right">
-            <span className="text-subheading text-foreground tabular-nums">{summary}</span>
-            {summaryLabel && <p className="text-caption text-placeholder">{summaryLabel}</p>}
+            <Txt as="span" variant="subheading" tone="ink" className="tabular-nums">
+              {summary}
+            </Txt>
+            {summaryLabel && (
+              <Txt variant="caption" tone="faint">
+                {summaryLabel}
+              </Txt>
+            )}
           </div>
         )}
       </div>
@@ -49,7 +62,9 @@ export function CustomTooltip({
   if (!active || !payload?.length) return null;
   return (
     <ChartTooltip>
-      <p className="mb-1 font-medium text-foreground">{label}</p>
+      <Txt as="p" variant="label" tone="ink" className="mb-1">
+        {label}
+      </Txt>
       {payload.map(entry => (
         <p key={entry.name} className="text-placeholder">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />

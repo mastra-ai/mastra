@@ -34,7 +34,7 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
   const tab = selectedTab ?? (hasOutput ? 'output' : 'input');
 
   return (
-    <Collapsible className="border-t border-border/50" data-testid="workflow-run-data">
+    <Collapsible className="border-t border-border" data-testid="workflow-run-data">
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-caption text-muted-foreground">
         <Database aria-hidden className="size-3.5 text-muted-foreground" />
         <span>Run data</span>

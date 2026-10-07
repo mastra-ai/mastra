@@ -1,19 +1,22 @@
 import type { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import {
+  useFeedbackAvailable,
+  useTraceQueryAvailable,
+  useTraceQueryDiscoveryAvailable,
+} from '@mastra/playground-ui/domains/capabilities';
 import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
-import { useTraceSpanScores, ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -23,20 +26,10 @@ import {
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useSpanFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-span-feedback';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
-import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import {
-  createTraceQueryValuesResolver,
-  useTraceMetadataFilterFields,
-} from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
-import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
-import { useTraceUsage } from '@mastra/playground-ui/domains/traces/hooks/use-trace-usage';
 import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
   buildTraceListFilters,
@@ -57,11 +50,23 @@ import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/trace
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
+import {
+  createTraceQueryValuesResolver,
+  useTraceMetadataFilterFields,
+  useEntityNames,
+  useEnvironments,
+  useSpanFeedback,
+  useTraceFeedback,
+  useTraceOrBranchSpans,
+  useTraceUsage,
+} from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/traces')];
@@ -146,11 +151,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
-  const { data: traceFeedbackData } = useTraceFeedback({ traceId: url.traceIdParam, enabled: withFeedback });
+  const { data: traceFeedbackData } = useTraceFeedback({
+    traceId: url.traceIdParam,
+    queryOptions: { enabled: withFeedback && !!url.traceIdParam },
+  });
   const { data: spanFeedbackData } = useSpanFeedback({
     traceId: url.traceIdParam,
     spanId: url.spanIdParam,
-    enabled: withFeedback,
+    queryOptions: { enabled: withFeedback && !!url.traceIdParam && !!url.spanIdParam },
   });
 
   const {
@@ -173,6 +181,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const { data: spanScoresData } = useTraceSpanScores({
     traceId: url.traceIdParam,
     spanId: anchorSpan?.spanId,
+    queryOptions: { enabled: !!url.traceIdParam && !!anchorSpan?.spanId },
   });
 
   // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
@@ -201,13 +210,18 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ),
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
-  const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
+  const { enabled: withDiscovery } = useTraceQueryDiscoveryAvailable();
+  const {
+    fields: metadataFields,
+    canonicalFields: canonicalTraceFields,
+    isLoading: isDiscoveryLoading,
+  } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
-    enabled: withQueryTrace,
+    queryOptions: { enabled: withQueryTrace && withDiscovery },
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
-    (scope: TraceQueryRelatedScope, path: string) =>
+    (scope: TraceQueryRelatedScope | 'trace', path: string) =>
       createTraceQueryValuesResolver(client, discoveryTimeRange, scope, path),
     [client, discoveryTimeRange],
   );
@@ -220,6 +234,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
+        canonicalTraceFields,
         valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
         withQueryTrace,
       }),
@@ -229,6 +244,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       discoveredEnvironments,
       hiddenFieldIds,
       metadataFields,
+      canonicalTraceFields,
       valueSuggestions,
       withQueryTrace,
     ],
@@ -418,15 +434,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
           onReset={traceColumns.resetColumns}
         />
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="auto-refetch"
-            checked={autoRefetchTraces}
-            onCheckedChange={checked => setAutoRefetchTraces(checked === true)}
-            disabled={isTracesLoading}
-          />
-          <Label htmlFor="auto-refetch">Auto refresh</Label>
-        </div>
+        <Field orientation="horizontal" disabled={isTracesLoading}>
+          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
+          <FieldLabel>Auto refresh</FieldLabel>
+        </Field>
       </ActionRow.End>
     </ActionRow>
   );
@@ -546,7 +557,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             : undefined
         }
       />
-      <ScoreDataPanel depth={2} score={featuredScore} onClose={() => url.handleScoreChange(null)} />
+      <ScoreDataPanel
+        depth={isFullThreadOpen ? 3 : 2}
+        score={featuredScore}
+        onClose={() => url.handleScoreChange(null)}
+      />
 
       <TraceAsItemDialog
         rootSpanId={datasetDialogTarget?.rootSpanId}

@@ -2,9 +2,9 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useTools } from '@mastra/react/hooks/tools';
 import { useEffect } from 'react';
-import { useAgents } from '../../agents/hooks/use-agents';
-import { useTools } from '../hooks/use-all-tools';
 
 export interface ToolComboboxProps {
   value?: string;

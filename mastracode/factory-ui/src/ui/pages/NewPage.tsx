@@ -21,6 +21,7 @@ import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -145,9 +146,9 @@ function DraftStart({
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
         <BrandLockup />
-        <h1 id="draft-start-heading" className="text-title text-foreground m-0">
+        <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
           What do you want to work on?
-        </h1>
+        </Txt>
         <FactoryContext activeFactory={activeFactory} />
       </div>
       {configurationError && (
@@ -169,9 +170,9 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
       as="h2"
       iconSlot={<Bot />}
       titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
+      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Your models settings${orgHint}.`}
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'personal-models')} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
         </Link>
       }
@@ -199,7 +200,9 @@ function BrandLockup() {
   return (
     <div className="text-muted-foreground inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <span className="text-column tracking-widest uppercase">Mastra Code</span>
+      <Txt as="span" variant="eyebrow">
+        Mastra Code
+      </Txt>
     </div>
   );
 }
@@ -213,29 +216,33 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <div className="text-caption text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
+    <div className="text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="text-placeholder shrink-0" />
-        <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
+        <Txt as="span" variant="column" className="shrink-0">
+          {activeFactory?.name ?? 'Factory'}
+        </Txt>
         {projectPath && (
           <>
-            <span className="text-placeholder shrink-0">·</span>
-            <span className="text-placeholder min-w-0 truncate" title={projectPath}>
+            <Txt as="span" variant="caption" tone="faint" className="shrink-0">
+              ·
+            </Txt>
+            <Txt as="span" variant="caption" tone="faint" title={projectPath} className="min-w-0 truncate">
               {projectPath}
-            </span>
+            </Txt>
           </>
         )}
       </div>
       {gitBranch && (
         <>
-          <span aria-hidden className="text-placeholder shrink-0">
+          <Txt as="span" variant="caption" tone="faint" aria-hidden className="shrink-0">
             ·
-          </span>
+          </Txt>
           <div className="flex min-w-0 items-center gap-1.5">
             <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
-            <span className="min-w-0 truncate" title={gitBranch}>
+            <Txt as="span" variant="caption" title={gitBranch} className="min-w-0 truncate">
               {gitBranch}
-            </span>
+            </Txt>
           </div>
         </>
       )}

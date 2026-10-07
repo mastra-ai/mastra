@@ -1,6 +1,5 @@
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useBuilderAgentAccess } from './use-builder-agent-access';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { isAuthenticated } from '@/domains/auth/types';
 
 export interface UseAgentBuilderSidebarVisibilityResult {
   isVisible: boolean;

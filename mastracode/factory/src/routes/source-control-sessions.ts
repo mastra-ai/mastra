@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -268,7 +267,7 @@ function projectSessionRoutes(
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
         const requestedSessionId = body.sessionId as string | undefined;
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
         if (body.title !== undefined && typeof body.title !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }

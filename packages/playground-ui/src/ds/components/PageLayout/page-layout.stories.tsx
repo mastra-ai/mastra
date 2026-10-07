@@ -122,6 +122,16 @@ export const FullPage: Story = {
   ),
 };
 
+export const WithoutBreadcrumbsAndHeaderActions: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout variant="narrow" header={pageHeader}>
+        <div className="mt-6">{resourceList}</div>
+      </PageLayout>
+    </StoryFrame>
+  ),
+};
+
 export const Empty: Story = {
   render: () => (
     <StoryFrame>

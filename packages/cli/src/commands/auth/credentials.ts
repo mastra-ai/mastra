@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -97,7 +96,7 @@ function isWSL(): boolean {
   }
 }
 
-function openBrowser(url: string) {
+export function openBrowser(url: string) {
   // Use execFileSync (shell: false) to avoid shell-injection via the URL.
   if (process.platform === 'darwin') {
     execFileSync('open', [url]);
@@ -238,7 +237,7 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
   console.info('\n   Logging in to Mastra...\n');
 
   const server = createServer();
-  const state = randomBytes(16).toString('hex');
+  const state = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('hex');
 
   const port = await new Promise<number>(resolve => {
     server.listen(0, '127.0.0.1', () => {

@@ -35,6 +35,7 @@ afterEach(async () => {
 describe('trace import manifest', () => {
   it('creates private state and atomically updates its checkpoint', async () => {
     const { directory, manifest } = await initialize();
+    expect(manifest.importId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     const previousUpdatedAt = '2000-01-01T00:00:00.000Z';
     const updated = await writeTraceImportManifest(directory, {
       ...manifest,

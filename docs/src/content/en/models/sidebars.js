@@ -411,6 +411,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/engy',
+          label: 'engy',
+        },
+        {
+          type: 'doc',
           id: 'providers/evroc',
           label: 'evroc',
         },
@@ -962,7 +967,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/tempr',
-          label: 'Tempr',
+          label: 'Tempr Gateway',
         },
         {
           type: 'doc',

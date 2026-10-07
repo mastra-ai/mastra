@@ -7,6 +7,7 @@ import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
+import { stripControlChars } from '../sanitize-ansi.js';
 import { BOX_INDENT, mastraBrand, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { WidthAwareContainer } from './width-aware-container.js';
@@ -49,7 +50,9 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
     this.rebuild();
   }
 
-  addActivity(line: string): void {
+  addActivity(rawLine: string): void {
+    // Activity lines interpolate raw judge tool arguments.
+    const line = stripControlChars(rawLine);
     if (this.activity[this.activity.length - 1] !== line) {
       this.activity.push(line);
     }
@@ -104,7 +107,8 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
       this.addChild(new Text(this.renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
-    const reason = this.result?.reason ?? this.streamingReason;
+    // The reason can be provider/scorer error text on a judge failure.
+    const reason = stripControlChars(this.result?.reason ?? this.streamingReason);
     if (reason) {
       for (const line of this.wrapLine(reason, innerWidth)) {
         this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));

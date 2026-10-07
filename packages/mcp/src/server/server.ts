@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { Agent, ToolsInput } from '@mastra/core/agent';
@@ -201,7 +200,7 @@ export class MCPServer extends MCPServerBase {
   private createRequestStateCodec(options: MCPServerRequestStateOptions | undefined) {
     let key = options?.key;
     if (key === undefined) {
-      key = randomBytes(32);
+      key = globalThis.crypto.getRandomValues(new Uint8Array(32));
       this.logger.warn(
         'No requestState.key configured: continuation state is signed with a per-process key, so a suspended request can only be resumed on this process. Set requestState.key in multi-instance and serverless deployments.',
       );
@@ -467,10 +466,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   private hasUiMetadata(): boolean {
-    return Object.values(this.convertedTools).some(tool => {
-      const meta = tool.mcp?._meta as { ui?: { resourceUri?: string } } | undefined;
-      return Boolean(meta?.ui?.resourceUri);
-    });
+    return Object.values(this.convertedTools).some(tool => Boolean(uiResourceUri(tool.mcp?._meta)));
   }
 
   // ---------------------------------------------------------------------------
@@ -495,7 +491,14 @@ export class MCPServer extends MCPServerBase {
 
   private createServerInstance(): Server {
     const server = new Server(
-      { name: this.name, version: this.version },
+      {
+        name: this.name,
+        version: this.version,
+        title: this.title,
+        description: this.description,
+        websiteUrl: this.websiteUrl,
+        icons: this.icons,
+      },
       {
         capabilities: this.capabilities(),
         instructions: this.instructions,
@@ -835,15 +838,24 @@ export class MCPServer extends MCPServerBase {
       this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
       return errorResult(value.message);
     }
+    // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
+    const resourceUri = uiResourceUri(tool.mcp?._meta);
+    const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
     if (!tool.outputSchema) {
       return {
         isError: false,
         content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+        ...meta,
       };
     }
     // Tools with an output schema already validated `value` against it.
     const structuredContent = value as Record<string, unknown>;
-    return { isError: false, structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
+    return {
+      isError: false,
+      structuredContent,
+      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      ...meta,
+    };
   }
 
   private registerResourceHandlers(server: Server): void {
@@ -1255,9 +1267,12 @@ export class MCPServer extends MCPServerBase {
   }
 
   /** Reads an `ui://` app resource; application resources require a protocol request. */
-  async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  async readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }> {
     const html = this.appResourceHtml.get(uri);
-    if (html === undefined) {
+    const resource = this.appResourceList.find(r => r.uri === uri);
+    if (html === undefined || !resource) {
       throw new MastraError({
         id: 'MCP_SERVER_RESOURCE_NOT_FOUND',
         domain: ErrorDomain.MCP,
@@ -1266,7 +1281,7 @@ export class MCPServer extends MCPServerBase {
         details: { uri },
       });
     }
-    return { contents: [{ uri, text: html }] };
+    return { contents: [this.resourceContents(resource, { text: html })] };
   }
 
   /** Lists `ui://` app resources; application resources require a protocol request. */
@@ -1284,14 +1299,18 @@ function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
-/** Keeps `_meta.ui.resourceUri` and the flat MCP Apps key in sync for older hosts. */
+/** The tool's MCP App URI; the nested key wins over the flat one, as in ext-apps' `getToolUiResourceUri`. */
+function uiResourceUri(meta: Record<string, unknown> | undefined): string | undefined {
+  const ui = meta?.ui as { resourceUri?: string } | undefined;
+  return ui?.resourceUri || (meta?.[RESOURCE_URI_META_KEY] as string | undefined) || undefined;
+}
+
+/** Writes the tool's MCP App URI to both the nested and the flat key, so every host opens the same app. */
 function normalizeUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-  if (!meta) return undefined;
-  const ui = meta.ui as { resourceUri?: string } | undefined;
-  const flat = meta[RESOURCE_URI_META_KEY] as string | undefined;
-  if (ui?.resourceUri && !flat) return { ...meta, [RESOURCE_URI_META_KEY]: ui.resourceUri };
-  if (flat && !ui?.resourceUri) return { ...meta, ui: { ...(ui ?? {}), resourceUri: flat } };
-  return meta;
+  const resourceUri = uiResourceUri(meta);
+  if (!meta || !resourceUri) return meta;
+  const ui = meta.ui as Record<string, unknown> | undefined;
+  return { ...meta, ui: { ...ui, resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri };
 }
 
 export { ServerPromptActions, ServerResourceActions, ServerToolActions };

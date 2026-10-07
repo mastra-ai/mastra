@@ -1,5 +1,17 @@
 # @mastra/auth-studio
 
+## 1.3.8
+
+### Patch Changes
+
+- Fixed local dev auth: MastraAuthStudio now falls back to organizationId in .mastra-project.json when neither the constructor option nor MASTRA_ORGANIZATION_ID env var is set. Running pnpm mastra dev in a project linked to a platform organization now pins AuthKit to that org and skips the WorkOS org picker for multi-org users, without requiring the env var to be exported locally. ([#25583](https://github.com/mastra-ai/mastra/pull/25583))
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- Fixed local dev auth: MastraAuthStudio now falls back to organizationId in .mastra-project.json when neither the constructor option nor MASTRA_ORGANIZATION_ID env var is set. Running pnpm mastra dev in a project linked to a platform organization now pins AuthKit to that org and skips the WorkOS org picker for multi-org users, without requiring the env var to be exported locally. ([#25583](https://github.com/mastra-ai/mastra/pull/25583))
+
 ## 1.3.7
 
 ### Patch Changes

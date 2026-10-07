@@ -5,7 +5,6 @@ import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 const memoryConstructorMock = vi.fn();
 const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
-const resolvePackMemoryModelChainMock = vi.fn();
 const loadSettingsMock = vi.fn();
 
 vi.mock('@mastra/memory', () => ({
@@ -36,7 +35,6 @@ vi.mock('../utils/project.js', () => ({
 
 vi.mock('./model.js', () => ({
   resolveModel: resolveModelMock,
-  resolvePackMemoryModelChain: resolvePackMemoryModelChainMock,
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
@@ -86,7 +84,11 @@ type RequestContextStub = {
   set: (key: string, value: unknown) => void;
 };
 
-function createRequestContext(state: Record<string, unknown>, sessionId = 'session-1'): RequestContextStub {
+function createRequestContext(
+  state: Record<string, unknown>,
+  sessionId = 'session-1',
+  threadId = 'thread-1',
+): RequestContextStub {
   const getState = () => state;
   const values = new Map<string, unknown>([
     ['user', { workosId: 'user-1', organizationId: 'org-1' }],
@@ -94,6 +96,7 @@ function createRequestContext(state: Record<string, unknown>, sessionId = 'sessi
       'controller',
       {
         getState,
+        threadId,
         session: { id: sessionId, ownerId: 'mastracode-owner', state: { get: getState } },
       },
     ],
@@ -109,6 +112,7 @@ async function createMemoryConfig(
   projectScope: 'thread' | 'resource' = 'thread',
   vector?: unknown,
   settingsPath?: string,
+  options?: { disableSettingsOmSeed?: boolean },
 ) {
   vi.resetModules();
   memoryConstructorMock.mockClear();
@@ -122,6 +126,7 @@ async function createMemoryConfig(
     storage as never,
     vector as never,
     settingsPath,
+    options,
   )({ requestContext: requestContext as never }) as unknown as {
     config: MemoryConfig;
   };
@@ -136,8 +141,6 @@ describe('getDynamicMemory', () => {
     getOmScopeMock.mockReset();
     resolveModelMock.mockReset();
     resolveModelMock.mockImplementation((modelId: string) => ({ modelId }));
-    resolvePackMemoryModelChainMock.mockReset();
-    resolvePackMemoryModelChainMock.mockReturnValue(undefined);
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue({ models: {} });
     delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
@@ -161,7 +164,7 @@ describe('getDynamicMemory', () => {
       temporalMarkers: true,
       retrieval: true,
       scope: 'thread',
-      activateAfterIdle: 'auto',
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
       activateOnProviderChange: true,
       observation: {
         bufferTokens: 1 / 5,
@@ -186,6 +189,7 @@ describe('getDynamicMemory', () => {
     expect(resolveModelMock).toHaveBeenLastCalledWith('google/gemini-3.5-flash', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
   });
 
@@ -440,137 +444,214 @@ describe('getDynamicMemory', () => {
     expect(resolveModelMock).toHaveBeenNthCalledWith(1, 'openai/gpt-5.4-mini', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
     expect(resolveModelMock).toHaveBeenNthCalledWith(2, 'anthropic/claude-sonnet-4-5', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
   });
 });
 
-describe('pack-driven OM models (A11)', () => {
+describe('model-route OM models', () => {
   beforeEach(() => {
     memoryConstructorMock.mockReset();
     getOmScopeMock.mockReset();
     getOmScopeMock.mockReturnValue('thread');
     resolveModelMock.mockReset();
     resolveModelMock.mockImplementation((modelId: string) => ({ modelId }));
-    resolvePackMemoryModelChainMock.mockReset();
     loadSettingsMock.mockReset();
+    loadSettingsMock.mockReturnValue({ models: {} });
     delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
   });
 
-  it('reads role overrides and pack memory models from the configured settings file', async () => {
-    // A caller pointing the agent at another settings path must not have OM
-    // resolve from the default one — it would read another user's overrides.
-    loadSettingsMock.mockReturnValue({ models: { activeModelPackId: 'anthropic' } });
-    resolvePackMemoryModelChainMock.mockReturnValue({ modelId: 'gpt-5.4-mini' });
+  it('reads role overrides from the configured settings file', async () => {
+    loadSettingsMock.mockReturnValue({
+      models: { observerModelOverride: 'openai/gpt-5-mini', reflectorModelOverride: null },
+    });
     const { config, requestContext } = await createMemoryConfig(
-      { projectPath: '/tmp/project' },
+      { projectPath: '/tmp/project', observerModelId: 'google/gemini-3.5-flash' },
       'thread',
       undefined,
       '/custom/settings.json',
     );
 
     expect(loadSettingsMock).not.toHaveBeenCalled();
-    config.options.observationalMemory.observation.model({ requestContext });
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'openai/gpt-5-mini',
+    });
     expect(loadSettingsMock).toHaveBeenCalledWith('/custom/settings.json');
-    config.options.observationalMemory.reflection.model({ requestContext });
-    expect(loadSettingsMock).toHaveBeenLastCalledWith('/custom/settings.json');
   });
 
-  it('falls back to the default settings file when none is configured', async () => {
-    loadSettingsMock.mockReturnValue({ models: {} });
-    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' });
-
-    config.options.observationalMemory.observation.model({ requestContext });
-
-    expect(loadSettingsMock).toHaveBeenCalledWith(undefined);
-  });
-
-  it('resolves observer and reflector from the active pack OM chain when set', async () => {
-    const chain = [
-      { id: 'custom:Work:memory', model: { modelId: 'claude-haiku-4-5' } },
-      { id: 'openai:memory', model: { modelId: 'gpt-5.4-mini' } },
-    ];
-    loadSettingsMock.mockReturnValue({ models: { activeModelPackId: 'anthropic' } });
-    resolvePackMemoryModelChainMock.mockReturnValue(chain);
+  it('uses the route memory chain for observer and reflector', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
-      activeModelPackId: 'custom:Work',
+      modelRoute: {
+        entries: [
+          {
+            id: 'custom:Work',
+            label: 'Work',
+            modelId: 'anthropic/claude-fable-5',
+            memoryModelId: 'anthropic/claude-haiku-4-5',
+          },
+          {
+            id: 'openai',
+            label: 'OpenAI',
+            modelId: 'openai/gpt-5.6-sol',
+            memoryModelId: 'openai/gpt-5.4-mini',
+          },
+        ],
+      },
       observerModelId: 'google/gemini-3.5-flash',
     });
 
+    const expected = [
+      { id: 'custom:Work:memory', model: { modelId: 'anthropic/claude-haiku-4-5' } },
+      { id: 'openai:memory', model: { modelId: 'openai/gpt-5.4-mini' } },
+    ];
     const om = config.options.observationalMemory;
-    expect(om.observation.model({ requestContext })).toBe(chain);
-    expect(om.reflection.model({ requestContext })).toBe(chain);
-    expect(resolvePackMemoryModelChainMock).toHaveBeenCalledWith(
-      { models: { activeModelPackId: 'anthropic' } },
-      'custom:Work',
-      { remapForCodexOAuth: true, requestContext },
-    );
-    expect(resolveModelMock).not.toHaveBeenCalled();
+    expect(om.observation.model({ requestContext })).toEqual(expected);
+    expect(om.reflection.model({ requestContext })).toEqual(expected);
   });
 
-  it('lets an explicit role override win over the pack OM chain', async () => {
+  it('deduplicates route memory models and returns a bare model for one id', async () => {
+    const { config, requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      modelRoute: {
+        entries: [
+          {
+            id: 'a',
+            label: 'A',
+            modelId: 'anthropic/claude-fable-5',
+            memoryModelId: 'anthropic/claude-haiku-4-5',
+          },
+          {
+            id: 'b',
+            label: 'B',
+            modelId: 'openai/gpt-5.6-sol',
+            memoryModelId: 'anthropic/claude-haiku-4-5',
+          },
+        ],
+      },
+    });
+
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('lets an explicit role override win over the route memory chain', async () => {
     loadSettingsMock.mockReturnValue({
       models: { observerModelOverride: 'openai/gpt-5-mini', reflectorModelOverride: null },
     });
-    resolvePackMemoryModelChainMock.mockReturnValue([{ id: 'x:memory', model: { modelId: 'x' } }]);
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
-      activeModelPackId: 'custom:Work',
-      observerModelId: 'google/gemini-3.5-flash',
+      modelRoute: {
+        entries: [
+          {
+            id: 'x',
+            label: 'X',
+            modelId: 'openai/gpt-5.6-sol',
+            memoryModelId: 'anthropic/claude-haiku-4-5',
+          },
+        ],
+      },
       reflectorModelId: 'anthropic/claude-sonnet-4-5',
     });
 
     const om = config.options.observationalMemory;
     expect(om.observation.model({ requestContext })).toEqual({ modelId: 'openai/gpt-5-mini' });
-    // Reflector has no override, so it still follows the pack chain.
-    expect(om.reflection.model({ requestContext })).toEqual([{ id: 'x:memory', model: { modelId: 'x' } }]);
+    expect(om.reflection.model({ requestContext })).toEqual({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('prefers the pending landed pack over the settled pack id (immediate retrigger)', async () => {
-    loadSettingsMock.mockReturnValue({ models: {} });
-    resolvePackMemoryModelChainMock.mockReturnValue({ modelId: 'gpt-5.4-mini' });
-    const { config, requestContext } = await createMemoryConfig({
-      projectPath: '/tmp/project',
-      activeModelPackId: 'anthropic',
-      mastracodePendingPackFallback: { fromPackId: 'anthropic', toPackId: 'openai', toModelId: 'openai/gpt-5.6-sol' },
-    });
-
-    config.options.observationalMemory.observation.model({ requestContext });
-
-    expect(resolvePackMemoryModelChainMock).toHaveBeenCalledWith({ models: {} }, 'openai', expect.anything());
-  });
-
-  it('ignores a pending hop captured for another thread', async () => {
-    loadSettingsMock.mockReturnValue({ models: {} });
-    resolvePackMemoryModelChainMock.mockReturnValue(undefined);
-    const { config, requestContext } = await createMemoryConfig({
-      projectPath: '/tmp/project',
-      activeModelPackId: 'anthropic',
-      observerModelId: 'google/gemini-3.5-flash',
-      mastracodePendingPackFallback: {
-        fromPackId: 'anthropic',
-        toPackId: 'openai',
-        toModelId: 'openai/gpt-5.6-sol',
-        threadId: 'thread-other',
+  it('gates settings role overrides with disableSettingsOmSeed', async () => {
+    loadSettingsMock.mockReturnValue({ models: { observerModelOverride: 'openai/gpt-5-mini' } });
+    const { config, requestContext } = await createMemoryConfig(
+      {
+        projectPath: '/tmp/project',
+        observerModelId: 'google/gemini-3.5-flash',
       },
-    });
+      'thread',
+      undefined,
+      '/custom/settings.json',
+      { disableSettingsOmSeed: true },
+    );
 
-    // The controller stub carries no threadId, so a foreign pending marker is ignored.
     expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
       modelId: 'google/gemini-3.5-flash',
     });
-    expect(resolvePackMemoryModelChainMock).toHaveBeenCalledWith({ models: {} }, 'anthropic', expect.anything());
+    expect(loadSettingsMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to standalone OM state when no pack in the chain defines an OM model', async () => {
-    loadSettingsMock.mockReturnValue({ models: { activeModelPackId: 'anthropic' } });
-    resolvePackMemoryModelChainMock.mockReturnValue(undefined);
+  it('starts the route memory chain at a same-thread pending hop', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
+      modelRoute: {
+        entries: [
+          { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+          {
+            id: 'openai',
+            label: 'OpenAI',
+            modelId: 'openai/gpt-5.6-sol',
+            memoryModelId: 'openai/gpt-5.4-mini',
+          },
+        ],
+      },
+      mastracodePendingModelFallback: {
+        fromEntryId: 'anthropic',
+        toEntryId: 'openai',
+        toModelId: 'openai/gpt-5.6-sol',
+        threadId: 'thread-1',
+        reason: 'pool-exhausted',
+        at: '2026-10-05T00:00:00.000Z',
+      },
+    });
+
+    expect(config.options.observationalMemory.observation.model({ requestContext })).toEqual({
+      modelId: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('ignores a pending hop captured for another thread', async () => {
+    const { config, requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      modelRoute: {
+        entries: [
+          {
+            id: 'anthropic',
+            label: 'Anthropic',
+            modelId: 'anthropic/claude-fable-5',
+            memoryModelId: 'anthropic/claude-haiku-4-5',
+          },
+          {
+            id: 'openai',
+            label: 'OpenAI',
+            modelId: 'openai/gpt-5.6-sol',
+            memoryModelId: 'openai/gpt-5.4-mini',
+          },
+        ],
+      },
+      mastracodePendingModelFallback: {
+        fromEntryId: 'anthropic',
+        toEntryId: 'openai',
+        toModelId: 'openai/gpt-5.6-sol',
+        threadId: 'thread-other',
+        reason: 'pool-exhausted',
+        at: '2026-10-05T00:00:00.000Z',
+      },
+    });
+    const entries = config.options.observationalMemory.observation.model({ requestContext }) as Array<{
+      id: string;
+    }>;
+
+    expect(entries.map(entry => entry.id)).toEqual(['anthropic:memory', 'openai:memory']);
+  });
+
+  it('falls back to standalone OM state when the route has no memory model', async () => {
+    const { config, requestContext } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
       observerModelId: 'openai/gpt-5.4-mini',
     });
 
@@ -579,18 +660,29 @@ describe('pack-driven OM models (A11)', () => {
     });
   });
 
-  it('uses only the primary chain entry for title generation', async () => {
-    const chain = [
-      { id: 'custom:Work:memory', model: { modelId: 'claude-haiku-4-5' } },
-      { id: 'openai:memory', model: { modelId: 'gpt-5.4-mini' } },
-    ];
-    loadSettingsMock.mockReturnValue({ models: {} });
-    resolvePackMemoryModelChainMock.mockReturnValue(chain);
+  it('uses only the primary route memory model for title generation', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
-      activeModelPackId: 'custom:Work',
+      modelRoute: {
+        entries: [
+          {
+            id: 'custom:Work',
+            label: 'Work',
+            modelId: 'anthropic/claude-fable-5',
+            memoryModelId: 'anthropic/claude-haiku-4-5',
+          },
+          {
+            id: 'openai',
+            label: 'OpenAI',
+            modelId: 'openai/gpt-5.6-sol',
+            memoryModelId: 'openai/gpt-5.4-mini',
+          },
+        ],
+      },
     });
 
-    expect(config.options.generateTitle.model({ requestContext })).toEqual({ modelId: 'claude-haiku-4-5' });
+    expect(config.options.generateTitle.model({ requestContext })).toEqual({
+      modelId: 'anthropic/claude-haiku-4-5',
+    });
   });
 });

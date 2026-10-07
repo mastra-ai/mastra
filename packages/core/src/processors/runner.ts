@@ -885,6 +885,7 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -935,6 +936,7 @@ export class ProcessorRunner {
               observabilityContext,
               requestContext,
               writer,
+              abortSignal,
             );
 
             // Extract the processed part from the result if it exists
@@ -953,7 +955,7 @@ export class ProcessorRunner {
                 processorId: error.processorId || workflowId,
               };
             }
-            this.logger.error('Output processor workflow failed', { agent: this.agentName, workflowId, error });
+            throw error;
           }
           continue;
         }
@@ -994,6 +996,7 @@ export class ProcessorRunner {
                 messageList,
                 retryCount,
                 writer,
+                abortSignal,
               });
             } finally {
               state.hookDurationMs += performance.now() - hookStart;
@@ -1028,11 +1031,7 @@ export class ProcessorRunner {
               processorId: processor.id,
             };
           }
-          // End span with error
-          const state = processorStates.get(processor.id);
-          state?.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
-          // Log error but continue with original part
-          this.logger.error('Output processor failed', { agent: this.agentName, processorId: processor.id, error });
+          throw error;
         }
       }
 
@@ -1053,7 +1052,7 @@ export class ProcessorRunner {
       for (const state of processorStates.values()) {
         state.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
       }
-      return { part, blocked: false };
+      throw error;
     }
   }
 
@@ -1099,6 +1098,7 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<
     Array<{
       part: ChunkType<OUTPUT> | null | undefined;
@@ -1142,6 +1142,7 @@ export class ProcessorRunner {
         messageList,
         retryCount,
         writer,
+        abortSignal,
       );
       results.push(result);
       if (result.blocked) {
@@ -1251,6 +1252,7 @@ export class ProcessorRunner {
           }
         } catch (error) {
           controller.error(error);
+          await reader.cancel(error).catch(() => {});
         }
       },
     });

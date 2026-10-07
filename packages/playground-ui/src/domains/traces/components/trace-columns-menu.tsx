@@ -1,4 +1,4 @@
-import { Columns3Icon, PlusIcon, Columns3, X } from 'lucide-react';
+import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
@@ -6,7 +6,9 @@ import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -14,9 +16,10 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Txt } from '@/ds/components/Txt';
 
-const METADATA_KEY_FIELD_NAME = 'trace-metadata-key';
 const EMPTY_KEYS: readonly string[] = [];
 
 const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
@@ -64,8 +67,6 @@ export function TraceColumnsMenu({
   const [metadataKey, setMetadataKey] = useState('');
   const [metadataError, setMetadataError] = useState<string | undefined>();
 
-  // Keys already shown as columns are left out; a typed key that discovery
-  // hasn't seen is kept in the list so the trigger can display it once picked.
   const metadataKeyOptions = useMemo(() => {
     const keys = availableMetadataKeys.filter(key => !preferences.metadataKeys.includes(key));
     if (metadataKey && !keys.includes(metadataKey)) keys.push(metadataKey);
@@ -131,9 +132,9 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
           {usageDisabledReason && (
-            <p className="px-2 py-1 text-meta text-placeholder" role="note">
+            <Txt variant="meta" tone="faint" className="px-2 py-1" role="note">
               {usageDisabledReason}
-            </p>
+            </Txt>
           )}
 
           <DropdownMenu.Separator />
@@ -182,7 +183,7 @@ export function TraceColumnsMenu({
       {withQueryTrace && (
         <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent>
-            <form onSubmit={handleAddMetadata}>
+            <Form onSubmit={handleAddMetadata} className="gap-0">
               <DialogHeader>
                 <DialogTitle>Add metadata column</DialogTitle>
                 <DialogDescription>
@@ -191,11 +192,9 @@ export function TraceColumnsMenu({
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name={METADATA_KEY_FIELD_NAME}>Metadata key</FieldBlock.Label>
+                <Field invalid={Boolean(metadataError)}>
+                  <FieldLabel>Metadata key</FieldLabel>
                   <Combobox
-                    id={`input-${METADATA_KEY_FIELD_NAME}`}
-                    name={METADATA_KEY_FIELD_NAME}
                     options={metadataKeyOptions}
                     value={metadataKey}
                     onValueChange={key => {
@@ -206,19 +205,15 @@ export function TraceColumnsMenu({
                     placeholder="Select a metadata key…"
                     searchPlaceholder="Search metadata keys…"
                     emptyText="No metadata keys observed. Type one to add it."
-                    error={metadataError}
                   />
-                </FieldBlock.Column>
+                  <FieldError>{metadataError}</FieldError>
+                </Field>
               </DialogBody>
               <DialogFooter>
-                <Button icon={<X />} type="button" onClick={() => handleDialogOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button icon={<Columns3 />} type="submit" variant="primary">
-                  Add column
-                </Button>
+                <DialogCancel>Cancel</DialogCancel>
+                <DialogAction type="submit">Add column</DialogAction>
               </DialogFooter>
-            </form>
+            </Form>
           </DialogContent>
         </Dialog>
       )}

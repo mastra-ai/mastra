@@ -12,6 +12,7 @@ import {
   getTraceQueryValuesArgsSchema,
   getTraceQueryValuesResponseSchema,
   isTraceQueryValueSuggestionsPath,
+  normalizeTraceQueryText,
   parseGetTraceQueryFieldsArgs,
   parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
@@ -932,7 +933,7 @@ describe('planTraceQuery', () => {
   });
 
   it('keeps correlation fields queryable and does not infer authorization fields', () => {
-    for (const field of ['resourceId', 'threadId'] as const) {
+    for (const field of ['resourceId', 'threadId', 'runId', 'sessionId', 'userId', 'organizationId'] as const) {
       expect(
         planTraceQuery(
           parsed({
@@ -943,15 +944,51 @@ describe('planTraceQuery', () => {
       ).toMatchObject({ field });
     }
 
-    const organization = validationError(() =>
+    const project = validationError(() =>
       planTraceQuery(
         parsed({
           ...baseRequest,
-          where: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-1' } },
+          where: { op: 'eq', left: { path: 'projectId' }, right: { literal: 'project-1' } },
         }),
       ),
     );
-    expect(organization.issues[0]).toMatchObject({ code: 'field_not_allowed' });
+    expect(project.issues[0]).toMatchObject({ code: 'field_not_allowed' });
+  });
+
+  it('plans context identifier predicates on traces and related spans', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-123' } },
+            { op: 'in', value: { path: 'sessionId' }, set: ['session-123', 'session-456'] },
+            { op: 'notExists', path: 'userId' },
+            { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'organizationId', operator: 'eq', value: 'org-123' },
+        { type: 'membership', field: 'sessionId', operator: 'in', values: ['session-123', 'session-456'] },
+        { type: 'presence', field: 'userId', operator: 'notExists' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'runId', operator: 'eq', value: 'run-42' },
+        },
+      ],
+    });
+    for (const field of ['runId', 'sessionId', 'userId', 'organizationId']) {
+      expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
+      expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
+    }
   });
 
   it('rejects inherited predicate field names in every predicate context', () => {
@@ -1036,14 +1073,14 @@ describe('planTraceQuery', () => {
     }
   });
 
-  it('rejects tenant scope fields as predicates in every predicate context', () => {
+  it('rejects the project scope field as a predicate in every predicate context', () => {
     const contexts: Array<(field: string) => TraceQueryPredicate> = [
-      field => ({ op: 'eq', left: { path: field }, right: { literal: 'org-1' } }),
+      field => ({ op: 'eq', left: { path: field }, right: { literal: 'project-1' } }),
       field => ({ spans: { some: { op: 'exists', path: field } } }),
       field => ({ scores: { some: { op: 'exists', path: field } } }),
       field => ({ feedback: { some: { op: 'exists', path: field } } }),
     ];
-    for (const field of ['organizationId', 'projectId']) {
+    for (const field of ['projectId']) {
       for (const where of contexts) {
         const error = validationError(() => planTraceQuery(parsed({ ...baseRequest, where: where(field) })));
         expect(error.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
@@ -1057,6 +1094,96 @@ describe('planTraceQuery', () => {
       );
       expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
     }
+  });
+
+  it('plans text predicates on human-text fields and rejects them elsewhere', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: { op: 'matches', left: { path: 'comment' }, right: { literal: ' Incorrect, DOSAGE! ' } },
+              },
+            },
+            { spans: { some: { op: 'notMatches', left: { path: '${name}' }, right: { literal: 'gpt-5' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        {
+          type: 'relation',
+          collection: 'feedback',
+          quantifier: 'some',
+          predicate: { type: 'text', field: 'comment', operator: 'matches', value: 'incorrect dosage' },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'text', field: 'name', operator: 'notMatches', value: 'gpt 5' },
+        },
+      ],
+    });
+
+    const noWords = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: '!!! ---' } } } },
+        }),
+      ),
+    );
+    expect(noWords.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_literal', path: ['where', 'feedback', 'some', 'right', 'literal'] }),
+    );
+
+    for (const field of ['environment', 'durationMs', 'tags', 'metadata.region']) {
+      const rejected = validationError(() =>
+        planTraceQuery(
+          parsed({ ...baseRequest, where: { op: 'matches', left: { path: field }, right: { literal: 'production' } } }),
+        ),
+      );
+      expect(rejected.issues).toContainEqual(
+        expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+      );
+    }
+
+    expect(
+      traceQueryScalarPredicateSchema.safeParse({ op: 'matches', left: { path: 'comment' }, right: { literal: 42 } })
+        .success,
+    ).toBe(false);
+    expect(
+      traceQueryScalarPredicateSchema.safeParse({ op: 'matches', left: { literal: 'x' }, right: { literal: 'y' } })
+        .success,
+    ).toBe(false);
+
+    expect(getTraceQueryCanonicalFieldDescriptors('feedback', 'comment')).toEqual([
+      {
+        path: 'comment',
+        valueKind: 'string',
+        operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'],
+        valueSuggestions: false,
+      },
+    ]);
+  });
+
+  it('normalizes text literals to lowercase words', () => {
+    expect(normalizeTraceQueryText(' Incorrect, DOSAGE! ')).toBe('incorrect dosage');
+    expect(normalizeTraceQueryText("llm: 'gpt-5'")).toBe('llm gpt 5');
+    expect(normalizeTraceQueryText('see café notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('see cafe\u0301 notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('नमस्ते, दुनिया!')).toBe('नमस्ते दुनिया');
+    expect(normalizeTraceQueryText('İstanbul')).toBe('istanbul');
+    expect(normalizeTraceQueryText('I\u0307stanbul')).toBe('istanbul');
+    expect(normalizeTraceQueryText('ΟΔΟΣ οδος')).toBe('οδοσ οδοσ');
+    expect(normalizeTraceQueryText('!!! ---')).toBe('');
   });
 
   it('plans tag collection predicates and rejects scalar operators on tags', () => {
@@ -1816,11 +1943,11 @@ describe('trace-query execution timeout contract', () => {
   it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
     expect(new TraceQueryResourceLimitError()).toMatchObject({
       code: 'TRACE_QUERY_RESOURCE_LIMIT',
-      message: 'The trace query exceeded its resource limit',
+      message: 'The query exceeded its resource limit',
     });
   });
 });

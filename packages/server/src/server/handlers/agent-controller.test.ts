@@ -5,6 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -14,12 +15,16 @@ import {
   ABORT_AGENT_CONTROLLER_SESSION_ROUTE,
   STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
+  SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
   LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
+  SWITCH_AGENT_CONTROLLER_MODEL_ROUTE,
   DELETE_AGENT_CONTROLLER_THREAD_ROUTE,
   RENAME_AGENT_CONTROLLER_THREAD_ROUTE,
+  CREATE_AGENT_CONTROLLER_THREAD_ROUTE,
+  SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE,
   LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE,
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
   STEER_AGENT_CONTROLLER_SESSION_ROUTE,
@@ -262,6 +267,7 @@ describe('agent-controller routes', () => {
         const session = await getRouteSession(`user-bg-${name}`);
         const failure = new Error('signal failed before stream started');
         vi.spyOn(session, method as any).mockRejectedValue(failure);
+        vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
         const errorLog = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
 
         const events: any[] = [];
@@ -335,6 +341,77 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
     });
 
+    it('forwards requestContext to session.thread.switch', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        threadId: 'another-thread',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.switch when renaming another thread', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session.thread, 'switch').mockResolvedValue(undefined);
+      vi.spyOn(session.thread, 'rename').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await RENAME_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        threadId: 'another-thread',
+        title: 'Renamed',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ threadId: 'another-thread', requestContext });
+    });
+
+    it('forwards requestContext to session.thread.create', async () => {
+      const session = await getRouteSession('user-rc');
+      const now = new Date();
+      const spy = vi
+        .spyOn(session.thread, 'create')
+        .mockResolvedValue({ id: 't', resourceId: 'user-rc', title: 'New', createdAt: now, updatedAt: now } as any);
+      const requestContext = makeRequestContext();
+
+      await CREATE_AGENT_CONTROLLER_THREAD_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        title: 'New',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ title: 'New', requestContext });
+    });
+
+    it('forwards requestContext to session.sendNotificationSignal', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendNotificationSignal').mockResolvedValue({} as any);
+      const requestContext = makeRequestContext();
+
+      await SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        source: 'test',
+        kind: 'info',
+        summary: 'hi',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ source: 'test' }), { requestContext });
+    });
+
     it('forwards files to session.sendMessage', async () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
@@ -401,7 +478,7 @@ describe('agent-controller routes', () => {
     it('forwards requestContext to session.respondToToolApproval', async () => {
       const session = await getRouteSession('user-rc');
       vi.spyOn(session.approval, 'isArmed').mockReturnValue(true);
-      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue(undefined);
+      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue({ accepted: true });
       const requestContext = makeRequestContext();
 
       await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
@@ -419,6 +496,7 @@ describe('agent-controller routes', () => {
     it('answers an approval with no parked gate through the stored suspended run', async () => {
       const session = await getRouteSession('user-rc');
       const gate = vi.spyOn(session, 'respondToToolApproval');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
       const persisted = vi.spyOn(session, 'respondToPersistedToolApproval').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -437,6 +515,7 @@ describe('agent-controller routes', () => {
 
     it('forwards requestContext to session.respondToToolSuspension', async () => {
       const session = await getRouteSession('user-rc');
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
       const spy = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -454,6 +533,7 @@ describe('agent-controller routes', () => {
 
     it('acks a tool suspension without waiting for the resumed run to finish', async () => {
       const session = await getRouteSession('user-suspension-ack');
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
       vi.spyOn(session, 'respondToToolSuspension').mockReturnValue(new Promise<void>(() => {}));
 
       const result = await Promise.race([
@@ -468,6 +548,106 @@ describe('agent-controller routes', () => {
       ]);
 
       expect(result).toEqual({ ok: true });
+    });
+  });
+
+  // mastra-ai/mastra#24779: the ack must reflect whether a pending target claimed the command.
+  describe('approval and suspension acks', () => {
+    async function getRouteSession(resourceId: string) {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+    }
+
+    const approve = (resourceId: string, toolCallId?: string) =>
+      AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId,
+        toolCallId,
+        approved: true,
+      } as any);
+
+    it('accepts the armed call once, then rejects a duplicate decision', async () => {
+      const session = await getRouteSession('user-ack-dup');
+      const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
+
+      expect(await approve('user-ack-dup', 'current')).toEqual({ ok: true });
+      await expect(decision).resolves.toMatchObject({ decision: 'approve' });
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
+      expect(await approve('user-ack-dup', 'current')).toEqual({ ok: false, reason: 'not_pending' });
+    });
+
+    it('rejects a stale tool call id and leaves the armed gate in place', async () => {
+      const session = await getRouteSession('user-ack-stale');
+      session.approval.arm({ toolName: 'write_file', toolCallId: 'current' });
+      const persisted = vi.spyOn(session, 'respondToPersistedToolApproval');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(false);
+
+      expect(await approve('user-ack-stale', 'stale')).toEqual({ ok: false, reason: 'stale_tool_call' });
+      expect(persisted).not.toHaveBeenCalled();
+      expect(session.approval.isArmed({ toolCallId: 'current' })).toBe(true);
+    });
+
+    it('rejects an approval without a tool call id when nothing is armed', async () => {
+      await getRouteSession('user-ack-none');
+      expect(await approve('user-ack-none')).toEqual({ ok: false, reason: 'not_pending' });
+    });
+
+    it('rejects a suspension answer when no question is pending', async () => {
+      const session = await getRouteSession('user-ack-suspend');
+      const spy = vi.spyOn(session, 'respondToToolSuspension');
+
+      const res = await AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-ack-suspend',
+        toolCallId: 'missing',
+        resumeData: 'Yes',
+      } as any);
+
+      expect(res).toEqual({ ok: false, reason: 'no_pending_suspension' });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('acks only one of two concurrent answers to the same suspension', async () => {
+      const session = await getRouteSession('user-ack-race');
+      vi.spyOn(session.suspensions, 'resolveToolCallId').mockReturnValue('q-1');
+      let finish!: () => void;
+      const spy = vi
+        .spyOn(session, 'respondToToolSuspension')
+        .mockReturnValue(new Promise<void>(resolve => (finish = resolve)));
+      const answer = () =>
+        AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-ack-race',
+          toolCallId: 'q-1',
+          resumeData: 'Yes',
+        } as any);
+
+      const results = await Promise.all([answer(), answer()]);
+      expect(results).toEqual([{ ok: true }, { ok: false, reason: 'not_pending' }]);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      finish();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(session.claimToolResponse('q-1')).toBe(true);
+    });
+
+    it('acks only one of two concurrent answers to the same persisted approval', async () => {
+      const session = await getRouteSession('user-ack-persisted-race');
+      vi.spyOn(session, 'hasPersistedToolApproval').mockResolvedValue(true);
+      const persisted = vi
+        .spyOn(session, 'respondToPersistedToolApproval')
+        .mockReturnValue(new Promise<void>(() => {}));
+
+      const results = await Promise.all([
+        approve('user-ack-persisted-race', 'restored'),
+        approve('user-ack-persisted-race', 'restored'),
+      ]);
+      expect(results).toEqual([{ ok: true }, { ok: false, reason: 'not_pending' }]);
+      expect(persisted).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -765,6 +945,44 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE', () => {
+    it('rejects oversized state through the session schema without installing it', async () => {
+      const storage = new InMemoryStore();
+      const routeStateSchema = z.object({
+        modelRoute: z
+          .object({
+            entries: z.array(z.object({ id: z.string(), label: z.string(), modelId: z.string() })).max(32),
+          })
+          .optional(),
+      });
+      const controller = new AgentController<z.infer<typeof routeStateSchema>>({
+        id: 'bounded-state',
+        storage,
+        stateSchema: routeStateSchema,
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
+      });
+      const boundedMastra = new Mastra({ agentControllers: { 'bounded-state': controller }, storage });
+      const entries = Array.from({ length: 33 }, (_, index) => ({
+        id: `route-${index}`,
+        label: `Route ${index}`,
+        modelId: 'openai/gpt-5.6-sol',
+      }));
+
+      await expect(
+        SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra: boundedMastra,
+          controllerId: 'bounded-state',
+          resourceId: 'user-route-limit',
+          state: { modelRoute: { entries } },
+        } as any),
+      ).rejects.toThrow('Invalid state update');
+
+      const session = await controller.getSessionByResource('user-route-limit');
+      expect(session?.state.get().modelRoute).toBeUndefined();
+    });
+  });
+
   describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {
     it('returns persisted messages in the MastraDBMessage shape (nested content.parts)', async () => {
       // Given a session/thread with a persisted assistant DB message
@@ -1048,6 +1266,71 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any)) as { modeId: string };
       expect(state.modeId).toBe('plan');
+    });
+  });
+
+  describe('SWITCH_AGENT_CONTROLLER_MODEL_ROUTE', () => {
+    it('switches and persists the model and thinking level together', async () => {
+      const ack = await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        modelId: 'openai/gpt-5.5',
+        thinkingLevel: 'high',
+      } as any);
+      expect(ack).toEqual({ ok: true });
+      const state = await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
+      expect(state).toMatchObject({ modelId: 'openai/gpt-5.5', settings: { thinkingLevel: 'high' } });
+    });
+
+    it.each([undefined, 'high'] as const)(
+      'does not acknowledge a canceled switch with thinking level %s',
+      async thinkingLevel => {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+        vi.spyOn(session.model, 'switch').mockRejectedValueOnce(
+          new Error('Model switch canceled because the active thread changed'),
+        );
+
+        await expect(
+          SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
+            mastra,
+            controllerId: 'code',
+            resourceId: 'user-1',
+            modelId: 'openai/gpt-5.5',
+            thinkingLevel,
+          } as any),
+        ).rejects.toThrow('Model switch canceled');
+      },
+    );
+
+    it('validates the thinking level on the request boundary', () => {
+      const schema = SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.bodySchema!;
+      expect(schema.safeParse({ modelId: 'openai/gpt-5.5', thinkingLevel: 'invalid' }).success).toBe(false);
+      expect(schema.safeParse({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' }).success).toBe(true);
+      expect(schema.safeParse({ modelId: 'openai/gpt-5.5' }).success).toBe(true);
+    });
+
+    it('switches the session model', async () => {
+      const ack = await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        modelId: 'anthropic/claude-opus-4-6',
+      } as any);
+      expect(ack).toEqual({ ok: true });
+
+      const state = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { modelId: string };
+      expect(state.modelId).toBe('anthropic/claude-opus-4-6');
     });
   });
 

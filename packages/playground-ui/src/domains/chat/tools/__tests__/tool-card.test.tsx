@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -13,7 +13,6 @@ import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { failedParentMessages, partialChildMessages, resumedChildMessages } from './fixtures/failed-delegation';
-import { useAgentMessages } from '@/domains/agents/hooks/use-agent-messages';
 import { ChatAgentContext, ChatRunningContext } from '@/domains/chat/context/chat-context';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import type { ToolPart } from '@/domains/chat/messages/renderers/tool-part';
@@ -142,10 +141,11 @@ describe('ToolCard dispatch', () => {
         }),
       );
 
-      expect(screen.getAllByRole<HTMLImageElement>('img', { name: 'Preview' }).map(image => image.src)).toEqual([
-        'https://example.com/generated.png',
-        'data:image/webp;base64,UklGRg==',
-        'data:image/jpeg;base64,/9j/4AAQ',
+      const images = within(screen.getByTestId('tool-result-media')).getAllByRole<HTMLImageElement>('img');
+      expect(images.map(image => ({ src: image.src, alt: image.alt }))).toEqual([
+        { src: 'https://example.com/generated.png', alt: 'generated.png' },
+        { src: 'data:image/webp;base64,UklGRg==', alt: 'Image' },
+        { src: 'data:image/jpeg;base64,/9j/4AAQ', alt: 'Image' },
       ]);
     });
   });
@@ -301,7 +301,7 @@ describe('ToolCard dispatch', () => {
     );
 
     expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions.*1 extracted/i })).toBeTruthy();
   });
 
   it('routes agent-* tools to the agent badge wrapper', () => {
@@ -422,6 +422,7 @@ describe('ToolCard dispatch', () => {
         toolCallId: 'failed-delegation',
         state: 'input-available',
         input: {},
+        output: { childMessages: [{ type: 'text', content: 'Looking it up.' }] },
       };
       const { rerender } = render(<ToolPartCard part={part} />, { wrapper: Providers });
       fireEvent.click(screen.getByRole('button', { name: 'head' }));
@@ -528,8 +529,29 @@ describe('ToolCard dispatch', () => {
         />,
         { wrapper: Providers },
       );
-      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('head')).not.toBeNull();
+      expect(screen.queryByRole('button', { expanded: true })).toBeNull();
+      expect(screen.queryByRole('button', { expanded: false })).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Approval required');
       expect(screen.getByRole('button', { name: 'Approve agent-head' })).not.toBeNull();
+    });
+  });
+
+  describe('when a delegation has not produced anything yet', () => {
+    it('offers nothing to open, then opens on the first child message', () => {
+      const props = {
+        agentId: 'head',
+        toolCallId: 'waiting-call',
+        toolName: 'agent-head',
+        isNetwork: false,
+        toolApprovalMetadata: undefined,
+      };
+      const { rerender } = render(<AgentBadge {...props} messages={[]} />, { wrapper: Providers });
+      expect(screen.getByText('head')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'head' })).toBeNull();
+
+      rerender(<AgentBadge {...props} messages={[{ type: 'text', content: 'Checking the forecast.' }]} />);
+      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
     });
   });
 
@@ -537,7 +559,7 @@ describe('ToolCard dispatch', () => {
     it('stays expanded until the child messages finish', () => {
       const props = {
         agentId: 'head',
-        messages: [],
+        messages: [{ type: 'text' as const, content: 'Checking the forecast.' }],
         toolCallId: 'streaming-call',
         toolName: 'agent-head',
         isNetwork: false,
@@ -575,7 +597,7 @@ describe('ToolCard dispatch', () => {
       render(
         <AgentBadge
           agentId="head"
-          messages={[]}
+          messages={[{ type: 'text', content: 'Done.' }]}
           toolCallId="successful-delegation"
           toolName="agent-head"
           isNetwork={false}
@@ -603,7 +625,7 @@ describe('ToolCard dispatch', () => {
     it('reopens the collapsed badge and displays the error', () => {
       const props = {
         agentId: 'head',
-        messages: [],
+        messages: [{ type: 'text' as const, content: 'Looking it up.' }],
         toolCallId: 'failed-delegation',
         toolName: 'agent-head',
         isNetwork: false,
@@ -670,7 +692,7 @@ describe('ToolCard dispatch', () => {
     );
 
     // Agent badge starts collapsed; expand it to reveal the suspend payload.
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('Agent suspend payload')).toBeTruthy();
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
   });
@@ -691,7 +713,7 @@ describe('ToolCard dispatch', () => {
       }),
     );
 
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('Agent suspend payload')).toBeTruthy();
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
   });
@@ -715,7 +737,7 @@ describe('ToolCard dispatch', () => {
         metadata: sharedMetadata,
       }),
     );
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2003?')).toBeNull();
     unmount();
@@ -728,7 +750,7 @@ describe('ToolCard dispatch', () => {
         metadata: sharedMetadata,
       }),
     );
-    fireEvent.click(screen.getByText('billingAgent'));
+    fireEvent.click(screen.getByRole('button', { name: /billingAgent/ }));
     expect(screen.getByText('approve refund ord_2003?')).toBeTruthy();
     expect(screen.queryByText('approve refund ord_2001?')).toBeNull();
   });

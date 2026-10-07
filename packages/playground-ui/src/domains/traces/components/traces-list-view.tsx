@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListFilterIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   TRACE_CUSTOM_COLUMN_LABELS,
@@ -10,10 +10,12 @@ import {
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
-import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
+import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
+import { splitColumns } from '@/ds/components/DataList/shared';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
@@ -138,28 +140,6 @@ export function TracesListView({
     global: true,
   });
 
-  // Reset scroll to top whenever a fresh query resolves (filter / date range change).
-  // `isLoading` only flips on initial fetches — `fetchNextPage` keeps it `false`, so this
-  // effect doesn't fire during pagination.
-  //
-  // Why the manual scroll event: when the skeleton-vs-list branch swaps in the new scroll
-  // container, it mounts at `scrollTop = 0`. The virtualizer rebinds its listener but
-  // doesn't re-read `scrollTop`, so it keeps the stale `scrollOffset` from the previous
-  // element. `scrollToOffset(0)` no-ops because the new element is already at 0 (no scroll
-  // event fires). Dispatching a synthetic `scroll` forces the virtualizer's handler to
-  // read the fresh `scrollTop` and recompute `virtualItems` with `paddingTop = 0`.
-  const wasLoadingRef = useRef(isLoading);
-  useEffect(() => {
-    if (wasLoadingRef.current && !isLoading) {
-      scrollRef.current?.dispatchEvent(new Event('scroll'));
-    }
-    wasLoadingRef.current = isLoading;
-  }, [isLoading]);
-
-  if (isLoading) {
-    return <DataListSkeleton columns={columns} fit="container" />;
-  }
-
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
   const paddingTop = virtualItems[0]?.start ?? 0;
@@ -212,7 +192,7 @@ export function TracesListView({
                   render={
                     <button
                       type="button"
-                      className="focus-visible:outline-accent flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2"
+                      className={cn('flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground', focusRing)}
                     >
                       <span className="min-w-0 truncate">{label}</span>
                       <ListFilterIcon aria-hidden className="size-[1.2em] shrink-0" />
@@ -240,7 +220,9 @@ export function TracesListView({
         ))}
       </TracesDataList.Top>
 
-      {traces.length === 0 ? (
+      {isLoading ? (
+        <DataListSkeletonRows columnCount={splitColumns(columns).length} />
+      ) : traces.length === 0 ? (
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
         />

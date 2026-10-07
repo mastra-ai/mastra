@@ -5,6 +5,7 @@ import {
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
   isTraceAggregateCanonicalDimension,
+  normalizeTraceQueryText,
   TraceQueryCursorError,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
@@ -20,6 +21,7 @@ import {
   type TraceQueryPredicate,
   type TraceQueryRequest,
   type TraceQueryResponse,
+  type TraceQueryScalarPredicate,
   type TraceQueryTrace,
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
@@ -54,6 +56,7 @@ export interface RawTraceQuerySpan {
   rootEntityVersionId: string | null;
   environment: string | null;
   organizationId: string | null;
+  runId: string | null;
   tags: string[] | null;
   serviceName?: string | null;
   executionSource?: string | null;
@@ -131,6 +134,7 @@ const span = (
   rootEntityVersionId: null,
   environment: 'production',
   organizationId: null,
+  runId: null,
   tags: null,
   serviceName: null,
   executionSource: null,
@@ -815,6 +819,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-org-a',
       organizationId: 'org-a',
       resourceId: 'project-1',
+      sessionId: 'session-123',
+      userId: 'user-1',
       startedAt: '2026-09-02T10:00:00.000Z',
       endedAt: '2026-09-02T10:00:01.000Z',
     }),
@@ -824,6 +830,9 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       spanType: 'tool_call',
       organizationId: 'org-a',
       resourceId: 'project-1',
+      runId: 'run-42',
+      sessionId: 'session-123',
+      userId: 'user-1',
       startedAt: '2026-09-02T10:00:00.100Z',
       endedAt: '2026-09-02T10:00:00.500Z',
     }),
@@ -841,6 +850,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-org-b',
       organizationId: 'org-b',
       resourceId: 'project-9',
+      sessionId: 'session-123',
+      userId: 'user-2',
       startedAt: '2026-09-03T10:00:00.000Z',
       endedAt: '2026-09-03T10:00:01.000Z',
     }),
@@ -920,7 +931,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: '2026-07-14T10:00:00.000Z',
       feedbackUserId: 'patient-1',
       sourceId: 'survey-result-1',
-      comment: 'Needs improvement',
+      comment: 'Needs improvement (obsolete draft)',
       entityVersionId: 'entity-v2',
       parentEntityVersionId: 'parent-v2',
       rootEntityVersionId: 'root-v1',
@@ -929,7 +940,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: '2026-07-15T10:00:00.000Z',
       feedbackUserId: 'patient-1',
       sourceId: 'survey-result-1',
-      comment: 'Needs improvement',
+      // The accent is stored as a separate combining mark (NFD).
+      comment: 'Needs improvement: incorrectly formatted dosage table, see cafe\u0301 notes',
       entityVersionId: 'entity-v2',
       parentEntityVersionId: 'parent-v2',
       rootEntityVersionId: 'root-v1',
@@ -945,7 +957,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
     feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
-      comment: 'Reviewed',
+      comment:
+        'Reviewed: incorrect dosage, 20 mg was correct. I\u0307stanbul clinic, greeted with नमस्ते. ΟΔΟΣ 5. CO₂ at ½ dose.',
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
@@ -1394,7 +1407,24 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     request: { traces: { timeRange: scopedRange } },
     expected: [{ threadId: 'thread-org-a' }, { threadId: 'thread-org-b' }],
   },
+  {
+    name: 'thread queries qualify threads through context identifiers',
+    request: {
+      traces: {
+        timeRange: scopedRange,
+        where: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+      },
+      where: { traces: { some: { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-2' } } } },
+    },
+    expected: [{ threadId: 'thread-org-b' }],
+  },
 ];
+
+const commentMatches = (literal: string, op: 'matches' | 'notMatches' = 'matches'): TraceQueryScalarPredicate => ({
+  op,
+  left: { path: 'comment' },
+  right: { literal },
+});
 
 export interface TraceQueryConformanceCase {
   name: string;
@@ -2321,6 +2351,116 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-org-a' }],
   },
   {
+    name: 'filters roots by organization and session with a span from one run',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+          { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+          { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'matches context identifiers through membership and inequality',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'in', value: { path: 'sessionId' }, set: ['session-123', 'session-999'] },
+          { op: 'ne', left: { path: 'userId' }, right: { literal: 'user-1' } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-org-b' }],
+  },
+  {
+    name: 'context identifier presence checks match roots that never recorded them',
+    request: { timeRange: scopedRange, where: { op: 'notExists', path: 'userId' } },
+    expected: [{ traceId: 'trace-org-none' }],
+  },
+  {
+    name: 'run predicates find a run recorded only on a child span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'exists', path: 'runId' } } },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'span context identifiers bind to one related span',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
+              { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+              { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'span context identifier absence excludes traces with one matching span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { none: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } } } },
+    },
+    expected: [{ traceId: 'trace-org-none' }],
+  },
+  {
+    name: 'unscoped span organization predicates see leaked spans on a shared trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } } } },
+    },
+    expected: [{ traceId: 'trace-org-b' }, { traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped span organization predicates cannot reach leaked spans on a shared trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'organization predicates narrow inside the trusted scope',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'organization predicates cannot widen the trusted scope',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } },
+          { op: 'notExists', path: 'organizationId' },
+        ],
+      },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
     name: 'includes matches traces whose current root carries the tag',
     request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'production' } },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
@@ -2395,10 +2535,140 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     },
     expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
+  {
+    name: 'matches finds a whole word in current feedback comments',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('incorrect') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches ignores case and punctuation',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('REVIEWED') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches requires a contiguous phrase',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('incorrect dosage') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches keeps phrase word order',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('dosage incorrect') } } },
+    expected: [],
+  },
+  {
+    name: 'matches treats Unicode letters as part of a word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('café') } } },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches keeps accents, so an unaccented literal misses',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('cafe') } } },
+    expected: [],
+  },
+  {
+    name: 'matches keeps combining marks inside a word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('नमस्ते') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches does not split a word at its combining marks',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('नमस') } } },
+    expected: [],
+  },
+  {
+    name: 'matches folds the Turkish dotted capital I like the stores do',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('İSTANBUL clinic') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches composes a decomposed dotted capital I before folding it',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('I\u0307STANBUL clinic') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches folds a Greek final sigma the same way in every store',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('οδος 5') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches keeps superscripts, subscripts, and fractions inside a word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('co₂ at ½ dose') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches does not split a word at a subscript digit',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('co') } } },
+    expected: [],
+  },
+  {
+    name: 'matches ignores superseded feedback comments',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('obsolete') } } },
+    expected: [],
+  },
+  {
+    name: 'notMatches requires a comment without the word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('incorrect', 'notMatches') } } },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'negated matches also matches feedback without comments',
+    request: {
+      timeRange: fullRange,
+      where: { feedback: { some: { op: 'not', arg: commentMatches('incorrect') } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'composes matches with other predicates on the same feedback record',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+              commentMatches('incorrect'),
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'feedback.none excludes traces with a matching comment',
+    request: { timeRange: fullRange, where: { feedback: { none: commentMatches('incorrect') } } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches splits span names on punctuation',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'lookup' } } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches finds a phrase inside a span name',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'gpt 5' } } } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches ignores superseded span names',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'superseded' } } } },
+    },
+    expected: [],
+  },
 ];
 
 /** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
-function matchesScope(
+export function matchesScope(
   record: { organizationId?: string | null; resourceId?: string | null },
   scope: TraceQueryTenantScope | undefined,
 ): boolean {
@@ -2414,7 +2684,7 @@ export interface TraceQueryRootSelection {
 }
 
 /**
- * The candidate population shared by every trace-scoped read (Decision 2): current, completed,
+ * The candidate population shared by every trace-scoped read: current, completed,
  * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
  */
 export function selectTraceQueryRoots(
@@ -2725,6 +2995,12 @@ function evaluateScalarPredicate(
     const included = members.includes(predicate.value);
     return predicate.operator === 'includes' ? included : members.length > 0 && !included;
   }
+  if (predicate.type === 'text') {
+    // A missing value satisfies neither operator: `notMatches` requires the field to exist.
+    if (typeof value !== 'string') return false;
+    const found = ` ${normalizeTraceQueryText(value)} `.includes(` ${predicate.value} `);
+    return predicate.operator === 'matches' ? found : !found;
+  }
   const missing = value === null || value === undefined;
   if (predicate.type === 'presence') return predicate.operator === 'exists' ? !missing : missing;
   if (predicate.type === 'membership') {
@@ -2773,6 +3049,10 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     entityVersionId: span.entityVersionId,
     parentEntityVersionId: span.parentEntityVersionId,
     rootEntityVersionId: span.rootEntityVersionId,
+    runId: span.runId,
+    sessionId: span.sessionId,
+    userId: span.userId,
+    organizationId: span.organizationId,
   };
 }
 
@@ -2828,6 +3108,10 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     traceId: root.traceId,
     threadId: traceQueryDimensionValue(root, 'threadId'),
     resourceId: traceQueryDimensionValue(root, 'resourceId'),
+    runId: root.runId,
+    sessionId: root.sessionId,
+    userId: root.userId,
+    organizationId: root.organizationId,
     startedAt: root.startedAt,
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),

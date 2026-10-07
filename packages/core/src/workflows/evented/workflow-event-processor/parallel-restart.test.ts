@@ -37,7 +37,7 @@ describe('processWorkflowParallel restart branch routing', () => {
     const step = makeParallelStep(['A', 'B', 'C']);
     const args = makeArgs({
       executionPath: [0, 2],
-      restart: { activeStepsPath: { C: [0, 2] }, isParallelOrConditionalRestarted: false },
+      restart: { activePaths: [0, 2], activeStepsPath: { C: [0, 2] }, isParallelOrConditionalRestarted: false },
     });
 
     await processWorkflowParallel(args, { pubsub, step });
@@ -59,7 +59,11 @@ describe('processWorkflowParallel restart branch routing', () => {
     const step = makeParallelStep(['A', 'B', 'C']);
     const args = makeArgs({
       executionPath: [0, 1],
-      restart: { activeStepsPath: { B: [0, 1], C: [0, 2] }, isParallelOrConditionalRestarted: false },
+      restart: {
+        activePaths: [0, 1],
+        activeStepsPath: { B: [0, 1], C: [0, 2] },
+        isParallelOrConditionalRestarted: false,
+      },
     });
 
     await processWorkflowParallel(args, { pubsub, step });

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import {
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -1487,7 +1487,7 @@ describe('FactoryDecisionDispatcher', () => {
       expect(prepareBinding).not.toHaveBeenCalled();
       expect(session.sendSignal).not.toHaveBeenCalled();
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
+        status: 'superseded',
         attempts: 1,
       });
     });
@@ -1632,7 +1632,7 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
+        status: 'superseded',
         attempts: 1,
       });
     });
@@ -2209,16 +2209,24 @@ describe('FactoryDecisionDispatcher', () => {
         ]);
 
         // A remote replica reading the ledger during the run must keep seeing a fresh claim.
-        await vi.advanceTimersByTimeAsync(25_000);
-        const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
-          heartbeatAt: number;
-        }>;
-        expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
-        expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+        // The heartbeat interval is armed and its ledger write lands through
+        // async storage, either of which can trail a single fixed timer jump
+        // on a loaded runner. Step the clock one heartbeat period at a time
+        // until the renewed claim is visible.
+        const heartbeatPeriodMs = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
+        await vi.waitFor(async () => {
+          await vi.advanceTimersByTimeAsync(heartbeatPeriodMs);
+          const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
+            heartbeatAt: number;
+          }>;
+          expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
+          expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+        });
 
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');
         await dispatch;
+        await waitForSessionRunAudit(session);
         expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
       } finally {
         vi.useRealTimers();
@@ -2784,7 +2792,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('succeeded');
+    expect(decision?.status).toBe('superseded');
     expect(decision?.attempts).toBe(1);
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
@@ -2807,7 +2815,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('succeeded');
+    expect(decision?.status).toBe('superseded');
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
@@ -3205,6 +3213,53 @@ describe('FactoryDecisionDispatcher', () => {
     expect(parked).toMatchObject({ status: 'proposed' });
     expect(session.sendSignal).not.toHaveBeenCalled();
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('re-reviews a push to a Factory-authored PR without asking, even with automatic runs off', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:8' },
+        title: 'Factory change',
+        stages: ['done'],
+        sessions: {},
+        metadata: { authorTrusted: true, factoryAuthored: true },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'push-f', triggerType: 'github' },
+      configVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-f' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(rows.find(row => row.idempotencyKey === 're-review-f')?.status).toBe('succeeded');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    const run = rows.find(row => row.decision.type === 'invokeSkill');
+    expect(run?.decision).toMatchObject({ skillName: 'factory-rereview' });
+    expect(run?.status).not.toBe('proposed');
   });
 
   it('lets an external push move a card a person already handed over', async () => {

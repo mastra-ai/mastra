@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleCheckIcon, CircleXIcon, ClockIcon } from 'lucide-react';
 
@@ -12,10 +13,10 @@ export interface ExperimentStatsProps {
 type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
-  pending: { icon: <ClockIcon className="size-4 text-warning1" />, label: 'Pending' },
+  pending: { icon: <ClockIcon className="size-4 text-warning-foreground" />, label: 'Pending' },
   running: { icon: <Spinner size="sm" />, label: 'Running' },
   completed: { icon: <CircleCheckIcon className="size-4 text-muted-foreground" />, label: 'Completed' },
-  failed: { icon: <CircleXIcon className="size-4 text-error" />, label: 'Failed' },
+  failed: { icon: <CircleXIcon className="size-4 text-destructive-foreground" />, label: 'Failed' },
 };
 
 /** Compact status indicator — a small icon with a tooltip describing the run state. */
@@ -50,31 +51,38 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
     <div className={cn('grid justify-items-end gap-3', className)}>
       <div
         className={cn(
-          'flex items-center gap-3 text-caption text-muted-foreground',
+          'text-muted-foreground',
+          'flex items-center gap-3',
           '[&>span]:flex [&>span]:items-center [&>span]:gap-1',
-          '[&_b]:text-column [&_b]:text-muted-foreground',
         )}
       >
-        <span>
-          Total: <b>{experiment.totalItems}</b>
-        </span>
-        <span>
-          Processed: <b>{experiment.succeededCount}</b>
-        </span>
-        <span>
-          Errored: <b>{experiment.failedCount}</b>
-        </span>
+        <Txt as="span" variant="caption">
+          Total:{' '}
+          <Txt as="b" variant="column" tone="muted">
+            {experiment.totalItems}
+          </Txt>
+        </Txt>
+        <Txt as="span" variant="caption">
+          Processed:{' '}
+          <Txt as="b" variant="column" tone="muted">
+            {experiment.succeededCount}
+          </Txt>
+        </Txt>
+        <Txt as="span" variant="caption">
+          Errored:{' '}
+          <Txt as="b" variant="column" tone="muted">
+            {experiment.failedCount}
+          </Txt>
+        </Txt>
         {(status === 'pending' || status === 'running') && (
-          <span>
-            Pending: <b>{pendingCount}</b>
-          </span>
+          <Txt as="span" variant="caption">
+            Pending:{' '}
+            <Txt as="b" variant="column" tone="muted">
+              {pendingCount}
+            </Txt>
+          </Txt>
         )}
       </div>
-
-      {/* <div className="flex items-center gap-1.5 text-ui text-muted-foreground">
-        <span className="text-muted-foreground">{experiment.targetType}:</span>
-        <span className="text-foreground font-mono">{experiment.targetId}</span>
-      </div> */}
     </div>
   );
 }

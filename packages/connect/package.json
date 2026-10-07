@@ -1,6 +1,6 @@
 {
   "name": "@mastra/connect",
-  "version": "0.5.0-alpha.2",
+  "version": "1.0.0",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",
@@ -32,6 +32,8 @@
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "list-providers": "tsx scripts/list-providers.ts",
     "remove-provider": "tsx scripts/remove-provider.ts",
+    "smoke-test": "tsx scripts/smoke-test/index.ts",
+    "smoke-test:channels": "tsx scripts/smoke-test/channels/index.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
     "test": "vitest run && tsc --noEmit"
   },
@@ -56,13 +58,14 @@
     "node": ">=22.13.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.72.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.75.0-0 <2.0.0-0",
     "zod": ">=3.0.0 || >=4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "hono": "^4.13.7",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
     "tsdown": "0.22.9",
@@ -75,6 +78,7 @@
     "@mastra/discord": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@mastra/slack": "workspace:^",
+    "@mastra/teams": "workspace:^",
     "@mastra/telegram": "workspace:^"
   }
 }

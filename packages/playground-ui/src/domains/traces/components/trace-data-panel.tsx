@@ -1,6 +1,6 @@
+import { useScorers } from '@mastra/react/hooks/scores';
 import { useState, type ComponentProps } from 'react';
 import { SpanScoring } from '@/domains/scores';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { TraceDataPanelView, type TraceSideView } from '@/domains/traces/components/trace-data-panel-view';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 
@@ -29,8 +29,8 @@ export function TraceDataPanel(props: TraceDataPanelProps) {
         sideView={sideView}
         onSideViewChange={setSideView}
       />
-      <Dialog variant="new" open={isScoringOpen} onOpenChange={setIsScoringOpen}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={isScoringOpen} onOpenChange={setIsScoringOpen}>
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Score trace</DialogTitle>
           </DialogHeader>

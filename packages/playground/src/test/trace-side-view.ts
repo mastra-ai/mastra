@@ -7,9 +7,12 @@ const sideColumn = (container?: HTMLElement) => {
   return column as HTMLElement;
 };
 
-/** Picks a view (Messages / Feedback / Scores) in the trace panel's side column tabs. */
+/**
+ * Picks a view (Messages / Feedback / Scores) in the trace panel's side column tabs.
+ * The tabs only render once the trace spans have loaded, so this waits for them.
+ */
 export const pickTraceSideView = async (name: RegExp, container?: HTMLElement) => {
-  fireEvent.click(within(sideColumn(container)).getByRole('tab', { name }));
+  fireEvent.click(await within(sideColumn(container)).findByRole('tab', { name }));
 };
 
 /** Accessible name of the currently selected side column view. */
