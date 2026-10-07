@@ -1214,7 +1214,9 @@ describe('KnowledgeRoutes', () => {
     for (const path of [base, `${base}/notes/runs`, detailPath]) {
       const reader = await h.app.request(path);
       expect(reader.status).toBe(403);
-      const body = JSON.stringify(await reader.json());
+      const json = await reader.json();
+      expect(json).toMatchObject({ error: 'forbidden' });
+      const body = JSON.stringify(json);
       expect(body).not.toContain('notes:primary');
       expect(body).not.toContain('succeeded');
       expect(body).not.toContain('importer-only secret');
@@ -1239,11 +1241,11 @@ describe('KnowledgeRoutes', () => {
       const h = await createHarness({
         knowledgeRuntime: runtime,
         ...fallback,
-        accessProfile: async ({ builtInScopes }) => ({
+        accessProfile: async ({ builtInScopes, request }) => ({
           id: 'project',
           rootScopeAddress: builtInScopes.resource.address,
           baselineScopes: [builtInScopes.org, builtInScopes.resource],
-          importOperator: false,
+          importOperator: request.headers.get('x-operator') === '1',
         }),
       });
       const run = await runtime.createImportRunInternal({
@@ -1256,8 +1258,13 @@ describe('KnowledgeRoutes', () => {
       await runtime.updateImportRunInternal({ id: run.id, status: 'running' });
       await runtime.updateImportRunInternal({ id: run.id, status: 'failed', error: 'upstream said private detail' });
       const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
-      for (const path of [base, `${base}/calendar/runs`]) {
-        expect((await h.app.request(path)).status).toBe(403);
+      const operatorRuns = await h.app.request(`${base}/calendar/runs`, { headers: { 'x-operator': '1' } });
+      expect(operatorRuns.status).toBe(200);
+      const [listed] = (await operatorRuns.json()).runs as Array<{ reference: string }>;
+      for (const path of [base, `${base}/calendar/runs`, `${base}/calendar/runs/${listed!.reference}`]) {
+        const response = await h.app.request(path);
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ error: 'forbidden' });
       }
     }
   });
@@ -1268,7 +1275,11 @@ describe('KnowledgeRoutes', () => {
       storage: new InMemoryStore(),
       importers: [{ id: 'calendar', handler: async () => {} }],
     });
-    const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
+    const admins = new Set<string>();
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      isOrganizationAdmin: async (_organizationId, userId) => admins.has(userId),
+    });
     const run = await runtime.createImportRunInternal({
       id: 'run-activity',
       importerId: 'calendar',
@@ -1299,10 +1310,18 @@ describe('KnowledgeRoutes', () => {
     expect(serialized).not.toContain('importer-thread');
     expect(serialized).not.toContain('calendar:primary');
     const runReference = (imported[0] as { importRunId: string }).importRunId;
-    expect(
-      (await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${runReference}`))
-        .status,
-    ).toBe(403);
+    const runPath = `/web/factory/projects/${h.projectId}/knowledge/importers/calendar/runs/${runReference}`;
+    const denied = await h.app.request(runPath);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: 'forbidden' });
+
+    // The same activity link resolves to the run for an operator.
+    admins.add('user-1');
+    const operatorRun = await h.app.request(runPath);
+    expect(operatorRun.status).toBe(200);
+    expect(await operatorRun.json()).toMatchObject({
+      run: { status: 'failed', error: 'upstream said private detail' },
+    });
   });
 
   it('treats organization administrators as import operators when the profile does not decide', async () => {
@@ -1336,7 +1355,9 @@ describe('KnowledgeRoutes', () => {
     for (const path of [base, `${base}/calendar/runs`, `${base}/calendar/runs/${listed!.reference}`]) {
       const member = await h.app.request(path);
       expect(member.status).toBe(403);
-      expect(JSON.stringify(await member.json())).not.toContain('private detail');
+      const json = await member.json();
+      expect(json).toMatchObject({ error: 'forbidden' });
+      expect(JSON.stringify(json)).not.toContain('private detail');
     }
   });
 
