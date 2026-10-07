@@ -499,7 +499,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     // Turning Knowledge on refuses to reinterpret v1 rows and names the explicit reset.
     const vector = await createVector();
     const blocked = createRuntime(storage, vector);
-    await expect(blocked.knowledge.reconcile()).rejects.toThrow('await storage.stores.knowledge.dangerouslyReset()');
+    await expect(blocked.knowledge.reconcile()).rejects.toThrow('await storage.stores?.knowledge?.dangerouslyReset()');
     expect(await countV1Nodes()).toBe(1);
 
     await storage.stores!.knowledge!.dangerouslyReset();
