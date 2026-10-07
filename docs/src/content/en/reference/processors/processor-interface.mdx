@@ -1515,7 +1515,7 @@ processToolModelOutput?(
     name: 'modelOutput',
     type: 'ToolModelOutput | undefined',
     description:
-      'Current model-facing output, mapped by `toModelOutput` from the result the tool returned. `undefined` when the tool has no `toModelOutput` and no earlier processor set one.',
+      'Current model-facing output, mapped by `toModelOutput` from the result the tool returned. `undefined` when no `toModelOutput` mapping applied (the tool has none, or the provider executed it) and no earlier processor set one.',
     isOptional: false,
   },
   {

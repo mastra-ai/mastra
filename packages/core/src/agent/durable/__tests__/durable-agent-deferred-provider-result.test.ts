@@ -12,7 +12,8 @@
  * 1. the deferred result is patched onto the existing call part,
  * 2. `processToolResult` runs BEFORE the raw result is emitted or persisted
  *    (post-processor mutations reach both the stream and history), and
- * 3. a processor tripwire blocks the raw result entirely and bails the run.
+ * 3. a processor tripwire blocks the raw result entirely and bails the run, and
+ * 4. `processToolModelOutput` changes only the stored model-facing output.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -259,6 +260,7 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
       id: 'deferred-shortener',
       processToolModelOutput: async ({ toolCallId, result, providerExecuted }: any) => {
         seen.push({ toolCallId, result, providerExecuted });
+        if (toolCallId !== PROVIDER_CALL_ID) return;
         return { modelOutput: { type: 'text', value: 'short' } };
       },
     };
@@ -289,7 +291,8 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
     const invocations = findInvocations(recalled.messages, PROVIDER_CALL_ID);
     const patched = invocations.find((inv: any) => inv.state === 'result');
     expect(patched?.result).toEqual({ hits: 3, source: 'full-source' });
-    expect(JSON.stringify(recalled.messages)).toContain('"modelOutput":{"type":"text","value":"short"}');
+    const part = findInvocationPart(recalled.messages, PROVIDER_CALL_ID);
+    expect(part?.providerMetadata?.mastra?.modelOutput).toEqual({ type: 'text', value: 'short' });
     result.cleanup();
   });
 

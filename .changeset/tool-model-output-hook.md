@@ -15,4 +15,4 @@ const shortener: Processor = {
 };
 ```
 
-The hook runs after every `processToolResult` and after the tool's `toModelOutput`, on both the default and durable engines, for provider-executed tools, and for background task results. It doesn't run for client-side tools. Stored processor configs and the server accept the new `processToolModelOutput` phase.
+The hook runs after every `processToolResult` and after the tool's `toModelOutput`, on both the default and durable engines, for provider-executed tools, and for background task results. It doesn't run for client-side tools. Stored processor configs accept the new `processToolModelOutput` phase, and the server's processor list and detail endpoints report it.
