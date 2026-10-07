@@ -405,9 +405,6 @@ export class MastraCodeAcpAgent implements Agent {
       } else if (isThinkingLevelSetting(params.value)) {
         await entry.session.state.set({ thinkingLevel: params.value });
       }
-      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevelToSave(entry)) {
-        await entry.session.state.set({ thinkingLevel: this.thinkingLevelToSave(entry) });
-      }
       return { configOptions: this.configOptions(entry) };
     });
   }

@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { MastraCodeAcpAgent } from './agent.js';
 
-async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavailable: string[] = []) {
+async function setup(
+  modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'],
+  unavailable: string[] = [],
+  defaultThinkingLevel: ThinkingLevelSetting = 'medium',
+) {
   let emit: (event: AgentControllerEvent) => void = () => {};
   const sessionUpdate = vi.fn().mockResolvedValue(undefined);
   let modelId = 'openai/gpt-5.5';
@@ -42,7 +46,7 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
         modelIds.map(id => ({ id, modelName: id.slice(id.indexOf('/') + 1), hasApiKey: !unavailable.includes(id) })),
     } as unknown as AgentController,
     modes: [{ id: 'build' }, { id: 'plan' }],
-    getThinkingLevel: () => state.thinkingLevel ?? 'medium',
+    getThinkingLevel: () => state.thinkingLevel ?? defaultThinkingLevel,
   }));
   const initial = await agent.newSession({ cwd: '/project', mcpServers: [] });
   return {
@@ -140,6 +144,17 @@ describe('ACP session configuration', () => {
         configOptions: expect.arrayContaining([expect.objectContaining({ id: 'mode', currentValue: 'plan' })]),
       },
     });
+  });
+
+  it('keeps an inherited default inherited when switching mode', async () => {
+    const { agent, initial, setState } = await setup(undefined, [], 'max');
+    const result = await agent.setSessionConfigOption({
+      sessionId: initial.sessionId,
+      configId: 'mode',
+      value: 'plan',
+    });
+    expect(setState).not.toHaveBeenCalled();
+    expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
   });
 
   it.each([

@@ -174,7 +174,6 @@ export function createAnthropicThinkingMiddleware(
 ): LanguageModelMiddleware | undefined {
   if (!thinkingLevel || thinkingLevel === 'off') return undefined;
   const capability = getAnthropicThinkingCapability(modelId);
-  if (capability === 'none') return undefined;
   const level = runAnthropicRequestLevel(modelId, thinkingLevel);
   if (level === 'off') return undefined;
 

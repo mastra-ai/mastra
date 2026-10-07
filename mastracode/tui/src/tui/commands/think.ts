@@ -2,8 +2,9 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import { loadSettings, resolveDefaultThinkingLevel } from '@mastra/code-sdk/onboarding/settings';
-import { isThinkingLevelSetting, parseThinkCommand } from '@mastra/code-sdk/thinking';
+import { isThinkingLevelSetting, parseThinkCommand, runThinkingLevel } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
+import { getModelReasoningOptions } from '@mastra/core/llm';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
@@ -68,6 +69,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
   const modelId = ctx.state.session.model.get() ?? '';
   const thinkingLevels = getThinkingLevelsForModel(modelId);
   const override = getSessionOverride(ctx);
+  const runningOverride = override && runThinkingLevel(modelId, override, getModelReasoningOptions(modelId));
   const configuredDefault = getConfiguredDefault(ctx);
   const rawArguments = args.join(' ');
 
@@ -109,7 +111,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     },
     ...thinkingLevels.map(l => ({
       value: l.id,
-      label: `  ${l.label}  ${theme.fg('dim', l.description)}${l.id === override ? theme.fg('dim', ' (current)') : ''}`,
+      label: `  ${l.label}  ${theme.fg('dim', l.description)}${l.id === runningOverride ? theme.fg('dim', ' (current)') : ''}`,
     })),
   ];
 
@@ -142,7 +144,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
           await ctx.state.session.state.set({ thinkingLevel: selectedValue });
           const selectedLabel = getThinkingLevelForModel(modelId, selectedValue).label;
           ctx.showInfo(
-            `Thinking → ${selectedValue === override ? `${selectedLabel} (unchanged)` : `${selectedLabel} (session override)`}`,
+            `Thinking → ${selectedValue === runningOverride ? `${selectedLabel} (unchanged)` : `${selectedLabel} (session override)`}`,
           );
         }
       } catch {
@@ -162,7 +164,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
 
     // Pre-select current entry (after adding to container, matching models-pack pattern)
-    const currentIdx = override === undefined ? 0 : thinkingLevels.findIndex(l => l.id === override) + 1;
+    const currentIdx = override === undefined ? 0 : thinkingLevels.findIndex(l => l.id === runningOverride) + 1;
     if (currentIdx > 0) selectList.setSelectedIndex(currentIdx);
 
     const modal = container as Box & { handleInput: (data: string) => void };

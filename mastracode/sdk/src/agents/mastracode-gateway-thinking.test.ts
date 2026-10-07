@@ -95,4 +95,15 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     const body = await requestBody(resolve('high', 'google', 'gemini-2.0-flash'));
     expect(body.generationConfig?.thinkingConfig).toBeUndefined();
   });
+
+  it('fits the Codex OAuth effort to the model the user picked, not its codex variant', async () => {
+    writeFileSync(
+      join(appDataDir, 'auth.json'),
+      JSON.stringify({ 'openai-codex': { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 } }),
+      'utf8',
+    );
+    reloadAuthStorage();
+
+    expect((await requestBody(resolve('xhigh', 'openai', 'gpt-5'))).reasoning).toMatchObject({ effort: 'high' });
+  });
 });
