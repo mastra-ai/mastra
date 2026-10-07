@@ -136,11 +136,14 @@ describe('materializeRepo', () => {
       '/workspace/hello',
     ]);
     expect(clone.options?.env).toMatchObject({
-      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.git.extraHeader',
+      // A template checkout's `origin` has no `.git`; the header covers it too.
+      GIT_CONFIG_KEY_1: 'http.https://github.com/octocat/hello.extraHeader',
       GIT_TERMINAL_PROMPT: '0',
     });
     expect(clone.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+    expect(clone.options?.env?.GIT_CONFIG_VALUE_1).toBe(clone.options?.env?.GIT_CONFIG_VALUE_0);
     expect(sandbox.calls.join('\n')).not.toContain('tok-123');
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
@@ -588,7 +591,7 @@ describe('checkoutSessionBranch', () => {
     expect(sandbox.calls).toContain('git -C /workspace/repo checkout -b factory/gitlab-mr-6-2c3b494988ac FETCH_HEAD');
     const checkout = sandbox.executions.find(execution => execution.args.includes('checkout'));
     expect(checkout?.options?.env).toMatchObject({
-      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://gitlab.example.com/acme/platform/app.git.extraHeader',
       GIT_TERMINAL_PROMPT: '0',
     });
@@ -934,7 +937,7 @@ describe('pushBranch', () => {
     const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
     expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/cloud-agent']);
     expect(push.options?.env).toMatchObject({
-      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.git.extraHeader',
       GIT_TERMINAL_PROMPT: '0',
     });
@@ -979,7 +982,7 @@ describe('pushRepositoryBranch', () => {
     const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
     expect(push.args).toEqual(['-C', '/workspace/hello', 'push', '-u', 'origin', 'feat/gitlab']);
     expect(push.options?.env).toMatchObject({
-      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_COUNT: '2',
       GIT_CONFIG_KEY_0: 'http.https://gitlab.com/acme/hello.git.extraHeader',
       GIT_TERMINAL_PROMPT: '0',
     });
