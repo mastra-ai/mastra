@@ -22,11 +22,13 @@ describe('Shipyard-shaped Knowledge configuration', () => {
     expect(await profile({ orgId: 'org', userId: 'owner' })).toMatchObject({
       rootScopeAddress: 'org:mastra',
       vouchedScopeAddresses: ['principal:shipyard-maintainer'],
+      importOperator: true,
     });
     const reader = await profile({ orgId: 'org', userId: 'reader' });
     expect(reader).toMatchObject({
       rootScopeAddress: 'repo:mastra',
       vouchedScopeAddresses: ['principal:shipyard-public'],
+      importOperator: false,
     });
   });
   it('integrates verified revisions without duplicates and leaves the watermark unchanged on failed verification', async () => {
