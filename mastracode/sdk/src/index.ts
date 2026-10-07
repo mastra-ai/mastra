@@ -35,7 +35,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
-import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
@@ -601,9 +601,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const cloudObservabilityConfig = resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId);
 
-  // Stable session id unique to this project/resource, and a machine-bound owner
-  // id. resourceId encodes root path + git identity and honors overrides, so it
-  // is the right input for scoping the session to the cwd/project.
+  // Stable session id unique to this project/resource. Mastra Code has no
+  // authenticated user identity in settings, so local sessions use a stable
+  // machine-and-project host identity. Core stamps it onto new threads as the
+  // ownerId/createdBy fallback; it is not a user id.
   const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
   const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
 
@@ -688,7 +689,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   }
 
-  const harnessStorage = new InMemoryHarness();
   // mastracode's scorers persist every result through the scores domain, but
   // nothing reads scores back. Accept the writes and keep nothing, so they
   // neither grow mastra.db nor the process heap.
@@ -701,7 +701,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // When local tracing is off, disable the observability domain entirely so
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
-      harness: harnessStorage,
       scores: scoresStorage,
     },
   });
