@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
-import type { ProviderConfig } from './gateways/base.js';
+import type { ModelReasoningOption, ProviderConfig, ReasoningCapabilities } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -30,6 +30,16 @@ function stripFromOpenRouterCapabilities(modelId: string, dimension?: string) {
       return JSON.stringify(data);
     }
     return content;
+  });
+}
+
+function withReasoningData(reasoningByProvider: ReasoningCapabilities) {
+  const originalReadFileSync = fs.readFileSync;
+  vi.spyOn(fs, 'readFileSync').mockImplementation((filePath, options) => {
+    const content = originalReadFileSync(filePath, options);
+    const reasoning = typeof filePath === 'string' ? reasoningByProvider[path.basename(filePath, '.json')] : undefined;
+    if (!reasoning || typeof content !== 'string') return content;
+    return JSON.stringify({ ...JSON.parse(content), reasoning });
   });
 }
 
@@ -240,40 +250,49 @@ describe('modelSupportsStructuredOutput', () => {
 });
 
 describe('getModelReasoningOptions', () => {
+  const haikuBudget: ModelReasoningOption[] = [{ type: 'budget_tokens', min: 1024 }];
+  const gatewayToggle: ModelReasoningOption[] = [{ type: 'toggle' }];
+  const gpt5Efforts: ModelReasoningOption[] = [{ type: 'effort', values: ['minimal', 'low', 'medium', 'high'] }];
+
+  beforeEach(() => {
+    withReasoningData({
+      anthropic: { 'claude-haiku-4-5': haikuBudget },
+      openai: { 'gpt-5': gpt5Efforts },
+      openrouter: { 'anthropic/claude-haiku-4.5': gatewayToggle },
+    });
+  });
+
   afterEach(() => {
     _resetCapabilityCaches();
+    vi.restoreAllMocks();
   });
 
   it('returns the controls the provider publishes for the model', () => {
-    expect(getModelReasoningOptions('anthropic/claude-haiku-4-5-20251001')).toContainEqual(
-      expect.objectContaining({ type: 'budget_tokens' }),
-    );
-    expect(getModelReasoningOptions('anthropic/claude-opus-4-6')).toContainEqual(
-      expect.objectContaining({ type: 'effort', values: expect.arrayContaining(['high']) }),
-    );
+    expect(getModelReasoningOptions('anthropic/claude-haiku-4-5')).toEqual(haikuBudget);
   });
 
   it('answers with the gateway data when the gateway publishes it, not the upstream provider', () => {
-    const gatewayOptions = getModelReasoningOptions('openrouter/anthropic/claude-haiku-4.5');
-    expect(gatewayOptions).toBeDefined();
-    expect(gatewayOptions).not.toEqual(getModelReasoningOptions('anthropic/claude-haiku-4-5'));
+    expect(getModelReasoningOptions('openrouter/anthropic/claude-haiku-4.5')).toEqual(gatewayToggle);
+  });
+
+  it('does not borrow upstream data for a model the publishing gateway lists without options', () => {
+    expect(GatewayRegistry.getInstance().getModels().openrouter).toContain('openai/gpt-5');
+
+    expect(getModelReasoningOptions('openrouter/openai/gpt-5')).toBeUndefined();
   });
 
   it('falls back to the upstream provider for catalog-only gateways', () => {
-    expect(getModelReasoningOptions('netlify/openai/gpt-5')).toEqual(getModelReasoningOptions('openai/gpt-5'));
-    expect(getModelReasoningOptions('openai/gpt-5')).toBeDefined();
+    expect(getModelReasoningOptions('netlify/openai/gpt-5')).toEqual(gpt5Efforts);
   });
 
   it('uses the vendor data for Bedrock-hosted models', () => {
-    expect(getModelReasoningOptions('amazon-bedrock/us.anthropic.claude-opus-4-6')).toEqual(
-      getModelReasoningOptions('anthropic/claude-opus-4-6'),
-    );
+    expect(getModelReasoningOptions('amazon-bedrock/us.anthropic.claude-haiku-4-5')).toEqual(haikuBudget);
   });
 
   it('returns undefined when nothing describes the model', () => {
     expect(getModelReasoningOptions('unknown-provider/some-model')).toBeUndefined();
-    expect(getModelReasoningOptions('anthropic/not-a-real-model')).toBeUndefined();
-    expect(getModelReasoningOptions('claude-opus-4-6')).toBeUndefined();
+    expect(getModelReasoningOptions('anthropic/claude-opus-4-6')).toBeUndefined();
+    expect(getModelReasoningOptions('claude-haiku-4-5')).toBeUndefined();
   });
 });
 

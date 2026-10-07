@@ -8,19 +8,5 @@
     "qwen3-coder:30b",
     "qwen3.6:27b"
   ],
-  "structuredOutput": ["deepseek-v4-flash", "gpt-oss:120b", "qwen3.6:27b"],
-  "reasoning": {
-    "gpt-oss:120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ]
-  }
+  "structuredOutput": ["deepseek-v4-flash", "gpt-oss:120b", "qwen3.6:27b"]
 }

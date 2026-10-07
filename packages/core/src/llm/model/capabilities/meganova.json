@@ -29,12 +29,5 @@
     "deepseek-ai/DeepSeek-V3.2-Exp",
     "mistralai/Mistral-Nemo-Instruct-2407",
     "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
-  ],
-  "reasoning": {
-    "zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ]
-  }
+  ]
 }

@@ -7,13 +7,5 @@
     "google/gemma-3-27b-it",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b"
-  ],
-  "reasoning": {
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ]
-  }
+  ]
 }

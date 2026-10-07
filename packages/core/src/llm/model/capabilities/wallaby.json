@@ -1,12 +1,4 @@
 {
   "attachment": ["moonshotai/kimi-k3"],
-  "structuredOutput": ["moonshotai/kimi-k3"],
-  "reasoning": {
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ]
-  }
+  "structuredOutput": ["moonshotai/kimi-k3"]
 }
