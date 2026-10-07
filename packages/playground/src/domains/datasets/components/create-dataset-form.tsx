@@ -1,14 +1,16 @@
 'use client';
+
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
@@ -104,10 +106,12 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className={cn('self-start text-caption', quietTextHover, controlStateColorTransition)}
+          className={cn('self-start', quietTextHover, controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
-          + Custom schema
+          <Txt as="span" variant="caption" className="block">
+            + Custom schema
+          </Txt>
         </button>
       ) : (
         <SchemaConfigSection

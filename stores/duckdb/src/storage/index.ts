@@ -8,6 +8,7 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
+import { spanQueryFeatures } from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -22,6 +23,8 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'tag-discovery',
   'metric-discovery',
   'trace-query',
+  'trace-aggregate',
+  ...spanQueryFeatures,
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -40,6 +43,8 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metric-discovery',
   'delta-polling',
   'trace-query',
+  'trace-aggregate',
+  ...spanQueryFeatures,
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -246,6 +251,20 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.queryTraces(...args);
+  }
+
+  async aggregateTraces(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateTraces']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateTraces']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateTraces(...args);
+  }
+
+  async querySpans(
+    ...args: Parameters<ObservabilityStoreImpl['querySpans']>
+  ): ReturnType<ObservabilityStoreImpl['querySpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.querySpans(...args);
   }
 
   async getTraceQueryObservedFields(

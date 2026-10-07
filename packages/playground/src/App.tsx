@@ -2,6 +2,7 @@ import { coreFeatures } from '@mastra/core/features';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import { createFetchWithRefresh } from '@mastra/react/hooks/auth';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';
@@ -18,6 +19,7 @@ import {
   legacyAgentChatLoader,
   legacyAgentSettingsLoader,
   paths,
+  workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -88,14 +90,12 @@ import { Workflow } from './pages/workflows/workflow';
 import WorkflowSchedules from './pages/workflows/workflow-schedules';
 import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
-import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { AuthLayout } from '@/components/auth-layout';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
@@ -418,7 +418,8 @@ export const routes: RouteObject[] = [
       { path: '/workspaces/:workspaceId', element: <Workspace /> },
       {
         path: '/workspaces/:workspaceId/skills/:skillName',
-        element: <WorkspaceSkillDetailPage />,
+        loader: ({ params, request }: LoaderFunctionArgs) =>
+          redirect(workspaceSkillFileLink(params.workspaceId, new URL(request.url).searchParams.get('path'))),
       },
 
       { path: '/workflows', element: <Workflows /> },

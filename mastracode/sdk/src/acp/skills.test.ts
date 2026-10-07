@@ -27,7 +27,9 @@ function runtime(id: string, catalog: Skill[]) {
     maybeRefresh: async () => {},
   };
   return {
-    controller: { listAvailableModels: async () => [] } as unknown as AgentController,
+    controller: {
+      listAvailableModels: async () => [{ id: 'test-model', hasApiKey: true }],
+    } as unknown as AgentController,
     modes: [],
     getSkills: async () => skills,
     skills,

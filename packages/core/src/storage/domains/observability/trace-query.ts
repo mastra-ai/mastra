@@ -793,9 +793,7 @@ export class TraceQueryValidationError extends Error {
 export class TraceQueryCursorError extends Error {
   constructor(readonly code: 'TRACE_QUERY_CURSOR_MALFORMED' | 'TRACE_QUERY_CURSOR_CONFLICT') {
     super(
-      code === 'TRACE_QUERY_CURSOR_MALFORMED'
-        ? 'The trace query cursor is malformed'
-        : 'The cursor does not match the query',
+      code === 'TRACE_QUERY_CURSOR_MALFORMED' ? 'The query cursor is malformed' : 'The cursor does not match the query',
     );
     this.name = 'TraceQueryCursorError';
   }
@@ -805,7 +803,7 @@ export class TraceQueryExecutionError extends Error {
   readonly code = 'TRACE_QUERY_EXECUTION_TIMEOUT';
 
   constructor() {
-    super('The trace query exceeded its execution timeout');
+    super('The query exceeded its execution timeout');
     this.name = 'TraceQueryExecutionError';
   }
 }
@@ -814,7 +812,7 @@ export class TraceQueryResourceLimitError extends Error {
   readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
 
   constructor() {
-    super('The trace query exceeded its resource limit');
+    super('The query exceeded its resource limit');
     this.name = 'TraceQueryResourceLimitError';
   }
 }
@@ -1353,7 +1351,7 @@ function planThreadPredicate(
  * problems to `issues`.
  *
  * @internal Shared with the trace-aggregate planner so both apply identical selection
- * validation (Aggregate Query API Decision 2).
+ * validation.
  */
 export function planTraceQuerySelectionPredicate(
   where: TraceQueryPredicate,
@@ -1362,6 +1360,16 @@ export function planTraceQuerySelectionPredicate(
 ): TrustedTraceQueryPredicate | undefined {
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   return planPredicate(where, 'trace', path, 1, state);
+}
+
+/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+export function planSpanQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  // Scalar grammar cannot produce a related-record predicate.
+  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
 function planPredicate(
@@ -1609,7 +1617,8 @@ function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<strin
   return normalized as Array<string | number>;
 }
 
-function digestBinding(value: unknown): string {
+/** @internal Shared query binding with property-order-independent serialization. */
+export function digestBinding(value: unknown): string {
   return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 

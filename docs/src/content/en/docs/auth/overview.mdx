@@ -18,8 +18,8 @@ You can start with basic shared secret JWT authentication and switch to known pr
 
 Configuring authentication locks down two things at once:
 
-- **Studio UI**: Studio displays a login screen (SSO, email/password, or both) and enforces role-based access control to determine what each team member can see and do.
-- **API routes**: All built-in routes (`/api/agents/*`, `/api/workflows/*`, etc.) and custom routes require authentication, whether requests come from Studio or direct API calls.
+- **Studio UI**: Studio displays a login screen (SSO, email/password, or both). When you also configure an RBAC provider, Studio enforces role-based access control to determine what each team member can see and do.
+- **API routes**: Built-in routes (`/api/agents/*`, `/api/workflows/*`, etc.) and custom routes require authentication, whether requests come from Studio or direct API calls. A few built-in routes stay public, such as `GET /api/auth/capabilities`, which Studio uses to detect the login state.
 
 Authentication is optional. If no auth is configured, all routes and Studio are publicly accessible. Public access can be enabled on individual custom routes using `requiresAuth: false`.
 

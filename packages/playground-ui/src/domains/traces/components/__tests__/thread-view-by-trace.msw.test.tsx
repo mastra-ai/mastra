@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import '@/test/inert-resize-observer';
 import type { ListScoresResponse } from '@mastra/client-js';
-import '@/test/jsdom-polyfills';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -308,7 +308,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('underlines each turn and separates the messages column from the trace with a right border', async () => {
+  it('announces each turn with a divider holding its tabs and shows the trace in a card', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -319,10 +319,11 @@ describe('ThreadViewByTrace', () => {
       .getAllByTestId('trace-row-timeline')
       .map(el => el.closest<HTMLElement>('[data-trace-id]') as HTMLElement);
     expect(rows).toHaveLength(2);
-    for (const row of rows) {
-      expect(row.className).toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
-      expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
+    for (const [index, row] of rows.entries()) {
+      const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
+      expect(within(divider).getByRole('tab', { name: /Scores/ })).not.toBeNull();
+      expect(row.className).not.toContain('border-b');
+      expect(row.querySelector('[data-slot=thread-trace-details]')?.className).toContain('rounded-xl');
     }
   });
 
@@ -331,6 +332,95 @@ describe('ThreadViewByTrace', () => {
     renderView();
 
     expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+  });
+
+  describe('loading the first page', () => {
+    it('shows only the loading status until every turn has its spans, then renders them complete', async () => {
+      installHandlers();
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, async ({ params }) => {
+          await gate;
+          return HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans);
+        }),
+      );
+      const { queryClient } = renderView();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
+      expect(document.querySelector('[data-trace-id]')).toBeNull();
+      // Same boxes as the resolved rows: a `px-4` messages column and one tab pill per tab.
+      const skeleton = screen.getByRole('status', { name: 'Loading thread' });
+      const messagesColumns = skeleton.querySelectorAll('[data-slot="thread-messages-skeleton"]');
+      expect(messagesColumns.length).toBeGreaterThan(0);
+      messagesColumns.forEach(column => expect(column.classList.contains('px-4')).toBe(true));
+      const firstDivider = skeleton.querySelector('[data-slot="thread-trace-divider-skeleton"]');
+      expect(firstDivider?.querySelectorAll('[data-slot="thread-tab-skeleton"]')).toHaveLength(3);
+      expect(screen.queryByText('No traces found for this thread.')).toBeNull();
+
+      release();
+      await screen.findByText('Chef agent run');
+      expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading thread' })).toBeNull();
+    });
+
+    it('shows one tab pill per tab in the skeleton when feedback is off', async () => {
+      installHandlers();
+      server.use(http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => new Promise<never>(() => {})));
+      renderView({ withFeedback: false });
+
+      const skeleton = await screen.findByRole('status', { name: 'Loading thread' });
+      const firstDivider = skeleton.querySelector('[data-slot="thread-trace-divider-skeleton"]');
+      expect(firstDivider?.querySelectorAll('[data-slot="thread-tab-skeleton"]')).toHaveLength(2);
+    });
+
+    it('never shows the empty state before the list resolves', async () => {
+      installHandlers({ list: emptyThreadTracesList });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          await gate;
+          return HttpResponse.json(queryPageFromList(emptyThreadTracesList));
+        }),
+      );
+      renderView();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.queryByText('No traces found for this thread.')).toBeNull();
+      release();
+      expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+    });
+
+    it("never shows the previous thread's turns after switching threads", async () => {
+      installHandlers();
+      const view = (threadId: string) => (
+        <TestLinkProvider>
+          <BrowserToolCallsProvider>
+            <ActivatedSkillsProvider>
+              <ThreadViewByTrace threadId={threadId} withQueryTrace />
+            </ActivatedSkillsProvider>
+          </BrowserToolCallsProvider>
+        </TestLinkProvider>
+      );
+      const { rerender } = renderWithProviders(view(THREAD_ID));
+      await screen.findByText('Chef agent follow-up');
+
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          await gate;
+          return HttpResponse.json(queryPageFromList(emptyThreadTracesList));
+        }),
+      );
+      rerender(view('other-thread'));
+      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
+      expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
+      release();
+      expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+    });
   });
 
   it('opens the span details beside the conversation when a span is clicked, and closes it', async () => {
@@ -469,7 +559,7 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  it('emphasises the first row in view while the others stay dimmed', async () => {
+  it('keeps every row at full opacity, whichever is in view', async () => {
     const { intersect } = stubIntersectionObserver();
     installHandlers();
     const { queryClient } = renderView();
@@ -481,11 +571,10 @@ describe('ThreadViewByTrace', () => {
         .getByTestId('thread-view-by-trace')
         .querySelector<HTMLElement>(`[data-trace-id="${traceId}"]`) as HTMLElement;
 
-    expect(rowOf('trace-a').className).toContain('opacity-50');
     act(() => intersect(rowOf('trace-a')));
 
-    expect(rowOf('trace-a').className).not.toContain('opacity-50');
-    expect(rowOf('trace-b').className).toContain('opacity-50');
+    expect(rowOf('trace-a').className).not.toMatch(/opacity/);
+    expect(rowOf('trace-b').className).not.toMatch(/opacity/);
     vi.unstubAllGlobals();
   });
 
@@ -497,35 +586,43 @@ describe('ThreadViewByTrace', () => {
         .getByTestId('thread-view-by-trace')
         .querySelector<HTMLElement>(`[data-trace-id="${traceId}"] [data-testid="trace-row-timeline"]`);
 
-    it('clamps the timeline to the messages height and reveals it with Show more / Show less', async () => {
+    it('clamps the timeline to the messages height and reveals it with Expand / Collapse', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       installHandlers();
       const { queryClient } = renderView();
 
-      const [showMore] = await screen.findAllByRole('button', { name: 'Show more' });
-      if (!showMore) throw new Error('expected a Show more button');
+      const [showMore] = await screen.findAllByRole('button', { name: 'Expand' });
+      if (!showMore) throw new Error('expected an Expand button');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
 
       fireEvent.click(showMore);
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
-      const showLess = screen.getByRole('button', { name: 'Show less' });
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
+      const showLess = screen.getByRole('button', { name: 'Collapse' });
 
       fireEvent.click(showLess);
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
     });
 
-    it('does not offer Show more when the timeline already fits', async () => {
+    it('does not offer Expand when the timeline already fits', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 200 });
       installHandlers();
       const { queryClient } = renderView();
 
       await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull();
       // The clamp stays on so the cell never grows past the messages column while the
       // timeline remeasures after a tab switch; a shorter timeline is unaffected by it.
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
     });
 
     it('expands the row when one of its spans is selected and keeps it expanded afterwards', async () => {
@@ -533,19 +630,23 @@ describe('ThreadViewByTrace', () => {
       installHandlers();
       const { queryClient } = renderView();
 
-      await screen.findAllByRole('button', { name: 'Show more' });
+      await screen.findAllByRole('button', { name: 'Expand' });
       fireEvent.click(await screen.findByText('Chef agent run'));
       await screen.findByRole('heading', { name: /^Span/ });
 
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
       // Collapsing would hide the selection, so the control is withheld while a span is open.
-      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
-      expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
+      expect(screen.getByRole('button', { name: 'Collapse' })).not.toBeNull();
     });
   });
 
@@ -823,7 +924,7 @@ describe('ThreadViewByTrace', () => {
       }
     });
 
-    it('opens at the latest turn and stays there while rows grow, until the reader scrolls up', async () => {
+    it('opens at the latest turn and does not move when a row grows', async () => {
       installPagedHandlers();
       const { grow } = stubScrollLayout();
       renderView({ withQueryTrace });
@@ -832,10 +933,10 @@ describe('ThreadViewByTrace', () => {
 
       await waitFor(() => expect(viewport.scrollTop).toBe(600));
 
+      // Growth only comes from the reader expanding a row: the view must stay put.
       act(() => grow(1200));
-      expect(viewport.scrollTop).toBe(800);
+      expect(viewport.scrollTop).toBe(600);
 
-      // The reader scrolls up: growth no longer pulls them back down.
       act(() => scrollReaderTo(viewport, 300));
       act(() => grow(1500));
       expect(viewport.scrollTop).toBe(300);

@@ -43,6 +43,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -118,6 +119,7 @@ import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
+import { usesOpenAIStrictJsonSchema } from '../stream/aisdk/v5/execute';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
@@ -377,6 +379,7 @@ type ProcessorLoadedToolsProvider = {
   getLoadedToolsForRequestContext?: (args: {
     requestContext: RequestContext;
     tools?: Record<string, unknown>;
+    getMessages?: () => Promise<MastraDBMessage[]>;
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
 };
 
@@ -1200,8 +1203,6 @@ export class Agent<
    * objective record; unset fields fall back to the agent's `goal` config at
    * evaluation time. A judge model (here or in `goal.judge`) is required for the
    * goal to do anything.
-   *
-   * @experimental Agent goals are experimental and may change in a future release.
    */
   async setObjective(
     objective: string,
@@ -4546,9 +4547,11 @@ export class Agent<
     backgroundTaskEnabled,
     tools,
     getModel,
+    memoryConfig,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
+    memoryConfig?: MemoryConfigInternal;
     /**
      * Tools already resolved for this request. A processor that made a
      * request-scoped tool searchable needs them to rebuild its executor here,
@@ -4568,6 +4571,22 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
 
+    // Resumed runs never re-enter processInputStep, so processors that derive loaded
+    // state from the conversation (e.g. ToolSearchProcessor storage: 'context') read
+    // the persisted thread here. Loaded lazily and at most once.
+    let messagesPromise: Promise<MastraDBMessage[]> | undefined;
+    const getMessages = (): Promise<MastraDBMessage[]> => {
+      if (!threadId) return Promise.resolve([]);
+      messagesPromise ??= this.getMemoryMessages({
+        threadId,
+        resourceId,
+        vectorMessageSearch: '',
+        memoryConfig,
+        requestContext,
+      }).then(result => result.messages);
+      return messagesPromise;
+    };
+
     const collectLoadedTools = async (processor: InputProcessorOrWorkflow | unknown) => {
       if (isProcessorWorkflow(processor)) {
         for (const childProcessor of listProcessorWorkflowChildren(processor)) {
@@ -4581,7 +4600,7 @@ export class Agent<
         return;
       }
 
-      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools });
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools, getMessages });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
         return;
       }
@@ -6904,6 +6923,7 @@ export class Agent<
     const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
       processors: configuredInputProcessors,
       tools: requestResolvedTools,
+      memoryConfig,
       runId,
       resourceId,
       threadId,
@@ -7824,7 +7844,14 @@ export class Agent<
       const targetProvider = structuredOutputModel.provider;
       const targetModelId = structuredOutputModel.modelId;
 
-      if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+      if (
+        targetProvider.includes('openai') ||
+        targetModelId?.includes('openai') ||
+        usesOpenAIStrictJsonSchema(
+          structuredOutputModel,
+          mergeProviderOptions(options.providerOptions, llm.getProviderOptions()),
+        )
+      ) {
         options = {
           ...options,
           structuredOutput: {
@@ -8735,9 +8762,6 @@ export class Agent<
     return fullOutput;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions & { withInitialHistory: true | { perPage?: number } },
   ): Promise<AgentThreadSubscription<OUTPUT, true>>;
@@ -8753,9 +8777,6 @@ export class Agent<
     return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(this.#getThreadRuntimeAgent(), options, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async claimThreadOwnership<OUTPUT = TOutput>(options: {
     resourceId: string;
     threadId: string;
@@ -8781,9 +8802,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   updateThreadPeerAdvertisement(options: {
     resourceId: string;
     threadId: string;
@@ -8796,9 +8814,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
     return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub(), this.#getThreadRuntimeAgent());
   }
@@ -8964,16 +8979,21 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    wrapperClose?.();
+    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   sendMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
@@ -8992,9 +9012,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   queueMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
@@ -9013,16 +9030,10 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
     return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent thread event APIs are experimental and may change in a future release.
-   */
   subscribeThreadEvents(scope: SubscribeAgentThreadEventsOptions, listener: AgentThreadEventListener): () => void {
     return agentThreadStreamRuntime.subscribeThreadEvents(
       this as Agent<any, any, any, any>,
@@ -9032,9 +9043,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent state signal APIs are experimental and may change in a future release.
-   */
   sendStateSignal<OUTPUT = TOutput>(
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
@@ -9059,8 +9067,6 @@ export class Agent<
    * notification dispatch workflow, so a deferred delivery can carry
    * freshly-resolved decision fields (e.g. `streamOptions` with the request
    * context a woken idle thread needs to resolve a model).
-   *
-   * @experimental Agent notification signal APIs are experimental and may change in a future release.
    */
   resolveNotificationDeliveryDecision(input: NotificationDeliveryPolicyInput): Promise<NotificationDeliveryDecision> {
     return resolveNotificationDeliveryDecision({
@@ -9069,9 +9075,6 @@ export class Agent<
     });
   }
 
-  /**
-   * @experimental Agent notification signal APIs are experimental and may change in a future release.
-   */
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
@@ -9322,9 +9325,6 @@ export class Agent<
     return results;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   sendSignal<OUTPUT = TOutput>(
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
@@ -10262,6 +10262,7 @@ export class Agent<
     }
 
     let runId = executionOptions.runId ?? this.getActiveThreadRunId({ threadId, resourceId });
+    let suspendedRun: AgentRun | undefined;
     // Tracks whether runId was recovered from storage (not the in-memory active-run
     // map). This path resumes directly because the snapshot has already been
     // discovered here, avoiding a second storage lookup in sendStreamResume().
@@ -10304,7 +10305,8 @@ export class Agent<
         });
       }
 
-      runId = matchingRuns[0]?.runId;
+      suspendedRun = matchingRuns[0];
+      runId = suspendedRun?.runId;
       resolvedFromStorage = runId !== undefined;
     }
 
@@ -10324,18 +10326,62 @@ export class Agent<
       });
     }
 
+    const pubsub = this.getPubSub();
+    const inMemorySuspension = agentThreadStreamRuntime.getResumableThreadRunSuspension(
+      { threadId, resourceId, runId, toolCallId: options.toolCallId },
+      pubsub,
+    );
+
+    if (!suspendedRun && !inMemorySuspension) {
+      try {
+        const { runs } = await this.listSuspendedRuns({ threadId, resourceId });
+        suspendedRun = runs.find(run => run.runId === runId);
+      } catch (error) {
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
+      }
+    }
+
+    const suspendedToolCall = options.toolCallId
+      ? suspendedRun?.toolCalls.find(toolCall => toolCall.toolCallId === options.toolCallId)
+      : suspendedRun?.toolCalls[0];
+    const approvalGated = inMemorySuspension
+      ? inMemorySuspension.kind === 'approval'
+      : suspendedToolCall?.requiresApproval === true;
+
     const resumeOptions = deepMerge(
       (streamOptions ?? {}) as Record<string, unknown>,
       executionOptions as Record<string, unknown>,
     ) as unknown as AgentExecutionOptions<OUTPUT>;
 
+    const customResumeDataCanCarryApproval =
+      typeof customResumeData === 'object' && customResumeData !== null && !Array.isArray(customResumeData);
+    if (approvalGated && customResumeData !== undefined && !customResumeDataCanCarryApproval) {
+      throw new MastraError({
+        id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendToolApproval() requires custom resumeData to be a non-null object for an approval-gated tool call.`,
+        details: {
+          threadId,
+          resourceId,
+          runId,
+          agentName: this.name,
+          ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+        },
+      });
+    }
+
     const resumeData =
       customResumeData !== undefined
-        ? customResumeData
+        ? approvalGated && customResumeDataCanCarryApproval
+          ? { ...customResumeData, ...(!approved && declineContext ? declineContext : {}), approved }
+          : customResumeData
         : approved
           ? { approved }
           : declineContext
-            ? { approved, ...declineContext }
+            ? { ...declineContext, approved }
             : { approved };
     const resumeStreamOptions = {
       ...resumeOptions,
@@ -10719,6 +10765,14 @@ export class Agent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;

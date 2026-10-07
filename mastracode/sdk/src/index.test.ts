@@ -6,7 +6,9 @@ vi.setConfig({ testTimeout: 30_000 });
 
 // Captures the createSession() args so tests can assert on wiring (e.g.
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
-const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
+const createSessionCalls = vi.hoisted<
+  Array<{ id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }>
+>(() => []);
 
 // Captures the AgentController constructor initialState so tests can assert on
 // which settings.json values were seeded into session state.
@@ -56,8 +58,13 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return undefined;
     }
 
-    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string }) {
-      createSessionCalls.push({ id: args?.id, ownerId: args?.ownerId, resourceId: args?.resourceId });
+    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string; createInitialThread?: boolean }) {
+      createSessionCalls.push({
+        id: args?.id,
+        ownerId: args?.ownerId,
+        resourceId: args?.resourceId,
+        createInitialThread: args?.createInitialThread,
+      });
       return {
         subscribe() {},
         thread: { getId: () => undefined },
@@ -140,7 +147,6 @@ vi.mock('./onboarding/settings.js', () => ({
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -346,9 +352,9 @@ describe('scores storage domain', () => {
 });
 
 describe('Kimi startup access', () => {
-  it('rejects stored OAuth credentials without a valid device ID', async () => {
+  it('rejects stored OAuth credentials without a valid device ID for OM pack selection', async () => {
     const previousApiKey = process.env.KIMI_API_KEY;
-    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { getAvailableOmPacks } = await import('./onboarding/packs.js');
     const { createMastraCode } = await import('./index.js');
 
     try {
@@ -359,11 +365,11 @@ describe('Kimi startup access', () => {
         refresh: 'refresh-token',
         expires: Date.now() + 60_000,
       });
-      vi.mocked(getAvailableModePacks).mockClear();
+      vi.mocked(getAvailableOmPacks).mockClear();
 
       await createMastraCode({ cwd: '/tmp/project-invalid-kimi-oauth' });
 
-      expect(getAvailableModePacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
+      expect(getAvailableOmPacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
     } finally {
       authCredentials.clear();
       if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -470,6 +476,19 @@ describe('settings.json OM seeding', () => {
     }
   });
 
+  it('does not resolve model packs for startup mode defaults', async () => {
+    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { resolveModelDefaults } = await import('./onboarding/settings.js');
+    const { createMastraCode } = await import('./index.js');
+    vi.mocked(getAvailableModePacks).mockClear();
+    vi.mocked(resolveModelDefaults).mockClear();
+
+    await createMastraCode({ cwd: '/tmp/project-no-runtime-packs' });
+
+    expect(getAvailableModePacks).not.toHaveBeenCalled();
+    expect(resolveModelDefaults).not.toHaveBeenCalled();
+  });
+
   it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {
     const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
     vi.mocked(resolveOmRoleModel).mockReturnValue('openai/gpt-5-mini');
@@ -510,6 +529,15 @@ describe('AgentController session id and ownerId wiring', () => {
     expect(call.id).toMatch(/^mastracode-session-/);
     expect(call.ownerId).toBeTruthy();
     expect(call.ownerId).toMatch(/^mastracode-/);
+  });
+
+  it('can defer initial thread creation during local boot', async () => {
+    const { createMastraCode } = await import('./index.js');
+
+    await createMastraCode({ cwd: '/tmp/project-deferred-thread', createInitialThread: false });
+
+    expect(createSessionCalls).toHaveLength(1);
+    expect(createSessionCalls[0]!.createInitialThread).toBe(false);
   });
 
   it('derives stable id and ownerId for the same cwd across calls', async () => {

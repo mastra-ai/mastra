@@ -5,7 +5,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useAgentVersions } from '../hooks/use-agent-versions';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 
 export interface AgentVersionPanelProps {
   agentId: string;
@@ -23,6 +23,7 @@ export function AgentVersionPanel({
   const { data, isLoading } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = data?.versions ?? [];
@@ -59,10 +60,11 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full border-l-2 px-3 py-2.5 text-left text-body',
+                      'text-foreground',
+                      'w-full border-l-2 px-3 py-2.5 text-left',
                       controlStateColorTransition,
                       isSelected
-                        ? 'border-border-strong bg-fill-hover text-foreground'
+                        ? 'border-border-strong bg-fill-hover'
                         : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,
                     )}
                   >

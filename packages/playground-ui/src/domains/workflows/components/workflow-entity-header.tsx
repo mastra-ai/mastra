@@ -1,5 +1,5 @@
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { CopyIcon, Cpu, Database } from 'lucide-react';
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -14,7 +14,11 @@ export interface WorkflowEntityHeaderProps {
 }
 
 export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEntityHeaderProps) => {
-  const { data: workflow, isLoading } = useWorkflow(workflowId, requestContext);
+  const { data: workflow, isLoading } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const workflowName = workflow?.name || workflowId;

@@ -10,6 +10,8 @@ import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
+import { listBuiltinModePacks } from '../onboarding/packs.js';
+import { loadSettings, resolveModelDefaults } from '../onboarding/settings.js';
 import {
   createProcessMemoryDiagnosticsFromEnvironment,
   startConfiguredProcessMemoryDiagnostics,
@@ -48,6 +50,7 @@ export interface HeadlessArgs {
 }
 
 const parseArgsOptions = buildParseArgsOptions();
+const STOP_NOTIFICATION_DISPATCH_TIMEOUT_MS = 2_000;
 
 /**
  * Returns true if `argv` selects headless mode. This must agree with what
@@ -203,7 +206,8 @@ export async function runMCCli(
   let exitCode = 1;
   try {
     boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
-    const { controller, session, mcpManager, effectiveDefaults } = boot;
+    const { controller, session, mcpManager } = boot;
+    const effectiveDefaults = resolveModelDefaults(loadSettings(args.settings), listBuiltinModePacks());
 
     if (mcpManager?.hasServers()) {
       try {
@@ -273,13 +277,23 @@ export async function runMCCli(
         // Best-effort — the process is exiting.
       }
       const { controller, mcpManager } = boot;
-      const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      // Release notification dispatch leases before the pubsub that holds them
+      // closes. Headless has no shutdown deadline, so don't let a stalled
+      // in-flight dispatch hold up exit.
+      await Promise.race([
+        boot.stopNotificationDispatch?.().catch(() => {}),
+        new Promise<void>(resolve => setTimeout(resolve, STOP_NOTIFICATION_DISPATCH_TIMEOUT_MS).unref()),
+      ]);
       await Promise.allSettled([
         mcpManager?.disconnect(),
         controller.getMastra()?.stopWorkers(),
         controller.stopIntervals(),
-        closeSignalsPubSub?.(),
       ]);
+      // The signals pubsub is Mastra's event bus, so close it after the workers
+      // stop. Call close() on the object; a detached method loses `this` and
+      // rejects silently, leaving socket files behind.
+      const signalsPubSub = boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+      await Promise.allSettled([signalsPubSub?.close?.()]);
     }
     await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, warning => {
       process.stderr.write(`Warning: ${warning}\n`);

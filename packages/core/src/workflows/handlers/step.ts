@@ -15,7 +15,7 @@ import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
@@ -104,9 +104,14 @@ export async function executeStep(
   const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = globalThis.crypto.randomUUID();
+  const persistedNestedRunId =
+    executionContext.foreachIndex !== undefined
+      ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]?.metadata
+          ?.nestedRunId
+      : stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId;
   const nestedRunId =
     step.component === 'WORKFLOW' && executionContext.foreachIndex !== undefined
-      ? globalThis.crypto.randomUUID()
+      ? (persistedNestedRunId ?? globalThis.crypto.randomUUID())
       : undefined;
 
   const { inputData, validationError: inputValidationError } = await validateStepInput({
@@ -363,10 +368,38 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
+      let completedNestedOutput: { found: boolean; value?: unknown } = { found: false };
+      if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
+        const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
+        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: step.id,
+          runId: persistedNestedRunId,
+        });
+        if (nestedSnapshot?.status === 'success') {
+          completedNestedOutput = { found: true, value: nestedSnapshot.result };
+        }
+      }
+
+      if (completedNestedOutput.found) {
+        if (engine.requiresDurableContextSerialization()) {
+          contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
+        }
+        return {
+          output: completedNestedOutput.value,
+          suspended,
+          bailed,
+          contextMutations,
+          nestedWflowStepPaused: !!perStep,
+        };
+      }
+
       const output = await runStep({
         runId: nestedRunId ?? runId,
         resourceId,
         workflowId,
+        parentWorkflow: isNestedWorkflow
+          ? { workflowId, runId, stepId: step.id, foreachIndex: executionContext.foreachIndex }
+          : undefined,
         mastra: mastraForStep,
         requestContext,
         actor,
@@ -426,7 +459,7 @@ export async function executeStep(
           bailed = { payload: result };
         },
         abort: () => {
-          abortController?.abort();
+          abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
         },
         // Only pass resume data if this step was actually suspended before
         // This prevents pending nested workflows from trying to resume instead of start

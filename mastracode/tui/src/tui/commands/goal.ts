@@ -108,7 +108,6 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
         return;
       }
     }
-    state.planStartedGoalId = undefined;
     // Abort any in-flight turn. The cleared objective stops the core loop from
     // driving *new* goal continuations, but a turn that was already running when
     // the user cleared keeps going to completion — which reads as "it's still
@@ -246,11 +245,25 @@ export async function startGoalWithDefaults(
   objective: string,
   cancelMessage = 'Goal cancelled.',
 ): Promise<void> {
+  const goal = await setGoalWithDefaults(ctx, objective, cancelMessage);
+  if (goal) await sendGoalReminder(ctx, goal);
+}
+
+/**
+ * Replace the thread's goal with `objective` without sending the goal reminder,
+ * asking for judge defaults only if they are unset. Resolves to `null` when the
+ * user cancels the defaults prompt or the goal could not be set.
+ */
+export async function setGoalWithDefaults(
+  ctx: SlashCommandContext,
+  objective: string,
+  cancelMessage = 'Goal cancelled.',
+): Promise<GoalState | null> {
   const defaults = getJudgeDefaults();
   const judgeDefaults = defaults ?? (await promptForJudgeDefaults(ctx, cancelMessage));
-  if (!judgeDefaults) return;
+  if (!judgeDefaults) return null;
 
-  await startGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
+  return setGoal(ctx, objective, judgeDefaults.judgeModelId, judgeDefaults.maxTurns);
 }
 
 function getJudgeDefaults(): JudgeDefaults | null {
@@ -327,12 +340,12 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   });
 }
 
-async function startGoal(
+async function setGoal(
   ctx: SlashCommandContext,
   objective: string,
   judgeModelId: string,
   maxTurns: number,
-): Promise<void> {
+): Promise<GoalState | null> {
   const { state } = ctx;
   const goalManager = state.goalManager;
 
@@ -370,15 +383,33 @@ async function startGoal(
       goalManager.consumePersistOnNextThreadCreate();
     }
     ctx.showError('Failed to set goal.');
-    return;
+    return null;
   }
 
-  state.planStartedGoalId = undefined;
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
+  return goal;
+}
 
+/**
+ * Send the canonical goal reminder for `goal`. It is delivered into an active
+ * run; on an idle thread it starts the goal run, or with `persistIfIdle` it is
+ * only recorded so no new run starts.
+ */
+export async function sendGoalReminder(
+  ctx: SlashCommandContext,
+  goal: GoalState,
+  options: { persistIfIdle?: boolean } = {},
+): Promise<void> {
+  const { state } = ctx;
+  const goalManager = state.goalManager;
+  const signal = createGoalReminderSignal(goal);
   try {
-    await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
+    await (
+      options.persistIfIdle
+        ? state.session.sendSignal(signal, { ifIdle: { behavior: 'persist' } })
+        : state.session.sendSignal(signal)
+    ).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);

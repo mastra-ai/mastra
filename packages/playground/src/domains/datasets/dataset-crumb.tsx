@@ -1,5 +1,5 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
-import { useDatasets } from '@mastra/playground-ui/domains/datasets';
+import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
 import { DatasetCombobox } from './components/dataset-combobox';
 
