@@ -90,6 +90,8 @@ describe('thinking model capabilities', () => {
       effort('low', 'medium', 'high'),
       ['off', 'low', 'high'],
     ],
+    ['Claude without extended thinking offers only off', 'anthropic/claude-3-5-haiku-20241022', undefined, ['off']],
+    ['Gemini without a thinking config offers only off', 'google/gemini-2.0-flash', undefined, ['off']],
     [
       'other providers offer the efforts the model publishes',
       'xai/grok-3-mini',

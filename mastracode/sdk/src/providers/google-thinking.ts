@@ -36,9 +36,9 @@ function geminiLevelForFamily(family: GeminiThinkingFamily, level: ActiveThinkin
   return cappedAtHigh;
 }
 
-export function runGeminiThinkingLevel(modelId: string, level: ActiveThinkingLevel): ActiveThinkingLevel {
+export function runGeminiThinkingLevel(modelId: string, level: ActiveThinkingLevel): ThinkingLevelSetting {
   const family = getGeminiThinkingFamily(modelId);
-  return family ? geminiLevelForFamily(family, level) : level;
+  return family ? geminiLevelForFamily(family, level) : 'off';
 }
 
 /**

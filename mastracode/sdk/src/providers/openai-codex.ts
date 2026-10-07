@@ -18,6 +18,7 @@ import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { runThinkingLevel } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
+export { supportsMaxReasoningEffort } from '../thinking.js';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
@@ -55,12 +56,9 @@ const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // GPT-5.* models on Codex require at least low reasoning.
-  if (GPT5_MODEL_RE.test(modelId) && level === 'off') {
-    return 'low';
-  }
-
+  const requestedLevel = GPT5_MODEL_RE.test(modelId) && level === 'off' ? 'low' : level;
   const routerModelId = `openai/${modelId}`;
-  return runThinkingLevel(routerModelId, level, getModelReasoningOptions(routerModelId));
+  return runThinkingLevel(routerModelId, requestedLevel, getModelReasoningOptions(routerModelId));
 }
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.

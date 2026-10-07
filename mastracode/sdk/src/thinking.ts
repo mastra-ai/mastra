@@ -80,9 +80,9 @@ function runAnthropicThinkingLevel(
   modelId: string,
   level: ActiveThinkingLevel,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
-): ActiveThinkingLevel {
+): ThinkingLevelSetting {
   const capability = getAnthropicThinkingCapability(modelId);
-  if (capability === 'none') return level;
+  if (capability === 'none') return 'off';
   if (capability === 'budget') return lowestLevelWithSameBudget(level);
   const offeredEffort = closestOfferedEffort(level, reasoningOptions);
   if (offeredEffort) return offeredEffort;
