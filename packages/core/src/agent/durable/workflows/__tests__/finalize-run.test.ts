@@ -238,7 +238,8 @@ describe('runDurableFinishSideEffects', () => {
     });
 
     it('still persists the turn when memory is not readOnly', async () => {
-      const { saveMessages } = await runFinish({});
+      const { saveMessages, seenMemoryContext } = await runFinish({});
+      expect(seenMemoryContext).toEqual({ thread: { id: 'thread-1' }, resourceId: 'resource-1', memoryConfig: {} });
       expect(saveMessages).toHaveBeenCalled();
     });
 
