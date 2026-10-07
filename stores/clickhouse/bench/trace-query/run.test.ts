@@ -267,7 +267,7 @@ describe('report', () => {
     const md = renderReport(runs, probeRecords(4, { ms: 101, mem: 1e8 }), [], new Set(['old']));
     expect(md).toContain('### Peak memory per API');
     expect(md).toContain('| T0-w1 | 1d |');
-    expect(md).toContain('#### Concurrency 4 vs sequential: PASS');
+    expect(md).toContain('#### Concurrency 4 vs sequential (small at 1d): PASS');
     expect(md).toContain('V1 1d @ small**: memory 286 MiB > store limit 256 MiB');
     expect(md).not.toContain('9.0 s');
   });

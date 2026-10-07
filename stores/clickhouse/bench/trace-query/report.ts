@@ -264,10 +264,20 @@ export function bootstrapCi(values: number[], iterations = 2_000): [number, numb
 }
 
 function probeSection(probe: TqRecord[]): string[] {
-  const levels = [...new Set(probe.map(r => r.probeLevel).filter((l): l is number => l !== undefined))].sort(
-    (a, b) => b - a,
-  );
-  if (!levels.length) return ['No probe run yet.'];
+  if (!probe.length) return ['No probe run yet.'];
+  const out: string[] = [];
+  for (const [, ofRun] of groupBy(probe, r => r.runId)) {
+    const buckets = [...new Set(ofRun.map(r => r.bucket))].join(', ');
+    const windows = [...new Set(ofRun.map(r => r.window))].join(', ');
+    const levels = [...new Set(ofRun.map(r => r.probeLevel).filter((l): l is number => l !== undefined))].sort(
+      (a, b) => b - a,
+    );
+    out.push(...probeRunSection(ofRun, levels, `${buckets} at ${windows}`));
+  }
+  return out;
+}
+
+function probeRunSection(probe: TqRecord[], levels: number[], scope: string): string[] {
   const out: string[] = [];
   for (const level of levels) {
     const v = evaluateProbe(probe, level);
@@ -276,7 +286,7 @@ function probeSection(probe: TqRecord[]): string[] {
       return r ? ` [${r[0].toFixed(3)}–${r[1].toFixed(3)}]` : '';
     };
     out.push(
-      `#### Concurrency ${level} vs sequential: ${v.pass ? 'PASS' : v.passWithColdAlone ? 'PASS with cold reps alone' : 'FAIL'}`,
+      `#### Concurrency ${level} vs sequential (${scope}): ${v.pass ? 'PASS' : v.passWithColdAlone ? 'PASS with cold reps alone' : 'FAIL'}`,
       '',
       '| measure (B ÷ A) | median of cells [90% CI] | criterion | ok |',
       '|---|---|---|---|',

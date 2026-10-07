@@ -3,7 +3,8 @@
  *
  *   tsx bench/trace-query/run.ts preflight [--accept-readonly-0]   metadata + capacity check
  *   tsx bench/trace-query/run.ts discover                          sidecar literals (aggregate-only)
- *   tsx bench/trace-query/run.ts probe [--levels 4,2]              concurrency A/B proof → concurrency.json
+ *   tsx bench/trace-query/run.ts probe [--levels 4,2] [--buckets …] [--windows …] [--blocks N]
+ *                                                                   concurrency A/B proof → concurrency.json
  *   tsx bench/trace-query/run.ts run --buckets small,mid [--windows 1d] [--cases T0,T7]
  *                                    [--concurrency N] [--gate-b-approved] [--dry-run]
  *   tsx bench/trace-query/run.ts report
@@ -902,15 +903,21 @@ export async function runProbe(
   ctx: TqContext,
   selection: Selection,
   levels: number[],
-  scope: { buckets: Bucket[]; windows: WindowStage[] } = { buckets: PROBE_BUCKETS, windows: PROBE_WINDOWS },
+  scope: { buckets: Bucket[]; windows: WindowStage[]; blocks?: number } = {
+    buckets: PROBE_BUCKETS,
+    windows: PROBE_WINDOWS,
+  },
 ): Promise<ConcurrencyDecision> {
   const f = files(ctx.resultsDir);
   mkdirSync(ctx.resultsDir, { recursive: true });
   const verdicts: ProbeVerdict[] = [];
   for (const level of levels) {
-    const pairs = scope.buckets.flatMap(bucket =>
-      scope.windows.map(w => ({ project: representative(selection, bucket), window: WINDOWS[w] })),
-    );
+    // Repeating the pairs as extra blocks keeps the A/B order alternating even for a single pair.
+    const pairs = Array.from({ length: scope.blocks ?? 1 }, () =>
+      scope.buckets.flatMap(bucket =>
+        scope.windows.map(w => ({ project: representative(selection, bucket), window: WINDOWS[w] })),
+      ),
+    ).flat();
     for (const [i, { project, window }] of pairs.entries()) {
       const units: Planned[] = PROBE_CASES.map(id => ({
         def: caseById(id),
@@ -997,6 +1004,7 @@ async function main(): Promise<void> {
       windows: { type: 'string' },
       cases: { type: 'string' },
       levels: { type: 'string', default: '4,2' },
+      blocks: { type: 'string', default: '1' },
       concurrency: { type: 'string' },
       tier: { type: 'string', default: '1' },
       'gate-b-approved': { type: 'boolean', default: false },
@@ -1137,7 +1145,13 @@ async function main(): Promise<void> {
         writeJson(f.concurrency, decide([]));
         return;
       }
-      await runProbe(ctx, selection, levels);
+      const blocks = Number(values.blocks);
+      if (!Number.isInteger(blocks) || blocks < 1 || blocks > 4) throw new Error('--blocks must be 1-4');
+      await runProbe(ctx, selection, levels, {
+        buckets: list(values.buckets, BUCKETS, PROBE_BUCKETS),
+        windows: list(values.windows, WINDOW_ORDER, PROBE_WINDOWS),
+        blocks,
+      });
     } else if (command === 'run') {
       if (!sidecar) throw new Error('Run `discover` first');
       await runPhases(ctx, selection, parseFilter(values, deltaAvailable, unavailable), decision!);
