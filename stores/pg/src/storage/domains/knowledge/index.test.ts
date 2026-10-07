@@ -159,7 +159,9 @@ describe('KnowledgePG schema completion marker', () => {
       `CREATE VIEW "${schemaName}".unrelated_report AS SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`,
     );
 
-    await expect(store.dangerouslyReset()).rejects.toThrow();
+    const reset = store.dangerouslyReset();
+    await expect(reset).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    await expect(reset).rejects.toThrow(/depend on the existing Knowledge tables\. Drop or detach them first/);
 
     const views = await pool.query(`SELECT table_name FROM information_schema.views WHERE table_schema = $1`, [
       schemaName,
@@ -334,7 +336,24 @@ describe('KnowledgePG published v1 layout', () => {
     );
     const before = await knowledgeObjects(schemaName);
 
-    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    const init = new KnowledgePG({ pool, schemaName }).init();
+    await expect(init).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    await expect(init).rejects.toThrow(/Drop or detach them first/);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
+  });
+
+  it('rolls back and names the dependents when a host foreign key blocks replacing an empty published layout', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_fk');
+    // Foreign keys are invisible to the view/trigger catalog checks, so only DROP TABLE detects them.
+    await pool.query(
+      `CREATE TABLE "${schemaName}".host_links (node_id TEXT REFERENCES "${schemaName}".mastra_knowledge_nodes(id))`,
+    );
+    const before = await knowledgeObjects(schemaName);
+
+    const init = new KnowledgePG({ pool, schemaName }).init();
+    await expect(init).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    await expect(init).rejects.toThrow(/depend on the existing Knowledge tables\. Drop or detach them first/);
 
     expect(await knowledgeObjects(schemaName)).toEqual(before);
   });
