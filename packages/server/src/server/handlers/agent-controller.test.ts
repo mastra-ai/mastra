@@ -699,6 +699,8 @@ describe('agent-controller routes', () => {
       } as any;
       session.emit({ type: 'message_start', message });
       session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'step two' } });
+      // Buffered workspace events are replayed on subscribe; the snapshot must still come first.
+      session.emit({ type: 'workspace_status_changed', status: 'ready' } as any);
 
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
