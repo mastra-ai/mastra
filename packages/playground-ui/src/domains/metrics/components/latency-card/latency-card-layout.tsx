@@ -15,7 +15,7 @@ export function LatencyCardLayout({ description, actions, children }: LatencyCar
         <MetricsCard.TitleAndDescription title="Latency" description={description} />
         {actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : undefined}
       </MetricsCard.TopBar>
-      <div className="min-h-72 min-w-0">{children}</div>
+      <div className="h-80 min-w-0">{children}</div>
     </MetricsCard>
   );
 }

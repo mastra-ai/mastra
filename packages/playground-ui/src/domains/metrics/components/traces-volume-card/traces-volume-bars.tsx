@@ -16,6 +16,7 @@ export function TracesVolumeBars({ rows, emptyMessage, onRowClick, onErrorSegmen
 
   return (
     <HorizontalBars
+      className="min-h-0"
       data={rows.map(row => {
         const values = [row.completed, row.errors];
         // A row-level click swallows segment clicks, so split navigation across

@@ -16,7 +16,7 @@ export function TracesVolumeCardLayout({ summary, actions, children }: TracesVol
         {summary}
         {actions && <MetricsCard.Actions>{actions}</MetricsCard.Actions>}
       </MetricsCard.TopBar>
-      <div className="min-h-72 min-w-0">{children}</div>
+      <div className="h-80 min-w-0">{children}</div>
     </MetricsCard>
   );
 }

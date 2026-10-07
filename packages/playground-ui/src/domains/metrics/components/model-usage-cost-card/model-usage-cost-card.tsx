@@ -30,7 +30,7 @@ export function ModelUsageCostCard({ onOpenTraces, onRowClick }: ModelUsageCostC
   if (isError || !data) {
     return (
       <ModelUsageCostCardLayout actions={actions}>
-        <MetricsCard.Error message="Failed to load model usage data" className="h-64" />
+        <MetricsCard.Error message="Failed to load model usage data" className="h-full" />
       </ModelUsageCostCardLayout>
     );
   }

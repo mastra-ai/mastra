@@ -32,7 +32,7 @@ export function LatencyCard({ onOpenTraces, onBucketClick }: LatencyCardProps) {
   if (isError || !data) {
     return (
       <LatencyCardLayout description="p50 and p95 latency.">
-        <MetricsCard.Error message="Failed to load latency data" className="h-64" />
+        <MetricsCard.Error message="Failed to load latency data" className="h-full" />
       </LatencyCardLayout>
     );
   }

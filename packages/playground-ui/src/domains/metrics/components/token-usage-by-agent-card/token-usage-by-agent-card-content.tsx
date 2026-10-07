@@ -42,6 +42,7 @@ export function TokenUsageByAgentCardContent({
       </TabList>
       <TabContent value="tokens" className="pt-3">
         <HorizontalBars
+          className="min-h-0"
           data={rows.map(d => ({
             name: d.name,
             values: [d.input, d.output],
@@ -58,6 +59,7 @@ export function TokenUsageByAgentCardContent({
       <TabContent value="cost" className="pt-3">
         {cost.total > 0 ? (
           <HorizontalBars
+            className="min-h-0"
             data={cost.rows.map(d => ({
               name: d.name,
               values: [d.cost],

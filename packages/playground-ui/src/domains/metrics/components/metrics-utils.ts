@@ -1,7 +1,7 @@
 import type { DataListRootProps } from '@/ds/components/DataList';
 
 export const METRICS_DATA_LIST_PROPS = {
-  className: 'max-h-80',
+  className: 'max-h-full',
   mask: { left: false },
 } satisfies Pick<DataListRootProps, 'className' | 'mask'>;
 

@@ -34,7 +34,7 @@ export function TokenUsageByAgentCard({ onOpenTraces, onRowClick }: TokenUsageBy
   if (isError || !data) {
     return (
       <TokenUsageByAgentCardLayout actions={actions}>
-        <MetricsCard.Error message="Failed to load token usage data" className="h-64" />
+        <MetricsCard.Error message="Failed to load token usage data" className="h-full" />
       </TokenUsageByAgentCardLayout>
     );
   }
