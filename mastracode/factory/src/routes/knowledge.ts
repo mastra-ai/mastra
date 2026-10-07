@@ -59,6 +59,11 @@ export interface KnowledgeAccessProfile {
   rootScopeAddress: string;
   baselineScopes: MaterializeKnowledgeScopeInput[];
   intakeScopes?: MaterializeKnowledgeScopeInput[];
+  /**
+   * Host-operator trust for this caller. Agentic import transcripts reflect the importer's
+   * authority rather than the viewer's, so they are returned only to operators.
+   */
+  importOperator?: boolean;
 }
 
 export interface KnowledgeAccessProfileInput {
@@ -332,6 +337,8 @@ interface ResolvedView {
   readableScopeIds: KnowledgeScopeIds;
   /** Binding scope addresses whose imports this view may list. */
   importScopeAddresses: ReadonlySet<string>;
+  /** Whether the host trusts this caller with import transcripts. */
+  importOperator: boolean;
   orgScopeId: string;
   resourceScopeId: string;
   threadScopeId?: string;
@@ -745,6 +752,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         vouchedScopes: Array<{ address: string; scopeId: string }>;
         rootScopeId: string;
         perspectiveKey: string;
+        importOperator: boolean;
       }
     | undefined
   > {
@@ -802,6 +810,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       scopeIds,
       vouchedScopes,
       rootScopeId: rootScope.scopeNodeId,
+      importOperator: profile.importOperator === true,
       perspectiveKey: `${input.projectId}\u0000${input.userId}\u0000${profile.id}\u0000${knowledgeScopeIdsKey(scopeIds)}`,
     };
   }
@@ -939,6 +948,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         perspectiveKey,
         readableScopeIds,
         importScopeAddresses,
+        importOperator: profile.importOperator,
         orgScopeId,
         resourceScopeId: profile.rootScopeId,
         pinScopes: [{ level: 'resource', scopeId: profile.rootScopeId }],
@@ -957,6 +967,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       perspectiveKey,
       readableScopeIds,
       importScopeAddresses,
+      importOperator: profile.importOperator,
       orgScopeId,
       resourceScopeId,
       threadScopeId,
@@ -1272,7 +1283,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               })
             : [];
           let transcript: KnowledgeImportRunDetailPayload['transcript'];
-          if (run.transcriptThreadId) {
+          if (run.transcriptThreadId && resolved.importOperator) {
             const memory = importer.agentic
               ? await importer.agentic.agent.getMemory().catch(() => undefined)
               : undefined;
