@@ -712,6 +712,17 @@ describe('RequestContext', () => {
       expect(Date.now() - start).toBeLessThan(2000);
     });
 
+    it('should keep a projected prefix when a large array exhausts the budget', () => {
+      const items = Array.from({ length: 9_999 }, (_, id) => ({ id }));
+      const ctx = new RequestContext();
+      ctx.set('items', items);
+
+      const projected = ctx.serializeForSpan()['items'] as unknown[];
+
+      expect(projected[0]).toEqual({ id: 0 });
+      expect(projected[projected.length - 1]).toBe('[Truncated]');
+    });
+
     it('should keep an own __proto__ key as data', () => {
       const value = JSON.parse('{"__proto__": {"polluted": true}, "ok": 1}');
       const ctx = new RequestContext();

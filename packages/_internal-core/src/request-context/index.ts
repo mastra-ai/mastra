@@ -264,13 +264,13 @@ function projectForSpan(
       // Each slot is charged to the budget so sparse arrays with a huge `length`
       // can't stall span creation.
       const length = obj.length;
-      const limit = Math.min(length, budget.remaining);
-      budget.remaining -= limit;
       const out: unknown[] = [];
-      for (let i = 0; i < limit; i++) {
+      let i = 0;
+      for (; i < length && budget.remaining > 0; i++) {
+        budget.remaining--;
         out.push(projectForSpan(obj[i], ancestors, depth + 1, budget));
       }
-      if (limit < length) out.push('[Truncated]');
+      if (i < length) out.push('[Truncated]');
       return out;
     }
     const out: Record<string, unknown> = {};
