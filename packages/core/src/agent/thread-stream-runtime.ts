@@ -263,6 +263,7 @@ type PreparedThreadRun = {
   threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
+  finalizerToken?: object;
 };
 
 type PendingIdleSignal<OUTPUT = unknown> = {
@@ -556,6 +557,14 @@ function createRuntimeState(): AgentThreadRuntimeState {
 export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+  #threadlessRunFinalizer = new FinalizationRegistry<{
+    state: AgentThreadRuntimeState;
+    runId: string;
+    token: object;
+  }>(({ state, runId, token }) => {
+    if (state.preparedRunsById.get(runId)?.finalizerToken !== token) return;
+    this.#cleanupPreparedRun(state, runId);
+  });
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
@@ -2586,13 +2595,18 @@ export class AgentThreadStreamRuntime {
     state.activeThreadStreamIds.clear();
     state.streamSeqByRunId.clear();
     state.watchedThreadStreamIds.clear();
+    for (const preparedRun of state.preparedRunsById.values()) {
+      if (preparedRun.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
+    }
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
   }
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
-    state.preparedRunsById.get(runId)?.cleanup();
+    const preparedRun = state.preparedRunsById.get(runId);
+    preparedRun?.cleanup();
+    if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
     state.abortedRunIds.delete(runId);
   }
@@ -2864,8 +2878,15 @@ export class AgentThreadStreamRuntime {
     if (!threadId) {
       if (registrationOptions?.strict) return;
       const state = this.#getState(pubsub);
+      const runId = output.runId;
+      const finalizerToken = {};
+      const preparedRun = state.preparedRunsById.get(runId);
+      if (preparedRun) {
+        preparedRun.finalizerToken = finalizerToken;
+        this.#threadlessRunFinalizer.register(output, { state, runId, token: finalizerToken }, finalizerToken);
+      }
       void Promise.allSettled([output._waitUntilFinished()]).then(() => {
-        this.#cleanupPreparedRun(state, output.runId);
+        this.#cleanupPreparedRun(state, runId);
       });
       return;
     }
