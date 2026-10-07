@@ -823,7 +823,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-call': {
-              const pending = self.#pendingToolCalls[chunk.payload.toolCallId];
+              // Own-property check: provider-supplied IDs like "constructor" must not hit Object.prototype.
+              const pending = Object.hasOwn(self.#pendingToolCalls, chunk.payload.toolCallId)
+                ? self.#pendingToolCalls[chunk.payload.toolCallId]
+                : undefined;
               if (pending) {
                 delete self.#pendingToolCalls[chunk.payload.toolCallId];
                 const { meta } = pending;
@@ -2234,6 +2237,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallArgsDeltas = {};
     this.#toolCallDeltaIdNameMap = {};
     this.#toolCallStreamingMeta = {};
+    this.#pendingToolCalls = {};
   }
 
   #createEventedStream() {
@@ -2325,6 +2329,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       toolCallArgsDeltas: this.#toolCallArgsDeltas,
       toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
       toolCallStreamingMeta: this.#toolCallStreamingMeta,
+      pendingToolCalls: this.#pendingToolCalls,
       toolCalls: this.#toolCalls,
       toolResults: this.#toolResults,
       warnings: this.#warnings,
@@ -2351,6 +2356,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
     this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
     this.#toolCallStreamingMeta = state.toolCallStreamingMeta ?? {};
+    this.#pendingToolCalls = state.pendingToolCalls ?? {};
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;
