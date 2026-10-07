@@ -157,6 +157,145 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it.each(['ensureId', 'create', 'send'] as const)('preserves startup selections on first %s', async operation => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, `startup-${operation}`);
+    const session = await controller.createSession({ createInitialThread: false });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+    await session.state.set({ notifications: false, observerModelId: 'openai/gpt-5.5', hostOnly: 'keep' });
+    const selections: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      if (event.type === 'model_changed' || event.type === 'mode_changed') selections.push(event);
+    });
+
+    if (operation === 'ensureId') await session.thread.ensureId();
+    if (operation === 'create') await session.thread.create({});
+    if (operation === 'send') await session.sendMessage({ content: 'Hello' });
+
+    expect(session.mode.get()).toBe('plan');
+    expect(session.model.get()).toBe('kimi-for-coding/kimi-for-coding');
+    expect(session.state.get()).toMatchObject({ thinkingLevel: 'high', notifications: false, hostOnly: 'keep' });
+    expect(selections).toEqual([]);
+    const memory = await storage.getStore('memory');
+    expect((await memory!.getThreadById({ threadId: session.thread.requireId() }))?.metadata).toMatchObject({
+      currentModeId: 'plan',
+      currentModelId: 'kimi-for-coding/kimi-for-coding',
+      thinkingLevel: 'high',
+      notifications: false,
+      observerModelId: 'openai/gpt-5.5',
+    });
+    expect((await memory!.getThreadById({ threadId: session.thread.requireId() }))?.metadata).not.toHaveProperty(
+      'hostOnly',
+    );
+    await session.thread.clearAndReleaseLock();
+  });
+
+  it.each(['create', 'clear', 'delete'] as const)(
+    'uses host defaults after a prior binding and %s',
+    async operation => {
+      const storage = new InMemoryStore();
+      const controller = await createSettingsController(storage, `after-${operation}`);
+      const session = await controller.createSession({ createInitialThread: false });
+      await session.mode.switch({ modeId: 'plan' });
+      await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+      const first = await session.thread.create({});
+      if (operation === 'clear') session.thread.clear();
+      if (operation === 'delete') await session.thread.delete({ threadId: first.id });
+      const next = await session.thread.create({});
+      expect(session.mode.get()).toBe('build');
+      expect(session.model.get()).toBe('openai/gpt-5.5');
+      expect(session.state.get().thinkingLevel).toBe('low');
+      const memory = await storage.getStore('memory');
+      expect((await memory!.getThreadById({ threadId: next.id }))?.metadata).toMatchObject({
+        currentModeId: 'build',
+        currentModelId: 'openai/gpt-5.5',
+      });
+      expect((await memory!.getThreadById({ threadId: next.id }))?.metadata?.thinkingLevel).toBeUndefined();
+      await session.thread.clearAndReleaseLock();
+    },
+  );
+
+  it('retains pending startup choices after failed creation for retry', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'startup-retry');
+    const session = await controller.createSession({ createInitialThread: false });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+    const memory = await storage.getStore('memory');
+    vi.spyOn(memory!, 'saveThread').mockRejectedValueOnce(new Error('save failed'));
+    await expect(session.thread.ensureId()).rejects.toThrow('save failed');
+    expect(session.thread.getId()).toBeNull();
+    expect(session.mode.get()).toBe('plan');
+    expect(session.model.get()).toBe('kimi-for-coding/kimi-for-coding');
+    expect(session.state.get().thinkingLevel).toBe('high');
+    const threadId = await session.thread.ensureId();
+    expect((await memory!.getThreadById({ threadId }))?.metadata).toMatchObject({
+      currentModeId: 'plan',
+      currentModelId: 'kimi-for-coding/kimi-for-coding',
+      thinkingLevel: 'high',
+    });
+    expect(session.state.get().thinkingLevel).toBe('high');
+    await session.thread.clearAndReleaseLock();
+  });
+
+  it('restores stored settings rather than pending startup choices when opening an existing thread', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'startup-existing');
+    const session = await controller.createSession({ createInitialThread: false });
+    const memory = await storage.getStore('memory');
+    await memory!.saveThread({
+      thread: {
+        id: 'existing',
+        resourceId: session.identity.getResourceId(),
+        title: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { currentModeId: 'build', currentModelId: 'openai/gpt-5.5', thinkingLevel: 'medium' },
+      },
+    });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+    await session.thread.switch({ threadId: 'existing' });
+    expect(session.mode.get()).toBe('build');
+    expect(session.model.get()).toBe('openai/gpt-5.5');
+    expect(session.state.get().thinkingLevel).toBe('medium');
+    expect((await memory!.getThreadById({ threadId: 'existing' }))?.metadata?.thinkingLevel).toBe('medium');
+    await session.thread.create({});
+    expect(session.state.get().thinkingLevel).toBe('low');
+    await session.thread.clearAndReleaseLock();
+  });
+
+  it('does not promote an explicit startup model to an unconfigured host fallback', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'startup-no-default',
+      name: 'Startup',
+      instructions: 'Test',
+      model: new MastraLanguageModelV2Mock({}),
+    });
+    const controller = new AgentController({
+      id: 'startup-no-default',
+      agent,
+      storage,
+      workspace: createMockWorkspace(),
+      modes: [{ id: 'build', name: 'Build', default: true }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ createInitialThread: false });
+    await session.model.switch('kimi-for-coding/kimi-for-coding');
+    const first = await session.thread.ensureId();
+    expect(session.model.get()).toBe('kimi-for-coding/kimi-for-coding');
+    const memory = await storage.getStore('memory');
+    expect((await memory!.getThreadById({ threadId: first }))?.metadata?.currentModelId).toBe(
+      'kimi-for-coding/kimi-for-coding',
+    );
+    const next = await session.thread.create({});
+    expect(session.model.get()).toBe('');
+    expect((await memory!.getThreadById({ threadId: next.id }))?.metadata?.currentModelId).toBeUndefined();
+    await session.thread.clearAndReleaseLock();
+  });
+
   it('restores mode, model, thinking level, and token usage when switching A to B to A', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'switch');
