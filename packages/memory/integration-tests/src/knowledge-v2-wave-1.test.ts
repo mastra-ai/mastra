@@ -469,17 +469,14 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'shipyard', title: 'Kept' });
     await plainMemory.saveMessages({ messages: [message('kept-thread')] });
 
-    // Turning Knowledge on refuses to reinterpret v1 rows and names the explicit reset.
-    const vector = await createVector();
-    const blocked = createRuntime(storage, vector);
-    await expect(blocked.knowledge.reconcile()).rejects.toThrow('await storage.stores?.knowledge?.dangerouslyReset()');
     expect(await countV1Nodes()).toBe(1);
 
-    await storage.stores!.knowledge!.dangerouslyReset();
-    // Reset removes the retired v1 cursor table from this store's own schema.
-    if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
-    const upgraded = createRuntime(storage, vector);
+    // Knowledge v1 data is not migrated: turning Knowledge on replaces the published v1 tables, rows included.
+    const upgraded = createRuntime(storage, await createVector());
     await upgraded.knowledge.reconcile();
+    expect(await storage.stores!.knowledge!.getNode('v1-node')).toBeNull();
+    // Replacement removes the retired v1 cursor table from this store's own schema.
+    if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
     const threadId = `upgrade-${randomUUID()}`;
     await upgraded.memory.createThread({ threadId, resourceId: 'shipyard', title: 'After upgrade' });
     await upgraded.memory.saveMessages({ messages: [message(threadId)] });
