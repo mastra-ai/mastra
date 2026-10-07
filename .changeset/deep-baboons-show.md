@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added `reasoningOptions` to each model returned by `GET /web/config/models`, so the Factory UI can offer only the thinking levels a model runs.
+Added `reasoningOptions` to the models `GET /web/config/models` returns when models.dev describes them, so the Factory UI can offer only the thinking levels a model runs. An empty list means models.dev lists the model without reasoning controls.
 
 ```json
 {
