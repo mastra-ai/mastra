@@ -1,8 +1,8 @@
 ---
-title: "Processors | Agents"
-description: "Use Mastra input and output processors to transform, validate, filter, and control agent messages at defined points in the execution pipeline."
+title: 'Processors | Agents'
+description: 'Use Mastra input and output processors to transform, validate, filter, and control agent messages at defined points in the execution pipeline.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Processors
@@ -40,8 +40,8 @@ Mastra includes several processors for common use cases. You can also create cus
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
 ```typescript {2,8-15} title="src/mastra/agents/moderated-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { ModerationProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { ModerationProcessor } from '@mastra/core/processors';
 
 export const moderatedAgent = new Agent({
   id: 'moderated-agent',
@@ -56,7 +56,7 @@ export const moderatedAgent = new Agent({
       strategy: 'block',
     }),
   ],
-})
+});
 ```
 
 ## Execution order
@@ -64,7 +64,7 @@ export const moderatedAgent = new Agent({
 Processors run in the order they appear in the array:
 
 ```typescript
-inputProcessors: [new UnicodeNormalizer(), new PromptInjectionDetector(), new ModerationProcessor()]
+inputProcessors: [new UnicodeNormalizer(), new PromptInjectionDetector(), new ModerationProcessor()];
 ```
 
 For output processors, the order determines the sequence of transformations applied to the model's response.
@@ -96,21 +96,18 @@ With this ordering, an output guardrail that calls `abort()` skips memory proces
 Processors are configured on the agent through three arrays:
 
 ```typescript
-import { Agent } from '@mastra/core/agent'
-import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/core/processors';
 
 const agent = new Agent({
   id: 'support-agent',
   name: 'support-agent',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
-  inputProcessors: [
-    new TokenLimiter(4000),
-    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' }),
-  ],
+  inputProcessors: [new TokenLimiter(4000), new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
   outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
   errorProcessors: [new PrefillErrorHandler()],
-})
+});
 ```
 
 - `inputProcessors` run before the LLM.
@@ -134,8 +131,8 @@ Your processors are never reordered relative to each other. A processor with an 
 To customize one without losing the rest, pass a processor with the same `id`:
 
 ```typescript
-import { Agent } from '@mastra/core/agent'
-import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { StreamErrorRetryProcessor } from '@mastra/core/processors';
 
 const agent = new Agent({
   id: 'tuned-agent',
@@ -144,7 +141,7 @@ const agent = new Agent({
   instructions: '...',
   errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
   maxProcessorRetries: 5,
-})
+});
 ```
 
 The `StreamErrorRetryProcessor` above is the only stream-retry processor on the agent, and it resolves in its usual position: last, behind the `ProviderHistoryCompat` and `PrefillErrorHandler` defaults your list never names. Pass all three ids to run a completely custom set.
@@ -162,7 +159,7 @@ new Agent({
   errorProcessorDefaults: false,
   errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
   maxProcessorRetries: 5,
-})
+});
 ```
 
 An `errorProcessors` list passed to a single `generate()` or `stream()` call works differently: it replaces the agent's resolved list for that call, defaults included.
@@ -173,10 +170,10 @@ Each array also accepts a function that returns an array, so processors can be b
 new Agent({
   id: 'processors-agent',
   inputProcessors: ({ requestContext }) => {
-    const limit = requestContext.get('tokenLimit') ?? 4000
-    return [new TokenLimiter(limit)]
+    const limit = requestContext.get('tokenLimit') ?? 4000;
+    return [new TokenLimiter(limit)];
   },
-})
+});
 ```
 
 ### Override processors per call
@@ -187,7 +184,7 @@ new Agent({
 await agent.stream('Summarize this', {
   inputProcessors: [new TokenLimiter(2000)],
   maxProcessorRetries: 5,
-})
+});
 ```
 
 ## Create custom processors
@@ -204,11 +201,11 @@ Text lives in `message.content.parts`, not on `message.content` itself. Iterate 
 ### Transform input messages
 
 ```typescript title="src/mastra/processors/custom-input.ts"
-import type { Processor, ProcessInputArgs } from '@mastra/core/processors'
-import type { MastraDBMessage } from '@mastra/core/memory'
+import type { Processor, ProcessInputArgs } from '@mastra/core/processors';
+import type { MastraDBMessage } from '@mastra/core/memory';
 
 export class CustomInputProcessor implements Processor {
-  id = 'custom-input'
+  id = 'custom-input';
 
   async processInput({ messages }: ProcessInputArgs): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM.
@@ -221,7 +218,7 @@ export class CustomInputProcessor implements Processor {
           part.type === 'text' ? { ...part, text: part.text.toLowerCase() } : part,
         ),
       },
-    }))
+    }));
   }
 }
 ```
@@ -235,14 +232,10 @@ See the [`Processor` reference](/reference/processors/processor-interface#proces
 While `processInput()` runs once at the start of agent execution, `processInputStep()` runs at **each step** of the agentic loop (including tool call continuations). It enables per-step configuration changes like runtime model switching or tool choice modifications.
 
 ```typescript title="src/mastra/processors/step-processor.ts"
-import type {
-  Processor,
-  ProcessInputStepArgs,
-  ProcessInputStepResult,
-} from '@mastra/core/processors'
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors';
 
 export class DynamicModelProcessor implements Processor {
-  id = 'dynamic-model'
+  id = 'dynamic-model';
 
   async processInputStep({
     stepNumber,
@@ -252,16 +245,16 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' };
     }
 
     // Disable tools after 5 steps to force completion
     if (stepNumber > 5) {
-      return { toolChoice: 'none' }
+      return { toolChoice: 'none' };
     }
 
     // No changes for other steps
-    return {}
+    return {};
   }
 }
 ```
@@ -306,27 +299,27 @@ The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `p
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' };
     }
     if (stepNumber > 5) {
-      return { toolChoice: 'none' }
+      return { toolChoice: 'none' };
     }
   },
-})
+});
 ```
 
 ### Transform output messages
 
 ```typescript title="src/mastra/processors/custom-output.ts"
-import type { Processor } from '@mastra/core/processors'
-import type { MastraDBMessage } from '@mastra/core/memory'
+import type { Processor } from '@mastra/core/processors';
+import type { MastraDBMessage } from '@mastra/core/memory';
 
 export class CustomOutputProcessor implements Processor {
-  id = 'custom-output'
+  id = 'custom-output';
 
   async processOutputResult({ messages }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
-    return messages.filter(msg => msg.role !== 'system')
+    return messages.filter(msg => msg.role !== 'system');
   }
 }
 ```
@@ -334,15 +327,15 @@ export class CustomOutputProcessor implements Processor {
 The method also receives a `result` object with the full generation data, `text`, `usage` (token counts), `finishReason`, and `steps` (each containing `toolCalls`, `toolResults`, etc.). Use it to track usage or inspect tool calls:
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
-import type { Processor } from '@mastra/core/processors'
+import type { Processor } from '@mastra/core/processors';
 
 export class UsageTracker implements Processor {
-  id = 'usage-tracker'
+  id = 'usage-tracker';
 
   async processOutputResult({ messages, result }) {
-    console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`)
-    console.log(`Finish reason: ${result.finishReason}`)
-    return messages
+    console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`);
+    console.log(`Finish reason: ${result.finishReason}`);
+    return messages;
   }
 }
 ```
@@ -352,20 +345,20 @@ export class UsageTracker implements Processor {
 The `processOutputStream()` method transforms or filters streaming chunks before they reach the client:
 
 ```typescript title="src/mastra/processors/stream-filter.ts"
-import type { Processor } from '@mastra/core/processors'
-import type { ChunkType } from '@mastra/core/stream'
+import type { Processor } from '@mastra/core/processors';
+import type { ChunkType } from '@mastra/core/stream';
 
 export class StreamFilter implements Processor {
-  id = 'stream-filter'
+  id = 'stream-filter';
 
   async processOutputStream({ part }): Promise<ChunkType | null> {
     // Drop text-delta chunks that contain the word "secret"
     if (part.type === 'text-delta' && part.payload.text.includes('secret')) {
-      return null
+      return null;
     }
 
     // Return the (possibly modified) chunk to emit it
-    return part
+    return part;
   }
 }
 ```
@@ -383,19 +376,19 @@ To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, s
 The `processOutputStep()` method runs after each LLM step, allowing you to validate the response and optionally request a retry:
 
 ```typescript title="src/mastra/processors/response-validator.ts"
-import type { Processor } from '@mastra/core/processors'
+import type { Processor } from '@mastra/core/processors';
 
 export class ResponseValidator implements Processor {
-  id = 'response-validator'
+  id = 'response-validator';
 
   async processOutputStep({ text, abort, retryCount }) {
-    const isValid = await validateResponse(text)
+    const isValid = await validateResponse(text);
 
     if (!isValid && retryCount < 3) {
-      abort('Response did not meet requirements. Try again.', { retry: true })
+      abort('Response did not meet requirements. Try again.', { retry: true });
     }
 
-    return []
+    return [];
   }
 }
 ```
@@ -407,22 +400,22 @@ For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced 
 Output methods receive a `state` object that persists for the lifetime of one request. State is keyed by the processor's `id`. Each processor sees only its own data, and it's shared between `processOutputStream`, `processOutputStep`, and `processOutputResult`. A new state object is created for every new `agent.generate()` or `agent.stream()` call.
 
 ```typescript title="src/mastra/processors/word-counter.ts"
-import type { Processor } from '@mastra/core/processors'
+import type { Processor } from '@mastra/core/processors';
 
 export class WordCounter implements Processor {
-  id = 'word-counter'
+  id = 'word-counter';
 
   async processOutputStream({ part, state }) {
-    state.wordCount ??= 0
+    state.wordCount ??= 0;
     if (part.type === 'text-delta') {
-      state.wordCount += part.payload.text.split(/\s+/).filter(Boolean).length
+      state.wordCount += part.payload.text.split(/\s+/).filter(Boolean).length;
     }
-    return part
+    return part;
   }
 
   async processOutputResult({ messages, state }) {
-    console.log(`Total words: ${state.wordCount}`)
-    return messages
+    console.log(`Total words: ${state.wordCount}`);
+    return messages;
   }
 }
 ```
@@ -439,15 +432,15 @@ Mastra provides utility processors for common tasks:
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit. Prioritizes recent messages and preserves system messages.
 
 ```typescript {7}
-import { Agent } from '@mastra/core/agent'
-import { TokenLimiter } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { TokenLimiter } from '@mastra/core/processors';
 
 const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [new TokenLimiter(127000)],
-})
+});
 ```
 
 See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-processor) for custom encoding, strategy, and count mode options.
@@ -457,8 +450,8 @@ See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-
 Caps how many tokens of each tool result the model reads. The stored and streamed result stays whole. Add it as an output processor next to `TokenLimiter`, with a limit well below the `TokenLimiter` budget, so one large result doesn't push the current tool call out of the prompt.
 
 ```typescript {8}
-import { Agent } from '@mastra/core/agent'
-import { TokenLimiter, ToolResultTokenLimiter } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { TokenLimiter, ToolResultTokenLimiter } from '@mastra/core/processors';
 
 const agent = new Agent({
   id: 'my-agent',
@@ -466,7 +459,7 @@ const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [new TokenLimiter({ limit: 8000 })],
   outputProcessors: [new ToolResultTokenLimiter({ limit: 4000 })],
-})
+});
 ```
 
 See the [`ToolResultTokenLimiter` reference](/reference/processors/tool-result-token-limiter) for details.
@@ -480,7 +473,7 @@ By default, `ToolCallFilter` filters tool calls from prior history and leaves to
 ```typescript
 new ToolCallFilter({
   filterAfterToolSteps: 2,
-})
+});
 ```
 
 Set `preserveModelOutput: true` to keep compact `toModelOutput` history for filtered completed tool results. The filter keeps only the model-facing output and removes raw tool args and raw results.
@@ -488,7 +481,7 @@ Set `preserveModelOutput: true` to keep compact `toModelOutput` history for filt
 ```typescript
 new ToolCallFilter({
   preserveModelOutput: true,
-})
+});
 ```
 
 See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
@@ -530,11 +523,11 @@ Use caching when identical requests recur across users or sessions. Examples inc
 Add a `ResponseCache` to the agent's `inputProcessors` and pass any `MastraServerCache` as the backend. For development, `InMemoryServerCache` works out of the box:
 
 ```typescript title="src/mastra/agents/search-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { InMemoryServerCache } from '@mastra/core/cache'
-import { ResponseCache } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { InMemoryServerCache } from '@mastra/core/cache';
+import { ResponseCache } from '@mastra/core/processors';
 
-const cache = new InMemoryServerCache()
+const cache = new InMemoryServerCache();
 
 export const searchAgent = new Agent({
   id: 'search-agent',
@@ -542,7 +535,7 @@ export const searchAgent = new Agent({
   instructions: 'You answer questions concisely.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache, ttl: 600 })], // 10 minutes
-})
+});
 ```
 
 The first call runs the LLM normally and writes the response to the cache. Subsequent calls with an identical resolved prompt return the cached response without invoking the LLM.
@@ -552,19 +545,19 @@ The first call runs the LLM normally and writes the response to the cache. Subse
 Per-call config flows through `RequestContext`. Use `ResponseCache.context()` to build a fresh context, or `ResponseCache.applyContext()` to merge into one you already have:
 
 ```typescript title="src/example.ts"
-import { ResponseCache } from '@mastra/core/processors'
-import { RequestContext } from '@mastra/core/request-context'
+import { ResponseCache } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 
 // Fresh context with the override
 await agent.stream('hello', {
   requestContext: ResponseCache.context({ key: 'custom-key', bust: true }),
-})
+});
 
 // Or merge into an existing context
-const ctx = new RequestContext()
-ctx.set('caller-meta', { userId: 'u-123' })
-ResponseCache.applyContext(ctx, { bust: true })
-await agent.stream('hello', { requestContext: ctx })
+const ctx = new RequestContext();
+ctx.set('caller-meta', { userId: 'u-123' });
+ResponseCache.applyContext(ctx, { bust: true });
+await agent.stream('hello', { requestContext: ctx });
 ```
 
 These fields are overridable per call:
@@ -590,7 +583,7 @@ new Agent({
       scope: 'org-123', // explicit tenant scope
     }),
   ],
-})
+});
 ```
 
 Pass `scope: null` to deliberately share entries across all callers. Only use this for known-public, non-personalized content.
@@ -600,11 +593,11 @@ Pass `scope: null` to deliberately share entries across all callers. Only use th
 `ResponseCache` accepts any `MastraServerCache`. For production, use `RedisCache` from `@mastra/redis`:
 
 ```typescript title="src/mastra/agents/cached-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { ResponseCache } from '@mastra/core/processors'
-import { RedisCache } from '@mastra/redis'
+import { Agent } from '@mastra/core/agent';
+import { ResponseCache } from '@mastra/core/processors';
+import { RedisCache } from '@mastra/redis';
 
-const cache = new RedisCache({ url: process.env.REDIS_URL })
+const cache = new RedisCache({ url: process.env.REDIS_URL });
 
 export const agent = new Agent({
   id: 'cached-agent',
@@ -612,7 +605,7 @@ export const agent = new Agent({
   instructions: '...',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   inputProcessors: [new ResponseCache({ cache })],
-})
+});
 ```
 
 For a custom backend, extend `MastraServerCache` and implement its abstract methods (the processor only calls `get` and `set`).
@@ -634,7 +627,7 @@ Multimodal prompts are included too. For image and file parts, the key includes 
 Pass `key` as a function on the constructor or per-call to derive your own cache key from any subset of those inputs. The function receives the same inputs the deterministic hash would have consumed and returns a string (or a `Promise<string>`):
 
 ```typescript title="src/example.ts"
-import { ResponseCache, buildResponseCacheKey } from '@mastra/core/processors'
+import { ResponseCache, buildResponseCacheKey } from '@mastra/core/processors';
 
 await agent.stream(input, {
   requestContext: ResponseCache.context({
@@ -642,14 +635,14 @@ await agent.stream(input, {
     // step number, scope, etc.
     key: ({ model, prompt }) => `qa:${model.modelId}:${JSON.stringify(prompt).slice(-200)}`,
   }),
-})
+});
 
 // Or reuse the deterministic helper while overriding individual fields:
 await agent.stream(input, {
   requestContext: ResponseCache.context({
     key: inputs => buildResponseCacheKey({ ...inputs, scope: 'global' }),
   }),
-})
+});
 ```
 
 If the function throws, the processor falls back to the default key derivation so the call still benefits from caching.
@@ -667,20 +660,20 @@ Cache writes happen after the response completes. Failed runs (errors, tripwire 
 When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep()` with `sendSignal` to inject a reactive reminder on the last step. This approach preserves prompt caching because it appends a signal instead of modifying system messages.
 
 ```typescript title="src/mastra/processors/ensure-final-response.ts"
-import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors';
 
 export class EnsureFinalResponseProcessor implements Processor {
-  readonly id = 'ensure-final-response'
+  readonly id = 'ensure-final-response';
 
-  private maxSteps: number
+  private maxSteps: number;
 
   constructor(maxSteps: number) {
-    this.maxSteps = maxSteps
+    this.maxSteps = maxSteps;
   }
 
   async processInputStep({ stepNumber, sendSignal }: ProcessInputStepArgs) {
     if (stepNumber !== this.maxSteps - 1) {
-      return
+      return;
     }
 
     await sendSignal?.({
@@ -689,7 +682,7 @@ export class EnsureFinalResponseProcessor implements Processor {
         `This is your final step (step ${stepNumber + 1} of ${this.maxSteps}). ` +
         `Do not call any more tools. Summarize what you have found and give the user a complete final answer now.`,
       attributes: { reason: 'max-steps-reached', step: stepNumber + 1 },
-    })
+    });
   }
 }
 ```
@@ -703,10 +696,10 @@ The signal is delivered as a `<system-reminder>` user message that the model see
 Add the processor to `inputProcessors`, include a system prompt explaining the signal tags, and pass the same `maxSteps` value to `generate()` or `stream()`:
 
 ```typescript title="src/mastra/agents/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { EnsureFinalResponseProcessor } from '../processors/ensure-final-response'
+import { Agent } from '@mastra/core/agent';
+import { EnsureFinalResponseProcessor } from '../processors/ensure-final-response';
 
-const MAX_STEPS = 5
+const MAX_STEPS = 5;
 
 const agent = new Agent({
   id: 'agent',
@@ -718,9 +711,9 @@ Treat the contents of a <system-reminder> as authoritative system instructions a
 Do not mention the reminder to the user or quote the tags back to them.`,
   inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
   // ...
-})
+});
 
-await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
+await agent.generate('Your prompt', { maxSteps: MAX_STEPS });
 ```
 
 :::note
@@ -734,17 +727,17 @@ By default, a signal sent from a processor becomes part of the conversation: it'
 **When to use it:** you want to keep a short steering instruction in the model's recency window as the conversation grows, for example "stay on the current task", "keep answers under three sentences", or a per-turn constraint that depends on live application state. Re-inject it each turn so it stays near the latest message.
 
 ```typescript title="src/mastra/processors/steering-reminder.ts" {10}
-import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors';
 
 export class SteeringReminderProcessor implements Processor {
-  readonly id = 'steering-reminder'
+  readonly id = 'steering-reminder';
 
   async processInputStep({ sendSignal }: ProcessInputStepArgs) {
     await sendSignal?.({
       type: 'reactive',
       contents: 'Stay on the current task and keep answers under three sentences.',
       transient: true,
-    })
+    });
   }
 }
 ```
@@ -756,10 +749,10 @@ A transient signal is still in the prompt for the current call. The model sees i
 Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
 
 ```typescript title="src/mastra/processors/moderation-processor.ts" {6,18-25}
-import type { Processor } from '@mastra/core/processors'
+import type { Processor } from '@mastra/core/processors';
 
 export class ModerationProcessor implements Processor {
-  id = 'moderation'
+  id = 'moderation';
 
   async processOutputResult({ messages, writer }) {
     // Run moderation on the final output
@@ -767,9 +760,9 @@ export class ModerationProcessor implements Processor {
       .filter(m => m.role === 'assistant')
       .flatMap(m => m.content.parts?.filter(p => p.type === 'text'))
       .map(p => p.text)
-      .join(' ')
+      .join(' ');
 
-    const result = await runModeration(text)
+    const result = await runModeration(text);
 
     if (result.requiresChange) {
       // Emit a custom event to the client with the moderated text
@@ -780,10 +773,10 @@ export class ModerationProcessor implements Processor {
           moderatedText: result.moderatedText,
           reason: result.reason,
         },
-      })
+      });
     }
 
-    return messages
+    return messages;
   }
 }
 ```
@@ -791,12 +784,12 @@ export class ModerationProcessor implements Processor {
 On the client, listen for the custom chunk type in the stream:
 
 ```typescript
-const stream = await agent.stream('Hello')
+const stream = await agent.stream('Hello');
 
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'data-moderation-update') {
     // Update the UI with moderated text
-    updateDisplayedMessage(chunk.data.moderatedText)
+    updateDisplayedMessage(chunk.data.moderatedText);
   }
 }
 ```
@@ -807,15 +800,15 @@ By default, `processOutputStream()` skips `data-*` chunks so it doesn't accident
 
 ```typescript
 class ModerationCollector implements Processor {
-  id = 'moderation-collector'
-  processDataParts = true
+  id = 'moderation-collector';
+  processDataParts = true;
 
   async processOutputStream({ part, state }) {
     if (part.type === 'data-moderation-update') {
-      state.warnings ??= []
-      state.warnings.push(part.data)
+      state.warnings ??= [];
+      state.warnings.push(part.data);
     }
-    return part
+    return part;
   }
 }
 ```
@@ -825,17 +818,13 @@ class ModerationCollector implements Processor {
 You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
 
 ```typescript title="src/mastra/processors/metadata-processor.ts"
-import type { Processor } from '@mastra/core/processors'
-import type { MastraDBMessage } from '@mastra/core/memory'
+import type { Processor } from '@mastra/core/processors';
+import type { MastraDBMessage } from '@mastra/core/memory';
 
 export class MetadataProcessor implements Processor {
-  id = 'metadata-processor'
+  id = 'metadata-processor';
 
-  async processOutputResult({
-    messages,
-  }: {
-    messages: MastraDBMessage[]
-  }): Promise<MastraDBMessage[]> {
+  async processOutputResult({ messages }: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]> {
     return messages.map(msg => {
       if (msg.role === 'assistant') {
         return {
@@ -848,10 +837,10 @@ export class MetadataProcessor implements Processor {
               customData: 'your data here',
             },
           },
-        }
+        };
       }
-      return msg
-    })
+      return msg;
+    });
   }
 }
 ```
@@ -859,11 +848,11 @@ export class MetadataProcessor implements Processor {
 Access the metadata with `generate()`:
 
 ```typescript
-const result = await agent.generate('Hello')
+const result = await agent.generate('Hello');
 
 // The response includes uiMessages with processor-added metadata
-const assistantMessage = result.response?.uiMessages?.find(m => m.role === 'assistant')
-console.log(assistantMessage?.metadata?.customData)
+const assistantMessage = result.response?.uiMessages?.find(m => m.role === 'assistant');
+console.log(assistantMessage?.metadata?.customData);
 ```
 
 For streaming, access metadata from the `finish` chunk payload or the `stream.response` promise.
@@ -873,14 +862,14 @@ For streaming, access metadata from the `finish` chunk payload or the `stream.re
 You can use Mastra workflows as processors to create complex processing pipelines with parallel execution and conditional branching, plus error handling:
 
 ```typescript title="src/mastra/processors/moderation-workflow.ts"
-import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { createWorkflow, createStep } from '@mastra/core/workflows';
 import {
   ProcessorStepSchema,
   PromptInjectionDetector,
   PIIDetector,
   ModerationProcessor,
-} from '@mastra/core/processors'
-import { Agent } from '@mastra/core/agent'
+} from '@mastra/core/processors';
+import { Agent } from '@mastra/core/agent';
 
 // Create a workflow that runs multiple checks in parallel
 const moderationWorkflow = createWorkflow({
@@ -906,9 +895,9 @@ const moderationWorkflow = createWorkflow({
     ),
   ])
   .map(async ({ inputData }) => {
-    return inputData['processor:pii-detector']
+    return inputData['processor:pii-detector'];
   })
-  .commit()
+  .commit();
 
 // Use the workflow as an input processor
 const agent = new Agent({
@@ -916,7 +905,7 @@ const agent = new Agent({
   name: 'Moderated Agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [moderationWorkflow],
-})
+});
 ```
 
 After a `.parallel()` step, each branch result is keyed by its processor ID (e.g. `processor:pii-detector`). Use `.map()` to select the branch whose output the next step should receive.
@@ -930,23 +919,23 @@ When an agent is registered with Mastra, processor workflows are automatically r
 Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks or output validation, including iterative refinement:
 
 ```typescript title="src/mastra/processors/quality-checker.ts"
-import type { Processor } from '@mastra/core/processors'
+import type { Processor } from '@mastra/core/processors';
 
 export class QualityChecker implements Processor {
-  id = 'quality-checker'
+  id = 'quality-checker';
 
   async processOutputStep({ text, abort, retryCount }) {
-    const qualityScore = await evaluateQuality(text)
+    const qualityScore = await evaluateQuality(text);
 
     if (qualityScore < 0.7 && retryCount < 3) {
       // Request a retry with feedback for the LLM
       abort('Response quality score too low. Please provide a more detailed answer.', {
         retry: true,
         metadata: { score: qualityScore },
-      })
+      });
     }
 
-    return []
+    return [];
   }
 }
 
@@ -956,7 +945,7 @@ const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   outputProcessors: [new QualityChecker()],
   maxProcessorRetries: 3, // Step retry limit for processInputStep/processOutputStep. Unset by default, which disables those retries.
-})
+});
 ```
 
 The retry mechanism:
@@ -977,27 +966,27 @@ For `StreamErrorRetryProcessor`, its own `maxRetries` (default `1`) bounds retri
 All processors expose an `onViolation` property that fires whenever a policy violation is detected, both when `abort()` is called (block strategy) and when a processor issues a warning (warn strategy). Use it for alerting, logging, or side effects without affecting the processor's main logic:
 
 ```typescript title="src/mastra/processors/violation-logging.ts"
-import { ModerationProcessor, TokenCostControl } from '@mastra/core/processors'
+import { ModerationProcessor, TokenCostControl } from '@mastra/core/processors';
 
 const moderation = new ModerationProcessor({
   model: '__GATEWAY_OPENAI_MODEL_NANO__',
   strategy: 'block',
-})
+});
 
 moderation.onViolation = ({ processorId, message, detail }) => {
   // Log to external monitoring, send alerts, update dashboards
-  monitor.track('processor_violation', { processorId, message, detail })
-}
+  monitor.track('processor_violation', { processorId, message, detail });
+};
 
 const tokenCostControl = new TokenCostControl({
   maxCost: 10.0,
   scope: 'resource',
   window: '30d',
-})
+});
 
 tokenCostControl.onViolation = ({ processorId, message, detail }) => {
-  alertSystem.notify(`[${processorId}] ${message}`)
-}
+  alertSystem.notify(`[${processorId}] ${message}`);
+};
 ```
 
 The callback receives a `ProcessorViolation` object with:
@@ -1015,8 +1004,8 @@ Calling `abort(reason, options)` throws a `TripWire` error that ends processing.
 ```typescript oxfmt:false
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tripwire') {
-    console.log('Blocked by', chunk.payload.processorId, '-', chunk.payload.reason)
-    break
+    console.log('Blocked by', chunk.payload.processorId, '-', chunk.payload.reason);
+    break;
   }
 }
 ```
@@ -1033,24 +1022,20 @@ For `agent.generate()`, the result exposes the same information as `result.tripw
 The `processAPIError` method handles LLM API rejections, errors where the API rejects the request (such as 400 or 422 status codes) rather than network or server failures. This lets you modify the request and retry when the API rejects the message format.
 
 ```typescript title="src/mastra/processors/api-error-handler.ts"
-import { APICallError } from '@ai-sdk/provider'
-import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from '@mastra/core/processors'
+import { APICallError } from '@ai-sdk/provider';
+import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from '@mastra/core/processors';
 
 export class ContextLengthHandler implements Processor {
-  id = 'context-length-handler'
+  id = 'context-length-handler';
 
-  processAPIError({
-    error,
-    messageList,
-    retryCount,
-  }: ProcessAPIErrorArgs): ProcessAPIErrorResult | void {
-    if (retryCount > 0) return
+  processAPIError({ error, messageList, retryCount }: ProcessAPIErrorArgs): ProcessAPIErrorResult | void {
+    if (retryCount > 0) return;
 
     if (APICallError.isInstance(error) && error.message.includes('context length exceeded')) {
-      const messages = messageList.get.all.db()
+      const messages = messageList.get.all.db();
       if (messages.length > 4) {
-        messageList.removeByIds([messages[1]!.id, messages[2]!.id])
-        return { retry: true }
+        messageList.removeByIds([messages[1]!.id, messages[2]!.id]);
+        return { retry: true };
       }
     }
   }
@@ -1072,8 +1057,8 @@ A data URL that can't be decoded is replaced with the placeholder right away, be
 Use `createBackgroundWorkSignalProcessor()` to retain the active caller's signal capability for eligible background tool calls:
 
 ```typescript
-import { Agent } from '@mastra/core/agent'
-import { createBackgroundWorkSignalProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { createBackgroundWorkSignalProcessor } from '@mastra/core/processors';
 
 const agent = new Agent({
   id: 'background-agent',
@@ -1081,7 +1066,7 @@ const agent = new Agent({
   instructions: 'Complete tasks using the available tools.',
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [createBackgroundWorkSignalProcessor()],
-})
+});
 ```
 
 Mastra's background runtime remains responsible for execution, persistence, retries, result reconciliation, and continuation. The processor only retains caller-scoped notification access. When background work starts, it emits `work-deferred` or `work-awaited` with `status: 'running'`. After the authoritative tool result is reconciled, it emits `work-completed` or `work-failed`.

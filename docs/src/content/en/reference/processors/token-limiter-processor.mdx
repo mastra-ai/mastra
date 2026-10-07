@@ -1,9 +1,9 @@
 ---
-title: "Reference: TokenLimiterProcessor | Processors"
-description: "Use TokenLimiterProcessor to constrain message tokens during prompt, input, or output processing with configurable limits and strategies."
+title: 'Reference: TokenLimiterProcessor | Processors'
+description: 'Use TokenLimiterProcessor to constrain message tokens during prompt, input, or output processing with configurable limits and strategies.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # TokenLimiterProcessor
@@ -17,129 +17,129 @@ The `TokenLimiterProcessor` limits the number of tokens in messages. Depending o
 ## Usage example
 
 ```typescript
-import { TokenLimiterProcessor } from '@mastra/core/processors'
+import { TokenLimiterProcessor } from '@mastra/core/processors';
 
 const processor = new TokenLimiterProcessor({
   limit: 1000,
   strategy: 'truncate',
   countMode: 'cumulative',
-})
+});
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'number | Options',
-    description: 'Either a simple number for token limit, or configuration options object',
-    isOptional: false,
-    properties: [
-      {
-        type: 'number | Options',
-        parameters: [
-          {
-            name: 'limit',
-            type: 'number',
-            description: 'Maximum number of tokens to allow in the response',
-            isOptional: false,
-          },
-          {
-            name: 'encoding',
-            type: 'TiktokenBPE',
-            description: 'Optional encoding to use. Defaults to o200k_base which is used by gpt-5.1',
-            isOptional: true,
-            default: 'o200k_base',
-          },
-          {
-            name: 'strategy',
-            type: "'truncate' | 'abort'",
-            description:
-              "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
-            isOptional: true,
-            default: "'truncate'",
-          },
-          {
-            name: 'countMode',
-            type: "'cumulative' | 'part'",
-            description:
-              "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
-            isOptional: true,
-            default: "'cumulative'",
-          },
-          {
-            name: 'trimMode',
-            type: "'best-fit' | 'contiguous' | 'memory-only'",
-            description:
-              "Controls how the token limit is enforced: 'best-fit' trims the provider prompt while keeping as many messages as possible (may create gaps), 'contiguous' trims the provider prompt but stops at the first message that does not fit (keeping a continuous suffix of conversation history), and 'memory-only' trims stored history in processInput instead of the prompt",
-            isOptional: true,
-            default: "'best-fit'",
-          },
-        ],
-      },
-    ],
-  },
-]}
+    {
+      name: 'options',
+      type: 'number | Options',
+      description: 'Either a simple number for token limit, or configuration options object',
+      isOptional: false,
+      properties: [
+        {
+          type: 'number | Options',
+          parameters: [
+            {
+              name: 'limit',
+              type: 'number',
+              description: 'Maximum number of tokens to allow in the response',
+              isOptional: false,
+            },
+            {
+              name: 'encoding',
+              type: 'TiktokenBPE',
+              description: 'Optional encoding to use. Defaults to o200k_base which is used by gpt-5.1',
+              isOptional: true,
+              default: 'o200k_base',
+            },
+            {
+              name: 'strategy',
+              type: "'truncate' | 'abort'",
+              description:
+                "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
+              isOptional: true,
+              default: "'truncate'",
+            },
+            {
+              name: 'countMode',
+              type: "'cumulative' | 'part'",
+              description:
+                "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
+              isOptional: true,
+              default: "'cumulative'",
+            },
+            {
+              name: 'trimMode',
+              type: "'best-fit' | 'contiguous' | 'memory-only'",
+              description:
+                "Controls how the token limit is enforced: 'best-fit' trims the provider prompt while keeping as many messages as possible (may create gaps), 'contiguous' trims the provider prompt but stops at the first message that does not fit (keeping a continuous suffix of conversation history), and 'memory-only' trims stored history in processInput instead of the prompt",
+              isOptional: true,
+              default: "'best-fit'",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: "Processor identifier set to 'token-limiter'",
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
-  },
-  {
-    name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
-    description:
-      "Trims stored history to fit within the token limit before the agentic loop starts in 'memory-only' trim mode, prioritizing recent messages while preserving system messages and the current turn",
-    isOptional: true,
-  },
-  {
-    name: 'processInputStep',
-    type: '(args: ProcessInputStepArgs) => Promise<void>',
-    description:
-      "In 'memory-only' trim mode, applies stored-history trimming at each step. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
-    isOptional: true,
-  },
-  {
-    name: 'processLLMRequest',
-    type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
-    description:
-      "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages are always preserved, and tool call and tool result messages are grouped so they are kept or removed together.",
-    isOptional: true,
-  },
-  {
-    name: 'processOutputStream',
-    type: '(args: ProcessOutputStreamArgs) => Promise<ChunkType | null>',
-    description:
-      'Processes streaming output parts to limit token count during streaming. Only text and object parts count against the limit and can be withheld; lifecycle, reasoning and tool parts always pass through.',
-    isOptional: false,
-  },
-  {
-    name: 'processOutputResult',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
-    description: 'Processes final output results to limit token count in non-streaming scenarios',
-    isOptional: false,
-  },
-  {
-    name: 'getMaxTokens',
-    type: '() => number',
-    description: 'Get the maximum token limit',
-    isOptional: false,
-  },
-]}
+    {
+      name: 'id',
+      type: 'string',
+      description: "Processor identifier set to 'token-limiter'",
+      isOptional: false,
+    },
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Optional processor display name',
+      isOptional: true,
+    },
+    {
+      name: 'processInput',
+      type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+      description:
+        "Trims stored history to fit within the token limit before the agentic loop starts in 'memory-only' trim mode, prioritizing recent messages while preserving system messages and the current turn",
+      isOptional: true,
+    },
+    {
+      name: 'processInputStep',
+      type: '(args: ProcessInputStepArgs) => Promise<void>',
+      description:
+        "In 'memory-only' trim mode, applies stored-history trimming at each step. In the 'best-fit' and 'contiguous' trim modes, it leaves trimming to processLLMRequest when the agent runs that method for this processor. Otherwise it trims stored history, for example in generateLegacy() and streamLegacy() or when the limiter is inside a processor workflow.",
+      isOptional: true,
+    },
+    {
+      name: 'processLLMRequest',
+      type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
+      description:
+        "Enforces the input budget on the provider prompt in the 'best-fit' and 'contiguous' trim modes. Runs after earlier prompt processors have transformed the prompt, counts that exact prompt, and returns a trimmed copy for the model call only. System messages are always preserved, and tool call and tool result messages are grouped so they are kept or removed together.",
+      isOptional: true,
+    },
+    {
+      name: 'processOutputStream',
+      type: '(args: ProcessOutputStreamArgs) => Promise<ChunkType | null>',
+      description:
+        'Processes streaming output parts to limit token count during streaming. Only text and object parts count against the limit and can be withheld; lifecycle, reasoning and tool parts always pass through.',
+      isOptional: false,
+    },
+    {
+      name: 'processOutputResult',
+      type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+      description: 'Processes final output results to limit token count in non-streaming scenarios',
+      isOptional: false,
+    },
+    {
+      name: 'getMaxTokens',
+      type: '() => number',
+      description: 'Get the maximum token limit',
+      isOptional: false,
+    },
+  ]}
 />
 
 ## Output stream behavior
@@ -151,7 +151,7 @@ With the default `truncate` strategy, the first time output is withheld the proc
 ```typescript oxfmt:false
 for await (const part of stream.fullStream) {
   if (part.type === 'data-token-limit-reached') {
-    console.log('output truncated at', part.data.limit, 'tokens')
+    console.log('output truncated at', part.data.limit, 'tokens');
   }
 }
 ```
@@ -169,13 +169,13 @@ When trimming input, `TokenLimiterProcessor` throws a `TripWire` error in the fo
 - **No messages fit**: If no message fits within the remaining token budget, a TripWire is thrown because you can't send an LLM request with no messages.
 
 ```typescript
-import { TripWire } from '@mastra/core/agent'
+import { TripWire } from '@mastra/core/agent';
 
 try {
-  await agent.generate('Hello')
+  await agent.generate('Hello');
 } catch (error) {
   if (error instanceof TripWire) {
-    console.log('Token limit error:', error.message)
+    console.log('Token limit error:', error.message);
   }
 }
 ```
@@ -187,9 +187,9 @@ try {
 Use `inputProcessors` to limit historical messages sent to the model, which helps stay within context window limits:
 
 ```typescript title="src/mastra/agents/context-limited-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { Memory } from '@mastra/memory'
-import { TokenLimiterProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { TokenLimiterProcessor } from '@mastra/core/processors';
 
 export const agent = new Agent({
   id: 'context-limited-agent',
@@ -200,7 +200,7 @@ export const agent = new Agent({
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 4000 }), // Limits historical messages to ~4000 tokens
   ],
-})
+});
 ```
 
 ### As a per-step processor (limit multi-step token growth)
@@ -208,8 +208,8 @@ export const agent = new Agent({
 When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. `TokenLimiterProcessor` applies its limit at every step, measuring the prompt that's about to be sent after any earlier prompt processors have run. Register prompt-shrinking processors such as `ToolCallFilter` before it, so the limiter counts the prompt the model actually receives:
 
 ```typescript title="src/mastra/agents/multi-step-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { TokenLimiterProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { TokenLimiterProcessor } from '@mastra/core/processors';
 
 export const agent = new Agent({
   id: 'multi-step-agent',
@@ -219,12 +219,12 @@ export const agent = new Agent({
   inputProcessors: [
     new TokenLimiterProcessor({ limit: 8000 }), // Applied at every step
   ],
-})
+});
 
 // Each tool call step will be limited to ~8000 input tokens
 const result = await agent.generate('Research this topic using your tools', {
   maxSteps: 10,
-})
+});
 ```
 
 Processor workflows don't run `processLLMRequest`, so a `TokenLimiterProcessor` inside a processor workflow trims stored messages in `processInputStep`, before prompt processors such as `ToolCallFilter` remove anything from the request. To count the prompt the model receives, add the limiter directly to `inputProcessors`.
@@ -234,8 +234,8 @@ Processor workflows don't run `processLLMRequest`, so a `TokenLimiterProcessor` 
 Use `outputProcessors` to limit the length of generated responses:
 
 ```typescript title="src/mastra/agents/response-limited-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { TokenLimiterProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { TokenLimiterProcessor } from '@mastra/core/processors';
 
 export const agent = new Agent({
   id: 'response-limited-agent',
@@ -249,7 +249,7 @@ export const agent = new Agent({
       countMode: 'cumulative',
     }),
   ],
-})
+});
 ```
 
 ## Large tool results

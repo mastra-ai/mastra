@@ -1,8 +1,8 @@
 ---
-title: "Reference: ToolResultTokenLimiter | Processors"
-description: "Use ToolResultTokenLimiter to cap how much of each tool result the language model reads."
+title: 'Reference: ToolResultTokenLimiter | Processors'
+description: 'Use ToolResultTokenLimiter to cap how much of each tool result the language model reads.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # ToolResultTokenLimiter
@@ -12,8 +12,8 @@ The `ToolResultTokenLimiter` is an **output processor** that caps how many token
 ## Usage example
 
 ```typescript
-import { Agent } from '@mastra/core/agent'
-import { TokenLimiterProcessor, ToolResultTokenLimiter } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent';
+import { TokenLimiterProcessor, ToolResultTokenLimiter } from '@mastra/core/processors';
 
 const agent = new Agent({
   id: 'research-agent',
@@ -23,7 +23,7 @@ const agent = new Agent({
   tools: { fetchPage },
   inputProcessors: [new TokenLimiterProcessor({ limit: 8000 })],
   outputProcessors: [new ToolResultTokenLimiter({ limit: 4000 })],
-})
+});
 ```
 
 When you use it with [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor), set the per-result limit well below that budget. The prompt budget also counts the tool call arguments, message roles, system messages, and per-message overhead, so a result capped at the full budget still doesn't fit.
@@ -32,26 +32,26 @@ When you use it with [`TokenLimiterProcessor`](/reference/processors/token-limit
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'number | ToolResultTokenLimiterOptions',
-    description: 'The token limit, or an options object.',
-    isOptional: false,
-    properties: [
-      {
-        type: 'ToolResultTokenLimiterOptions',
-        parameters: [
-          {
-            name: 'limit',
-            type: 'number',
-            description:
-              'Maximum number of tokens a single tool result may use, including the truncation marker. Must be an integer of at least 64.',
-          },
-        ],
-      },
-    ],
-  },
-]}
+    {
+      name: 'options',
+      type: 'number | ToolResultTokenLimiterOptions',
+      description: 'The token limit, or an options object.',
+      isOptional: false,
+      properties: [
+        {
+          type: 'ToolResultTokenLimiterOptions',
+          parameters: [
+            {
+              name: 'limit',
+              type: 'number',
+              description:
+                'Maximum number of tokens a single tool result may use, including the truncation marker. Must be an integer of at least 64.',
+            },
+          ],
+        },
+      ],
+    },
+  ]}
 />
 
 ## Behavior
