@@ -261,6 +261,8 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** In-flight creation of the pending new thread, shared by concurrent submissions. */
+  pendingNewThreadCreation?: Promise<void>;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
   /** Landed model-pack fallback for the current thread. */
@@ -303,6 +305,8 @@ export interface TUIState {
   pendingSlashCommands: string[];
   /** Pending user-message component ids for queued slash commands */
   pendingSlashCommandMessageIds: string[];
+  /** Ctrl+F messages still being handed to the core queue. */
+  pendingQueueSubmissions: number;
   /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
   pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
 
@@ -469,6 +473,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
     pendingSlashCommandMessageIds: [],
+    pendingQueueSubmissions: 0,
     pendingApprovalDismiss: null,
 
     // Status line

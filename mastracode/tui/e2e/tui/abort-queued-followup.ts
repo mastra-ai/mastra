@@ -3,6 +3,7 @@ import type { McE2eScenario } from './types.js';
 
 const CTRL_F = '\x06';
 const START_PROMPT = 'Start a slow run before queueing a follow-up.';
+const SECOND_PROMPT = 'Second sent message before abort.';
 const QUEUED_PROMPT = 'Queued follow-up survives abort.';
 
 /**
@@ -25,6 +26,11 @@ export const abortQueuedFollowupScenario: McE2eScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Initial queued run text/i, terminal, 15_000);
 
+    terminal.write(SECOND_PROMPT);
+    await runtime.waitForScreenText(/Second sent message before abort\./i, terminal);
+    terminal.write('\r');
+    await runtime.sleep(300);
+
     terminal.write(QUEUED_PROMPT);
     await runtime.waitForScreenText(/Queued follow-up survives abort\./i, terminal);
     terminal.write(CTRL_F);
@@ -34,16 +40,21 @@ export const abortQueuedFollowupScenario: McE2eScenario = {
     terminal.keyCtrlC();
     runtime.printScreen('after Ctrl+C', terminal);
 
+    await runtime.waitForScreenText(/Sent messages answered after abort\./i, terminal, 60_000);
     await runtime.waitForScreenText(/Queued follow-up after abort completed\./i, terminal, 60_000);
     runtime.printScreen('after queued follow-up response', terminal);
 
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
     const bodies = requests.map(request => JSON.stringify((request as { body?: unknown }).body));
     expect(bodies[0]).toContain(START_PROMPT);
     expect(bodies[0]).not.toContain(QUEUED_PROMPT);
-    expect(bodies[1]).toContain(QUEUED_PROMPT);
+    // Both sent messages are answered together before the queued message runs on its own.
+    expect(bodies[1]).toContain(START_PROMPT);
+    expect(bodies[1]).toContain(SECOND_PROMPT);
+    expect(bodies[1]).not.toContain(QUEUED_PROMPT);
+    expect(bodies[2]).toContain(QUEUED_PROMPT);
   },
 };

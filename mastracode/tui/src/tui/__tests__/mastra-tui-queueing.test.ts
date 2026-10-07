@@ -526,6 +526,7 @@ describe('MastraTUI queueing', () => {
     tui.createPendingNewThread = () => undefined;
     tui.state = {
       session: { queueMessage },
+      pendingQueueSubmissions: 0,
       pendingSlashCommands: [],
       pendingSlashCommandMessageIds: [],
       pendingImages: [{ data: 'img-1', mimeType: 'image/png' }],
@@ -553,6 +554,47 @@ describe('MastraTUI queueing', () => {
     ]);
     expect(tui.state.pendingSlashCommands).toEqual(['/help']);
     expect(tui.state.pendingSlashCommandMessageIds).toHaveLength(1);
+  });
+
+  it('shares one pending thread creation across queued follow-ups and tracks in-flight submissions', async () => {
+    let resolveCreate!: () => void;
+    const create = vi.fn(() => new Promise<void>(resolve => (resolveCreate = resolve)));
+    const queueMessage = vi.fn().mockResolvedValue(undefined);
+    const tui = Object.create(MastraTUI.prototype) as { state: any; queueFollowUpMessage: (text: string) => void };
+    tui.state = {
+      session: { queueMessage, thread: { create } },
+      pendingNewThread: true,
+      pendingQueueSubmissions: 0,
+      pendingSlashCommands: [],
+      pendingSlashCommandMessageIds: [],
+      pendingImages: [],
+      ui: { requestRender: vi.fn() },
+    };
+
+    tui.queueFollowUpMessage('first');
+    tui.queueFollowUpMessage('second');
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(queueMessage).not.toHaveBeenCalled();
+    expect(tui.state.pendingQueueSubmissions).toBe(2);
+
+    resolveCreate();
+    await vi.waitFor(() => expect(tui.state.pendingQueueSubmissions).toBe(0));
+    expect(queueMessage.mock.calls.map(([arg]) => arg.content)).toEqual(['first', 'second']);
+    expect(tui.state.pendingNewThreadCreation).toBeUndefined();
+  });
+
+  it('keeps queued slash commands while follow-up submissions are still reaching the core queue', () => {
+    const state = createQueueState();
+    state.pendingSlashCommands = ['/help'];
+    state.pendingSlashCommandMessageIds = ['queued-slash-1'];
+    state.pendingQueueSubmissions = 1;
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    expect(ctx.handleSlashCommand).not.toHaveBeenCalled();
+    expect(state.pendingSlashCommands).toEqual(['/help']);
   });
 
   it('does not notify agent_done from the queued handler (#20860 — moved to receipt-time tap)', () => {

@@ -17,6 +17,16 @@
     },
     {
       "match": {
+        "userMessage": "Second sent message before abort.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Sent messages answered after abort."
+      }
+    },
+    {
+      "match": {
         "userMessage": "Queued follow-up survives abort.",
         "model": "gpt-5.4-mini",
         "endpoint": "chat"

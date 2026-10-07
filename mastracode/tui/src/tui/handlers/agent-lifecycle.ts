@@ -81,7 +81,7 @@ function drainQueuedAction(ctx: EventHandlerContext): void {
   // Drain queued follow-up actions once all controller-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
-  if (state.session.displayState.get().queuedFollowUps > 0) {
+  if (state.session.displayState.get().queuedFollowUps > 0 || state.pendingQueueSubmissions > 0) {
     return;
   }
 

@@ -548,9 +548,23 @@ export class MastraTUI {
   }
 
   private createPendingNewThread(): Promise<void> | undefined {
+    if (this.state.pendingNewThreadCreation) return this.state.pendingNewThreadCreation;
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
-    return this.state.session.thread.create().then(() => undefined);
+    const creation = this.state.session.thread.create().then(
+      () => undefined,
+      (error: unknown) => {
+        this.state.pendingNewThread = true;
+        throw error;
+      },
+    );
+    // Later submissions wait for this same creation instead of creating another thread.
+    this.state.pendingNewThreadCreation = creation;
+    const clear = () => {
+      if (this.state.pendingNewThreadCreation === creation) this.state.pendingNewThreadCreation = undefined;
+    };
+    creation.then(clear, clear);
+    return creation;
   }
 
   private sendOptimisticSignal(
@@ -649,9 +663,15 @@ export class MastraTUI {
     // The Agent runtime owns queued-message ordering, including across aborts.
     const queue = () => this.state.session.queueMessage({ content, files });
     const pendingThread = this.createPendingNewThread();
-    (pendingThread ? pendingThread.then(queue) : queue()).catch((error: unknown) => {
-      showSessionError(this.state, error);
-    });
+    // Queued slash commands wait until in-flight submissions reach the core queue.
+    this.state.pendingQueueSubmissions++;
+    (pendingThread ? pendingThread.then(queue) : queue())
+      .catch((error: unknown) => {
+        showSessionError(this.state, error);
+      })
+      .finally(() => {
+        this.state.pendingQueueSubmissions--;
+      });
     updateStatusLine(this.state);
     flushRender(this.state);
   }
