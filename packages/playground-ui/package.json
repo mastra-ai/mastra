@@ -227,7 +227,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
     "@storybook/addon-mcp": "^10.6.0",
