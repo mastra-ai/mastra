@@ -355,11 +355,21 @@ export async function evaluateGoal(deps: {
     // scorer needs it — a custom scorer brings its own judging, so we avoid
     // resolving (and potentially failing on) the judge model in that case.
     let scorer: MastraScorer<any, any, any, any> | undefined;
-    if (goal.scorer) {
+    if (typeof goal.scorer === 'string') {
+      // Match the scorer's id (or name) first, as documented, then fall back to
+      // the registration key.
+      const scorerRef = goal.scorer;
+      const registered = (mastra?.listScorers?.() ?? {}) as Record<string, MastraScorer<any, any, any, any>>;
+      const candidates = Object.values(registered);
       scorer =
-        typeof goal.scorer === 'string'
-          ? (mastra?.getScorer?.(goal.scorer as any) as MastraScorer<any, any, any, any> | undefined)
-          : goal.scorer;
+        candidates.find(s => s?.id === scorerRef) ??
+        candidates.find(s => s?.name === scorerRef) ??
+        registered[scorerRef];
+      if (!scorer) {
+        throw new Error(`Goal scorer "${scorerRef}" not found (matched by scorer id or registration key)`);
+      }
+    } else if (goal.scorer) {
+      scorer = goal.scorer;
     }
     if (!scorer) {
       // Resolve a bare model id (string) through the model router/gateways so
