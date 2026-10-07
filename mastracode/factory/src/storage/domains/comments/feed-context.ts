@@ -17,11 +17,11 @@ const FEED_CLOSE = `</${WORK_ITEM_FEED_TAG}>`;
 // before the close all count against the block budget.
 const WRAPPER_CHARS = FEED_OPEN.length + FEED_PREAMBLE.length + FEED_CLOSE.length + 4;
 
-// Lenient on purpose: the reader is a model, not a parser, so spaced or
-// case-shifted variants of either tag would still read as a boundary.
 // Worst-case omission marker plus the blank line after it.
 const OMITTED_MARKER_RESERVE = omittedMarkerLength() + 2;
 
+// Lenient on purpose: the reader is a model, not a parser, so spaced or
+// case-shifted variants of either tag would still read as a boundary.
 const FEED_BOUNDARY_RE = /<\s*(\/?)\s*work-item-feed\s*>/gi;
 
 function escapeFeedBoundary(value: string): string {

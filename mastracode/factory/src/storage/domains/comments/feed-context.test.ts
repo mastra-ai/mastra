@@ -204,7 +204,19 @@ describe('FactoryFeedReader', () => {
     }
     const block = await readerOf(rows).readRunContext(scope);
     expect(block!.length).toBeLessThanOrEqual(12_000);
-    expect(block).toMatch(/\[\d+\+ older comments omitted\]/);
+    expect(block).toContain('[16+ older comments omitted]');
+  });
+
+  it('adds no omission marker for exactly 20 short comments', async () => {
+    const rows = [];
+    for (let i = 0; i < 20; i++) {
+      rows.push(
+        row({ body: `note ${i}`, occurredAt: new Date(`2026-08-01T10:${String(i).padStart(2, '0')}:00.000Z`) }),
+      );
+    }
+    const block = await readerOf(rows).readRunContext(scope);
+    for (let i = 0; i < 20; i++) expect(block).toContain(`note ${i}`);
+    expect(block).not.toContain('omitted');
   });
 
   it('returns null for an empty feed', async () => {
