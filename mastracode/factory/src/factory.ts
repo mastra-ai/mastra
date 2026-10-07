@@ -1042,7 +1042,7 @@ export class MastraFactory {
                 if (storage.isDomainReady('source-control')) {
                   mergeTools(
                     'source-control',
-                    createSourceControlTools({
+                    await createSourceControlTools({
                       requestContext,
                       providers: sourceControlToolProviders,
                       audit: auditDomain,

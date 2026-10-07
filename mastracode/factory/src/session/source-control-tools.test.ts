@@ -52,19 +52,35 @@ async function fixture(integrationId = 'gitlab') {
     createdByUserId: 'user-1',
     createdAt: now,
   });
-  storage.projectRepositoriesRows.push({
-    id: 'repo-link-1',
+  storage.repositoriesRows.push({
+    id: 'repo-2',
+    installationId: 'install-1',
+    externalId: 'project-2',
+    slug: 'acme/other',
+    defaultBranch: 'develop',
+    providerMetadata: {},
+    createdAt: now,
+    updatedAt: now,
+  });
+  const link = (id: string, repositoryId: string, position: number) => ({
+    id,
     connectionId: 'connection-1',
-    repositoryId: 'repo-1',
+    repositoryId,
     createdByUserId: 'user-1',
     branch: null,
     sandboxProvider: 'custom',
     sandboxWorkdir: '/workspace/repo',
     setupCommand: null,
     teardownCommand: null,
+    position,
+    inEnvironment: true,
+    lastBuildStatus: 'unbuilt' as const,
+    lastBuildError: null,
+    lastBuiltAt: null,
     createdAt: now,
     updatedAt: now,
   });
+  storage.projectRepositoriesRows.push(link('repo-link-1', 'repo-1', 1), link('repo-link-2', 'repo-2', 2));
   await storage.sessions.create({
     sessionId: 'session-1',
     projectRepositoryId: 'repo-link-1',
@@ -75,25 +91,29 @@ async function fixture(integrationId = 'gitlab') {
     visibility: 'org',
   });
 
-  const createPullRequest = vi.fn(async () => ({
-    id: '17',
+  const createPullRequest = vi.fn(async (input: { sourceId: string; baseBranch: string }) => ({
+    id: input.sourceId === 'acme/other' ? '18' : '17',
     title: 'Ship it',
-    url: 'https://gitlab.com/acme/repo/-/merge_requests/17',
+    url: `https://gitlab.com/${input.sourceId}/-/merge_requests/${input.sourceId === 'acme/other' ? 18 : 17}`,
     author: 'bot',
     body: 'Body',
     state: 'open' as const,
     draft: false,
     merged: false,
     mergeable: true,
-    baseBranch: 'main',
+    baseBranch: input.baseBranch,
     headBranch: 'factory/issue-1',
     headSha: 'abc',
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   }));
-  const getRepositoryTarget = vi.fn(async () => ({
+  const getRepositoryTarget = vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
     connection: { type: 'oauth' as const, accessToken: 'server-opaque-connection' },
-    sourceId: 'acme/repo',
+    sourceId: repositoryId === 'repo-2' ? 'acme/other' : 'acme/repo',
+  }));
+  const getRepositoryAccess = vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
+    cloneUrl: `https://gitlab.com/${repositoryId === 'repo-2' ? 'acme/other' : 'acme/repo'}.git`,
+    authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
   }));
   const createReviewComment = vi.fn(async () => ({
     id: 'discussion-note-1',
@@ -114,6 +134,7 @@ async function fixture(integrationId = 'gitlab') {
   const createReview = vi.fn(async () => ({ id: 'review-1' }));
   const versionControl = {
     getRepositoryTarget,
+    getRepositoryAccess,
     getPullRequest,
     createReview,
     createPullRequest,
@@ -133,6 +154,7 @@ async function fixture(integrationId = 'gitlab') {
     getPullRequest,
     createReview,
     getRepositoryTarget,
+    getRepositoryAccess,
     audit,
     emitAgent,
   };
@@ -141,7 +163,7 @@ async function fixture(integrationId = 'gitlab') {
 describe('createSourceControlTools', () => {
   it('lists reviews through the active repository connection without exposing provider credentials', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -163,7 +185,7 @@ describe('createSourceControlTools', () => {
 
   it('creates a change request only for the active persisted session target', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -194,7 +216,7 @@ describe('createSourceControlTools', () => {
 
   it('creates brokered diff discussions and replies without accepting repository credentials', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -250,7 +272,7 @@ describe('createSourceControlTools', () => {
 
   it('publishes diff-comment input as one object schema admitting either mode', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -318,7 +340,7 @@ describe('createSourceControlTools', () => {
 
   it('validates review bodies before execution', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -335,7 +357,7 @@ describe('createSourceControlTools', () => {
 
   it('fails closed before provider access for a cross-organization caller', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext({ orgId: 'org-2' }),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -350,7 +372,7 @@ describe('createSourceControlTools', () => {
 
   it('rejects checkout refresh outside a bound GitLab MR review session', async () => {
     const setup = await fixture();
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
       audit: setup.audit,
@@ -364,7 +386,7 @@ describe('createSourceControlTools', () => {
   it('fails closed when a session exists in more than one provider partition', async () => {
     const first = await fixture('gitlab');
     const second = await fixture('github');
-    const tools = createSourceControlTools({
+    const tools = await createSourceControlTools({
       requestContext: requestContext(),
       providers: [
         { id: 'gitlab', storage: first.storage, versionControl: first.versionControl },
@@ -382,20 +404,184 @@ describe('createSourceControlTools', () => {
 
   it('offers no tools without an authenticated request context', async () => {
     const setup = await fixture();
-    expect(
+    await expect(
       createSourceControlTools({
         requestContext: new RequestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
       }),
-    ).toEqual({});
+    ).resolves.toEqual({});
+  });
+
+  describe('environment repositories', () => {
+    function fakeSandbox(currentBranch: Record<string, string> = {}) {
+      const executions: Array<{ command: string; args: string[]; options?: { env?: Record<string, string> } }> = [];
+      const sandbox = {
+        id: 'sandbox-1',
+        provider: 'custom',
+        workingDirectory: '/home/user',
+        executeCommand: vi.fn(async (command: string, args: string[], options?: { env?: Record<string, string> }) => {
+          executions.push({ command, args, options });
+          if (args.includes('--abbrev-ref')) {
+            const workdir = args[args.indexOf('-C') + 1]!;
+            return { exitCode: 0, stdout: `${currentBranch[workdir] ?? 'factory/issue-1'}\n`, stderr: '' };
+          }
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }),
+      };
+      const pushes = () => executions.filter(entry => entry.command === 'git' && entry.args.includes('push'));
+      return { sandbox, executions, pushes };
+    }
+
+    async function tools(setup: Awaited<ReturnType<typeof fixture>>) {
+      return createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+    }
+
+    it('lists the environment slugs and the default in the tool descriptions', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      expect(built.source_control_push_branch!.description).toContain('acme/repo, acme/other');
+      expect(built.source_control_push_branch!.description).toContain(
+        "Defaults to acme/repo, this session's repository",
+      );
+      expect(built.source_control_create_change_request!.description).toContain('acme/repo, acme/other');
+      const pushSchema = built.source_control_push_branch!.inputSchema as any;
+      expect(pushSchema.safeParse({}).success).toBe(true);
+      expect(Object.keys(pushSchema.shape)).toEqual(['repository']);
+      const crSchema = built.source_control_create_change_request!.inputSchema as any;
+      expect(Object.keys(crSchema.shape).sort()).toEqual(['body', 'draft', 'repository', 'title']);
+    });
+
+    it("pushes the session's own repository by default and records the row", async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      const { sandbox, pushes } = fakeSandbox();
+
+      const result = await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
+
+      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/repo' });
+      expect(pushes()).toHaveLength(1);
+      expect(pushes()[0]!.args).toEqual(['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1']);
+      expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-1' });
+      await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
+        { projectRepositoryId: 'repo-link-1', branch: 'factory/issue-1', changeRequestUrl: null },
+      ]);
+      expect(setup.emitAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            action: 'factory.agent.push',
+            metadata: expect.objectContaining({ repository: 'acme/repo' }),
+          }),
+        }),
+      );
+    });
+
+    it('pushes HEAD to the session branch in another environment repository', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      const { sandbox, pushes, executions } = fakeSandbox({ '/home/user/other': 'develop' });
+
+      const result = await (built.source_control_push_branch!.execute as any)(
+        { repository: 'acme/other' },
+        { workspace: { sandbox } },
+      );
+
+      expect(result).toEqual({ pushed: true, branch: 'factory/issue-1', repository: 'acme/other' });
+      expect(pushes()[0]!.args).toEqual([
+        '-C',
+        '/home/user/other',
+        'push',
+        'origin',
+        'HEAD:refs/heads/factory/issue-1',
+      ]);
+      expect(setup.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
+      expect(JSON.stringify(executions)).not.toContain('glpat-secret');
+      await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
+        { projectRepositoryId: 'repo-link-2', branch: 'factory/issue-1' },
+      ]);
+    });
+
+    it('rejects a repository outside the environment, naming the valid slugs, and pushes nothing', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      const { sandbox, pushes } = fakeSandbox();
+
+      await expect(
+        (built.source_control_push_branch!.execute as any)({ repository: 'nope/x' }, { workspace: { sandbox } }),
+      ).rejects.toThrow(
+        "Repository 'nope/x' is not in this Factory's environment. Valid repositories: acme/repo, acme/other.",
+      );
+      expect(pushes()).toHaveLength(0);
+      expect(setup.getRepositoryAccess).not.toHaveBeenCalled();
+      await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toEqual([]);
+    });
+
+    it('opens change requests in two repositories from one session with their own base branches', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+
+      const own = await (built.source_control_create_change_request!.execute as any)({ title: 'Own' });
+      const other = await (built.source_control_create_change_request!.execute as any)({
+        title: 'Other',
+        repository: 'acme/other',
+      });
+
+      expect(own.url).toBe('https://gitlab.com/acme/repo/-/merge_requests/17');
+      expect(other.url).toBe('https://gitlab.com/acme/other/-/merge_requests/18');
+      expect(setup.createPullRequest).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ sourceId: 'acme/repo', baseBranch: 'main', headBranch: 'factory/issue-1' }),
+      );
+      expect(setup.createPullRequest).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ sourceId: 'acme/other', baseBranch: 'develop', headBranch: 'factory/issue-1' }),
+      );
+      const rows = await setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' });
+      expect(rows).toMatchObject([
+        {
+          projectRepositoryId: 'repo-link-1',
+          changeRequestId: '17',
+          changeRequestUrl: 'https://gitlab.com/acme/repo/-/merge_requests/17',
+        },
+        {
+          projectRepositoryId: 'repo-link-2',
+          changeRequestId: '18',
+          changeRequestUrl: 'https://gitlab.com/acme/other/-/merge_requests/18',
+        },
+      ]);
+      const audited = setup.emitAgent.mock.calls.map(call => (call as any)[0].input);
+      expect(
+        audited.filter(input => input.action === 'factory.agent.pr_opened').map(i => i.metadata.repository),
+      ).toEqual(['acme/repo', 'acme/other']);
+    });
+
+    it('keeps the change request on the row when the branch is pushed again', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+      const { sandbox } = fakeSandbox();
+
+      await (built.source_control_create_change_request!.execute as any)({ title: 'Own' });
+      await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
+
+      await expect(setup.storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).resolves.toMatchObject([
+        {
+          projectRepositoryId: 'repo-link-1',
+          branch: 'factory/issue-1',
+          changeRequestUrl: 'https://gitlab.com/acme/repo/-/merge_requests/17',
+        },
+      ]);
+    });
   });
 
   describe('review verdict consistency', () => {
     const head = 'cd1e5903851234567890abcdef1234567890abcd';
     async function submit(input: Record<string, unknown>) {
       const setup = await fixture();
-      const tools = createSourceControlTools({
+      const tools = await createSourceControlTools({
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
@@ -406,7 +592,7 @@ describe('createSourceControlTools', () => {
 
     async function schemaError(input: Record<string, unknown>) {
       const { setup } = await submit({});
-      const tools = createSourceControlTools({
+      const tools = await createSourceControlTools({
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,
@@ -472,7 +658,7 @@ describe('createSourceControlTools', () => {
 
     it('accepts consistent verdict and full-SHA bodies in the schema', async () => {
       const { setup } = await submit({});
-      const tools = createSourceControlTools({
+      const tools = await createSourceControlTools({
         requestContext: requestContext(),
         providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
         audit: setup.audit,

@@ -17,6 +17,8 @@ export interface SessionEnvironmentRepositoryState {
   position: number;
   /** `ok` ran or was already set up, `failed` exited non-zero, `skipped` has no setup command. */
   setupStatus: EnvironmentRepositorySetupStatus;
+  /** The change request this session opened in the repository, once it has. */
+  changeRequestUrl?: string;
 }
 
 export interface SessionEnvironmentState {
@@ -44,6 +46,31 @@ export function recordSessionEnvironment(
   teardown: SessionEnvironmentTeardown[] = [],
 ): void {
   environments.set(sessionId, { state, teardown });
+}
+
+/**
+ * Record what a source-control tool did in one environment repository (the
+ * branch it pushed, the change request it opened) so the next signal snapshot
+ * tells the agent. A no-op when the session's environment is not recorded in
+ * this process or the slug is not part of it.
+ */
+export function updateSessionEnvironmentRepository(
+  sessionId: string,
+  slug: string,
+  patch: { branch?: string; changeRequestUrl?: string },
+): void {
+  const entry = environments.get(sessionId);
+  if (!entry) return;
+  const wanted = slug.toLowerCase();
+  const repositories = entry.state.repositories.map(repo => {
+    if (repo.slug.toLowerCase() !== wanted) return repo;
+    return {
+      ...repo,
+      ...(patch.branch !== undefined ? { branch: patch.branch } : {}),
+      ...(patch.changeRequestUrl !== undefined ? { changeRequestUrl: patch.changeRequestUrl } : {}),
+    };
+  });
+  entry.state = { ...entry.state, repositories };
 }
 
 export function clearSessionEnvironment(sessionId: string): void {
@@ -101,7 +128,8 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
       return;
     const lines = state.repositories.map(
       repo =>
-        `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})`,
+        `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
+        (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
     );
     const contents =
       `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n` +
