@@ -356,6 +356,12 @@
         "min": 1024
       }
     ],
+    "claude-sonnet-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gpt-oss-20b": [
       {
         "type": "effort",
@@ -454,6 +460,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral-large-4-0": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "claude-opus-5.5": [

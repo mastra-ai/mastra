@@ -582,6 +582,12 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "gemini-3.5-flash-lite@eu": [
       {
         "type": "effort",
@@ -1237,6 +1243,12 @@
       }
     ],
     "grok-4.6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "mistral-large-4@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

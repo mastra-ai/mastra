@@ -1514,6 +1514,12 @@
         "values": ["none", "high"]
       }
     ],
+    "mistral/magistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "mistral/mistral-small-2603": [
       {
         "type": "effort",

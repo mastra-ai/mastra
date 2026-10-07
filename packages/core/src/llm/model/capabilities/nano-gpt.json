@@ -1082,6 +1082,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "anthropic/claude-haiku-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "anthropic/claude-opus-latest": [
       {
         "type": "effort",
@@ -1206,6 +1212,12 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "deepseek/deepseek-v4-flash-0423": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
@@ -1225,6 +1237,12 @@
       }
     ],
     "deepseek/deepseek-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash-0423:thinking": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

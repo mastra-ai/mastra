@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `getModelReasoningOptions` to read which reasoning controls a model accepts, as published by models.dev: named effort levels, a thinking-token budget, or an on/off toggle. Returns `undefined` when no data describes the model.
+Added `getModelReasoningOptions` to read which reasoning controls a model accepts, as published by models.dev: named effort levels, a thinking-token budget, or an on/off toggle. Returns `[]` when models.dev lists the model without reasoning controls, and `undefined` when no data describes the model.
 
 ```ts
 import { getModelReasoningOptions } from '@mastra/core/llm';

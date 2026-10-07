@@ -1020,6 +1020,12 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "anthropic/claude-haiku-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "anthropic/claude-opus-4.8": [
       {
         "type": "effort",
@@ -1515,7 +1521,7 @@
     "~anthropic/claude-haiku-latest": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "~anthropic/claude-sonnet-latest": [

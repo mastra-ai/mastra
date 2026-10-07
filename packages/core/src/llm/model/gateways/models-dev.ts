@@ -40,8 +40,8 @@ interface ModelsDevModelInfo {
   [key: string]: unknown;
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(item => typeof item === 'string');
+function stringItems(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [];
 }
 
 function isOptionalNumber(value: unknown): value is number | undefined {
@@ -51,8 +51,9 @@ function isOptionalNumber(value: unknown): value is number | undefined {
 function toReasoningOption(raw: unknown): ModelReasoningOption | undefined {
   if (!raw || typeof raw !== 'object' || !('type' in raw)) return undefined;
   if (raw.type === 'toggle') return { type: 'toggle' };
-  if (raw.type === 'effort' && 'values' in raw && isStringArray(raw.values) && raw.values.length > 0) {
-    return { type: 'effort', values: raw.values };
+  if (raw.type === 'effort') {
+    const values = 'values' in raw ? stringItems(raw.values) : [];
+    return values.length > 0 ? { type: 'effort', values } : undefined;
   }
   if (raw.type === 'budget_tokens') {
     const min = 'min' in raw ? raw.min : undefined;
