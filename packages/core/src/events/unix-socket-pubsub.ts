@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
@@ -1116,7 +1116,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
    * broker's file is at socketPath by then.
    */
   async #bindIfAbsent(): Promise<boolean> {
-    const privatePath = join(dirname(this.socketPath), `.${randomBytes(6).toString('hex')}`);
+    const privatePath = join(
+      dirname(this.socketPath),
+      `.${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`,
+    );
     const server = await this.#listen(privatePath);
     let published = false;
     try {

@@ -58,6 +58,14 @@ export const mastra = new Mastra({
         isOptional: true,
         defaultValue: '67108864',
       },
+      {
+        name: 'brokerPathCheckIntervalMs',
+        type: 'number',
+        description:
+          'How often in milliseconds the broker checks that the socket path still points at its own socket. Must be a positive finite number. If the file was deleted or replaced, the broker steps down and rejoins as a client, so it never keeps serving clients that new processes can no longer reach.',
+        isOptional: true,
+        defaultValue: '2000',
+      },
     ],
   },
 ]}
@@ -104,4 +112,8 @@ await pubsub.close()
 
 ## Broker election
 
-The first process to bind the socket becomes the broker and routes events between all connected clients. Other processes connect as clients. When the broker exits, an exclusive lock file serializes the next election. Exactly one client becomes the new broker. The remaining clients resubscribe to it. This avoids a split-brain state where two processes both act as broker.
+The broker is the first process to link its socket into place at the shared path. It routes events between all connected clients, and other processes connect to it as clients. Each candidate binds a socket at a private name and hard-links it to the shared path. The link fails if a socket is already there, so a candidate never replaces a live broker by accident.
+
+When the broker exits cleanly, it removes the shared path. Clients then reconnect, and the first to link its socket into place becomes the new broker. The remaining clients resubscribe to it.
+
+A refused connection doesn't trigger a takeover on its own. Clients retry with backoff first. Only if the socket keeps refusing connections does a client take an exclusive lock file and replace it. A broker removes the shared path only while it still points at its own socket. If a broker finds its path deleted or replaced, it steps down and rejoins as a client. Processes that end up on different sockets therefore converge on one broker again instead of staying split.
