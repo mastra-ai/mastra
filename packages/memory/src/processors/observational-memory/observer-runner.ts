@@ -488,6 +488,7 @@ export class ObserverRunner {
     model?: ConcreteObservationModel,
     hookContext?: { resourceId?: string; trigger?: ObserveTrigger },
     timeZone?: string,
+    wasTruncated?: boolean,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -518,6 +519,7 @@ export class ObserverRunner {
       observabilityContext,
       model,
       timeZone,
+      wasTruncated,
     );
 
     for (const threadId of allThreadOrder) {
@@ -550,6 +552,7 @@ export class ObserverRunner {
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
     timeZone?: string,
+    wasTruncated?: boolean,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -606,6 +609,7 @@ export class ObserverRunner {
             priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
             model: resolvedModel.model,
             timeZone,
+            wasTruncated,
           },
         );
         results.set(threadId, {
@@ -646,7 +650,7 @@ export class ObserverRunner {
         messagesByThread,
         threadOrder,
         priorMetadataByThread,
-        undefined,
+        wasTruncated,
         this.observationConfig.threadTitle,
         activeExtractors,
         { attachmentFilter: multiThreadAttachmentFilter, timeZone },
@@ -665,6 +669,7 @@ export class ObserverRunner {
             metadata: {
               omThreadCount: threadOrder.length,
               omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
+              omWasTruncated: wasTruncated ?? false,
               omThreadTitleEnabled: this.observationConfig.threadTitle,
               ...(resolvedModel.selectedThreshold !== undefined
                 ? { omSelectedThreshold: resolvedModel.selectedThreshold }

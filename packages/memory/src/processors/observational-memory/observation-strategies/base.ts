@@ -106,6 +106,11 @@ export interface StrategyDeps {
     recordId?: string;
   }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
+  /** Applies `observation.previousObserverTokens` to the previous observations the Observer sees. */
+  prepareObserverContext: (
+    existingObservations: string | undefined,
+    record?: ObservationalMemoryRecord | null,
+  ) => { context: string | undefined; wasTruncated: boolean };
 }
 
 /**
@@ -157,7 +162,7 @@ export abstract class ObservationStrategy {
         }
       }
 
-      const { messages, existingObservations } = await this.prepare();
+      const { messages, existingObservations, contextRecord } = await this.prepare();
       if (messages.length === 0) {
         // Nothing is unobserved (e.g. a stale persisted pending count met the threshold). Observing
         // nothing would still commit a cursor at the current time, past any message that is
@@ -166,7 +171,13 @@ export abstract class ObservationStrategy {
       }
       const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
-      const output = await this.observe(existingObservations, observationMessages);
+      // The Observer sees the budgeted context; composition below still builds on the full text.
+      const observerContext = this.deps.prepareObserverContext(existingObservations, contextRecord ?? record);
+      const output = await this.observe(
+        observerContext.context ?? '',
+        observationMessages,
+        observerContext.wasTruncated,
+      );
       let processed = await this.process(output, existingObservations);
       let committedRecord = record;
       const outcome = await this.persist(processed);
@@ -716,8 +727,18 @@ export abstract class ObservationStrategy {
   abstract get needsLock(): boolean;
   abstract get needsReflection(): boolean;
   abstract get rethrowOnFailure(): boolean;
-  abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
-  abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
+  /** `contextRecord`: the record `existingObservations` was read from, when fresher than `opts.record`. */
+  abstract prepare(): Promise<{
+    messages: MastraDBMessage[];
+    existingObservations: string;
+    contextRecord?: ObservationalMemoryRecord | null;
+  }>;
+  /** `observerContext` is the previous observations after the `previousObserverTokens` budget. */
+  abstract observe(
+    observerContext: string,
+    messages: MastraDBMessage[],
+    wasTruncated: boolean,
+  ): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;
   abstract persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void>;
   abstract emitStartMarkers(cycleId: string): Promise<void>;

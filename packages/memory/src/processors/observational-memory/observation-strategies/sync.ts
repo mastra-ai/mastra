@@ -91,7 +91,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-    return { messages, existingObservations };
+    return { messages, existingObservations, contextRecord: freshRecord };
   }
 
   async emitStartMarkers(cycleId: string) {
@@ -110,13 +110,14 @@ export class SyncObservationStrategy extends ObservationStrategy {
     }
   }
 
-  async observe(existingObservations: string, messages: MastraDBMessage[]) {
+  async observe(observerContext: string, messages: MastraDBMessage[], wasTruncated: boolean) {
     // Fetch prior thread metadata for observer prompt continuity
     const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
     this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
-    const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
+    const result = await this.deps.observer.call(observerContext, messages, this.opts.abortSignal, {
+      wasTruncated,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
       priorCurrentTask: omMeta?.currentTask,
