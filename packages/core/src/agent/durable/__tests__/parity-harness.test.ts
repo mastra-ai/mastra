@@ -12,6 +12,7 @@ import { Agent } from '../../agent';
 import type { PublicStructuredOutputOptions } from '../../types';
 import type {
   CapturedRequest,
+  EngineDifference,
   EngineObservation,
   EngineParityScenario,
   EngineRunResult,
@@ -883,6 +884,85 @@ describe('expectEngineParity', () => {
       expect(turn.error).toEqual({ name: 'Error', message: 'scripted generate failure' });
       // The request is still recorded, so a failure does not hide what was sent.
       expect(results[engine]!.requests).toHaveLength(1);
+    }
+  });
+
+  /**
+   * One deferred tool call, then text. The tool is eligible and the agent
+   * defers it, so it only runs in the background when the host manages tasks
+   * and its workers are up — which is what `host` turns on.
+   */
+  function backgroundScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+    return {
+      model: { tapes: [toolCallTape('research', { topic: 'AI' }), textOnlyTape('Done.')] },
+      buildAgent: ({ model }) =>
+        new Agent({
+          id: 'parity-background',
+          name: 'Parity Background',
+          instructions: 'Be brief',
+          model,
+          tools: {
+            research: createTool({
+              id: 'research',
+              description: 'Research a topic',
+              inputSchema: z.object({ topic: z.string() }),
+              execute: async ({ topic }) => ({ summary: `Research on ${topic}` }),
+              background: { enabled: true },
+            }),
+          },
+          backgroundTasks: { tools: { research: true } },
+        }),
+      input: 'Research AI',
+      options: { maxSteps: 3 },
+      ...overrides,
+    };
+  }
+
+  it('dispatches a deferred tool in the background when the scenario enables it, and not otherwise', async () => {
+    // A deferred dispatch is only comparable with the chunk and result fields
+    // declared: the wrapped engines stream an extra `background-task-progress`
+    // and flush the completed result after `step-finish`, where plain keeps the
+    // dispatch placeholder.
+    const difference: EngineDifference = {
+      reason:
+        'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish ' +
+        'where plain keeps the placeholder; taskId is a per-engine stubbed UUID.',
+      ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'toolResults', 'requests', 'finishChunk'],
+    };
+    const withHost = await expectEngineParity(
+      backgroundScenario({
+        host: { backgroundTasks: { enabled: true } },
+        differences: { durable: difference, evented: difference },
+      }),
+    );
+
+    for (const engine of ENGINES) {
+      const turn = withHost[engine]!.turns[0]!;
+      // The task finishes before the loop's wait step arms, so no
+      // `background-task-completed` chunk is emitted on any engine: the proof a
+      // dispatch really went to the background is this `-started` chunk plus the
+      // result shape below, not a wait for completion.
+      expect(turn.chunkTypes).toContain('background-task-started');
+      expect(turn.text).toBe('Done.');
+      if (engine === 'plain') {
+        // Plain hands the model the dispatch placeholder and keeps going.
+        expect(turn.toolResults[0]!.result).toEqual(expect.stringContaining('running in the background'));
+      } else {
+        expect(turn.toolResults).toEqual([
+          { toolCallId: 'parity-call-1', toolName: 'research', result: { summary: 'Research on AI' } },
+        ]);
+      }
+    }
+
+    // Without the host the same script degrades to a foreground call, so the
+    // scenario above would pass vacuously. This pins that.
+    const withoutHost = await expectEngineParity(backgroundScenario());
+
+    for (const engine of ENGINES) {
+      const turn = withoutHost[engine]!.turns[0]!;
+      expect(turn.chunkTypes.filter(t => t.startsWith('background-task'))).toEqual([]);
+      expect(turn.chunks).toContain('AGENT:tool-result:research');
+      expect(turn.text).toBe('Done.');
     }
   });
 

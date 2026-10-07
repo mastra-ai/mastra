@@ -103,6 +103,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -745,6 +746,14 @@ export interface EngineParityScenario {
   differences?: Partial<Record<Exclude<ParityEngine, 'plain'>, EngineDifference>>;
   /** Storage for the evented engine's Mastra host. Defaults to a fresh `InMemoryStore`. */
   createStorage?: () => MastraCompositeStore;
+  /**
+   * Extra host options. A background-task scenario needs the host to enable
+   * them (`backgroundTasks`) and its workers running, which the helper then
+   * does before the run. Without both, a deferred tool call degrades silently
+   * to a foreground run, so the scenario would pass without ever dispatching
+   * anything.
+   */
+  host?: { backgroundTasks?: BackgroundTaskManagerConfig };
 }
 
 export interface EngineRunResult extends EngineObservation {
@@ -817,12 +826,18 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
   }
 
   // Every engine runs on a host, as it would in a real app: a suspended run is
-  // only resumable when the run's snapshot reached storage.
+  // only resumable when the run's snapshot reached storage, and a deferred
+  // background task is only dispatched when the host manages them and its
+  // workers are running. Both need the host the engines actually share.
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
     storage: scenario.createStorage?.() ?? new InMemoryStore(),
     logger: false,
+    ...scenario.host,
   });
+  // Workers are a host concern, not an agent one: the run only sees a bound
+  // manager once they are up.
+  if (scenario.host?.backgroundTasks?.enabled) await host.startWorkers();
 
   const turns: ParitySnapshot[] = [];
   const cleanups: Array<() => void | Promise<void>> = [];
@@ -939,8 +954,9 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
         errors.push(error);
       }
     }
-    // The host starts workers; stop it so many scenarios in one file don't
-    // pile up. Done last, after the runs' own cleanups.
+    // Stop the host so many scenarios in one file don't pile up, including the
+    // workers a background-task scenario started. Done last, after the runs'
+    // own cleanups.
     try {
       await host.shutdown();
     } catch (error) {
