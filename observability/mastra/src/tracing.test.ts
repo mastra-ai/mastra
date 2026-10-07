@@ -2725,6 +2725,58 @@ describe('Tracing', () => {
 
       span.end();
     });
+
+    it('should not export live channel adapters or other class instances nested in requestContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      class FakeSlackAdapter {
+        appToken = 'xapp-FAKE-SLACK-TOKEN';
+        socketForwardingSecret = 'FAKE-FORWARDING-SECRET';
+      }
+      class FakeTelegramAdapter {
+        staticBotToken = '123456789:FAKE-TELEGRAM-TOKEN';
+        chat = { adapters: { slack: new FakeSlackAdapter() } };
+      }
+      class FakeBrowserProvider {
+        apiKey = 'FAKE-BROWSER-KEY';
+      }
+
+      const requestContext = new RequestContext();
+      requestContext.set('__mastra_chat_channel_render', {
+        adapter: new FakeTelegramAdapter(),
+        chatThread: { id: 'thread-1' },
+        platform: 'telegram',
+      });
+      requestContext.set('browser', { provider: new FakeBrowserProvider(), cdpUrl: 'ws://127.0.0.1:9222' });
+      requestContext.set('user', { name: 'Ada', profile: new FakeBrowserProvider() });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+      span.end();
+
+      const exported = testExporter.events.at(-1)!.exportedSpan.requestContext;
+      expect(exported).toEqual({
+        browser: { provider: '[object]', cdpUrl: 'ws://127.0.0.1:9222' },
+        user: { name: 'Ada', profile: '[object]' },
+      });
+      const serialized = JSON.stringify(exported);
+      for (const secret of [
+        'FAKE-TELEGRAM-TOKEN',
+        'xapp-FAKE-SLACK-TOKEN',
+        'FAKE-FORWARDING-SECRET',
+        'FAKE-BROWSER-KEY',
+      ]) {
+        expect(serialized).not.toContain(secret);
+      }
+    });
   });
 
   describe('hideInput/hideOutput Support', () => {

@@ -3,6 +3,7 @@ import type { Adapter, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { ProcessOutputStreamArgs } from '../processors';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../request-context';
 import type { AgentChunkType, ChunkType } from '../stream/types';
 
 import type { AgentChannels } from './agent-channels';
@@ -46,7 +47,7 @@ export interface ChatChannelRenderContext {
 }
 
 /** Key the processor reads off `requestContext` to locate its render deps. */
-export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
+export { CHAT_CHANNEL_RENDER_CONTEXT_KEY };
 
 interface ChunkQueue {
   iterable: AsyncIterable<AgentChunkType<any>>;

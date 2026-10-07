@@ -76,6 +76,13 @@ export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
  */
 export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
 
+/**
+ * Reserved key under which agent channels store their per-run render
+ * dependencies (live platform adapter, chat thread, callbacks). Runtime
+ * plumbing only — omitted from span serialization.
+ */
+export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
+
 export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
 
 export type VersionOverrides = {
@@ -198,6 +205,58 @@ function isPlainObjectOrArray(value: unknown): boolean {
     // Array.isArray/getPrototypeOf throw TypeError. Treat them as non-plain so
     // serializeForSpan collapses them to a type marker instead of throwing.
     return false;
+  }
+}
+
+/** Nesting depth past which `projectForSpan` stops descending. */
+const SPAN_PROJECTION_MAX_DEPTH = 8;
+
+/**
+ * Builds a plain-data copy of a request-context value for span export.
+ * Plain objects and arrays are copied and walked; every non-plain value at any
+ * depth (class instances, functions, Map/Set, etc.) is collapsed to
+ * `[${typeof value}]` so live objects — and any credentials they hold — never
+ * reach the trace serializer. Dates are kept. Cycles become `[Circular]`.
+ */
+function projectForSpan(value: unknown, ancestors: WeakSet<object>, depth: number): unknown {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (!isPlainObjectOrArray(value)) {
+    // isPlainObjectOrArray already returned false for revoked Proxies; guard
+    // instanceof the same way since it also reads the prototype.
+    try {
+      if (value instanceof Date) return value;
+    } catch {}
+    return `[${typeof value}]`;
+  }
+
+  const obj = value as object;
+  if (ancestors.has(obj)) return '[Circular]';
+  if (depth >= SPAN_PROJECTION_MAX_DEPTH) return '[MaxDepth]';
+
+  ancestors.add(obj);
+  try {
+    if (Array.isArray(obj)) {
+      return obj.map(item => projectForSpan(item, ancestors, depth + 1));
+    }
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(obj)) {
+      out[key] = projectForSpan((obj as Record<string, unknown>)[key], ancestors, depth + 1);
+    }
+    return out;
+  } catch {
+    // Exotic values (e.g. Proxies with throwing traps) collapse instead of
+    // breaking span creation.
+    return '[object]';
+  } finally {
+    ancestors.delete(obj);
   }
 }
 
@@ -537,34 +596,24 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    *
    * Per stored value:
    * - The framework-managed auth token is redacted by key.
+   * - The channel render context (live adapters, chat thread) is omitted.
    * - Primitives are returned as-is.
-   * - Plain objects and arrays are returned by reference so the downstream
-   *   `deepClean` walks and bounds them — this keeps nested request-context
-   *   data visible in traces instead of collapsing it to `[object]`.
-   * - Every other type (class instances, functions, Map/Set, Date, etc.) is
-   *   collapsed to `[${typeof value}]` rather than walked, so a class's
-   *   internals never reach the trace serializer.
+   * - Plain objects and arrays are copied so nested request-context data stays
+   *   visible in traces, but any non-plain value inside them is collapsed.
+   * - Every other type (class instances, functions, Map/Set, etc.) is
+   *   collapsed to `[${typeof value}]` at every depth rather than walked, so a
+   *   class's internals never reach the trace serializer.
    *
-   * The plain objects/arrays passed through here MUST still be bounded by a
-   * downstream `deepClean` before export.
+   * The result is still bounded by a downstream `deepClean` before export.
    */
   serializeForSpan(): Record<string, unknown> {
     const safe: Record<string, unknown> = {};
     for (const [key, value] of this.registry.entries()) {
+      if (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY) continue;
       if (key === MASTRA_AUTH_TOKEN_KEY) {
         safe[key] = '[REDACTED]';
-      } else if (
-        value === null ||
-        value === undefined ||
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      ) {
-        safe[key] = value;
-      } else if (isPlainObjectOrArray(value)) {
-        safe[key] = value;
       } else {
-        safe[key] = `[${typeof value}]`;
+        safe[key] = projectForSpan(value, new WeakSet(), 0);
       }
     }
     return safe;

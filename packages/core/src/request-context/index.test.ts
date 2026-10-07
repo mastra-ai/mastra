@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from './index';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, MASTRA_AUTH_TOKEN_KEY, RequestContext } from './index';
 
 describe('RequestContext', () => {
   describe('constructor', () => {
@@ -552,7 +552,7 @@ describe('RequestContext', () => {
       });
     });
 
-    it('should pass plain objects and arrays through for deepClean to walk, but collapse other types', () => {
+    it('should copy plain objects and arrays so nested data stays visible, but collapse other types', () => {
       class Widget {
         secret = 'do-not-walk';
       }
@@ -568,10 +568,9 @@ describe('RequestContext', () => {
 
       const result = ctx.serializeForSpan();
 
-      // Plain objects/arrays are returned by reference so the downstream
-      // deepClean walks them (nested data stays visible in traces).
-      expect(result['obj']).toBe(obj);
-      expect(result['arr']).toBe(arr);
+      // Plain objects/arrays are copied so nested data stays visible in traces.
+      expect(result['obj']).toEqual(obj);
+      expect(result['arr']).toEqual(arr);
       // Functions and class instances are collapsed, not walked — their
       // internals never reach the trace serializer.
       expect(result['fn']).toBe('[function]');
@@ -594,6 +593,69 @@ describe('RequestContext', () => {
     it('should return empty object for empty context', () => {
       const ctx = new RequestContext();
       expect(ctx.serializeForSpan()).toEqual({});
+    });
+
+    it('should collapse class instances nested inside plain objects and arrays', () => {
+      class TelegramAdapter {
+        staticBotToken = '123456789:FAKEtelegramTOKEN';
+      }
+      const ctx = new RequestContext();
+      ctx.set('wrapper', {
+        platform: 'telegram',
+        adapter: new TelegramAdapter(),
+        handler: () => {},
+        lookup: new Map([['k', 'v']]),
+        list: [new TelegramAdapter(), 'ok'],
+        nested: { deeper: { adapter: new TelegramAdapter(), id: 7 } },
+      });
+
+      const result = ctx.serializeForSpan();
+
+      expect(result['wrapper']).toEqual({
+        platform: 'telegram',
+        adapter: '[object]',
+        handler: '[function]',
+        lookup: '[object]',
+        list: ['[object]', 'ok'],
+        nested: { deeper: { adapter: '[object]', id: 7 } },
+      });
+      expect(JSON.stringify(result)).not.toContain('FAKEtelegramTOKEN');
+    });
+
+    it('should preserve nested Dates', () => {
+      const when = new Date('2026-01-01T00:00:00Z');
+      const ctx = new RequestContext();
+      ctx.set('meta', { when });
+
+      expect((ctx.serializeForSpan()['meta'] as { when: Date }).when).toBe(when);
+    });
+
+    it('should mark cycles and bound depth instead of throwing', () => {
+      const cyclic: Record<string, unknown> = { name: 'root' };
+      cyclic.self = cyclic;
+      let deep: Record<string, unknown> = { leaf: true };
+      for (let i = 0; i < 20; i++) deep = { child: deep };
+      const ctx = new RequestContext();
+      ctx.set('cyclic', cyclic);
+      ctx.set('deep', deep);
+
+      const result = ctx.serializeForSpan();
+
+      expect(result['cyclic']).toEqual({ name: 'root', self: '[Circular]' });
+      expect(JSON.stringify(result['deep'])).toContain('[MaxDepth]');
+    });
+
+    it('should omit the channel render context entirely', () => {
+      class SlackAdapter {
+        appToken = 'xapp-FAKE';
+      }
+      const ctx = new RequestContext();
+      ctx.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { adapter: new SlackAdapter(), platform: 'slack' });
+      ctx.set('userId', 'user-123');
+
+      const result = ctx.serializeForSpan();
+
+      expect(result).toEqual({ userId: 'user-123' });
     });
   });
 
