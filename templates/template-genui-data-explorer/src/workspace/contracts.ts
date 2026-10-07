@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { sourceDescriptorSchema } from "../../data-sources/source.ts";
+import { sourceDescriptorSchema, scalarSchema } from "../../data-sources/source.ts";
 import { verifiedResultSchema } from "../analysis/contracts.ts";
 import { componentSchema } from "../components/catalog.ts";
 
@@ -69,14 +69,15 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("filter"),
     componentId: z.string(),
-    field: z.enum(["segment", "region", "ownerId", "stage"]),
-    value: z.union([z.string(), z.number()]).optional(),
+    field: z.string().min(1).max(80),
+    value: scalarSchema.optional(),
   }),
   z.strictObject({ type: z.literal("drill"), componentId: z.string(), label: z.string() }),
   z.strictObject({
     type: z.literal("compare"),
     componentId: z.string(),
-    segment: z.enum(["SMB", "Mid-market", "Enterprise"]),
+    field: z.string().min(1).max(80),
+    value: scalarSchema,
   }),
 ]);
 export type WorkspaceAction = z.infer<typeof actionSchema>;

@@ -5,7 +5,7 @@ import type { MastraModelConfig } from "@mastra/core/llm";
 import type { Memory } from "@mastra/memory";
 import { analysisToolSchema, SourceError, hasAvailableData } from "../../data-sources/source.ts";
 import type { SourceDescriptor } from "../../data-sources/source.ts";
-import { compositionSchema } from "../components/catalog.ts";
+import { compositionSchema, supportsUnit } from "../components/catalog.ts";
 import {
   agentCatalog,
   compositionInputSchema,
@@ -66,7 +66,7 @@ export function explorerAgent(
                     (entry) =>
                       entry.enabled &&
                       entry.roles.includes(view.role) &&
-                      entry.units.includes(view.unit),
+                      supportsUnit(entry, view.unit),
                   )
                   .map(({ id, version, kind }) => ({ id, version, kind })),
               }
@@ -120,12 +120,12 @@ export function explorerAgent(
     instructions: ({ requestContext }) =>
       [
         "Select supported metrics with analyze. Use the source's saved clock for relative questions. Ask for clarification when ambiguous. Never claim causation from descriptive data, supply raw SQL, or invent facts. Return only a brief nonnumeric acknowledgement after tool calls.",
-        "For the included Sales source, sales means bookings (closed-won contract value), not MRR or recognized revenue. Last month means the final complete month in the source's saved coverage. A chart request needs a supported grouped result, even for one month: use month for a trend or a requested category for a comparison. A scalar alone cannot satisfy a chart request. For monthly customer or revenue churn, use groupBy=month; each month uses its own starting population. For customer retention cohorts use cohortRetention; for a cohort chart of customer churn use cohortChurn. Both use groupBy=cohort and first activation cohorts with continuous retention: cancelled members never return, reactivation is separate. A cohort matrix cannot be replaced with aggregate churn. Cohort dates select activation months; ages stop at the requested period end. Subscription cohorts do not support opportunity segment filters or revenue-retention cohorts.",
+        "A chart request needs a supported grouped result, even for one observation. A scalar alone cannot satisfy a chart request. Select the advertised grouping that matches the requested trend, comparison or matrix.",
         "Periods are start-inclusive and end-exclusive. For the last N complete months, if coverage.end is the first of a month, use it as the exclusive end and subtract N calendar months for the start. Do not use the inclusive asOf day as a period end. Prefer source example periods for matching relative questions.",
-        "Use only fields advertised for the chosen metric. Unused fields must be absent/null, including records; records is true only for record inspection. Apply a requested segment/owner/region as filters, not as a grouping substitute. A total for one segment needs its filter and no groupBy unless a breakdown is requested.",
+        "Use only fields advertised for the chosen metric. Unused fields must be absent/null, including records; records is true only for record inspection. Apply requested categories as filters, not as a grouping substitute. A filtered total needs no groupBy unless a breakdown is requested.",
         ...(options.catalog
           ? [
-              "After analyzing, use compose with the exact resultId, role, columns[].key and grouping returned by analyze. Choose only from that result's compatibleComponents list. Do not invent column names from metric names or column labels. Prefer line for series, bar for ranked, heatmap for matrix, table for records, metric for scalar. Line/bar charts use x=returned grouping and y=the compatible numeric column key. Heatmaps use x=returned axes.x, y=returned axes.y, value=returned axes.value. Scalar/table views have no x, y or value. Empty columns mean no chart axes exist: use a scalar component, including for a forecast. Titles must be short metric labels WITHOUT digits or dates; periods are displayed separately. Never abbreviate or corrupt a requested period to bypass the title rule. Set scenario=true for forecasts. Unused properties are absent/null. Refine accepted card IDs to replace them; new IDs add cards.",
+              "After analyzing, use compose with the exact resultId, role, columns[].key and grouping returned by analyze. Choose only from that result's compatibleComponents list. Do not invent column names from metric names or column labels. Prefer line for series, bar for ranked, heatmap for matrix, table for records, metric for scalar. Line/bar charts use x=returned grouping and y=the compatible numeric column key. Heatmaps use x=returned axes.x, y=returned axes.y, value=returned axes.value. Scalar/table views have no x, y or value. Empty columns mean no chart axes exist: use a scalar component, including for a forecast. Titles must be short metric labels WITHOUT digits or dates; periods are displayed separately. Never abbreviate or corrupt a requested period to bypass the title rule. Set scenario=true when the returned representation marks scenario=true. Unused properties are absent/null. Refine accepted card IDs to replace them; new IDs add cards.",
             ]
           : []),
         `Source descriptor: ${JSON.stringify(descriptor)}`,

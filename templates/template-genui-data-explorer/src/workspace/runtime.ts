@@ -21,7 +21,7 @@ export class WorkspaceAgent extends AbstractAgent {
   constructor(engine: WorkspaceEngine) {
     super({
       agentId: "dataExplorer",
-      description: "Verified local Sales exploration and persistent registered UI.",
+      description: "Verified local data exploration and persistent registered UI.",
     });
     this.engine = engine;
   }

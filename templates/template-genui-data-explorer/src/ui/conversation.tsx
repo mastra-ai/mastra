@@ -75,7 +75,7 @@ function ConversationInput(props: CopilotChatInputProps) {
                 Correction reason
                 <input
                   aria-label="Correction reason"
-                  placeholder="For example, show bookings for last month"
+                  placeholder="Describe the metric, period or chart you want"
                   maxLength={300}
                   disabled={busy}
                   value={correction.reason}

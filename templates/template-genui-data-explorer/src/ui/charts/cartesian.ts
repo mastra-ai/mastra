@@ -4,7 +4,7 @@ import { formatDate, formatValue } from "../../components/format.ts";
 
 function monthLabels(props: RendererProps, points: readonly Point[]) {
   const period = props.result.data.period;
-  if (props.result.data.request.groupBy !== "month" || !period)
+  if (props.result.data.table?.interval !== "month" || !period)
     return points.map((point) => point.key);
   const labels: string[] = [];
   const cursor = new Date(`${period.start.slice(0, 7)}-01T00:00:00Z`);
@@ -28,7 +28,7 @@ export function cartesianOptions(
     ...base,
     xAxis: {
       type: "category",
-      data: labels.map((label) => formatDate(label, props.result.data.table?.kind === "series")),
+      data: labels.map((label) => formatDate(label, props.result.data.table?.interval === "month")),
       axisLabel: { color: ink, hideOverlap: true },
       axisLine: { lineStyle: { color: edge } },
     },

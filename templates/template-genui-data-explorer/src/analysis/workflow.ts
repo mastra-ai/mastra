@@ -2,7 +2,7 @@ import type { TelemetrySink } from "../observability/telemetry.ts";
 import { randomUUID } from "node:crypto";
 import { RequestContext } from "@mastra/core/request-context";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
-import { analysisRequestSchema, SourceError } from "../../data-sources/source.ts";
+import { analysisRequestSchema, SourceError, validFilterValue } from "../../data-sources/source.ts";
 import type {
   AnalysisRequest,
   DataSource,
@@ -72,7 +72,11 @@ function validatePlan(request: AnalysisRequest, descriptor: SourceDescriptor): v
     throw new SourceError("invalid-input", "This source does not support the requested grouping.");
   if (request.groupBy && request.records)
     throw new SourceError("invalid-input", "Choose grouped data or records for one request.");
-  if (Object.keys(request.filters ?? {}).some((key) => !capability.filters.includes(key)))
+  if (
+    Object.entries(request.filters ?? {}).some(
+      ([key, value]) => !validFilterValue(capability, key, value),
+    )
+  )
     throw new SourceError("invalid-input", "This source does not support the requested filters.");
 }
 
@@ -92,7 +96,7 @@ export function analyticalWorkflow() {
       const capability = session.descriptor.capabilities.find(
         (entry) => entry.metric === inputData.metric,
       );
-      // Saved opportunity filters must not leak into unrelated subscription metrics.
+      // Saved filters apply only to metrics advertising those fields.
       // Explicit tool filters remain intact so unsupported requests still fail validation.
       const inheritedFilters = Object.fromEntries(
         Object.entries(session.filters ?? {}).filter(

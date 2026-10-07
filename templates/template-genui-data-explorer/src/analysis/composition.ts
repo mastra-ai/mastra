@@ -8,6 +8,7 @@ import {
   componentProperties,
   compositionSchema,
   validateCatalog,
+  supportsUnit,
 } from "../components/catalog.ts";
 
 import type { ComponentBinding, ComponentDeclaration, Composition } from "../components/catalog.ts";
@@ -58,7 +59,7 @@ export function compositionInputSchema(
   const candidates = results.flatMap((result) =>
     catalog.flatMap((entry) => {
       const table = result.data.table;
-      if (!entry.roles.includes(table?.kind ?? "scalar") || !entry.units.includes(result.data.unit))
+      if (!entry.roles.includes(table?.kind ?? "scalar") || !supportsUnit(entry, result.data.unit))
         return [];
       const registered =
         entry.properties instanceof z.ZodObject ? entry.properties : componentProperties;
@@ -85,7 +86,7 @@ export function compositionInputSchema(
           y: z.enum(values.map((column) => column.key)),
         });
       }
-      if (result.data.metric === "forecast")
+      if (result.data.presentation?.scenario)
         properties = properties.safeExtend({ scenario: z.literal(true) });
       properties = properties.refine((value) => entry.properties.safeParse(value).success, {
         message: "Properties must satisfy the registered view contract.",
@@ -122,10 +123,10 @@ export function validateComposition(
     ids.add(binding.id);
     entry.properties.parse(binding.properties);
     const table = result.data.table;
-    if (!entry.roles.includes(table?.kind ?? "scalar") || !entry.units.includes(result.data.unit))
+    if (!entry.roles.includes(table?.kind ?? "scalar") || !supportsUnit(entry, result.data.unit))
       throw new Error("Component data role or unit is incompatible.");
-    if (result.data.metric === "forecast" && binding.properties.scenario !== true)
-      throw new Error("Forecast views must explicitly identify an illustrative scenario.");
+    if (result.data.presentation?.scenario && binding.properties.scenario !== true)
+      throw new Error("Scenario views must explicitly identify an illustrative scenario.");
     if (entry.kind === "heatmap") {
       if (
         !table ||

@@ -16,7 +16,7 @@ import { formatValue, periodLabel } from "../../components/format.ts";
 import { chartPoints, chartTheme, eventName } from "./shared.ts";
 import { heatmapOptions } from "./heatmap.ts";
 import { cartesianOptions } from "./cartesian.ts";
-import { CohortSelection } from "./cohort-selection.tsx";
+import { MatrixSelection } from "./matrix-selection.tsx";
 
 use([
   LineChart,
@@ -42,7 +42,7 @@ export default function Charts(props: RendererProps) {
       const theme = chartTheme(props, points, element, reducedMotion);
       const options =
         props.declaration.kind === "heatmap"
-          ? heatmapOptions(points, theme)
+          ? heatmapOptions(props, points, theme)
           : cartesianOptions(props, points, theme);
       chart.setOption(options, { notMerge: true });
     },
@@ -91,21 +91,26 @@ export default function Charts(props: RendererProps) {
         className="echart"
         style={{
           height: matrix
-            ? Math.max(320, new Set(points.map((point) => point.cohort)).size * 30 + 120)
+            ? Math.max(320, new Set(points.map((point) => point.y)).size * 30 + 120)
             : 340,
         }}
         role="img"
-        aria-label={`${binding.properties.title}, ${result.data.unit === "USD cents" ? "USD" : result.data.unit}; ${periodLabel(result.data)}; ${matrix ? "activation cohorts" : "zero baseline"}`}
+        aria-label={`${binding.properties.title}, ${result.data.unit === "USD cents" ? "USD" : result.data.unit}; ${periodLabel(result.data)}; ${matrix ? "matrix" : "zero baseline"}`}
       >
         <div ref={container} aria-hidden="true" style={{ height: "100%", width: "100%" }} />
       </div>
       <div
         className="chart-points"
         role="group"
-        aria-label={matrix ? "Cohort cells" : "Chart points"}
+        aria-label={matrix ? "Matrix cells" : "Chart points"}
       >
         {matrix ? (
-          <CohortSelection points={points} active={active} setSelected={setSelected} />
+          <MatrixSelection
+            table={result.data.table!}
+            points={points}
+            active={active}
+            setSelected={setSelected}
+          />
         ) : (
           points.map((point) => (
             <button
@@ -138,17 +143,6 @@ export default function Charts(props: RendererProps) {
             </button>
           )}
         </div>
-      )}
-      {matrix ? (
-        <p>
-          Month 0 is the activation month end. Blank cells have not been observed. Cohort size stays
-          fixed. After the first complete cancellation, reactivated customers remain outside
-          continuous retention.
-        </p>
-      ) : (
-        result.data.unit === "percent" && (
-          <p>Months without a denominator are gaps; monthly rates are never added.</p>
-        )
       )}
       <DataTable {...props} />
     </div>

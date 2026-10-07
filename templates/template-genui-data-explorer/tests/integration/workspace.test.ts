@@ -865,7 +865,7 @@ it("enabled catalog validates bindings and custom display schemas", async () => 
     ).toThrow("action");
     expect(
       app.engine.validateAction(
-        { type: "compare", componentId: binding.id, segment: "Enterprise" },
+        { type: "compare", componentId: binding.id, field: "segment", value: "Enterprise" },
         completed.snapshot.workspace,
       ).request.filters,
     ).toEqual({ segment: "Enterprise" });

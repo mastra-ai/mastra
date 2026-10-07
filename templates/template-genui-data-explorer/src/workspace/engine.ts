@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { SourceError, groupingColumn } from "../../data-sources/source.ts";
+import {
+  SourceError,
+  groupingColumn,
+  validFilterValue,
+  drillGrouping,
+  filterControl,
+} from "../../data-sources/source.ts";
 import { DataExplorer } from "../analysis/explorer.ts";
 import { WorkspaceError, WorkspaceStore } from "./store.ts";
 import type { Workspace, WorkspaceAction, WorkspaceSnapshot, Correction } from "./contracts.ts";
@@ -102,6 +108,15 @@ export class WorkspaceEngine {
       };
     let recovered = false;
     workspace.source = source;
+    // Restore optional display metadata for saved results created before these fields existed.
+    for (const result of workspace.results) {
+      const capability = source.capabilities.find((item) => item.metric === result.data.metric);
+      if (capability?.presentation) result.data.presentation = capability.presentation;
+      const grouping = capability?.groupings?.find(
+        (group) => group.field === result.data.request.groupBy,
+      );
+      if (result.data.table && grouping?.interval) result.data.table.interval = grouping.interval;
+    }
     const components = workspace.components
       .map((binding) => {
         try {
@@ -172,24 +187,39 @@ export class WorkspaceEngine {
       );
     const request = structuredClone(result.data.request);
     const filters = { ...workspace.filters };
-    if (action.type === "filter") {
-      if (action.value === undefined) delete filters[action.field];
-      else filters[action.field] = action.value;
-      request.filters = filters;
-    } else if (action.type === "compare")
-      request.filters = { ...request.filters, segment: action.segment };
-    else {
-      const group = request.groupBy;
+    const capability = workspace.source.capabilities.find((item) => item.metric === request.metric);
+    if (!capability) throw new WorkspaceError("invalid-input", "The metric is unavailable.");
+    if (action.type === "filter" || action.type === "compare") {
+      if (
+        !capability.fields.includes("filters") ||
+        !capability.filters.includes(action.field) ||
+        (action.value !== undefined && !validFilterValue(capability, action.field, action.value))
+      )
+        throw new WorkspaceError("invalid-input", "Choose a supported filter field and value.");
+      request.filters = { ...request.filters };
+      if (action.value === undefined) {
+        delete filters[action.field];
+        delete request.filters[action.field];
+      } else {
+        request.filters[action.field] = action.value;
+        if (action.type === "filter") filters[action.field] = action.value;
+      }
+    } else {
+      const group = drillGrouping(capability, request);
       const table = result.data.table;
       const column = table && groupingColumn(table);
-      if (!group || !column || !table?.rows.some((row) => row[column.key] === action.label))
-        throw new WorkspaceError("invalid-input", "Drill into a verified category or month.");
-      if (group === "month") {
-        const start = `${action.label.slice(0, 7)}-01`;
+      const row = column && table?.rows.find((row) => String(row[column.key]) === action.label);
+      if (!group || !column || !row)
+        throw new WorkspaceError(
+          "invalid-input",
+          "Drill into a verified category or date with an advertised record mapping.",
+        );
+      if (group.kind === "series" && group.interval && request.period) {
+        const dateValue = String(row[column.key]);
+        const start = group.interval === "month" ? `${dateValue.slice(0, 7)}-01` : dateValue;
         const date = new Date(`${start}T00:00:00Z`);
-        date.setUTCMonth(date.getUTCMonth() + 1);
-        if (!request.period)
-          throw new WorkspaceError("invalid-input", "A period is required for monthly drill-down.");
+        if (group.interval === "month") date.setUTCMonth(date.getUTCMonth() + 1);
+        else date.setUTCDate(date.getUTCDate() + 1);
         request.period = {
           start: start < request.period.start ? request.period.start : start,
           end:
@@ -197,11 +227,24 @@ export class WorkspaceEngine {
               ? request.period.end
               : date.toISOString().slice(0, 10),
         };
-      } else
-        request.filters = {
-          ...request.filters,
-          [group]: group === "ownerId" ? Number(action.label) : action.label,
-        };
+      } else if (group.drillFilter) {
+        const raw = row[column.key];
+        const type = filterControl(capability, group.drillFilter).type;
+        const value =
+          type === "number" && typeof raw === "string"
+            ? Number(raw)
+            : type === "boolean" && raw === "true"
+              ? true
+              : type === "boolean" && raw === "false"
+                ? false
+                : raw;
+        if (value === undefined || !validFilterValue(capability, group.drillFilter, value))
+          throw new WorkspaceError(
+            "invalid-input",
+            "The selected category cannot be used as a filter.",
+          );
+        request.filters = { ...request.filters, [group.drillFilter]: value };
+      }
       delete request.groupBy;
       request.records = true;
     }
@@ -438,12 +481,15 @@ export class WorkspaceEngine {
                       resultId: result.resultId,
                       properties:
                         action?.type === "drill"
-                          ? { title: "Opportunity records" }
+                          ? {
+                              title: "Source records",
+                              ...(result.data.presentation?.scenario ? { scenario: true } : {}),
+                            }
                           : {
                               ...interaction.binding.properties,
                               title:
                                 action?.type === "compare"
-                                  ? `Comparison: ${action.segment}`
+                                  ? "Comparison"
                                   : interaction.binding.properties.title,
                             },
                     },

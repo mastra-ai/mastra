@@ -2,6 +2,8 @@
 import { useState, useId } from "react";
 import { components } from "../components/catalog.ts";
 import type { ComponentDeclaration } from "../components/catalog.ts";
+import { drillGrouping, filterControl } from "../../data-sources/source.ts";
+import { FilterControls } from "./filter-controls.tsx";
 import { overviewFor } from "../workspace/contracts.ts";
 import { RegisteredView } from "./renderers.tsx";
 import { periodLabel, viewTitle } from "../components/format.ts";
@@ -23,7 +25,7 @@ export function ResultCard({ componentId }: { componentId: string }) {
   const entry: ComponentDeclaration = {
     ...registered,
     actions: registered.actions.filter(
-      (action) => action !== "drill" || capability?.fields.includes("records"),
+      (action) => action !== "drill" || Boolean(drillGrouping(capability, result.data.request)),
     ),
     enabled: true,
     ...(configured ? { defaults: configured.defaults } : {}),
@@ -39,8 +41,9 @@ export function ResultCard({ componentId }: { componentId: string }) {
           {Object.keys(result.data.request.filters ?? {}).length > 0 && (
             <p className="cohort-label">
               {Object.entries(result.data.request.filters ?? {})
-                .map(([field, value]) =>
-                  field === "ownerId" ? `Sales representative ${value}` : String(value),
+                .map(
+                  ([field, value]) =>
+                    `${capability ? filterControl(capability, field).label : field}: ${value}`,
                 )
                 .join(" · ")}
             </p>
@@ -56,7 +59,8 @@ export function ResultCard({ componentId }: { componentId: string }) {
         </button>
       </div>
       <div id={bodyId} hidden={collapsed}>
-        {binding.properties.scenario && <p>Illustrative scenario · not guaranteed revenue</p>}
+        {binding.properties.scenario && <p>Illustrative scenario · outcomes are not guaranteed</p>}
+        {result.data.presentation?.note && <p>{result.data.presentation.note}</p>}
         <RegisteredView
           binding={titled}
           result={result}
@@ -83,39 +87,19 @@ export function ResultCard({ componentId }: { componentId: string }) {
           >
             Correct this view
           </button>
-          {entry.actions.includes("filter") && capability?.filters.includes("segment") && (
-            <label>
-              Segment filter
-              <select
-                aria-label={`Segment filter ${title}`}
+          {capability?.fields.includes("filters") &&
+            capability.filters.map((field) => (
+              <FilterControls
+                key={`${result.resultId}:${field}`}
+                control={filterControl(capability, field)}
+                value={result.data.request.filters?.[field]}
+                componentId={binding.id}
+                title={title}
+                actions={entry.actions}
                 disabled={isRunning}
-                value={String(result.data.request.filters?.segment ?? "")}
-                onChange={(event) => {
-                  void act({
-                    type: "filter",
-                    componentId: binding.id,
-                    field: "segment",
-                    ...(event.target.value ? { value: event.target.value } : {}),
-                  });
-                }}
-              >
-                <option value="">All segments</option>
-                <option>SMB</option>
-                <option>Mid-market</option>
-                <option>Enterprise</option>
-              </select>
-            </label>
-          )}
-          {entry.actions.includes("compare") && capability?.filters.includes("segment") && (
-            <button
-              disabled={isRunning}
-              onClick={() => {
-                void act({ type: "compare", componentId: binding.id, segment: "Enterprise" });
-              }}
-            >
-              Compare Enterprise
-            </button>
-          )}
+                act={act}
+              />
+            ))}
         </div>
         <details className="source-details">
           <summary>Source details</summary>

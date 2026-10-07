@@ -147,7 +147,7 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
       "Show ranked segment bookings",
       "Inspect final month records",
     ].entries()) {
-      const input = page.getByPlaceholder("Ask about Sales…");
+      const input = page.getByPlaceholder("Ask about your data…");
       await input.fill(question);
       await input.press("Enter");
       await expect
@@ -259,14 +259,14 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
     await expect(page.getByText("Revision 3", { exact: false }).first()).toBeVisible();
     expect((await saved()).source.datasetVersion).toBe(checksum);
     expect(provider.calls.length).toBe(calls);
-    await page.getByPlaceholder("Ask about Sales…").fill("Show monthly bookings");
-    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await page.getByPlaceholder("Ask about your data…").fill("Show monthly bookings");
+    await page.getByPlaceholder("Ask about your data…").press("Enter");
     await expect.poll(async () => (await saved()).revision).toBe(4);
     await cancelAfterRead(await saved());
     await page
-      .getByPlaceholder("Ask about Sales…")
+      .getByPlaceholder("Ask about your data…")
       .fill("Show a customer retention cohort heatmap");
-    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await page.getByPlaceholder("Ask about your data…").press("Enter");
     await expect.poll(async () => (await saved()).revision).toBe(5);
     const heatmap = page.locator('[data-component="heatmap"]');
     await expect(heatmap.getByRole("img")).toBeVisible();
@@ -282,9 +282,9 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
       .locator(".echart")
       .screenshot({ path: testInfo.outputPath("production-cohort.png") });
     await page
-      .getByPlaceholder("Ask about Sales…")
+      .getByPlaceholder("Ask about your data…")
       .fill("Show monthly customer churn for the last 12 complete months");
-    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await page.getByPlaceholder("Ask about your data…").press("Enter");
     await expect.poll(async () => (await saved()).revision).toBe(6);
     await expect(
       page.getByRole("heading", { name: "Monthly customer churn", exact: true }),
@@ -489,8 +489,8 @@ test("separate UI and Mastra processes use the authenticated proxy without shari
     ).toBe(403);
     await ready(webOrigin);
     await page.goto(webOrigin);
-    await page.getByPlaceholder("Ask about Sales…").fill("Show monthly bookings");
-    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await page.getByPlaceholder("Ask about your data…").fill("Show monthly bookings");
+    await page.getByPlaceholder("Ask about your data…").press("Enter");
     await expect(page.getByText("Revision 1 · Saved locally", { exact: false })).toBeVisible();
     await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
     expect(await page.content()).not.toContain(token);

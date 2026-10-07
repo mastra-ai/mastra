@@ -24,93 +24,142 @@ import {
 } from "./opportunity-metrics.ts";
 import { customerChurn, revenueChurn, churnSeries, customerCohorts } from "./churn-metrics.ts";
 
-const opportunityFilters = ["ownerId", "segment", "region", "stage"] as const;
-const capabilities: SourceDescriptor["capabilities"] = [
-  ...["cohortRetention", "cohortChurn"].map(
-    (metricId): SourceDescriptor["capabilities"][number] => ({
-      metric: metricId,
-      description: `First activation month per account with a fixed cohort size. Continuous retention ends at the first complete cancellation; reactivation stays separate. ${metricId === "cohortRetention" ? "Retained" : "Cumulatively churned"} customers / cohort size at each completed month end. Month 0 is activation month end. The overall rate observes selected cohorts at the requested period end, not an average of matrix cells.`,
-      unit: "percent",
-      calculation: "percentage" as const,
-      fields: ["period", "groupBy"],
-      groupings: [{ field: "cohort", kind: "matrix" as const }],
-      groupedCalculation: "independent" as const,
-      filters: [],
-    }),
-  ),
+const labels: Record<string, string> = {
+  bookings: "Bookings",
+  conversion: "Closed-deal win rate",
+  growth: "Bookings growth",
+  pipeline: "Open pipeline",
+  forecast: "Weighted forecast",
+  customerChurn: "Customer churn",
+  revenueChurn: "Gross revenue churn",
+  cohortRetention: "Continuous customer retention",
+  cohortChurn: "Cumulative customer churn",
+};
+const filterControls: NonNullable<SourceDescriptor["capabilities"][number]["filterControls"]> = [
   {
-    metric: "bookings",
-    description:
-      "Closed-won contract value, counted once. Monthly rows with no closes are zero; monthly conversion omits no-close months as gaps.",
-    unit: "USD cents",
-    calculation: "total",
-    fields: ["period", "filters", "groupBy", "records"],
-    groupings: ["month", "segment", "region", "ownerId", "stage"].map((field) => ({
-      field,
-      kind: field === "month" ? ("series" as const) : ("ranked" as const),
-    })),
-    filters: [...opportunityFilters],
+    field: "segment",
+    label: "Segment",
+    type: "string",
+    options: ["SMB", "Mid-market", "Enterprise"].map((value) => ({ label: value, value })),
   },
   {
-    metric: "conversion",
-    description: "Closed-deal win rate: won / (won + lost).",
-    unit: "percent",
-    calculation: "percentage",
-    fields: ["period", "filters", "groupBy", "records"],
-    groupings: ["month", "segment", "region", "ownerId", "stage"].map((field) => ({
-      field,
-      kind: field === "month" ? ("series" as const) : ("ranked" as const),
-    })),
-    filters: [...opportunityFilters],
+    field: "region",
+    label: "Region",
+    type: "string",
+    options: ["Americas", "EMEA", "APAC"].map((value) => ({ label: value, value })),
   },
+  { field: "ownerId", label: "Sales representative", type: "number" },
   {
-    metric: "growth",
-    description: "Bookings growth against matching earlier-year dates.",
-    unit: "percent",
-    calculation: "percentage",
-    fields: ["period", "baseline", "filters"],
-    filters: [...opportunityFilters],
-  },
-  {
-    metric: "pipeline",
-    description: "Open opportunity values known as of a UTC date.",
-    unit: "USD cents",
-    calculation: "total",
-    fields: ["asOf", "filters"],
-    filters: [...opportunityFilters],
-  },
-  {
-    metric: "forecast",
-    description:
-      "Illustrative fixed-weight scenario; not calibrated or guaranteed revenue. Known bookings are separate.",
-    unit: "USD cents",
-    calculation: "total",
-    fields: ["asOf", "horizon", "filters"],
-    filters: [...opportunityFilters],
-  },
-  {
-    metric: "customerChurn",
-    description:
-      "First full account cancellation in the opening cohort; reactivation separate. Monthly rates use each month's opening accounts, never a sum or mean of monthly rates. No starting accounts means a gap.",
-    unit: "percent",
-    calculation: "percentage",
-    fields: ["period", "groupBy"],
-    groupings: [{ field: "month", kind: "series" }],
-    groupedCalculation: "independent",
-    filters: [],
-  },
-  {
-    metric: "revenueChurn",
-    description:
-      "Opening-cohort gross MRR losses, capped per account at opening MRR. Monthly rates use each month's opening MRR, never a sum or mean of monthly rates. No opening MRR means a gap.",
-    unit: "percent",
-    calculation: "percentage",
-    fields: ["period", "groupBy"],
-    groupings: [{ field: "month", kind: "series" }],
-    groupedCalculation: "independent",
-    filters: [],
+    field: "stage",
+    label: "Stage",
+    type: "string",
+    options: ["qualification", "discovery", "proposal", "negotiation", "won", "lost"].map(
+      (value) => ({ label: value, value }),
+    ),
   },
 ];
+const opportunityFilters = ["ownerId", "segment", "region", "stage"] as const;
+const capabilities: SourceDescriptor["capabilities"] = (
+  [
+    ...["cohortRetention", "cohortChurn"].map(
+      (metricId): SourceDescriptor["capabilities"][number] => ({
+        metric: metricId,
+        description: `First activation month per account with a fixed cohort size. Continuous retention ends at the first complete cancellation; reactivation stays separate. ${metricId === "cohortRetention" ? "Retained" : "Cumulatively churned"} customers / cohort size at each completed month end. Month 0 is activation month end. The overall rate observes selected cohorts at the requested period end, not an average of matrix cells.`,
+        unit: "percent",
+        calculation: "percentage" as const,
+        fields: ["period", "groupBy"],
+        groupings: [
+          { field: "cohort", label: "activation cohort", kind: "matrix" as const, cohort: true },
+        ],
+        groupedCalculation: "independent" as const,
+        filters: [],
+      }),
+    ),
+    {
+      metric: "bookings",
+      description:
+        "Closed-won contract value, counted once. Monthly rows with no closes are zero; monthly conversion omits no-close months as gaps.",
+      unit: "USD cents",
+      calculation: "total",
+      fields: ["period", "filters", "groupBy", "records"],
+      groupings: ["month", "segment", "region", "ownerId", "stage"].map((field) => ({
+        field,
+        kind: field === "month" ? ("series" as const) : ("ranked" as const),
+        ...(field === "month" ? { interval: "month" as const } : { drillFilter: field }),
+      })),
+      filters: [...opportunityFilters],
+    },
+    {
+      metric: "conversion",
+      recordCount: { field: "stage", equals: "won" },
+      description: "Closed-deal win rate: won / (won + lost).",
+      unit: "percent",
+      calculation: "percentage",
+      fields: ["period", "filters", "groupBy", "records"],
+      groupings: ["month", "segment", "region", "ownerId", "stage"].map((field) => ({
+        field,
+        kind: field === "month" ? ("series" as const) : ("ranked" as const),
+        ...(field === "month" ? { interval: "month" as const } : { drillFilter: field }),
+      })),
+      filters: [...opportunityFilters],
+    },
+    {
+      metric: "growth",
+      description: "Bookings growth against matching earlier-year dates.",
+      unit: "percent",
+      calculation: "percentage",
+      fields: ["period", "baseline", "filters"],
+      filters: [...opportunityFilters],
+    },
+    {
+      metric: "pipeline",
+      description: "Open opportunity values known as of a UTC date.",
+      unit: "USD cents",
+      calculation: "total",
+      fields: ["asOf", "filters"],
+      filters: [...opportunityFilters],
+    },
+    {
+      metric: "forecast",
+      description:
+        "Illustrative fixed-weight scenario; not calibrated or guaranteed revenue. Known bookings are separate.",
+      unit: "USD cents",
+      calculation: "total",
+      fields: ["asOf", "horizon", "filters"],
+      filters: [...opportunityFilters],
+    },
+    {
+      metric: "customerChurn",
+      description:
+        "First full account cancellation in the opening cohort; reactivation separate. Monthly rates use each month's opening accounts, never a sum or mean of monthly rates. No starting accounts means a gap.",
+      unit: "percent",
+      calculation: "percentage",
+      fields: ["period", "groupBy"],
+      groupings: [{ field: "month", kind: "series", interval: "month" }],
+      groupedCalculation: "independent",
+      filters: [],
+    },
+    {
+      metric: "revenueChurn",
+      description:
+        "Opening-cohort gross MRR losses, capped per account at opening MRR. Monthly rates use each month's opening MRR, never a sum or mean of monthly rates. No opening MRR means a gap.",
+      unit: "percent",
+      calculation: "percentage",
+      fields: ["period", "groupBy"],
+      groupings: [{ field: "month", kind: "series", interval: "month" }],
+      groupedCalculation: "independent",
+      filters: [],
+    },
+  ] satisfies SourceDescriptor["capabilities"]
+).map((capability) => ({
+  ...capability,
+  presentation: {
+    label: labels[capability.metric]!,
+    ...(capability.metric === "forecast" ? { scenario: true } : {}),
+    ...(capability.metric.startsWith("cohort") ? { note: capability.description } : {}),
+  },
+  ...(capability.filters.length ? { filterControls } : {}),
+}));
 
 function requestPeriod(value: unknown, name: string): Period {
   if (
@@ -185,6 +234,8 @@ export class SalesSource implements DataSource {
       asOf: metadata.asOf,
       metadata: { ...metadata },
       metricVersion: metadata.metrics,
+      instructions:
+        "For the included Sales source, sales means bookings (closed-won contract value), not MRR or recognized revenue. Last month means the final complete month in the source's saved coverage. A chart request needs a supported grouped result, even for one month: use month for a trend or a requested category for a comparison. A scalar alone cannot satisfy a chart request. For monthly customer or revenue churn, use groupBy=month; each month uses its own starting population. For customer retention cohorts use cohortRetention; for a cohort chart of customer churn use cohortChurn. Both use groupBy=cohort and first activation cohorts with continuous retention: cancelled members never return, reactivation is separate. A cohort matrix cannot be replaced with aggregate churn. Cohort dates select activation months; ages stop at the requested period end. Subscription cohorts do not support opportunity segment filters or revenue-retention cohorts.",
       capabilities,
       examples: [
         {
@@ -404,6 +455,8 @@ export class SalesSource implements DataSource {
     return {
       ...(table ? { table } : {}),
       metric: request.metric,
+      presentation: this.#descriptor.capabilities.find((item) => item.metric === request.metric)!
+        .presentation,
       request: structuredClone(request),
       status: result.status,
       value: result.value,
@@ -498,11 +551,12 @@ export class SalesSource implements DataSource {
     }
     return {
       kind: request.groupBy === "month" ? "series" : "ranked",
+      ...(request.groupBy === "month" ? { interval: "month" as const } : {}),
       omitted: 0,
       columns: [
         {
           key: "label",
-          label: request.groupBy!,
+          label: request.groupBy === "ownerId" ? "sales representative" : request.groupBy!,
           type: request.groupBy === "month" ? "date" : "category",
         },
         {

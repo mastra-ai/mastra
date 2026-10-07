@@ -292,6 +292,7 @@ export function customerCohorts(
     kind: "matrix",
     omitted: 0,
     axes: { x: "age", y: "cohort", value: "value" },
+    cohort: true,
     columns: [
       { key: "cohort", label: "First activation cohort", type: "date" },
       { key: "age", label: "Months since activation", type: "number" },

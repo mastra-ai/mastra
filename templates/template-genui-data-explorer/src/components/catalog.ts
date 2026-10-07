@@ -80,10 +80,10 @@ export const components: readonly ComponentDeclaration[] = [
     kind: "heatmap",
     version: "1",
     description:
-      "Customer retention or cumulative churn by first activation cohort and completed month age. Bind x, y and value exactly to verified matrix axes. Unobserved months remain blank.",
+      "Two-dimensional numeric matrix. Bind x, y and value exactly to verified matrix axes. Missing cells remain blank.",
     enabled: true,
     roles: ["matrix"],
-    units: ["percent"],
+    units: ["*"],
     actions: [],
     properties: componentProperties,
     defaults: { pageSize: 12 },
@@ -95,7 +95,7 @@ export const components: readonly ComponentDeclaration[] = [
     description: "Verified scalar metric with definition and provenance.",
     enabled: true,
     roles: ["scalar", "series", "ranked", "records"],
-    units: ["USD cents", "percent"],
+    units: ["*"],
     actions: ["filter", "compare"],
     properties: componentProperties,
     defaults: { pageSize: 10 },
@@ -105,10 +105,10 @@ export const components: readonly ComponentDeclaration[] = [
     kind: "line",
     version: "1",
     description:
-      "Ordered monthly trend. Bind x to a date column and y to a numeric column with the metric unit.",
+      "Ordered time trend. Bind x to a date column and y to a numeric column with the metric unit.",
     enabled: true,
     roles: ["series"],
-    units: ["USD cents", "percent"],
+    units: ["*"],
     actions: ["filter", "drill", "compare"],
     properties: componentProperties,
     defaults: { pageSize: 10 },
@@ -121,7 +121,7 @@ export const components: readonly ComponentDeclaration[] = [
       "Ranked comparison with zero baseline. Bind x to categories and y to verified metric values.",
     enabled: true,
     roles: ["ranked"],
-    units: ["USD cents", "percent"],
+    units: ["*"],
     actions: ["filter", "drill", "compare"],
     properties: componentProperties,
     defaults: { pageSize: 10 },
@@ -134,7 +134,7 @@ export const components: readonly ComponentDeclaration[] = [
       "Accessible paginated verified records or grouped data; all columns remain available.",
     enabled: true,
     roles: ["scalar", "series", "ranked", "records", "matrix"],
-    units: ["USD cents", "percent"],
+    units: ["*"],
     actions: ["filter", "drill", "compare"],
     properties: componentProperties,
     defaults: { pageSize: 10 },
@@ -146,7 +146,7 @@ export const components: readonly ComponentDeclaration[] = [
     description: "A comparison panel for a second verified metric, preserving existing cards.",
     enabled: true,
     roles: ["scalar", "series", "ranked", "records"],
-    units: ["USD cents", "percent"],
+    units: ["*"],
     actions: ["filter", "compare"],
     properties: componentProperties,
     defaults: { pageSize: 10 },
@@ -180,4 +180,8 @@ export function validateCatalog(entries: readonly ComponentDeclaration[]) {
   }
   if (!entries.some((entry) => entry.enabled)) throw new Error("Enable at least one UI component.");
   return entries.filter((entry) => entry.enabled);
+}
+
+export function supportsUnit(entry: ComponentDeclaration, unit: string) {
+  return entry.units.includes("*") || entry.units.includes(unit);
 }

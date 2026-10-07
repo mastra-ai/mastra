@@ -8,6 +8,7 @@ const { workspaceServer } = await import("./server.ts");
 import { SalesSource } from "../../data-sources/sales/source.ts";
 import { groupingColumn } from "../../data-sources/source.ts";
 import { components } from "../../src/components/catalog.ts";
+import { EducationSource, educationPeriod } from "./education-source.ts";
 import { compact } from "./compact.ts";
 
 const directory = process.env.TEST_DIRECTORY;
@@ -26,6 +27,34 @@ writeFileSync(join(directory, "calls.json"), "0");
 const provider = workspaceModel({
   ...(process.env.CARD_ID ? { cardId: process.env.CARD_ID } : {}),
   choose: (question) => {
+    if (process.env.EDUCATION_DATA === "true")
+      return {
+        component: /matrix/.test(question)
+          ? "heatmap"
+          : /ranking/.test(question)
+            ? "bar"
+            : /completion/.test(question)
+              ? "metric"
+              : "line",
+        cardId: /matrix/.test(question)
+          ? "education-matrix"
+          : /ranking/.test(question)
+            ? "education-ranking"
+            : /completion/.test(question)
+              ? "education-completion"
+              : "education-daily",
+        plan: {
+          metric: /completion/.test(question) ? "completion" : "enrollments",
+          period: educationPeriod,
+          ...(/matrix/.test(question)
+            ? { groupBy: "courseCampus" }
+            : /ranking/.test(question)
+              ? { groupBy: "course" }
+              : /completion/.test(question)
+                ? {}
+                : { groupBy: "teachingDay" }),
+        },
+      };
     if (/second monthly trend/i.test(question)) return { component: "line", cardId: "second-line" };
     if (/monthly.*churn|churn.*by month/i.test(question))
       return {
@@ -132,6 +161,12 @@ const app = await createWorkspace({
             }),
           },
         ],
+      }
+    : {}),
+  ...(process.env.EDUCATION_DATA === "true"
+    ? {
+        sourceId: "education",
+        registrations: [{ id: "education", open: () => new EducationSource() }],
       }
     : {}),
   settings: { path: salesPath },

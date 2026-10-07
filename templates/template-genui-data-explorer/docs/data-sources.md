@@ -53,8 +53,8 @@ three methods:
    on the server.
 4. If the source needs preparation, add it in [`scripts/sources.ts`](../scripts/sources.ts).
    Remove the Sales-specific preparation when replacing that source; keep setup code under `scripts/`.
-5. Update the Sales-specific guidance in [`src/mastra/agent.ts`](../src/mastra/agent.ts) for the new
-   domain. The source descriptor supplies capabilities and examples to the agent automatically.
+5. Declare domain guidance in your source descriptor’s `instructions`, and supply capabilities,
+   display metadata and example requests. These reach the agent and UI automatically.
 
 Results include the executed request, values and units, calculation operands, completeness, and
 source provenance. Optional tables declare typed columns and their shape: series, ranked data,
@@ -83,3 +83,66 @@ their results to the `DataSource` contract so this template can validate and ren
 passages and citations need their own result contract and UI component; they do not fit the current
 numeric metric contract directly. See [Adding UI components](ui-components.md) for the catalog and
 agent selection guidance.
+
+## Use another domain without changing the UI
+
+The shared agent, renderers and workspace actions read the selected source's contracts. Sales
+terminology, business guidance and fixed filter choices live in the Sales adapter. An education
+adapter can advertise `enrollments` in `students` and `completion` in `percent` using the same UI.
+
+For example, this capability enables a daily enrollment chart, course rankings, filtering,
+comparison and record inspection:
+
+```ts
+{
+  metric: "enrollments",
+  description: "Count of enrolled students in the requested period.",
+  presentation: { label: "Student enrollment" },
+  unit: "students",
+  calculation: "total",
+  fields: ["period", "filters", "groupBy", "records"],
+  filters: ["course"],
+  filterControls: [{
+    field: "course", label: "Course", type: "string",
+    options: [{ label: "Mathematics", value: "math" }, { label: "History", value: "history" }],
+  }],
+  groupings: [
+    { field: "teachingDay", kind: "series", interval: "day" },
+    { field: "course", kind: "ranked", drillFilter: "course" },
+  ],
+}
+```
+
+Return a typed `date` grouping column for the daily series, or a `category` column for the ranking,
+plus the numeric `value` column with unit `students`. Grouped rows carry `numerator` and
+`denominator`; totals equal the numerator and reconcile to the sum of rows. Rates use `percent`
+and verified numerator/denominator operands. Arbitrary free-form documents and unverified values
+remain outside this numeric analytical contract.
+
+- `presentation.label` names the metric. `presentation.scenario: true` requires the composed
+  view to identify a scenario, regardless of the metric ID. `presentation.note` supplies a
+  source-owned explanation. Verification attaches these fields from the registered capability;
+  the model cannot override them.
+- `filterControls` defines labels, types (`string`, `number`, `boolean`) and optional labelled
+  values. Numeric, boolean and explicit null options retain their types. A missing control falls
+  back to a text input. Filter and comparison actions accept only the selected metric's declared
+  filters; undeclared fields and invalid declared types/options are rejected server-side.
+- `groupings[].interval` identifies daily or monthly series and their record drill windows.
+  `drillFilter` maps a ranked category to a supported filter. Without either mapping, the UI
+  does not offer record drill-down. The source must also advertise `records`.
+- Matrix tables declare distinct `axes.x`, `axes.y` and numeric `axes.value`. Axes may use any
+  supported column type. The renderer reads their labels and coordinates, and displays the metric
+  unit. Cohort matrices additionally set `cohort: true` in both the grouping and table; this retains
+  the stricter complete-month/fixed-population validation used by the Sales adapter.
+- Optional `recordCount: { field, equals }` reconciles a percentage's record numerator to matching
+  rows and its denominator to the full record count.
+
+Put domain-specific analysis guidance in the descriptor's optional `instructions`, and useful
+questions in `examples`. Both reach the agent automatically; the welcome screen uses the source
+title and examples. The source still owns metric calculations, supported questions and data access.
+A new domain requires an adapter and registration, not edits to presentation components.
+
+`tests/fixtures/education-source.ts` is an independent in-memory example used by integration and
+browser tests. It demonstrates daily trends, rankings, categorical matrices, percentages, numeric
+and boolean filters, comparisons, record drill-down and saved conversations. It is a test fixture,
+not a preinstalled production education connector.

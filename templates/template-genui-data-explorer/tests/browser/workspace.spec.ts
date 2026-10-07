@@ -56,7 +56,7 @@ async function saved(page: Page) {
   return workspaceSchema.parse(body.workspace);
 }
 async function ask(page: Page, text: string, revision: number) {
-  const input = page.getByPlaceholder("Ask about Sales…");
+  const input = page.getByPlaceholder("Ask about your data…");
   await expect(input).toBeVisible();
   await input.fill(text);
   await input.press("Enter");
@@ -114,7 +114,7 @@ test("a rejected or failed question can be followed by a valid question without 
   page,
 }) => {
   await page.goto("/");
-  const input = page.getByPlaceholder("Ask about Sales…");
+  const input = page.getByPlaceholder("Ask about your data…");
   for (const [question, message] of [
     ["DELETE FROM opportunities", "Raw SQL, writes and internal stores are unavailable."],
     ["Why did Sales fall?", "These descriptive data do not establish causes"],
@@ -146,12 +146,16 @@ test("copilot_workspace_filters_drills_and_compares", async ({ page }, testInfo)
   expect(first.results[0]?.data.value).toBe(42000);
   expect(first.components[0]?.component).toBe("line");
   await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
-  await page.getByLabel("Segment filter Monthly bookings").selectOption("SMB");
+  await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
   const filtered = await saved(page);
   expect(filtered.filters).toEqual({ segment: "SMB" });
   expect(filtered.results[0]?.data.value).toBe(36000);
-  await page.getByRole("button", { name: "Compare Enterprise", exact: true }).first().click();
+  await page
+    .getByLabel(/^Compare Segment /)
+    .first()
+    .selectOption({ label: "Enterprise" });
+  await page.getByRole("button", { name: "Compare Segment", exact: true }).first().click();
   await revision(page, 3);
   const compared = await saved(page);
   expect(compared.components).toHaveLength(2);
@@ -336,7 +340,7 @@ test("inline views format answers, collapse without removing the conversation an
   await ask(page, "show a cohort chart of churn for last 12 months", 2);
   await expect(
     page.getByRole("heading", {
-      name: "Cumulative customer churn by activation cohort",
+      name: "Cumulative customer churn by First activation cohort",
       exact: true,
     }),
   ).toBeVisible();
@@ -360,7 +364,7 @@ test("inspection returns to the saved filtered overview after restart without mo
   await page.goto("/");
   await ask(page, "Show monthly bookings", 1);
   await expect(page.getByRole("button", { name: "Back to overview", exact: true })).toHaveCount(0);
-  await page.getByLabel("Segment filter Monthly bookings").selectOption("SMB");
+  await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
   const overview = await saved(page);
   const calls = await readFile(join(directory, "calls.json"), "utf8");
@@ -374,7 +378,7 @@ test("inspection returns to the saved filtered overview after restart without mo
   await page.getByRole("button", { name: "Back to overview", exact: true }).click();
   await revision(page, 4);
   await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
-  await expect(page.getByLabel("Segment filter Monthly bookings")).toHaveValue("SMB");
+  await expect(page.getByLabel("Segment filter Monthly bookings")).toHaveValue("0");
   const restored = await saved(page);
   expect(restored.components).toEqual(overview.components);
   expect(restored.results).toEqual(overview.results);
@@ -393,12 +397,12 @@ test("filter replacement resets table pagination", async ({ page }) => {
   await ask(page, "Show bookings records", 1);
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
-  await page.getByLabel("Segment filter Bookings records").selectOption("Enterprise");
+  await page.getByLabel("Segment filter Bookings records").selectOption({ label: "Enterprise" });
   await revision(page, 2);
   await expect(page.getByText("Page 1 of 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("table")).toContainText("$60.00");
-  await expect(page.getByRole("table")).toContainText("Example account 2");
-  await expect(page.locator(".card")).not.toContainText("Synthetic");
+  await expect(page.getByRole("table")).toContainText("Synthetic account 2");
+  await expect(page.locator(".card")).toContainText("Synthetic account 2");
 });
 
 test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
@@ -443,7 +447,7 @@ test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
       return json && typeof json === "object" && "status" in json ? json.status : undefined;
     })
     .toBe("working");
-  await page.getByLabel("Segment filter Monthly bookings").selectOption("Enterprise");
+  await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "Enterprise" });
   await revision(page, 2);
   await slow;
   expect((await saved(page)).results[0]?.data.value).toBe(6000);
@@ -462,7 +466,7 @@ test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {
 test("workspace_restores_after_restart_and_partial_failure", async ({ page }) => {
   await page.goto("/");
   await ask(page, "Show monthly bookings", 1);
-  await page.getByLabel("Segment filter Monthly bookings").selectOption("SMB");
+  await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
   const before = await saved(page);
   await page.reload();
@@ -497,13 +501,21 @@ test("workspace_restores_after_restart_and_partial_failure", async ({ page }) =>
     before.messages.at(-1)?.content ?? "missing prior verified explanation",
   );
   triggerSaveFailure(true);
-  await page.getByRole("button", { name: "Compare Enterprise", exact: true }).first().click();
+  await page
+    .getByLabel(/^Compare Segment /)
+    .first()
+    .selectOption({ label: "Enterprise" });
+  await page.getByRole("button", { name: "Compare Segment", exact: true }).first().click();
   await expect(page.getByText(/Workspace save failed/).first()).toBeVisible();
   expect((await saved(page)).revision).toBe(3);
   await page.reload();
   await expect(page.getByText(/Workspace save failed/).first()).toBeVisible();
   triggerSaveFailure(false);
-  await page.getByRole("button", { name: "Compare Enterprise", exact: true }).first().click();
+  await page
+    .getByLabel(/^Compare Segment /)
+    .first()
+    .selectOption({ label: "Enterprise" });
+  await page.getByRole("button", { name: "Compare Segment", exact: true }).first().click();
   await revision(page, 4);
   const accepted = await saved(page);
   const request = input(accepted, "duplicate");
@@ -561,7 +573,11 @@ test("configured_catalog_drives_dynamic_copilot_compositions", async ({ page }) 
   expect(binding).toBeDefined();
   await page
     .locator('[data-component="compact"]')
-    .getByRole("button", { name: "Compare Enterprise", exact: true })
+    .getByLabel(/^Compare Segment /)
+    .selectOption({ label: "Enterprise" });
+  await page
+    .locator('[data-component="compact"]')
+    .getByRole("button", { name: "Compare Segment", exact: true })
     .click();
   await revision(page, 5);
   await expect(
@@ -699,21 +715,21 @@ test("cohort heatmaps show continuous retention, inspect cells and preserve targ
   const card = page.locator('[data-component="heatmap"]').first();
   await expect(
     card.getByRole("heading", {
-      name: "Continuous customer retention by activation cohort",
+      name: "Continuous customer retention by First activation cohort",
       exact: true,
     }),
   ).toBeVisible();
   await expect(card.getByRole("img")).toBeVisible();
   await expect(card.locator(".echart svg")).toBeVisible();
-  await card.locator(".echart svg").getByText("67%", { exact: true }).click();
+  await card.locator(".echart svg").getByText("66.67%", { exact: true }).click();
   await expect(card.getByRole("status")).toContainText("66.67%");
-  await card.getByLabel("Activation cohort", { exact: true }).selectOption("2025-01-01");
-  await card.getByLabel("Month since activation", { exact: true }).selectOption("1");
+  await card.getByLabel("First activation cohort", { exact: true }).selectOption("2025-01-01");
+  await card.getByLabel("Months since activation", { exact: true }).selectOption("1");
   await expect(card.getByRole("status")).toContainText("33.33%");
   await expect(card.getByRole("status")).toContainText("Retained customers: 1 / 3");
-  await card.getByLabel("Activation cohort", { exact: true }).selectOption("2025-03-01");
+  await card.getByLabel("First activation cohort", { exact: true }).selectOption("2025-03-01");
   await expect(
-    card.getByLabel("Month since activation", { exact: true }).getByRole("option"),
+    card.getByLabel("Months since activation", { exact: true }).getByRole("option"),
   ).toHaveCount(1);
   await expect(card.getByRole("status")).toContainText("100.00%");
   const original = await saved(page);
@@ -743,12 +759,12 @@ test("cohort heatmaps show continuous retention, inspect cells and preserve targ
   const churn = page.locator('[data-component="heatmap"]').last();
   await expect(
     churn.getByRole("heading", {
-      name: "Cumulative customer churn by activation cohort",
+      name: "Cumulative customer churn by First activation cohort",
       exact: true,
     }),
   ).toBeVisible();
-  await churn.getByLabel("Activation cohort", { exact: true }).selectOption("2025-01-01");
-  await churn.getByLabel("Month since activation", { exact: true }).selectOption("1");
+  await churn.getByLabel("First activation cohort", { exact: true }).selectOption("2025-01-01");
+  await churn.getByLabel("Months since activation", { exact: true }).selectOption("1");
   await expect(churn.getByRole("status")).toContainText("66.67%");
   await expect(churn.getByRole("status")).toContainText("Churned customers: 2 / 3");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -861,7 +877,7 @@ test("creating a chat during generation stops the old run without leaking late v
   await page.goto("/");
   await ask(page, "Show monthly bookings", 1);
   const original = await saved(page);
-  const input = page.getByPlaceholder("Ask about Sales…");
+  const input = page.getByPlaceholder("Ask about your data…");
   await input.fill("Show slow monthly bookings CANCELLED_SESSION");
   await input.press("Enter");
   await expect(
@@ -886,4 +902,71 @@ test("creating a chat during generation stops the old run without leaking late v
   await expect(page.locator(".notice")).toHaveAttribute("data-status", "incomplete");
   expect((await saved(page)).revision).toBe(1);
   expect((await saved(page)).components).toEqual(original.components);
+});
+
+test("education source renders intent-selected charts and typed controls without Sales UI changes", async ({
+  page,
+}, testInfo) => {
+  await stop();
+  await start({ EDUCATION_DATA: "true" });
+  await page.goto("/");
+  await expect(
+    page.getByText("Explore School learning data with charts, comparisons and records."),
+  ).toBeVisible();
+  await expect(page.getByText("Show daily student enrollment", { exact: true })).toBeVisible();
+  await ask(page, "Show daily enrollment", 1);
+  let daily = page.locator('[data-component="line"]').first();
+  await expect(
+    daily.getByRole("heading", { name: "Student enrollment by Teaching day", exact: true }),
+  ).toBeVisible();
+  await expect(daily.locator(".echart svg")).toBeVisible();
+  await daily.getByRole("button", { name: "Mar 2, 2025", exact: true }).click();
+  await expect(daily.getByRole("status")).toContainText("2 students");
+  await daily.getByRole("button", { name: "Inspect selected records" }).click();
+  await revision(page, 2);
+  await expect(
+    page.getByRole("heading", { name: "Student enrollment records", exact: true }),
+  ).toBeVisible();
+  expect((await saved(page)).results[0]?.data.request.period).toEqual({
+    start: "2025-03-02",
+    end: "2025-03-03",
+  });
+  await page.getByRole("button", { name: "Back to overview", exact: true }).click();
+  await revision(page, 3);
+  await daily.getByLabel(/^School filter /).selectOption({ label: "Primary" });
+  await revision(page, 4);
+  expect((await saved(page)).results[0]?.data.request.filters).toEqual({ schoolId: 10 });
+  await daily.getByLabel(/^Compare School /).selectOption({ label: "Secondary" });
+  await daily.getByRole("button", { name: "Compare School", exact: true }).click();
+  await revision(page, 5);
+  expect((await saved(page)).results.map((result) => result.data.value)).toEqual([4, 2]);
+  await daily.getByLabel(/^School filter /).selectOption({ label: "All" });
+  await revision(page, 6);
+  await ask(page, "Show a course ranking", 7);
+  const bar = page.locator('[data-component="bar"]');
+  await expect(bar.locator(".echart svg")).toBeVisible();
+  await bar.getByRole("button", { name: "Math", exact: true }).click();
+  await expect(bar.getByRole("status")).toContainText("4 students");
+  await ask(page, "Show a course campus matrix", 8);
+  const matrix = page.locator('[data-component="heatmap"]');
+  await expect(matrix.locator(".echart svg")).toBeVisible();
+  await matrix.getByLabel("Campus", { exact: true }).selectOption("North");
+  await matrix.getByLabel("Course", { exact: true }).selectOption("Math");
+  await expect(matrix.getByRole("status")).toContainText("3 students");
+  await expect(matrix).not.toContainText("activation");
+  await ask(page, "Show completion", 9);
+  const metric = page.locator('[data-component="metric"]');
+  await expect(
+    metric.getByRole("heading", { name: "Course completion", exact: true }),
+  ).toBeVisible();
+  await expect(metric.locator(".metric-value")).toHaveText("66.67%");
+  const snapshot = await saved(page);
+  await page.reload();
+  await expect(matrix.locator(".echart svg")).toBeVisible();
+  expect((await saved(page)).results).toEqual(snapshot.results);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await matrix.screenshot({ path: testInfo.outputPath("education-matrix.png") });
 });

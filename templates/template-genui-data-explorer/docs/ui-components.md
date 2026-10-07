@@ -12,16 +12,16 @@ data and selection guidance in the catalog, then connect it to a React renderer.
 
 The shared catalog lives in [`src/components/catalog.ts`](../src/components/catalog.ts). Each entry describes:
 
-| Field            | Purpose                                                                                      |
-| ---------------- | -------------------------------------------------------------------------------------------- |
-| `id`, `version`  | Identify the renderer and its saved property contract.                                       |
-| `description`    | Tell the agent when to choose this component and how to configure it.                        |
-| `enabled`        | Include the component in the default agent catalog.                                          |
-| `kind`           | Reuse the validation rules for `metric`, `line`, `bar`, `table`, `comparison`, or `heatmap`. |
-| `roles`, `units` | Restrict compatible result shapes and measurement units.                                     |
-| `actions`        | Declare supported `filter`, `drill`, and `compare` interactions.                             |
-| `properties`     | Validate the properties the agent can supply with a Zod schema.                              |
-| `defaults`       | Configure the table page size, from 1 to 50 rows.                                            |
+| Field            | Purpose                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| `id`, `version`  | Identify the renderer and its saved property contract.                                            |
+| `description`    | Tell the agent when to choose this component and how to configure it.                             |
+| `enabled`        | Include the component in the default agent catalog.                                               |
+| `kind`           | Reuse the validation rules for `metric`, `line`, `bar`, `table`, `comparison`, or `heatmap`.      |
+| `roles`, `units` | Restrict compatible result shapes and measurement units; `"*"` accepts any verified numeric unit. |
+| `actions`        | Declare supported `filter`, `drill`, and `compare` interactions.                                  |
+| `properties`     | Validate the properties the agent can supply with a Zod schema.                                   |
+| `defaults`       | Configure the table page size, from 1 to 50 rows.                                                 |
 
 ## Register a component
 
@@ -129,3 +129,5 @@ whose default `enabled` flag is false.
 
 Increase `version` when changing the saved property contract. Keep extension tests under `tests/`;
 cover selection compatibility, invalid options, and rendering against known results.
+
+The built-in renderers use `units: ["*"]` so domain units such as `students` or `hours` need no catalog edit. Restricted custom renderers can list specific units. Percent and USD-cent formatting remain supported; other units display beside the numeric value. Matrix axis labels, filter controls, scenario notices and metric titles come from source metadata. See [domain contracts](data-sources.md#use-another-domain-without-changing-the-ui).

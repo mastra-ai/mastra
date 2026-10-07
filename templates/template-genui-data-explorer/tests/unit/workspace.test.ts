@@ -25,15 +25,15 @@ it("human summaries display currency and inclusive calendar dates without techni
   expect(humanAnswer(data)).toBe("Bookings: $120.00 · Mar 1, 2025 – Mar 31, 2025.");
   expect(formatValue(63976000, "USD cents")).toBe("$639,760.00");
   expect(formatValue(25.123, "percent")).toBe("25.12%");
-  expect(formatValue("Synthetic account 12")).toBe("Example account 12");
-  expect(formatValue("Synthetic representative 2")).toBe("Example representative 2");
+  expect(formatValue("Synthetic account 12")).toBe("Synthetic account 12");
+  expect(formatValue("Synthetic representative 2")).toBe("Synthetic representative 2");
   expect(formatValue("Customer account 12")).toBe("Customer account 12");
   expect(formatDate("2026-01-01")).toBe("Jan 1, 2026");
   expect(viewTitle({ ...data, metric: "customerChurn" })).toBe("Customer churn");
-  expect(metricName("constructor")).toBe("constructor");
+  expect(metricName("constructor")).toBe("Constructor");
   expect(
     viewTitle({ ...data, metric: "constructor", request: { ...data.request, groupBy: "month" } }),
-  ).toBe("Monthly constructor");
+  ).toBe("Constructor by month");
 });
 
 it("catalog schemas reject misleading axes, units, forecasts and undeclared display options", async () => {
@@ -88,6 +88,7 @@ it("catalog schemas reject misleading axes, units, forecasts and undeclared disp
       reason: "No opening customers.",
       unit: "percent",
       table: {
+        interval: "month",
         kind: "series",
         grouping: "month",
         omitted: 0,
@@ -146,6 +147,7 @@ it("catalog schemas reject misleading axes, units, forecasts and undeclared disp
       request: { ...monthlyOnly.data.request, groupBy: "cohort" },
       table: {
         kind: "matrix",
+        cohort: true,
         omitted: 0,
         axes: { x: "age", y: "cohort", value: "share" },
         columns: [
@@ -226,6 +228,7 @@ it("catalog schemas reject misleading axes, units, forecasts and undeclared disp
   );
   const forecast = structuredClone(result);
   forecast.data.metric = "forecast";
+  forecast.data.presentation = { label: "Forecast", scenario: true };
   expect(() => validateComposition({ components: [binding] }, [forecast], components)).toThrow(
     "scenario",
   );
@@ -337,4 +340,79 @@ it("catalog schemas reject misleading axes, units, forecasts and undeclared disp
   expect(resultTableSchema.parse({ ...ambiguous, grouping: "calendarTick" }).grouping).toBe(
     "calendarTick",
   );
+});
+
+it("generic matrix colors cover signed percentages and counts beyond the Sales scale", async () => {
+  const { heatmapOptions } = await import("../../src/ui/charts/heatmap.ts");
+  const { chartPoints } = await import("../../src/ui/charts/shared.ts");
+  const data = await new ReferenceSource().execute({
+    metric: "bookings",
+    period: { start: "2025-03-01", end: "2025-04-01" },
+  });
+  const result = verifiedResultSchema.parse({
+    resultId: "matrix",
+    queryId: "query",
+    workflowId: "workflow",
+    workflowRunId: "run",
+    requestId: "request",
+    workspaceId: "workspace",
+    threadId: "thread",
+    baseRevision: 0,
+    traceId: "trace",
+    elapsedMs: 1,
+    explanation: "Verified matrix",
+    checks: ["schema"],
+    data: {
+      ...data,
+      metric: "enrollmentGrowth",
+      unit: "percent",
+      value: 125,
+      numerator: 250,
+      denominator: 200,
+      table: {
+        kind: "matrix",
+        omitted: 0,
+        axes: { x: "term", y: "school", value: "value" },
+        columns: [
+          { key: "term", label: "Term", type: "category" },
+          { key: "school", label: "School", type: "category" },
+          { key: "value", label: "Growth", type: "number", unit: "percent" },
+        ],
+        rows: [
+          { term: "Spring", school: "Primary", value: -50 },
+          { term: "Autumn", school: "Primary", value: 300 },
+        ],
+      },
+    },
+  });
+  const props = {
+    result,
+    binding: {
+      id: "matrix",
+      component: "heatmap",
+      version: "1",
+      resultId: "matrix",
+      properties: { title: "Growth", x: "term", y: "school", value: "value" },
+    },
+    declaration: components.find((entry) => entry.id === "heatmap")!,
+    act: () => {},
+  };
+  const points = chartPoints(props);
+  const theme = {
+    base: {},
+    ink: "black",
+    edge: "gray",
+    color: "green",
+    lowColor: "white",
+    surface: "white",
+    pointMap: new Map(points.map((point) => [point.key, point])),
+  };
+  expect(heatmapOptions(props, points, theme).visualMap).toMatchObject({ min: -50, max: 300 });
+  expect(
+    heatmapOptions(props, [{ key: "zero", label: "Zero", value: 0 }], theme).visualMap,
+  ).toMatchObject({ min: 0, max: 100 });
+  result.data.unit = "students";
+  expect(
+    heatmapOptions(props, [{ key: "count", label: "Count", value: 800 }], theme).visualMap,
+  ).toMatchObject({ min: 0, max: 800 });
 });

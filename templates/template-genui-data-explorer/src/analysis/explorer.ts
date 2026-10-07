@@ -283,7 +283,7 @@ export class DataExplorer {
           )
             throw new SourceError(
               "unsupported",
-              "This analysis did not produce a verified matrix for a heatmap. Ask for a supported customer retention cohort or another registered view.",
+              "This analysis did not produce a verified matrix for a heatmap. Ask for a supported matrix grouping from this source or another registered view.",
             );
           if (
             session.composition &&
@@ -296,7 +296,7 @@ export class DataExplorer {
           )
             throw new SourceError(
               "unsupported",
-              "This analysis did not produce chart data. Ask for a metric with a supported month or category grouping. Metrics without a grouping capability can be displayed as a total or rate.",
+              "This analysis did not produce chart data. Ask for a metric with a supported time or category grouping. Metrics without a grouping capability can be displayed as a total or rate.",
             );
           await options.onComplete?.(session);
           controller.signal.throwIfAborted();

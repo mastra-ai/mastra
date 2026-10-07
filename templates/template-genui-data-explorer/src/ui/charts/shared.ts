@@ -21,8 +21,8 @@ export interface Point {
   key: string;
   label: string;
   value: number;
-  cohort?: string;
-  age?: number;
+  x?: string;
+  y?: string;
   denominator?: number;
   numerator?: number;
 }
@@ -33,22 +33,22 @@ export function chartPoints({ binding, result }: RendererProps): Point[] {
     const value = row[binding.properties.value ?? binding.properties.y ?? ""];
     if (typeof value !== "number") return [];
     if (table.kind === "matrix" && table.axes) {
-      const cohort = String(row[table.axes.y]);
-      const age = Number(row[table.axes.x]);
+      const x = String(row[table.axes.x]);
+      const y = String(row[table.axes.y]);
       return [
         {
-          key: `${cohort}:${age}`,
-          label: `${formatDate(cohort, true)} · Month ${age}`,
+          key: JSON.stringify([x, y]),
+          label: `${formatDate(y, Boolean(table.cohort))} · ${x}`,
           value,
-          cohort,
-          age,
-          numerator: Number(row.numerator),
-          denominator: Number(row.denominator),
+          x,
+          y,
+          ...(typeof row.numerator === "number" ? { numerator: row.numerator } : {}),
+          ...(typeof row.denominator === "number" ? { denominator: row.denominator } : {}),
         },
       ];
     }
     const key = String(row[binding.properties.x ?? ""]);
-    return [{ key, label: formatDate(key, table.kind === "series"), value }];
+    return [{ key, label: formatDate(key, table.interval === "month"), value }];
   });
 }
 export function eventName(event: unknown) {

@@ -28,6 +28,19 @@ export function verifySourceResult(
       "The source returned malformed analytical data. Check the connector before retrying.",
     );
   const data = parsed.data;
+  // Display semantics are source configuration, never provider-controlled properties.
+  if (capability.presentation) data.presentation = capability.presentation;
+  else delete data.presentation;
+  const grouping = capability.groupings?.find((group) => group.field === inputData.groupBy);
+  if (data.table) {
+    if (Boolean(data.table.cohort) !== Boolean(grouping?.cohort))
+      throw new SourceError(
+        "invalid-result",
+        "Matrix semantics do not match the advertised grouping.",
+      );
+    if (grouping?.interval) data.table.interval = grouping.interval;
+    else delete data.table.interval;
+  }
   // Narrative assumptions belong to versioned server capabilities, not connector output.
   if (data.details) delete data.details.assumption;
   if (data.provenance.sourceId !== descriptor.id)
@@ -127,14 +140,13 @@ export function verifySourceResult(
       throw new SourceError("invalid-result", "Table does not match the requested representation.");
     if (
       table.kind === "records" &&
-      data.metric === "conversion" &&
-      (table.rows.filter((row) => row.stage === "won").length !== data.numerator ||
+      capability.recordCount &&
+      (table.rows.filter(
+        (row) => row[capability.recordCount!.field] === capability.recordCount!.equals,
+      ).length !== data.numerator ||
         table.rows.length !== data.denominator)
     )
-      throw new SourceError(
-        "invalid-result",
-        "Closed records do not reconcile to the verified counts.",
-      );
+      throw new SourceError("invalid-result", "Records do not reconcile to the verified counts.");
     const values = table.rows.map((row) => row[valueKey]);
     if (values.some((value) => typeof value !== "number" || !Number.isFinite(value)))
       throw new SourceError("invalid-result", "Table values must be finite numbers.");
@@ -156,8 +168,10 @@ export function verifySourceResult(
     }
     if (
       capability.calculation === "total" &&
-      table.rows.reduce((sum, row) => sum + (typeof row.value === "number" ? row.value : 0), 0) !==
-        data.value
+      table.rows.reduce(
+        (sum, row) => sum + (typeof row[valueKey] === "number" ? row[valueKey] : 0),
+        0,
+      ) !== data.value
     )
       throw new SourceError(
         "invalid-result",
@@ -176,7 +190,7 @@ export function verifySourceResult(
           0,
         ) !== data.denominator)
     )
-      throw new SourceError("invalid-result", "Grouped closed-deal counts do not reconcile.");
+      throw new SourceError("invalid-result", "Grouped operands do not reconcile.");
   }
   return { data, capability };
 }

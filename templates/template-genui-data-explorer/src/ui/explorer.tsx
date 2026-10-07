@@ -178,7 +178,7 @@ export function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
       <header className="app-header">
         <div>
           <h1>Mastra GenUI Data Explorer</h1>
-          <p>Ask about Sales. Explore the results with charts, comparisons and records.</p>
+          <p>Explore {snapshot.workspace.source.title} with charts, comparisons and records.</p>
         </div>
         <div className="chat-session-actions">
           <label className="chat-history">
@@ -229,7 +229,7 @@ export function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
           <CopilotChat
             agentId="workspace-agent"
             threadId={initial.workspace.threadId}
-            labels={{ chatInputPlaceholder: "Ask about Sales…" }}
+            labels={{ chatInputPlaceholder: "Ask about your data…" }}
             input={ConversationInputSlot}
             onSubmitMessage={() => {
               setNotice(undefined);
@@ -249,7 +249,11 @@ export function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
                     <div className="empty">
                       <h2>Start with a question</h2>
                       <p>
-                        Try “Show a chart of last month sales” or “Compare bookings by segment”.
+                        {snapshot.workspace.source.examples
+                          .slice(0, 2)
+                          .map((example) => example.title)
+                          .join(" · ") ||
+                          "Ask for a metric, trend, comparison or records supported by this source."}
                       </p>
                     </div>
                   )}

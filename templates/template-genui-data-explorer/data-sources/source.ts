@@ -71,7 +71,7 @@ export class SourceError extends Error {
     this.retryable = retryable;
   }
 }
-const scalarSchema = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
+export const scalarSchema = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
 const dateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -150,9 +150,38 @@ export function analysisToolSchema(descriptor: SourceDescriptor) {
       }),
     );
 }
+export const presentationSchema = z.strictObject({
+  label: z.string().trim().min(1).max(100),
+  scenario: z.boolean().optional(),
+  note: z.string().trim().min(1).max(2000).optional(),
+});
+export const filterControlSchema = z
+  .strictObject({
+    field: z.string().min(1).max(80),
+    label: z.string().min(1).max(100),
+    type: z.enum(["string", "number", "boolean"]),
+    options: z
+      .array(z.strictObject({ label: z.string().min(1).max(100), value: scalarSchema }))
+      .min(1)
+      .max(100)
+      .optional(),
+  })
+  .refine(
+    (control) =>
+      !control.options?.some(
+        (option) => option.value !== null && typeof option.value !== control.type,
+      ),
+    "Filter options must match the declared type.",
+  );
+export type FilterControl = z.infer<typeof filterControlSchema>;
 export const sourceCapabilitySchema = z
   .strictObject({
     metric: z.string().min(1),
+    presentation: presentationSchema.optional(),
+    filterControls: z.array(filterControlSchema).max(30).optional(),
+    recordCount: z
+      .strictObject({ field: z.string().min(1).max(80), equals: scalarSchema })
+      .optional(),
     description: z.string().min(1),
     unit: z.string().min(1),
     calculation: z.enum(["total", "percentage"]),
@@ -166,11 +195,28 @@ export const sourceCapabilitySchema = z
         z.strictObject({
           field: z.string().min(1).max(80),
           kind: z.enum(["series", "ranked", "matrix"]),
+          label: z.string().min(1).max(100).optional(),
+          interval: z.enum(["day", "month"]).optional(),
+          drillFilter: z.string().min(1).max(80).optional(),
+          cohort: z.boolean().optional(),
         }),
       )
       .max(30)
       .optional(),
   })
+  .refine((capability) => {
+    const controls = capability.filterControls ?? [];
+    return (
+      new Set(controls.map((control) => control.field)).size === controls.length &&
+      controls.every(
+        (control) =>
+          capability.fields.includes("filters") && capability.filters.includes(control.field),
+      ) &&
+      (capability.groupings ?? []).every(
+        (group) => !group.drillFilter || capability.filters.includes(group.drillFilter),
+      )
+    );
+  }, "Controls and drill filters must reference advertised filters without duplicates.")
   .refine(
     (capability) => (capability.calculation === "percentage") === (capability.unit === "percent"),
     "Percentage calculations require percent units; totals use non-percent units.",
@@ -190,7 +236,7 @@ export const sourceCapabilitySchema = z
   )
   .refine(
     (capability) =>
-      !capability.groupings?.some((group) => group.kind === "matrix") ||
+      !capability.groupings?.some((group) => group.cohort) ||
       (capability.calculation === "percentage" && capability.groupedCalculation === "independent"),
     "Cohort matrices require independent percentage observations.",
   );
@@ -205,6 +251,7 @@ export const sourceDescriptorSchema = z
     coverage: dateRangeSchema.optional(),
     asOf: dateSchema.optional(),
     metadata: z.record(z.string(), scalarSchema),
+    instructions: z.string().min(1).max(6000).optional(),
     capabilities: z.array(sourceCapabilitySchema).min(1),
     examples: z.array(z.strictObject({ title: z.string(), request: analysisRequestSchema })),
   })
@@ -230,6 +277,8 @@ export const resultTableSchema = z
     columns: z.array(tableColumnSchema).min(1).max(50),
     grouping: z.string().min(1).max(80).optional(),
     axes: matrixAxesSchema.optional(),
+    interval: z.enum(["day", "month"]).optional(),
+    cohort: z.boolean().optional(),
     rows: z.array(z.record(z.string(), scalarSchema)).max(1000),
     omitted: z.number().int().nonnegative(),
   })
@@ -255,13 +304,13 @@ export const resultTableSchema = z
         !y ||
         !value ||
         new Set([x.key, y.key, value.key]).size !== 3 ||
-        x.type !== "number" ||
-        y.type !== "date" ||
+        (table.cohort && (x.type !== "number" || y.type !== "date")) ||
         value.type !== "number"
       )
         ctx.addIssue({
           code: "custom",
-          message: "Matrices require distinct age, cohort-date and numeric value axes.",
+          message:
+            "Matrices require distinct coordinate axes and a numeric value axis; cohorts need age and date axes.",
         });
       if (axes) {
         const cells = new Set<string>();
@@ -269,8 +318,7 @@ export const resultTableSchema = z
           const coordinate = JSON.stringify([row[axes.x], row[axes.y]]);
           if (
             cells.has(coordinate) ||
-            !Number.isSafeInteger(row[axes.x]) ||
-            Number(row[axes.x]) < 0
+            (table.cohort && (!Number.isSafeInteger(row[axes.x]) || Number(row[axes.x]) < 0))
           )
             ctx.addIssue({
               code: "custom",
@@ -326,6 +374,7 @@ const sourceOperationSchema = z.strictObject({
 export const analysisResultSchema = z
   .strictObject({
     metric: z.string().min(1),
+    presentation: presentationSchema.optional(),
     request: analysisRequestSchema,
     status: z.enum(["available", "unavailable"]),
     value: z.number().finite().nullable(),
@@ -359,7 +408,7 @@ export const analysisResultSchema = z
   })
   .superRefine((value, context) => {
     const table = value.table;
-    if (table?.kind === "matrix" && table.axes) {
+    if (table?.kind === "matrix" && table.cohort && table.axes) {
       const period = value.period;
       const groups = new Map<string, { size: number; ages: Set<number>; final: number }>();
       let previous = "";
@@ -493,4 +542,30 @@ export function resultRecordCount(result: AnalysisResult): number {
     (total, value) => total + (Array.isArray(value) ? value.length : 0),
     result.table?.rows.length ?? 0,
   );
+}
+
+/** Missing display metadata uses a text control; adapters still validate business rules. */
+export function filterControl(capability: SourceCapability, field: string): FilterControl {
+  return (
+    capability.filterControls?.find((control) => control.field === field) ?? {
+      field,
+      label: field,
+      type: "string",
+    }
+  );
+}
+export function validFilterValue(capability: SourceCapability, field: string, value: Scalar) {
+  if (!capability.fields.includes("filters") || !capability.filters.includes(field)) return false;
+  const control = capability.filterControls?.find((control) => control.field === field);
+  if (!control) return true;
+  if (control.options) return control.options.some((option) => option.value === value);
+  return typeof value === control.type && (typeof value !== "number" || Number.isFinite(value));
+}
+export function drillGrouping(capability: SourceCapability | undefined, request: AnalysisRequest) {
+  if (!capability?.fields.includes("records") || request.records) return undefined;
+  const group = capability.groupings?.find((group) => group.field === request.groupBy);
+  return group &&
+    ((group.kind === "series" && group.interval && request.period) || group.drillFilter)
+    ? group
+    : undefined;
 }
