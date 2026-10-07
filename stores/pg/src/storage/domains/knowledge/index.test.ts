@@ -227,6 +227,36 @@ describe('KnowledgePG published v1 layout', () => {
     expect(nodeColumns.rows.map(row => row.column_name)).toContain('isScope');
   });
 
+  it('initializes a pre-created schema for a role without CREATE on the database', async () => {
+    const schemaName = `knowledge_schema_only_${process.pid}_${schemaCounter++}`;
+    const role = `knowledge_schema_only_${process.pid}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    await pool.query(`CREATE ROLE ${role} LOGIN PASSWORD 'schema-only' NOCREATEDB`);
+    const url = new URL(connectionString);
+    url.username = role;
+    url.password = 'schema-only';
+    const restricted = new Pool({ connectionString: url.toString() });
+    try {
+      await pool.query(`GRANT USAGE, CREATE ON SCHEMA "${schemaName}" TO ${role}`);
+      const database = (await pool.query('SELECT current_database() AS name')).rows[0].name;
+      const canCreate = await pool.query(`SELECT has_database_privilege($1, $2, 'CREATE') AS allowed`, [
+        role,
+        database,
+      ]);
+      expect(canCreate.rows[0].allowed).toBe(false);
+
+      await new KnowledgePG({ pool: restricted, schemaName }).init();
+
+      const marker = await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
+      expect(marker.rows).toEqual([{ version: 1 }]);
+    } finally {
+      await restricted.end();
+      await pool.query(`DROP OWNED BY ${role}`);
+      await pool.query(`DROP ROLE ${role}`);
+    }
+  });
+
   it('rolls back the empty published layout if canonical creation fails and permits a retry', async () => {
     const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_rollback');
     const before = await knowledgeObjects(schemaName);

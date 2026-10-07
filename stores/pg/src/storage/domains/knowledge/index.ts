@@ -626,11 +626,18 @@ export class KnowledgePG extends KnowledgeStorage {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
     return this.#client.tx(async client => {
       const tx = createExecutor(client, this.#schemaName);
+      // Key on the resolved schema so stores naming it explicitly and stores relying on search_path serialize together.
       await tx.execute({
-        sql: 'SELECT pg_advisory_xact_lock(hashtext(?))',
-        args: [`mastra-knowledge-init:${this.#schemaName ?? 'current_schema'}`],
+        sql: `SELECT pg_advisory_xact_lock(hashtext('mastra-knowledge-init:' || COALESCE(?, current_schema())))`,
+        args: [this.#schemaName ?? null],
       });
-      if (this.#schemaName) await client.none(`CREATE SCHEMA IF NOT EXISTS "${parseSchemaName(this.#schemaName)}"`);
+      // Only create a missing schema: CREATE SCHEMA IF NOT EXISTS needs CREATE on the database even when the
+      // schema exists, which roles granted only schema privileges lack.
+      if (this.#schemaName) {
+        const schemaName = parseSchemaName(this.#schemaName);
+        const present = await client.oneOrNone('SELECT 1 FROM pg_namespace WHERE nspname = $1', [schemaName]);
+        if (!present) await client.none(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+      }
       const existing = await tx.execute({
         sql: `SELECT table_name AS "tableName" FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
         args: [this.#schemaName ?? null],
@@ -705,7 +712,16 @@ export class KnowledgePG extends KnowledgeStorage {
     for (const table of tables) {
       if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return null;
     }
-    await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
+    try {
+      await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
+    } catch (error) {
+      // Dependents the catalog checks above cannot see (other roles' views, materialized views, foreign keys).
+      if ((error as { code?: string }).code !== '2BP01') throw error;
+      const { KnowledgeSchemaError } = await loadKnowledgeCore();
+      throw new KnowledgeSchemaError(
+        `Knowledge schema reset required: other database objects depend on the existing Knowledge tables. ${KNOWLEDGE_RESET_GUIDANCE}`,
+      );
+    }
     return { tables, indexes: indexNames };
   }
 

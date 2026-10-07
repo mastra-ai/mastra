@@ -161,7 +161,7 @@ export const PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES: ReadonlySet<string> = new Set([
 
 /** Appended to schema errors so callers learn the one supported way forward. */
 export const KNOWLEDGE_RESET_GUIDANCE =
-  'Existing Knowledge data is not migrated. To replace it, call `await storage.stores.knowledge.dangerouslyReset()`, which deletes every Knowledge row and nothing else.';
+  'Existing Knowledge data is not migrated. To replace it, call `await storage.stores?.knowledge?.dangerouslyReset()`, which deletes every Knowledge row and nothing else.';
 
 /** Mirrors `StorageColumn` from `@mastra/core/storage`. */
 export interface KnowledgeStorageColumn {
