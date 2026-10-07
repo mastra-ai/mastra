@@ -5244,32 +5244,26 @@ export class Agent<
    * conversation context (user messages, assistant text, etc.).
    * @internal
    */
-  private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
+  private stripParentToolParts(messages: ModelMessage[]): ModelMessage[] {
     return messages
-      .map(message => {
-        if (message.id === 'om-continuation') {
+      .map((message): ModelMessage | null => {
+        if ((message as { id?: string }).id === 'om-continuation') {
           return null;
         }
 
-        if (message.role === 'assistant') {
-          const content = message.content;
-          const parts = Array.isArray(content) ? content : content?.parts;
-          if (!Array.isArray(parts)) return message;
-          const filtered = parts.filter((part: any) => part?.type !== 'tool-call');
+        if (message.role === 'tool') {
+          return null;
+        }
+
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const filtered = message.content.filter(part => part.type !== 'tool-call');
           if (filtered.length === 0) return null;
-          if (Array.isArray(content)) {
-            return { ...message, content: filtered };
-          }
-          return { ...message, content: { ...content, parts: filtered } };
-        }
-
-        if ((message as any).role === 'tool') {
-          return null;
+          return { ...message, content: filtered };
         }
 
         return message;
       })
-      .filter((message): message is MastraDBMessage => Boolean(message));
+      .filter((message): message is ModelMessage => message !== null);
   }
 
   private getSubAgentToolSchemas(variant: SubAgentToolSchemaVariant = 'default'): SubAgentToolSchemas {
@@ -5363,12 +5357,13 @@ export class Agent<
             const toolCallId = context?.agent?.toolCallId || globalThis.crypto.randomUUID();
 
             // Get messages from context - available at tool execution time
-            const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
+            const contextMessages = (context?.agent?.messages || []) as ModelMessage[];
 
             // Strip tool call/result parts from the context.
             const sanitizedMessages = this.stripParentToolParts(contextMessages);
 
-            let fullSubAgentMessages: MastraDBMessage[] = sanitizedMessages;
+            // Replaced with the sub-agent transcript once it runs; until then it holds the parent context.
+            let fullSubAgentMessages = sanitizedMessages as unknown as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
             // Each iteration typically produces an assistant message
@@ -5849,7 +5844,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -5863,7 +5858,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -5942,7 +5937,7 @@ export class Agent<
                   requestContext: subAgentRequestContext,
                   actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
-                  context: filteredContextMessages as unknown as CoreMessage[],
+                  context: filteredContextMessages as CoreMessage[],
                   ...subAgentAbortOptions,
                 });
                 result = {
@@ -5961,7 +5956,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -5975,7 +5970,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
