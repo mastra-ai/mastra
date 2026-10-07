@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveWorkItemRepository } from './work-item-repository.js';
 
-async function seedRepositories(slugs: string[]) {
+async function seedRepositories(slugs: string[], integrationId: 'github' | 'gitlab' = 'github') {
   const seeded = await createFactoryStorageForTests();
-  const sourceControl = seeded.sourceControl.forIntegration('github');
+  const sourceControl = seeded.sourceControl.forIntegration(integrationId);
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
   const installation = await sourceControl.installations.upsert({
     orgId: 'org-1',
@@ -52,6 +52,42 @@ describe('resolveWorkItemRepository', () => {
     await expect(
       resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/one' });
+  });
+
+  it('resolves a renamed repository by its provider id when the stored slug is stale', async () => {
+    const { sourceControl, project, repositories } = await seedRepositories(['acme/renamed', 'acme/two']);
+    const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
+
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 1 } },
+      }),
+    ).resolves.toEqual({
+      status: 'resolved',
+      projectRepositoryId: repositories[0]!.projectRepository.id,
+      slug: 'acme/renamed',
+    });
+    // A GitLab project id must not match a GitHub repository that happens to share it.
+    await expect(
+      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'acme/old-name', gitlabProjectId: '2' } } }),
+    ).resolves.toMatchObject({ status: 'unlinked' });
+
+    const gitlab = await seedRepositories(['acme/gitlab-renamed'], 'gitlab');
+    await expect(
+      resolveWorkItemRepository({
+        sourceControl: gitlab.sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: gitlab.project.id,
+        item: { metadata: { repository: 'acme/old-name', gitlabProjectId: '1' } },
+      }),
+    ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/gitlab-renamed' });
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 99 } },
+      }),
+    ).resolves.toEqual({ status: 'unlinked', hint: 'Repository acme/old-name is not linked to this Factory.' });
   });
 
   it('uses a Linear project mapping and resolves an unattributed single-repository item', async () => {
