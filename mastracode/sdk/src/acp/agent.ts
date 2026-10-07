@@ -378,11 +378,6 @@ export class MastraCodeAcpAgent implements Agent {
     return runCatalogThinkingLevel(modelId, level);
   }
 
-  private thinkingLevelToSave(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
-    const runLevel = this.thinkingLevel(entry, modelId);
-    return runLevel === 'off' ? (entry.getThinkingLevel?.() ?? 'off') : runLevel;
-  }
-
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
     const entry = this.getSession(params.sessionId);
     return this.enqueue(entry, async () => {
@@ -396,10 +391,7 @@ export class MastraCodeAcpAgent implements Agent {
         throw RequestError.invalidParams(undefined, 'Unknown session configuration selection');
       }
       if (params.configId === 'model') {
-        const modelId = String(params.value);
-        await entry.session.model.switch(modelId, {
-          ...(entry.getThinkingLevel ? { thinkingLevel: this.thinkingLevelToSave(entry, modelId) } : {}),
-        });
+        await entry.session.model.switch(String(params.value));
       } else if (params.configId === 'mode') {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {

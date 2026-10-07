@@ -61,6 +61,12 @@ function offeredEffortLevels(reasoningOptions: readonly ModelReasoningOption[] |
   return ACTIVE_THINKING_LEVELS.filter(level => effortValues.includes(level));
 }
 
+const TOGGLE_ON_LEVEL: ActiveThinkingLevel = 'high';
+
+function onlyTogglesThinking(reasoningOptions: readonly ModelReasoningOption[] | undefined): boolean {
+  return !!reasoningOptions?.length && reasoningOptions.every(option => option.type === 'toggle');
+}
+
 function closestOfferedEffort(
   level: ActiveThinkingLevel,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
@@ -112,6 +118,7 @@ export function runThinkingLevel(
   }
   const listedWithoutReasoningControls = reasoningOptions?.length === 0;
   if (listedWithoutReasoningControls) return 'off';
+  if (onlyTogglesThinking(reasoningOptions)) return TOGGLE_ON_LEVEL;
   if (provider === 'openai') return runOpenAIThinkingLevel(bareModelId, level, reasoningOptions);
   return closestOfferedEffort(level, reasoningOptions) ?? level;
 }

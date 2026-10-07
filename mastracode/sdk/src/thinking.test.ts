@@ -101,6 +101,12 @@ describe('thinking model capabilities', () => {
     ['OpenAI models listed without reasoning controls offer only off', 'openai/gpt-4o', [], ['off']],
     ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
     [
+      'models that only toggle thinking offer off and one on level',
+      'zai/glm-4.6',
+      [{ type: 'toggle' }],
+      ['off', 'high'],
+    ],
+    [
       'Claude keeps the levels its thinking budget sends when listed without controls',
       'anthropic/claude-haiku-4-5',
       [],

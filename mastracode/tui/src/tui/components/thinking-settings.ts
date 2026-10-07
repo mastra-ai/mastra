@@ -39,7 +39,7 @@ const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
   { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
   { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
-  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic, GPT-5.6+)' },
+  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning' },
 ];
 
 function isOpenAIModel(modelId: string): boolean {

@@ -102,7 +102,7 @@ describe('ACP session configuration', () => {
     });
   });
 
-  it('normalizes max when switching to a model whose reasoning scale ends at xhigh', async () => {
+  it('reports max as xhigh on a model whose reasoning scale ends at xhigh without saving it', async () => {
     const { agent, initial, setState, switchModel } = await setup();
     await agent.setSessionConfigOption({
       sessionId: initial.sessionId,
@@ -115,10 +115,35 @@ describe('ACP session configuration', () => {
       configId: 'model',
       value: 'openai/gpt-5.5',
     });
-    expect(switchModel).toHaveBeenLastCalledWith('openai/gpt-5.5', { thinkingLevel: 'xhigh' });
+    expect(switchModel).toHaveBeenLastCalledWith('openai/gpt-5.5');
     expect(setState).toHaveBeenCalledExactlyOnceWith({ thinkingLevel: 'max' });
     expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
   });
+
+  it.each([
+    ['anthropic/claude-opus-4-7', 'xhigh', 'anthropic/claude-sonnet-4-6', 'high'],
+    ['anthropic/claude-opus-4-7', 'xhigh', 'google/gemini-3-pro-preview', 'high'],
+    ['openai/gpt-5.5', 'xhigh', 'openai/gpt-5', 'high'],
+    ['anthropic/claude-opus-4-7', 'medium', 'openai/gpt-5-pro', 'high'],
+  ] as const)(
+    'keeps %s at %s after a round trip through %s, which runs it as %s',
+    async (modelId, savedLevel, otherModelId, otherRunLevel) => {
+      const { agent, initial } = await setup([modelId, otherModelId]);
+      const thinkingAfterSelecting = async (value: string) => {
+        const result = await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'model', value });
+        return result.configOptions.find(option => option.id === 'thought_level');
+      };
+
+      await thinkingAfterSelecting(modelId);
+      await agent.setSessionConfigOption({
+        sessionId: initial.sessionId,
+        configId: 'thought_level',
+        value: savedLevel,
+      });
+      expect(await thinkingAfterSelecting(otherModelId)).toMatchObject({ currentValue: otherRunLevel });
+      expect(await thinkingAfterSelecting(modelId)).toMatchObject({ currentValue: savedLevel });
+    },
+  );
 
   it('keeps the saved level across a model that cannot think', async () => {
     const { agent, initial } = await setup(['openai/gpt-5.6-sol', 'google/gemini-2.0-flash']);
