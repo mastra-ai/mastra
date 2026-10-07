@@ -44,6 +44,7 @@ function renderPicker({
   thinkingLevel,
   settingsLoaded,
   catalogLoaded,
+  modelSwitched,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -51,6 +52,7 @@ function renderPicker({
   thinkingLevel?: string;
   settingsLoaded?: Promise<void>;
   catalogLoaded?: Promise<void>;
+  modelSwitched?: Promise<void>;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -86,6 +88,7 @@ function renderPicker({
     }),
     http.post(`${API}/sessions/:resourceId/model`, async ({ request }) => {
       modelSwitches.push(await request.json());
+      await modelSwitched;
       return HttpResponse.json({ ok: true });
     }),
   );
@@ -228,5 +231,28 @@ describe('ModelPicker', () => {
 
     loadCatalog();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
+  });
+
+  it('locks the thinking level while a model switch is in flight', async () => {
+    let finishSwitch = () => {};
+    const modelSwitched = new Promise<void>(resolve => {
+      finishSwitch = resolve;
+    });
+    const user = userEvent.setup();
+    const { client } = renderPicker({ modelId: 'anthropic/claude-sonnet-4-5', thinkingLevel: 'high', modelSwitched });
+
+    await screen.findByRole('button', { name: 'Thinking: High' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Session model' }));
+    await user.click(screen.getByRole('option', { name: /gpt-5/i }));
+
+    expect(await screen.findByRole('button', { name: 'Thinking: unavailable. Switching model…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    finishSwitch();
+    await waitForMutationsIdle(client);
+    expect(await screen.findByRole('button', { name: 'Thinking: High' })).toBeEnabled();
   });
 });
