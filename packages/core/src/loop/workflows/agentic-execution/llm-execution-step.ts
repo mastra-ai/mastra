@@ -3050,6 +3050,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
+      // A processOutputStep rejection that ends the run (retries exhausted, or an abort
+      // without retry) must drop the rejected step too, or it is persisted to memory and
+      // surfaces in response messages and result text (issue #26048). Rolled back before the
+      // step snapshot below so its response messages exclude it as well.
+      if (processOutputStepTripwire && !shouldRetry) {
+        eagerCoordinator?.recarryCommittedWork(outputStream.messageId);
+        messageList.rollbackToStepBoundary(outputStream.messageId, iterationBoundary);
+        await discardAttemptEagerWork();
+      }
+
       const steps = inputData.output?.steps || [];
 
       // Only include content from this iteration, not all accumulated content.
