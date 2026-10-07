@@ -449,9 +449,10 @@ describe('expectEngineParity', () => {
       input: 'hi',
     });
     const observe = (r: EngineRunResult) => structuredClone({ turns: r.turns, requests: r.requests });
-    const finishIndex = (r: EngineRunResult) => r.turns[0]!.chunkTypes.indexOf('finish');
-    const stepStartIndex = (r: EngineRunResult) => r.turns[0]!.chunkTypes.indexOf('step-start');
-    const payloadAt = (r: EngineRunResult, index: number) =>
+    // These three read only `turns`, so they accept what `observe` returns.
+    const finishIndex = (r: EngineObservation) => r.turns[0]!.chunkTypes.indexOf('finish');
+    const stepStartIndex = (r: EngineObservation) => r.turns[0]!.chunkTypes.indexOf('step-start');
+    const payloadAt = (r: EngineObservation, index: number) =>
       r.turns[0]!.chunkPayloads[index] as Record<string, unknown>;
 
     expect(staleKnownDifferences('durable', observe(results.plain!), observe(results.durable!))).toEqual([]);
