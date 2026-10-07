@@ -503,6 +503,83 @@ describe('AgentController thread-derived session state', () => {
     expect(session.getTokenUsage()).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
   });
 
+  it.each([false, true])(
+    'keeps retained preferences authoritative after persistence (failure=%s)',
+    async failPersistence => {
+      const storage = new InMemoryStore();
+      const controller = await createSettingsController(storage, 'retained-persistence');
+      const session = await controller.createSession({ id: 'retained', resourceId: 'resource', ownerId: 'owner' });
+      const threadA = session.thread.getId()!;
+      const state = session.state as typeof session.state & {
+        retain(): typeof session.state & { release(): void };
+      };
+      const source = state.retain();
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const persist = session.thread.setSettingOn.bind(session.thread);
+      const spy = vi.spyOn(session.thread, 'setSettingOn').mockImplementation(async args => {
+        if (args.threadId === threadA && args.key === 'thinkingLevel' && args.value === 'high') {
+          entered.resolve();
+          await release.promise;
+          if (failPersistence) throw new Error('offline');
+        }
+        return persist(args);
+      });
+      const write = source.set({ thinkingLevel: 'high' });
+      await entered.promise;
+      const threadB = await session.thread.create({ id: 'retained-b' });
+      expect(session.state.get().thinkingLevel).toBe('low');
+      session.thread.set({ threadId: threadA });
+      expect(session.state.get().thinkingLevel).toBe('high');
+      const reload = session.thread.loadMetadata();
+      release.resolve();
+      await Promise.all([write, reload]);
+      expect(session.state.get().thinkingLevel).toBe('high');
+      expect(source.get().thinkingLevel).toBe('high');
+      const memory = await storage.getStore('memory');
+      expect((await memory!.getThreadById({ threadId: threadA }))?.metadata?.thinkingLevel).toBe(
+        failPersistence ? 'low' : 'high',
+      );
+      expect((await memory!.getThreadById({ threadId: threadB.id }))?.metadata?.thinkingLevel).toBeUndefined();
+      spy.mockRestore();
+      source.release();
+      session.thread.set({ threadId: threadB.id });
+      session.thread.set({ threadId: threadA });
+      await session.thread.loadMetadata();
+      expect(session.state.get().thinkingLevel).toBe(failPersistence ? 'low' : 'high');
+    },
+  );
+
+  it('retains the persistence target through a resource change and rejects cancelled writes', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'retained-resource');
+    const session = await controller.createSession({
+      id: 'retained-resource',
+      resourceId: 'a-resource',
+      ownerId: 'owner',
+    });
+    const threadA = session.thread.getId()!;
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const blocker = session.state.update(async () => {
+      entered.resolve();
+      await release.promise;
+      return { result: undefined };
+    });
+    await entered.promise;
+    const accepted = session.state.set({ thinkingLevel: 'high' });
+    const rejected = session.state.setIf({ thinkingLevel: 'max' }, () => false);
+    await session.thread.setResourceId({ resourceId: 'b-resource' });
+    await session.thread.create({ id: 'b-resource-thread' });
+    release.resolve();
+    await Promise.all([blocker, accepted]);
+    await expect(rejected).resolves.toBe(false);
+    expect(session.state.get().thinkingLevel).toBe('low');
+    const memory = await storage.getStore('memory');
+    expect((await memory!.getThreadById({ threadId: threadA }))?.metadata?.thinkingLevel).toBe('high');
+    expect((await memory!.getThreadById({ threadId: 'b-resource-thread' }))?.metadata?.thinkingLevel).toBeUndefined();
+  });
+
   it('fences a queued thread preference update from a newly created thread', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'queued-preference');
