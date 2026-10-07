@@ -303,7 +303,11 @@ describe('UpstashTransport', () => {
           perPage: 100,
           hasMore: false,
         });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        fetchMock.mockClear();
         await expect(transport.listLogsByRunId({ runId: 'run' })).resolves.toMatchObject({ logs: [], total: 0 });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
       });
 
       it('should page run ID queries from bounded windows', async () => {
