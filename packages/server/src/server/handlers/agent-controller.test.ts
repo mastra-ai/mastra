@@ -616,7 +616,9 @@ describe('agent-controller routes', () => {
 
     it('rejects a caller mapped to another resource before claiming a suspended tool', async () => {
       const session = await getRouteSession('user-suspend-owner');
-      const claim = vi.spyOn(session, 'claimToolSuspension');
+      const claim = vi
+        .spyOn(session, 'claimToolSuspension')
+        .mockReturnValue({ accepted: true, toolCallId: 'suspended-call' });
       const respond = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-suspend-intruder');
