@@ -482,6 +482,7 @@ export class CloudflareSandbox extends MastraSandbox {
     // and that path is echoed so a single exec reports every stale mount at once.
     const script = `for p in ${checkPaths.join(' ')}; do mountpoint -q "$p" || echo "$p"; done; exit 0`;
     const decoder = new TextDecoder();
+    const stderrDecoder = new TextDecoder();
     let stdout = '';
     let stderr = '';
     let exitCode: number | undefined;
@@ -492,13 +493,14 @@ export class CloudflareSandbox extends MastraSandbox {
       {
         onEvent: event => {
           if (event.type === 'stdout') stdout += decoder.decode(event.data, { stream: true });
-          else if (event.type === 'stderr') stderr += new TextDecoder().decode(event.data);
+          else if (event.type === 'stderr') stderr += stderrDecoder.decode(event.data, { stream: true });
           else if (event.type === 'exit') exitCode = event.exitCode;
           else if (event.type === 'error') probeError = event.message;
         },
       },
     );
     stdout += decoder.decode();
+    stderr += stderrDecoder.decode();
 
     if (probeError !== undefined || exitCode !== 0) {
       const reason = probeError ?? (exitCode === undefined ? 'no exit status' : `exit code ${exitCode}`);
