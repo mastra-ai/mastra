@@ -3819,11 +3819,6 @@ export class Session<TState = unknown> {
     this.run.requestAbort();
   }
 
-  /**
-   * Take the origin captured when a gated abort was armed. The run engine
-   * claims it as soon as the gate releases, so a later abort of another run
-   * cannot overwrite the origin this run's teardown is checked against.
-   */
   async #releaseSuspendedRuns(suspendedToolCalls: Array<{ runId: string }>, liveRunId?: string | null): Promise<void> {
     const runIds = new Set(suspendedToolCalls.map(({ runId }) => runId));
     for (const runId of runIds) {
@@ -3837,6 +3832,11 @@ export class Session<TState = unknown> {
     }
   }
 
+  /**
+   * Take the origin captured when a gated abort was armed. The run engine
+   * claims it as soon as the gate releases, so a later abort of another run
+   * cannot overwrite the origin this run's teardown is checked against.
+   */
   takeDeferredAbortOrigin(): { bindingGeneration: number; localOnly: boolean } | undefined {
     const origin = this.#deferredAbortOrigin;
     this.#deferredAbortOrigin = undefined;

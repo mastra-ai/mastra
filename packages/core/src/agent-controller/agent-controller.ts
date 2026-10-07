@@ -1,4 +1,5 @@
 import { Agent } from '../agent';
+import { DurableStepIds } from '../agent/durable/constants';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import { isUserAuthoredMessage } from '../agent/signals';
@@ -420,9 +421,12 @@ export class AgentController<TState = {}> {
         mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
         const workflowsStore = await mastra.getStorage()?.getStore('workflows');
         await Promise.all(
-          [AGENTIC_LOOP_WORKFLOW_ID, AGENTIC_EXECUTION_WORKFLOW_ID].map(workflowName =>
-            workflowsStore?.deleteWorkflowRunById({ runId, workflowName }),
-          ),
+          [
+            AGENTIC_LOOP_WORKFLOW_ID,
+            AGENTIC_EXECUTION_WORKFLOW_ID,
+            DurableStepIds.AGENTIC_LOOP,
+            DurableStepIds.AGENTIC_EXECUTION,
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
         );
       },
       // History lets the runtime skip retained run parts that storage already
