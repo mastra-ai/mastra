@@ -3,7 +3,7 @@ import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import type { ExecutionContext } from 'hono';
@@ -1394,6 +1394,51 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 }
 
+function requestedResourceIds(params: Record<string, unknown>): string[] {
+  const memory = params.memory as { resource?: unknown } | undefined;
+  const candidates = [params.resourceId, params.resource_id, memory?.resource];
+  return [...new Set(candidates.filter((value): value is string => typeof value === 'string' && value.length > 0))];
+}
+
+/**
+ * Applies `server.auth.authorizeUserResource` when a caller mapped to one resource
+ * (via `mapUserToResourceId`) asks for another. Only `true` approves, and then the
+ * request runs under the requested resource. Without a policy, the mapped resource
+ * keeps winning, as before.
+ */
+export async function checkRequestedResource(
+  mastra: any,
+  requestContext: RequestContext | undefined,
+  params: Record<string, unknown>,
+): Promise<{ status: number; error: string; message: string } | null> {
+  const mappedResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+  if (!requestContext || typeof mappedResourceId !== 'string' || !mappedResourceId) return null;
+
+  const auth = mastra?.getServer?.()?.auth as
+    | {
+        authorizeUserResource?: (
+          user: unknown,
+          resourceId: string,
+          requestContext: RequestContext,
+        ) => Promise<boolean> | boolean;
+      }
+    | undefined;
+  if (typeof auth?.authorizeUserResource !== 'function') return null;
+
+  const requested = requestedResourceIds(params).filter(resourceId => resourceId !== mappedResourceId);
+  if (requested.length === 0) return null;
+
+  const denied = { status: 403, error: 'Forbidden', message: 'Access denied: resource not available to this caller' };
+  if (requested.length > 1) return denied;
+
+  const [resourceId] = requested as [string];
+  const approved = await auth.authorizeUserResource(requestContext.get('user'), resourceId, requestContext);
+  if (approved !== true) return denied;
+
+  requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  return null;
+}
+
 /**
  * Check FGA authorization for an HTTP route.
  * Returns null if authorized or FGA not configured, or an error object if denied.
@@ -1404,6 +1449,9 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
+  const resourceError = await checkRequestedResource(mastra, requestContext, params);
+  if (resourceError) return resourceError;
+
   // Use request context to determine which FGA provider to use (studio vs server)
   const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;

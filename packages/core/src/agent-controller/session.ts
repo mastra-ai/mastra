@@ -4436,11 +4436,9 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * Run the host's session-resource policy once for a caller, then reject a
-   * caller whose resource still differs from this session's before anything
-   * is created, subscribed, queued or delivered. The returned context carries
-   * the session resource when approved, so downstream context builders skip
-   * the policy.
+   * Build the run context for a caller, then reject a caller whose resource
+   * differs from this session's before anything is created, subscribed,
+   * queued or delivered.
    */
   async #authorizeCaller(requestContext?: RequestContext): Promise<RequestContext | undefined> {
     if (!requestContext) return undefined;
