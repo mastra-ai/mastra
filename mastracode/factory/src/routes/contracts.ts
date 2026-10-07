@@ -77,6 +77,26 @@ const environmentRepositorySchema = z.object({
   lastBuiltAt: z.string().nullable(),
 });
 
+const environmentBuildTriggersSchema = z.object({
+  schedule: z.object({ enabled: z.boolean(), hours: z.number().int() }),
+  onPush: z.object({
+    enabled: z.boolean(),
+    debounceMinutes: z.number().int(),
+    // Null = unlimited.
+    maxPerHour: z.number().int().nullable(),
+  }),
+});
+
+const environmentBuildSchema = z.object({
+  status: z.enum(['ready', 'partial', 'failed', 'building']).nullable(),
+  error: z.string().nullable(),
+  lastBuiltAt: z.string().nullable(),
+  activeTemplateId: z.string().nullable(),
+  requestedAt: z.string().nullable(),
+  // How this host learns about pushes: the Platform polling worker, the self-hosted webhook, or nothing.
+  pushSignal: z.enum(['polling', 'webhook', 'none']),
+});
+
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
     sandboxWorkdir: z.string().nullable(),
@@ -87,7 +107,29 @@ export const projectEnvironmentResponseSchema = z.object({
     activeTemplateId: z.string().nullable(),
     activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
     repositories: z.array(environmentRepositorySchema),
+    buildTriggers: environmentBuildTriggersSchema,
+    build: environmentBuildSchema,
   }),
+  // Present on PATCH when the change affects the template and a build was queued.
+  buildRequested: z.boolean().optional(),
+});
+
+export const projectEnvironmentBuildResponseSchema = z.object({
+  requested: z.literal(true),
+  build: environmentBuildSchema,
+});
+
+const updateEnvironmentBuildTriggersSchema = z.object({
+  schedule: z
+    .object({ enabled: z.boolean().optional(), hours: z.number().int().min(1).max(168).optional() })
+    .optional(),
+  onPush: z
+    .object({
+      enabled: z.boolean().optional(),
+      debounceMinutes: z.number().int().min(0).max(1_440).optional(),
+      maxPerHour: z.number().int().min(1).max(60).nullable().optional(),
+    })
+    .optional(),
 });
 
 const environmentRepositoryPatchSchema = z.object({
@@ -130,6 +172,7 @@ export const updateProjectEnvironmentBodySchema = z
         }
       })
       .optional(),
+    buildTriggers: updateEnvironmentBuildTriggersSchema.optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one environment field is required' });
 
@@ -436,6 +479,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     bodySchema: updateProjectEnvironmentBodySchema,
     responseSchema: projectEnvironmentResponseSchema,
+  },
+  projectEnvironmentBuild: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/environment/build',
+    description: 'Request an environment build now; the build worker picks it up on its next tick',
+    pathSchema: projectPathSchema,
+    responseSchema: projectEnvironmentBuildResponseSchema,
   },
   projectApplyDefaultModel: {
     method: 'POST',

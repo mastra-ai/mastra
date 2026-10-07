@@ -3,7 +3,11 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type {
+  FactoryProject,
+  FactoryProjectsStorage,
+  UpdateFactoryProjectInput,
+} from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -182,7 +186,19 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
   /** Controller used to reach the thread store behind each active binding. */
   controller?: ModelApplyController;
+  /** How this host learns about pushes to linked repositories (shown with the build triggers). */
+  pushSignal?: 'polling' | 'webhook' | 'none';
 }
+
+/** Environment fields whose change alters the template, so a PATCH touching them queues a build. */
+const TEMPLATE_AFFECTING_PROJECT_FIELDS = [
+  'sandboxProvider',
+  'sandboxWorkdir',
+  'sandboxCpuCount',
+  'sandboxMemoryMb',
+  'workspaceSetupCommand',
+] as const;
+const TEMPLATE_AFFECTING_REPOSITORY_FIELDS = ['position', 'inEnvironment', 'setupCommand', 'teardownCommand'] as const;
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
@@ -281,7 +297,27 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         activeTemplateId: project.activeTemplateId,
         activeTemplateHeads: project.activeTemplateHeads,
         repositories,
+        buildTriggers: {
+          schedule: { enabled: project.buildScheduleEnabled, hours: project.buildScheduleHours },
+          onPush: {
+            enabled: project.buildOnPushEnabled,
+            debounceMinutes: project.buildPushDebounceMinutes,
+            maxPerHour: project.buildPushMaxPerHour === 0 ? null : project.buildPushMaxPerHour,
+          },
+        },
+        build: this.#buildPayload(project),
       },
+    };
+  }
+
+  #buildPayload(project: FactoryProject) {
+    return {
+      status: project.lastBuildStatus,
+      error: project.lastBuildError,
+      lastBuiltAt: project.lastBuiltAt?.toISOString() ?? null,
+      activeTemplateId: project.activeTemplateId,
+      requestedAt: project.buildRequestedAt?.toISOString() ?? null,
+      pushSignal: this.deps.pushSignal ?? 'none',
     };
   }
 
@@ -660,7 +696,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!project) return context.json({ error: 'Project not found' }, 404);
           const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
-          const { repositories: repositoryPatches, ...projectInput } = parsed.data;
+          const { repositories: repositoryPatches, buildTriggers, ...projectInput } = parsed.data;
 
           // Resolve every listed link before writing anything, so a foreign id leaves the project untouched.
           const links = new Map(
@@ -678,10 +714,36 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'invalid_environment' }, 400);
           }
 
+          const buildRequested =
+            TEMPLATE_AFFECTING_PROJECT_FIELDS.some(field => projectInput[field] !== undefined) ||
+            (repositoryPatches ?? []).some(patch =>
+              TEMPLATE_AFFECTING_REPOSITORY_FIELDS.some(field => patch[field] !== undefined),
+            );
+          const projectUpdate: UpdateFactoryProjectInput = {
+            ...projectInput,
+            ...(buildTriggers?.schedule?.enabled !== undefined
+              ? { buildScheduleEnabled: buildTriggers.schedule.enabled }
+              : {}),
+            ...(buildTriggers?.schedule?.hours !== undefined
+              ? { buildScheduleHours: buildTriggers.schedule.hours }
+              : {}),
+            ...(buildTriggers?.onPush?.enabled !== undefined
+              ? { buildOnPushEnabled: buildTriggers.onPush.enabled }
+              : {}),
+            ...(buildTriggers?.onPush?.debounceMinutes !== undefined
+              ? { buildPushDebounceMinutes: buildTriggers.onPush.debounceMinutes }
+              : {}),
+            // Null (unlimited) is stored as 0: the column is never null, so a never-written row keeps its default.
+            ...(buildTriggers?.onPush?.maxPerHour !== undefined
+              ? { buildPushMaxPerHour: buildTriggers.onPush.maxPerHour ?? 0 }
+              : {}),
+            ...(buildRequested ? { buildRequestedAt: new Date() } : {}),
+          };
+
           let updated = project;
-          if (Object.keys(projectInput).length > 0) {
+          if (Object.keys(projectUpdate).length > 0) {
             updated =
-              (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input: projectInput })) ??
+              (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input: projectUpdate })) ??
               project;
           }
           for (const { projectRepositoryId, ...input } of repositoryPatches ?? []) {
@@ -692,7 +754,27 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               input,
             });
           }
-          return context.json(await this.#environmentPayload(tenant.orgId, updated));
+          return context.json({
+            ...(await this.#environmentPayload(tenant.orgId, updated)),
+            ...(buildRequested ? { buildRequested: true } : {}),
+          });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const updated = await (
+            await this.#projects()
+          ).update({ orgId: tenant.orgId, id: projectId, input: { buildRequestedAt: new Date() } });
+          return context.json({ requested: true, build: this.#buildPayload(updated ?? project) });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {

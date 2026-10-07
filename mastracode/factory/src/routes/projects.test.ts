@@ -728,7 +728,7 @@ describe('ProjectRoutes', () => {
         context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
         await next();
       });
-      mountApiRoutes(app as never, projectRoutes(seed, ['github']));
+      mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { pushSignal: 'polling' }));
       return { seed, project, github, links, app };
     }
 
@@ -753,6 +753,18 @@ describe('ProjectRoutes', () => {
         workspaceSetupCommand: null,
         activeTemplateId: null,
         activeTemplateHeads: null,
+        buildTriggers: {
+          schedule: { enabled: true, hours: 24 },
+          onPush: { enabled: true, debounceMinutes: 10, maxPerHour: 4 },
+        },
+        build: {
+          status: null,
+          error: null,
+          lastBuiltAt: null,
+          activeTemplateId: null,
+          requestedAt: null,
+          pushSignal: 'polling',
+        },
       });
       // Defaults are applied on read, never written.
       expect(await seed.projects.getById({ id: project.id })).toMatchObject({
@@ -810,9 +822,10 @@ describe('ProjectRoutes', () => {
       const stored = await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id });
       expect(stored).toMatchObject({ branch: 'main', sandboxProvider: 'local', sandboxWorkdir: '/workspace' });
 
-      // Re-reading returns the same shape the PATCH returned.
+      // Re-reading returns the same environment the PATCH returned (the PATCH alone flags the queued build).
       const reread = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
-      expect(reread).toEqual(after);
+      expect(after).toMatchObject({ buildRequested: true });
+      expect(reread).toEqual({ environment: after.environment });
 
       // Build-status fields in the body are ignored, not written.
       const mixed = await patch(app, project.id, {
@@ -868,6 +881,12 @@ describe('ProjectRoutes', () => {
         {
           repositories: [{ projectRepositoryId: links[0]!.id, position: 1 }, { projectRepositoryId: links[1]!.id }],
         },
+        { buildTriggers: { schedule: { hours: 0 } } },
+        { buildTriggers: { schedule: { hours: 169 } } },
+        { buildTriggers: { onPush: { debounceMinutes: -1 } } },
+        { buildTriggers: { onPush: { debounceMinutes: 1441 } } },
+        { buildTriggers: { onPush: { maxPerHour: 0 } } },
+        { buildTriggers: { onPush: { maxPerHour: 61 } } },
       ];
       for (const body of cases) {
         const response = await patch(app, project.id, body);
@@ -885,6 +904,65 @@ describe('ProjectRoutes', () => {
       expect(after).toEqual(before);
     });
 
+    it('writes build triggers without queuing a build, and queues one for template-affecting changes', async () => {
+      const { seed, project, links, app } = await seedEnvironment();
+
+      const triggersOnly = await patch(app, project.id, {
+        buildTriggers: { schedule: { enabled: false, hours: 6 }, onPush: { debounceMinutes: 0, maxPerHour: null } },
+      });
+      expect(triggersOnly.status).toBe(200);
+      const afterTriggers = (await triggersOnly.json()) as Record<string, unknown>;
+      expect(afterTriggers).not.toHaveProperty('buildRequested');
+      expect(afterTriggers.environment).toMatchObject({
+        buildTriggers: {
+          schedule: { enabled: false, hours: 6 },
+          onPush: { enabled: true, debounceMinutes: 0, maxPerHour: null },
+        },
+        build: { requestedAt: null },
+      });
+      // Unlimited is stored as 0, never as null.
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        buildScheduleEnabled: false,
+        buildScheduleHours: 6,
+        buildPushDebounceMinutes: 0,
+        buildPushMaxPerHour: 0,
+        buildRequestedAt: null,
+      });
+
+      const setupChange = await patch(app, project.id, {
+        repositories: [{ projectRepositoryId: links[1]!.id, setupCommand: 'pnpm i && pnpm build' }],
+      });
+      const afterSetup = (await setupChange.json()) as {
+        buildRequested?: boolean;
+        environment: { build: { requestedAt: string | null } };
+      };
+      expect(afterSetup.buildRequested).toBe(true);
+      expect(afterSetup.environment.build.requestedAt).toEqual(expect.any(String));
+
+      // The idle timeout does not shape the template.
+      const idleOnly = await patch(app, project.id, { sandboxIdleTimeoutMinutes: 15 });
+      expect(await idleOnly.json()).not.toHaveProperty('buildRequested');
+    });
+
+    it('requests a build now and reports the build status', async () => {
+      const { seed, project, app } = await seedEnvironment();
+      const response = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { requested: boolean; build: Record<string, unknown> };
+      expect(body.requested).toBe(true);
+      expect(body.build).toMatchObject({ status: null, activeTemplateId: null, pushSignal: 'polling' });
+      expect(body.build.requestedAt).toEqual(expect.any(String));
+      expect((await seed.projects.getById({ id: project.id }))?.buildRequestedAt).toBeInstanceOf(Date);
+
+      expect(
+        (
+          await app.request(`/web/factory/projects/00000000-0000-4000-8000-000000000000/environment/build`, {
+            method: 'POST',
+          })
+        ).status,
+      ).toBe(404);
+    });
+
     it('scopes the environment to the organization', async () => {
       const { seed, project, links } = await seedEnvironment();
       const app = new Hono();
@@ -897,6 +975,9 @@ describe('ProjectRoutes', () => {
       expect(
         (await patch(app, project.id, { repositories: [{ projectRepositoryId: links[0]!.id, inEnvironment: false }] }))
           .status,
+      ).toBe(404);
+      expect(
+        (await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' })).status,
       ).toBe(404);
     });
   });

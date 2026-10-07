@@ -773,6 +773,14 @@ export class MastraFactory {
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
+      pushSignal:
+        githubIntegration instanceof PlatformGithubIntegration
+          ? githubIntegration.pollingEnabled
+            ? 'polling'
+            : 'none'
+          : githubIntegration
+            ? 'webhook'
+            : 'none',
       ...(githubIntegration || gitlabIntegration
         ? {
             resolveRepository: async ({ integrationId, orgId, userId, installationId, externalId, slug }) => {

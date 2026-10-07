@@ -645,6 +645,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     };
   }
 
+  /** Whether this host polls the Platform for repository events (pushes included). */
+  get pollingEnabled(): boolean {
+    return this.#pollingEnabled;
+  }
+
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
     this.#integrationStorage = storage as unknown as GithubSubscriptionStorage;
     logPlatformInfo('Platform GitHub integration initialized', {

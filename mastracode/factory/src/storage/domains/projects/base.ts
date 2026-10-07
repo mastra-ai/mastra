@@ -26,9 +26,39 @@ export interface FactoryProject {
   activeTemplateId: string | null;
   /** Repository slug → commit the active template was built at. */
   activeTemplateHeads: Record<string, string> | null;
+  /** Rebuild the environment every `buildScheduleHours` when a base-branch head moved. */
+  buildScheduleEnabled: boolean;
+  buildScheduleHours: number;
+  /** Rebuild after a push to a base branch, once the debounce window passes. */
+  buildOnPushEnabled: boolean;
+  buildPushDebounceMinutes: number;
+  /** Push-triggered builds per trailing hour; 0 means unlimited (the API reads it back as null). */
+  buildPushMaxPerHour: number;
+  /** Outcome of the most recent build attempt (null = never attempted). */
+  lastBuildStatus: FactoryProjectBuildStatus | null;
+  lastBuildError: string | null;
+  /** Most recent successful build. */
+  lastBuiltAt: Date | null;
+  /** Most recent attempt, success or failure; the schedule and the retry backoff read this. */
+  lastBuildAttemptedAt: Date | null;
+  /** A build is wanted (config change, Build now, push trigger fired); cleared by the build that serves it. */
+  buildRequestedAt: Date | null;
+  /** Most recent push to a base branch; the debounce reads it. */
+  lastPushAt: Date | null;
+  /** Trailing-hour push-build cap window, persisted so replicas and restarts agree. */
+  buildWindowStartedAt: Date | null;
+  buildWindowCount: number;
+  /** Worker lease on the build; null when no build is running. */
+  buildClaimedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type FactoryProjectBuildStatus = 'ready' | 'partial' | 'failed' | 'building';
+
+export const BUILD_SCHEDULE_HOURS_DEFAULT = 24;
+export const BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT = 10;
+export const BUILD_PUSH_MAX_PER_HOUR_DEFAULT = 4;
 
 export interface CreateFactoryProjectInput {
   name: string;
@@ -50,6 +80,28 @@ export interface UpdateFactoryProjectInput {
   workspaceSetupCommand?: string | null;
   activeTemplateId?: string | null;
   activeTemplateHeads?: Record<string, string> | null;
+  buildScheduleEnabled?: boolean;
+  buildScheduleHours?: number;
+  buildOnPushEnabled?: boolean;
+  buildPushDebounceMinutes?: number;
+  buildPushMaxPerHour?: number;
+  lastBuildStatus?: FactoryProjectBuildStatus | null;
+  lastBuildError?: string | null;
+  lastBuiltAt?: Date | null;
+  lastBuildAttemptedAt?: Date | null;
+  buildRequestedAt?: Date | null;
+  lastPushAt?: Date | null;
+  buildWindowStartedAt?: Date | null;
+  buildWindowCount?: number;
+  buildClaimedAt?: Date | null;
+}
+
+export interface RecordFactoryProjectBuildInput {
+  /** When the attempt finished; also stamps `last_build_attempted_at`. */
+  now: Date;
+  /** The claim the attempt ran under; a request made after it stays pending. */
+  claimedAt: Date;
+  result: { status: 'ready'; templateId: string; heads: Record<string, string> } | { status: 'failed'; error: string };
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -71,6 +123,20 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
+    build_schedule_enabled: { type: 'boolean', default: true },
+    build_schedule_hours: { type: 'integer', default: BUILD_SCHEDULE_HOURS_DEFAULT },
+    build_on_push_enabled: { type: 'boolean', default: true },
+    build_push_debounce_minutes: { type: 'integer', default: BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT },
+    build_push_max_per_hour: { type: 'integer', default: BUILD_PUSH_MAX_PER_HOUR_DEFAULT },
+    last_build_status: { type: 'text', nullable: true },
+    last_build_error: { type: 'text', nullable: true },
+    last_built_at: { type: 'timestamp', nullable: true },
+    last_build_attempted_at: { type: 'timestamp', nullable: true },
+    build_requested_at: { type: 'timestamp', nullable: true },
+    last_push_at: { type: 'timestamp', nullable: true },
+    build_window_started_at: { type: 'timestamp', nullable: true },
+    build_window_count: { type: 'integer', default: 0 },
+    build_claimed_at: { type: 'timestamp', nullable: true },
     /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -96,6 +162,20 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   workspace_setup_command: string | null;
   active_template_id: string | null;
   active_template_heads: Record<string, string> | null;
+  build_schedule_enabled: boolean | null;
+  build_schedule_hours: number | null;
+  build_on_push_enabled: boolean | null;
+  build_push_debounce_minutes: number | null;
+  build_push_max_per_hour: number | null;
+  last_build_status: FactoryProjectBuildStatus | null;
+  last_build_error: string | null;
+  last_built_at: Date | null;
+  last_build_attempted_at: Date | null;
+  build_requested_at: Date | null;
+  last_push_at: Date | null;
+  build_window_started_at: Date | null;
+  build_window_count: number | null;
+  build_claimed_at: Date | null;
   environment_backfilled_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -119,6 +199,20 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     workspaceSetupCommand: row.workspace_setup_command ?? null,
     activeTemplateId: row.active_template_id ?? null,
     activeTemplateHeads: row.active_template_heads ?? null,
+    buildScheduleEnabled: row.build_schedule_enabled ?? true,
+    buildScheduleHours: row.build_schedule_hours ?? BUILD_SCHEDULE_HOURS_DEFAULT,
+    buildOnPushEnabled: row.build_on_push_enabled ?? true,
+    buildPushDebounceMinutes: row.build_push_debounce_minutes ?? BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT,
+    buildPushMaxPerHour: row.build_push_max_per_hour ?? BUILD_PUSH_MAX_PER_HOUR_DEFAULT,
+    lastBuildStatus: row.last_build_status ?? null,
+    lastBuildError: row.last_build_error ?? null,
+    lastBuiltAt: row.last_built_at ?? null,
+    lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
+    buildRequestedAt: row.build_requested_at ?? null,
+    lastPushAt: row.last_push_at ?? null,
+    buildWindowStartedAt: row.build_window_started_at ?? null,
+    buildWindowCount: row.build_window_count ?? 0,
+    buildClaimedAt: row.build_claimed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -160,6 +254,12 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       slack_work_items_enabled: false,
       auto_run_enabled: false,
       auto_approve_plans: false,
+      build_schedule_enabled: true,
+      build_schedule_hours: BUILD_SCHEDULE_HOURS_DEFAULT,
+      build_on_push_enabled: true,
+      build_push_debounce_minutes: BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT,
+      build_push_max_per_hour: BUILD_PUSH_MAX_PER_HOUR_DEFAULT,
+      build_window_count: 0,
       created_at: now,
       updated_at: now,
     });
@@ -219,8 +319,88 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.workspaceSetupCommand !== undefined ? { workspace_setup_command: input.workspaceSetupCommand } : {}),
       ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
       ...(input.activeTemplateHeads !== undefined ? { active_template_heads: input.activeTemplateHeads } : {}),
+      ...(input.buildScheduleEnabled !== undefined ? { build_schedule_enabled: input.buildScheduleEnabled } : {}),
+      ...(input.buildScheduleHours !== undefined ? { build_schedule_hours: input.buildScheduleHours } : {}),
+      ...(input.buildOnPushEnabled !== undefined ? { build_on_push_enabled: input.buildOnPushEnabled } : {}),
+      ...(input.buildPushDebounceMinutes !== undefined
+        ? { build_push_debounce_minutes: input.buildPushDebounceMinutes }
+        : {}),
+      ...(input.buildPushMaxPerHour !== undefined ? { build_push_max_per_hour: input.buildPushMaxPerHour } : {}),
+      ...(input.lastBuildStatus !== undefined ? { last_build_status: input.lastBuildStatus } : {}),
+      ...(input.lastBuildError !== undefined ? { last_build_error: input.lastBuildError } : {}),
+      ...(input.lastBuiltAt !== undefined ? { last_built_at: input.lastBuiltAt } : {}),
+      ...(input.lastBuildAttemptedAt !== undefined ? { last_build_attempted_at: input.lastBuildAttemptedAt } : {}),
+      ...(input.buildRequestedAt !== undefined ? { build_requested_at: input.buildRequestedAt } : {}),
+      ...(input.lastPushAt !== undefined ? { last_push_at: input.lastPushAt } : {}),
+      ...(input.buildWindowStartedAt !== undefined ? { build_window_started_at: input.buildWindowStartedAt } : {}),
+      ...(input.buildWindowCount !== undefined ? { build_window_count: input.buildWindowCount } : {}),
+      ...(input.buildClaimedAt !== undefined ? { build_claimed_at: input.buildClaimedAt } : {}),
       updated_at: new Date(),
     }));
+    return row ? toFactoryProject(row) : null;
+  }
+
+  /**
+   * Take the build lease on a project. Resolves the project with
+   * `build_claimed_at = now` when no build holds it (or the holder is older
+   * than `staleAfterMs`), else null; the read and the write run under one
+   * `updateAtomic`, so two workers never both win.
+   */
+  async claimBuild({
+    orgId,
+    id,
+    now,
+    staleAfterMs,
+  }: {
+    orgId: string;
+    id: string;
+    now: Date;
+    staleAfterMs: number;
+  }): Promise<FactoryProject | null> {
+    let claimed = false;
+    const row = await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, current => {
+      const held = current.build_claimed_at;
+      if (held && now.getTime() - held.getTime() < staleAfterMs) return null;
+      claimed = true;
+      return { build_claimed_at: now, last_build_status: 'building', updated_at: now };
+    });
+    return claimed && row ? toFactoryProject(row) : null;
+  }
+
+  /**
+   * Record the outcome of a claimed build and release the lease. Every
+   * attempt stamps `last_build_attempted_at`; only `ready` moves the template
+   * id, heads and `last_built_at`. A request made after the claim stays
+   * pending so the next tick serves it.
+   */
+  async recordBuild({
+    orgId,
+    id,
+    input,
+  }: {
+    orgId: string;
+    id: string;
+    input: RecordFactoryProjectBuildInput;
+  }): Promise<FactoryProject | null> {
+    const row = await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, current => {
+      const requested = current.build_requested_at;
+      const stillRequested = requested !== null && requested.getTime() > input.claimedAt.getTime();
+      return {
+        last_build_attempted_at: input.now,
+        build_claimed_at: null,
+        build_requested_at: stillRequested ? requested : null,
+        ...(input.result.status === 'ready'
+          ? {
+              last_build_status: 'ready',
+              last_build_error: null,
+              last_built_at: input.now,
+              active_template_id: input.result.templateId,
+              active_template_heads: input.result.heads,
+            }
+          : { last_build_status: 'failed', last_build_error: input.result.error }),
+        updated_at: input.now,
+      };
+    });
     return row ? toFactoryProject(row) : null;
   }
 
