@@ -1,0 +1,85 @@
+import { Mastra } from '@mastra/core';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import { Hono } from 'hono';
+import { describe, expect, it, vi } from 'vitest';
+
+import { MastraServer } from '../index';
+
+async function setup(bodyLimitOptions?: { maxSize: number; onError: (err: unknown) => unknown }) {
+  const authorizeUserResource = vi.fn(async () => true);
+  const handler = vi.fn(async (c: any) => c.json({ resource: c.get('requestContext').get(MASTRA_RESOURCE_ID_KEY) }));
+  const mastra = new Mastra({
+    logger: false,
+    server: {
+      auth: {
+        authenticateToken: async () => ({ id: 'u1' }),
+        authorizeUser: () => true,
+        mapUserToResourceId: () => 'mapped',
+        authorizeUserResource,
+      } as any,
+      apiRoutes: [{ method: 'POST', path: '/custom', requiresAuth: true, handler }],
+    },
+  });
+  const app = new Hono();
+  await new MastraServer({ app, mastra, bodyLimitOptions } as any).init();
+  return { app, authorizeUserResource, handler };
+}
+
+const post = (app: Hono, body: string, headers: Record<string, string> = {}) =>
+  app.request('http://localhost/custom', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer t', ...headers },
+    body,
+  });
+
+describe('custom-route resource check body limit', () => {
+  const limits = { maxSize: 64, onError: () => ({ error: 'too big' }) };
+
+  it('rejects a body over the configured limit with 413 before parsing or running the policy', async () => {
+    const { app, authorizeUserResource, handler } = await setup(limits);
+    const response = await post(app, JSON.stringify({ resourceId: 'session-r', pad: 'x'.repeat(200) }));
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: 'too big' });
+    expect(authorizeUserResource).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('enforces the limit when content-length is absent (streamed body)', async () => {
+    const { app, handler } = await setup(limits);
+    const bytes = new TextEncoder().encode(JSON.stringify({ pad: 'x'.repeat(200) }));
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      },
+    });
+    const response = await app.request(
+      new Request('http://localhost/custom', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer t' },
+        body: stream,
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' }),
+    );
+    expect(response.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('still reads a body within the limit for the resource check', async () => {
+    const { app, authorizeUserResource } = await setup(limits);
+    const response = await post(app, JSON.stringify({ resourceId: 'session-r' }));
+    expect(response.status).toBe(200);
+    expect(authorizeUserResource).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'u1' }),
+      'session-r',
+      expect.anything(),
+    );
+  });
+
+  it('changes nothing when no limit is configured', async () => {
+    const { app, authorizeUserResource } = await setup();
+    const response = await post(app, JSON.stringify({ resourceId: 'session-r', pad: 'x'.repeat(200) }));
+    expect(response.status).toBe(200);
+    expect(authorizeUserResource).toHaveBeenCalledOnce();
+  });
+});

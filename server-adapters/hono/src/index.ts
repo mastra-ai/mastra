@@ -782,9 +782,24 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           this.mastra.getServer()?.auth?.authorizeUserResource
         ) {
           const contentType = c.req.header('content-type');
+          // Custom routes get no bodyLimit middleware, so cap this read at the configured limit.
+          const maxSize = this.bodyLimitOptions?.maxSize;
+          const bodyRequest =
+            maxSize !== undefined && (contentType?.includes('application/json') || contentType?.includes('form'))
+              ? await readBodyWithinLimit(pristineRequest, maxSize)
+              : pristineRequest.clone();
+          if (bodyRequest === undefined) {
+            let errorResponse: unknown = { error: 'Request body too large' };
+            try {
+              errorResponse = this.bodyLimitOptions!.onError(errorResponse);
+            } catch {
+              // Fall back to the default response.
+            }
+            return c.json(errorResponse, 413);
+          }
           if (contentType?.includes('application/json')) {
             try {
-              const body = (await pristineRequest.clone().json()) as unknown;
+              const body = (await bodyRequest.json()) as unknown;
               if (body && typeof body === 'object' && !Array.isArray(body)) {
                 bodyParams = body as Record<string, unknown>;
               }
@@ -796,7 +811,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             contentType?.includes('multipart/form-data')
           ) {
             try {
-              bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
+              bodyParams = Object.fromEntries(await bodyRequest.formData());
             } catch {
               bodyParams = {};
             }
@@ -936,4 +951,36 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
     });
   }
+}
+
+/**
+ * Read a copy of the request body, stopping once it exceeds `maxSize` bytes.
+ * Returns a request carrying the buffered body, or `undefined` when over the limit.
+ */
+async function readBodyWithinLimit(request: Request, maxSize: number): Promise<Request | undefined> {
+  const declared = request.headers.get('content-length');
+  if (declared !== null && Number(declared) > maxSize) return undefined;
+  const stream = request.clone().body;
+  if (!stream) return new Request(request.url, { method: request.method, headers: request.headers });
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxSize) {
+      // Don't await: cancelling one branch of a tee'd body only settles once every branch is cancelled.
+      void reader.cancel().catch(() => {});
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Request(request.url, { method: request.method, headers: request.headers, body });
 }
