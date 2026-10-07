@@ -748,11 +748,12 @@ export const KNOWLEDGE_NODES_SCHEMA: Record<string, StorageColumn> = {
 
 export const KNOWLEDGE_RECORDS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  node: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
   text: { type: 'text', nullable: false },
   metadata: { type: 'jsonb', nullable: true },
+  source: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
-  capturedAt: { type: 'timestamp', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
   deletedAt: { type: 'timestamp', nullable: true },
   deletedBy: { type: 'text', nullable: true },
