@@ -18,6 +18,7 @@ import {
   DELETE_MESSAGES_ROUTE,
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
+  UPDATE_WORKING_MEMORY_ROUTE,
   CLONE_THREAD_ROUTE,
   TRANSFER_THREAD_ROUTE,
   SEARCH_MEMORY_ROUTE,
@@ -78,6 +79,61 @@ describe('Memory Handlers', () => {
       instructions: 'test-instructions',
       model: {} as any,
       memory: mockMemory,
+    });
+  });
+
+  describe('atomic working-memory route', () => {
+    it('binds the resource to authenticated context and forwards the merge contract', async () => {
+      const mastra = new Mastra({ logger: false, agents: { mockAgent } });
+      await mockMemory.saveThread({ thread: createThread() });
+      vi.spyOn(mockMemory, 'supportsAtomicWorkingMemoryUpdates').mockResolvedValue(true);
+      const update = vi.spyOn(mockMemory, 'updateWorkingMemory').mockResolvedValue();
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      expect(
+        await UPDATE_WORKING_MEMORY_ROUTE.handler({
+          ...context,
+          agentId: 'mockAgent',
+          threadId: 'test-thread-id',
+          resourceId: 'untrusted-resource',
+          workingMemory: '{"name":"Fad"}',
+          mode: 'merge',
+        }),
+      ).toEqual({ success: true });
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({ resourceId: 'test-resource', mode: 'merge', workingMemory: '{"name":"Fad"}' }),
+      );
+    });
+    it('rejects another users thread before touching memory', async () => {
+      const mastra = new Mastra({ logger: false, agents: { mockAgent } });
+      await mockMemory.saveThread({ thread: createThread({ resourceId: 'other-user' }) });
+      const update = vi.spyOn(mockMemory, 'updateWorkingMemory');
+      const context = createTestContextWithReservedKeys({ mastra, resourceId: 'test-resource' });
+      await expect(
+        UPDATE_WORKING_MEMORY_ROUTE.handler({
+          ...context,
+          agentId: 'mockAgent',
+          threadId: 'test-thread-id',
+          workingMemory: '{}',
+          mode: 'merge',
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(update).not.toHaveBeenCalled();
+    });
+    it('fails instead of acknowledging a merge that a custom memory cannot perform', async () => {
+      const mastra = new Mastra({ logger: false, agents: { mockAgent } });
+      await mockMemory.saveThread({ thread: createThread() });
+      const update = vi.spyOn(mockMemory, 'updateWorkingMemory');
+      await expect(
+        UPDATE_WORKING_MEMORY_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'mockAgent',
+          threadId: 'test-thread-id',
+          resourceId: 'test-resource',
+          workingMemory: '{}',
+          mode: 'merge',
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(update).not.toHaveBeenCalled();
     });
   });
 
