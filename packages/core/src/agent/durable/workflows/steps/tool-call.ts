@@ -1746,7 +1746,7 @@ export function createDurableToolCallStep() {
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
-            providerMetadata = await applyToolModelOutputProcessors(resultProcessorRunner, {
+            providerMetadata = (await applyToolModelOutputProcessors(resultProcessorRunner, {
               steps: [],
               stepNumber: 0,
               messageList,
@@ -1759,7 +1759,7 @@ export function createDurableToolCallStep() {
               requestContext: registryEntry.requestContext,
               retryCount: 0,
               abortSignal: toolAbortSignal,
-            }) as typeof providerMetadata;
+            })) as typeof providerMetadata;
           } catch (processorError) {
             if (processorError instanceof TripWire) {
               // Blocked: emit a tripwire chunk instead of the tool-result and

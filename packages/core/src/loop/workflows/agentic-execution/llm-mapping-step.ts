@@ -98,9 +98,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     stepNumber: number;
     steps: Array<StepResult<ToolSet>>;
     providerMetadata: Record<string, unknown> | undefined;
-  }): Promise<
-    { ok: true; providerMetadata: Record<string, unknown> | undefined } | { ok: false; tripwire: TripWire }
-  > {
+  }): Promise<{ ok: true; providerMetadata: Record<string, unknown> | undefined } | { ok: false; tripwire: TripWire }> {
     if (!processorRunner || !rest.outputProcessors?.length) {
       return { ok: true, providerMetadata: args.providerMetadata };
     }
@@ -402,9 +400,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolName: toolCall.toolName,
                 toolArgs: toolCall.args,
                 approval: toolCall.approval,
-                providerMetadata: withToolPayloadTransformProviderMetadata(trResult.providerMetadata, chunk.metadata) as
-                  | ProviderMetadata
-                  | undefined,
+                providerMetadata: withToolPayloadTransformProviderMetadata(
+                  trResult.providerMetadata,
+                  chunk.metadata,
+                ) as ProviderMetadata | undefined,
               });
             }
 

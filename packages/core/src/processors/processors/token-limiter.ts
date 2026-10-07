@@ -563,8 +563,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
               // Tool result - this will become a separate CoreMessage
               toolResultCount++;
               // The model reads the mapped/capped copy when one is stored, not the raw result.
-              const modelOutput = (part.providerMetadata?.mastra as { modelOutput?: unknown } | undefined)
-                ?.modelOutput;
+              const modelOutput = (part.providerMetadata?.mastra as { modelOutput?: unknown } | undefined)?.modelOutput;
               if (modelOutput != null) {
                 const content = (modelOutput as { type?: string; value?: unknown }).value;
                 if ((modelOutput as { type?: string }).type === 'content' && Array.isArray(content)) {

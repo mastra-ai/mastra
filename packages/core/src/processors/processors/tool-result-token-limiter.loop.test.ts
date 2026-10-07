@@ -168,7 +168,9 @@ describe('ToolResultTokenLimiter with TokenLimiterProcessor (#24110)', () => {
     const storedPart = persisted
       .flatMap(m => m.content.parts)
       .find(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result') as any;
-    expect(storedPart.providerMetadata.mastra.modelOutput.value).toMatch(/\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
+    expect(storedPart.providerMetadata.mastra.modelOutput.value).toMatch(
+      /\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/,
+    );
   });
 
   it('still trims older oversized tool results from history', async () => {

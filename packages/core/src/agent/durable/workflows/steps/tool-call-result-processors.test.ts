@@ -190,7 +190,9 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
 
     expect(output.error).toBeUndefined();
     expect(output.result).toBe(big);
-    expect(output.providerMetadata.mastra.modelOutput.value).toMatch(/\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/);
+    expect(output.providerMetadata.mastra.modelOutput.value).toMatch(
+      /\n\[truncated: showing [\d,]+ of [\d,]+ tokens\]$/,
+    );
     const toolResultChunks = emittedChunksOfType('tool-result');
     expect(toolResultChunks[0].payload.result).toBe(big);
   });

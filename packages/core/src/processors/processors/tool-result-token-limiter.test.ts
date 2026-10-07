@@ -181,7 +181,9 @@ describe('ToolResultTokenLimiter', () => {
   it('keeps the marker at the minimum limit when the original has 7+ digit tokens', () => {
     const text = 'word '.repeat(1_200_000);
     expect(estimateTokenCount(text)).toBeGreaterThanOrEqual(1_000_000);
-    expect(callHook(64, text)!.modelOutput.value).toMatch(/\[truncated: showing [\d,]+ of \d{1,3}(,\d{3}){2,} tokens\]$/);
+    expect(callHook(64, text)!.modelOutput.value).toMatch(
+      /\[truncated: showing [\d,]+ of \d{1,3}(,\d{3}){2,} tokens\]$/,
+    );
   });
 
   it.each([64, 300, 2000])('stays within the limit with the marker (limit %s)', limit => {

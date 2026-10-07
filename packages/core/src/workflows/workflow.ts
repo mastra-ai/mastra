@@ -1055,10 +1055,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // the public processor span would export as an orphan trace root.
       const fallbackSpan = currentSpan && getRootExportSpan(currentSpan) ? currentSpan : undefined;
       const parentSpan =
-        phase === 'inputStep' ||
-        phase === 'outputStep' ||
-        phase === 'toolResult' ||
-        phase === 'toolModelOutput'
+        phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult' || phase === 'toolModelOutput'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
           : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
 

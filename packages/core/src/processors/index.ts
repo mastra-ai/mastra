@@ -585,8 +585,9 @@ export type ToolModelOutput =
  * after the tool's `toModelOutput` mapping. Changes only what the model reads — the
  * stored and streamed `result` is never modified.
  */
-export interface ProcessToolModelOutputArgs<TTripwireMetadata = unknown>
-  extends ProcessorMessageContext<TTripwireMetadata> {
+export interface ProcessToolModelOutputArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
   /** Name of the tool that was executed */
