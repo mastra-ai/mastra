@@ -30,7 +30,7 @@ export const updateCommandPromptScenario: McE2eScenario = {
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Update skipped/i, terminal);
-    await (expect(terminal.getByText(/›|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    await (expect(terminal.getByText(/→|›|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.keyCtrlC();
   },
