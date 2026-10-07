@@ -624,10 +624,10 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /**
-   * First boot runs in one transaction under a schema-wide advisory lock: replacing an empty published
+   * First boot runs in one transaction under a schema-wide advisory lock: replacing the published v1
    * layout, creating every canonical table and index, and writing the completion marker either all
    * commit or all roll back, and concurrent processes serialize so exactly one initializes while the
-   * rest observe the marker. Anything other than no Knowledge tables or the empty published layout is
+   * rest observe the marker. Anything other than no Knowledge tables or the published v1 layout is
    * rejected without mutation.
    */
   async #initializeCanonicalSchema(): Promise<{ tables: string[]; indexes: string[] }> {
@@ -660,7 +660,7 @@ export class KnowledgePG extends KnowledgeStorage {
       if (names.has(TABLE_KNOWLEDGE_SCHEMA)) return { tables: [], indexes: [] };
       let dropped: { tables: string[]; indexes: string[] } = { tables: [], indexes: [] };
       if (names.size > 0) {
-        const replaced = await this.#replaceEmptyPublishedV1(tx);
+        const replaced = await this.#replacePublishedV1(tx);
         if (replaced === 'dependents') throw new KnowledgeSchemaError(KNOWLEDGE_DEPENDENTS_MESSAGE);
         if (!replaced) {
           throw new KnowledgeSchemaError(
@@ -684,13 +684,13 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /**
-   * Earlier releases created empty Knowledge tables for every app. When exactly that layout and its
-   * indexes are the only Knowledge objects in this store's schema, drop it so canonical storage can
-   * initialize; replacing it loses nothing. Rows, partial or unfamiliar tables, views, triggers, and
+   * Knowledge v1 was experimental and its data is not migrated. When exactly the published v1 tables
+   * and indexes are the only Knowledge objects in this store's schema, drop them, discarding any rows
+   * they hold, so canonical storage can initialize. Partial or unfamiliar tables, views, triggers, and
    * extra indexes all leave the database untouched. Runs inside the caller's first-boot transaction.
    * Returns `'dependents'` when other objects depend on the tables, since a reset cannot remove them either.
    */
-  async #replaceEmptyPublishedV1(tx: Executor): Promise<{ tables: string[]; indexes: string[] } | 'dependents' | null> {
+  async #replacePublishedV1(tx: Executor): Promise<{ tables: string[]; indexes: string[] } | 'dependents' | null> {
     const schema = this.#schemaName ?? null;
     const relations = await tx.execute({
       sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
@@ -728,11 +728,6 @@ export class KnowledgePG extends KnowledgeStorage {
       args: [schema, tables],
     });
     if (triggers.rows.length > 0) return null;
-    // Block writers from an older release until the drop commits, so a row cannot land after the emptiness check.
-    await tx.execute(`LOCK TABLE ${tables.map(table => `"${table}"`).join(', ')} IN ACCESS EXCLUSIVE MODE`);
-    for (const table of tables) {
-      if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return null;
-    }
     try {
       await tx.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
     } catch (error) {

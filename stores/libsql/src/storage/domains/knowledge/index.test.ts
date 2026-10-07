@@ -230,28 +230,29 @@ describe('KnowledgeLibSQL published v1 layout', () => {
     }
   });
 
-  it('rejects a populated published layout without mutation and names the reset call', async () => {
+  it('replaces a published layout that holds rows, discarding them and keeping other storage', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
       await client.execute(
         "INSERT INTO mastra_knowledge_nodes (id,type,name,canonicalName,scope,scopeKey,version,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,'2026-01-01','2026-01-01')",
       );
-      const before = await knowledgeObjects(client);
+      await client.execute('CREATE TABLE mastra_threads (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO mastra_threads (id) VALUES ('preserved')");
 
-      const init = new KnowledgeLibSQL({ client }).init();
-      await expect(init).rejects.toBeInstanceOf(KnowledgeSchemaError);
-      await expect(init).rejects.toThrow(/Knowledge schema reset required.*dangerouslyReset\(\)/);
+      await new KnowledgeLibSQL({ client }).init();
 
-      expect(await knowledgeObjects(client)).toEqual(before);
-      const nodes = await client.execute('SELECT id FROM mastra_knowledge_nodes');
-      expect(nodes.rows.map(row => row.id)).toEqual(['legacy']);
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+      expect((await client.execute("SELECT id FROM mastra_knowledge_nodes WHERE id = 'legacy'")).rows).toEqual([]);
+      const threads = await client.execute('SELECT id FROM mastra_threads');
+      expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
     } finally {
       client.close();
     }
   });
 
-  it('rejects an empty published layout that another object depends on', async () => {
+  it('rejects a published layout that another object depends on', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
@@ -285,7 +286,7 @@ describe('KnowledgeLibSQL published v1 layout', () => {
     }
   });
 
-  it('rejects an empty published layout missing one of its tables', async () => {
+  it('rejects a published layout missing one of its tables', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
