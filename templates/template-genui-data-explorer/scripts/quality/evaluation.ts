@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { AnalysisRequest, SourceDescriptor } from "../../data-sources/source.ts";
 import type { Outcome } from "../../src/analysis/contracts.ts";
-import type { ComponentBinding } from "../../src/ui/catalog.ts";
+import type { ComponentBinding } from "../../src/components/catalog.ts";
 
 export const dimensions = [
   "query-semantics",

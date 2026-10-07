@@ -26,9 +26,9 @@ export interface Session {
   emit: (event: Omit<AnalysisEvent, "requestId" | "workspaceId" | "traceId">) => void;
   steps: number;
   filters?: AnalysisRequest["filters"];
-  composition?: import("../ui/catalog.ts").Composition;
-  accepted?: import("../ui/catalog.ts").AcceptedWorkspace;
-  correctionTarget?: import("../ui/catalog.ts").AcceptedWorkspace["components"][number];
+  composition?: import("../components/catalog.ts").Composition;
+  accepted?: import("./composition.ts").AcceptedWorkspace;
+  correctionTarget?: import("./composition.ts").AcceptedWorkspace["components"][number];
   failure?: SourceError;
   workflowRunId?: string;
 }

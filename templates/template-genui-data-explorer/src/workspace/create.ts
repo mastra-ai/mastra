@@ -7,8 +7,10 @@ import type { SourceSettings, SourceRegistration } from "../../data-sources/sour
 import { openDataSource } from "../../data-sources/registry.ts";
 import { defaultSourceId, sources } from "../../data-sources/sources.ts";
 import { DataExplorer } from "../analysis/explorer.ts";
-import { components } from "../ui/catalog.ts";
-import type { ComponentDeclaration } from "../ui/catalog.ts";
+import { components } from "../components/catalog.ts";
+
+import type { ComponentDeclaration } from "../components/catalog.ts";
+
 import { WorkspaceStore } from "./store.ts";
 import { WorkspaceEngine } from "./engine.ts";
 

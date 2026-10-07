@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sourceDescriptorSchema } from "../../data-sources/source.ts";
 import { verifiedResultSchema } from "../analysis/contracts.ts";
-import { componentSchema } from "../ui/catalog.ts";
+import { componentSchema } from "../components/catalog.ts";
 
 export const workspaceSchema = z.strictObject({
   id: z.string().min(1).max(128),
@@ -95,11 +95,20 @@ export const requestProperties = z.strictObject({
   action: actionSchema.optional(),
   correction: correctionSchema.optional(),
 });
-export interface WorkspaceSnapshot {
-  sessions: ChatSession[];
-  lastRequest?: { question: string; requestId: string } | undefined;
-  catalog?: { id: string; version: string; defaults: { pageSize: number } }[] | undefined;
-  workspace: Workspace;
-  status: "saved" | "working" | "incomplete" | "recovery-required";
-  message: string;
-}
+export const snapshotSchema = z.strictObject({
+  sessions: z.array(chatSessionSchema),
+  lastRequest: z.strictObject({ question: z.string(), requestId: z.string() }).optional(),
+  workspace: workspaceSchema,
+  status: z.enum(["saved", "working", "incomplete", "recovery-required"]),
+  message: z.string(),
+  catalog: z
+    .array(
+      z.strictObject({
+        id: z.string(),
+        version: z.string(),
+        defaults: z.strictObject({ pageSize: z.number().int() }),
+      }),
+    )
+    .optional(),
+});
+export type WorkspaceSnapshot = z.infer<typeof snapshotSchema>;

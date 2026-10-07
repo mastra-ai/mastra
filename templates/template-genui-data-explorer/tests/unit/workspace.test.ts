@@ -1,12 +1,7 @@
 import { it, expect } from "vitest";
 import { verifiedResultSchema } from "../../src/analysis/contracts.ts";
-import {
-  components,
-  validateCatalog,
-  validateComposition,
-  acceptedWorkspace,
-  componentSchema,
-} from "../../src/ui/catalog.ts";
+import { components, validateCatalog, componentSchema } from "../../src/components/catalog.ts";
+import { validateComposition, acceptedWorkspace } from "../../src/analysis/composition.ts";
 import {
   resultTableSchema,
   tableColumnSchema,
@@ -19,7 +14,7 @@ import {
   humanAnswer,
   viewTitle,
   metricName,
-} from "../../src/ui/format.ts";
+} from "../../src/components/format.ts";
 
 it("human summaries display currency and inclusive calendar dates without technical operands", async () => {
   const data = await new ReferenceSource().execute({

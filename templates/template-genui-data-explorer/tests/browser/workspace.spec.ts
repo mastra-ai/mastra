@@ -7,7 +7,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { workspaceSchema, threadId } from "../../src/workspace/contracts.ts";
+import { workspaceSchema } from "../../src/workspace/contracts.ts";
 
 let directory: string;
 let backend: ChildProcess | undefined;

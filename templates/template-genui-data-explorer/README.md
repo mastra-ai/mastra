@@ -48,6 +48,9 @@ how it looks and behaves.
 - Connect your own data or adapt the example to another domain. See [Data sources](docs/data-sources.md)
   for the source contract and related Mastra templates for databases, PDFs, CSVs, and documents.
 
+For the startup flow, server/client boundaries, and independent deployment commands, see
+[Architecture and deployment](docs/architecture.md).
+
 ## About Mastra templates
 
 [Mastra templates](https://mastra.ai/templates) are starting points you can run, explore, and adapt.

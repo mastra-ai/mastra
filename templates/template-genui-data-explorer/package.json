@@ -5,7 +5,7 @@
   "description": "Reproducible example SaaS Sales analytics for a candidate Mastra generative UI data explorer.",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node --experimental-strip-types scripts/build-mastra.ts && NEXT_TELEMETRY_DISABLED=1 next build",
+    "build": "npm run build:agent && npm run build:ui",
     "data:init": "node scripts/cli.ts init",
     "data:inspect": "node scripts/cli.ts inspect",
     "format": "oxfmt --config .oxfmtrc.json .",
@@ -20,7 +20,11 @@
     "benchmark:live": "node --env-file-if-exists=.env scripts/benchmark.ts",
     "standalone:prepare": "node scripts/standalone.ts",
     "test:standalone:browser": "playwright test --config tests/standalone.config.ts",
-    "diagnostics": "node --env-file-if-exists=.env scripts/diagnostics.ts"
+    "diagnostics": "node --env-file-if-exists=.env scripts/diagnostics.ts",
+    "build:agent": "tsc -p tsconfig.build.json && node --experimental-strip-types scripts/build-mastra.ts",
+    "build:ui": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "start:agent": "node --env-file-if-exists=.env .mastra/output/index.mjs",
+    "start:ui": "node --env-file-if-exists=.env node_modules/next/dist/bin/next start"
   },
   "dependencies": {
     "@ag-ui/client": "1.0.1",

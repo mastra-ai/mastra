@@ -5,17 +5,18 @@ import type { MastraModelConfig } from "@mastra/core/llm";
 import type { Memory } from "@mastra/memory";
 import { analysisToolSchema, SourceError, hasAvailableData } from "../../data-sources/source.ts";
 import type { SourceDescriptor } from "../../data-sources/source.ts";
+import { compositionSchema } from "../components/catalog.ts";
 import {
   agentCatalog,
-  compositionSchema,
   compositionInputSchema,
   validateComposition,
-} from "../ui/catalog.ts";
+} from "../analysis/composition.ts";
 import { z } from "zod";
-import type { ComponentDeclaration } from "../ui/catalog.ts";
+import type { ComponentDeclaration } from "../components/catalog.ts";
+
 import { LIMITS, representationSchema, representation } from "../analysis/contracts.ts";
 import { sessionFrom } from "../analysis/workflow.ts";
-import type { analyticalWorkflow, Session } from "../analysis/workflow.ts";
+import type { analyticalWorkflow } from "../analysis/workflow.ts";
 
 export function explorerAgent(
   workflow: ReturnType<typeof analyticalWorkflow>,

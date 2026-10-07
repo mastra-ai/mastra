@@ -5,11 +5,13 @@ import { DataExplorer } from "../analysis/explorer.ts";
 import { WorkspaceError, WorkspaceStore } from "./store.ts";
 import type { Workspace, WorkspaceAction, WorkspaceSnapshot, Correction } from "./contracts.ts";
 import { workspaceId, threadId, overviewFor, savedCardTurn } from "./contracts.ts";
-import { validateCatalog, validateComposition } from "../ui/catalog.ts";
-import type { ComponentDeclaration, ComponentBinding } from "../ui/catalog.ts";
+import { validateCatalog } from "../components/catalog.ts";
+import { validateComposition } from "../analysis/composition.ts";
+import type { ComponentDeclaration, ComponentBinding } from "../components/catalog.ts";
+
 import type { Session } from "../analysis/workflow.ts";
 import type { Question } from "../analysis/contracts.ts";
-import { humanAnswer } from "../ui/format.ts";
+import { humanAnswer } from "../components/format.ts";
 
 export class WorkspaceEngine {
   readonly explorer: DataExplorer;

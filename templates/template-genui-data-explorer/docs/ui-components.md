@@ -10,7 +10,7 @@ data and selection guidance in the catalog, then connect it to a React renderer.
 3. The server checks that the component supports that result. CopilotKit delivers the accepted
    composition to the app, which renders the registered React component.
 
-The shared catalog lives in [`src/ui/catalog.ts`](../src/ui/catalog.ts). Each entry describes:
+The shared catalog lives in [`src/components/catalog.ts`](../src/components/catalog.ts). Each entry describes:
 
 | Field            | Purpose                                                                                      |
 | ---------------- | -------------------------------------------------------------------------------------------- |
@@ -26,7 +26,7 @@ The shared catalog lives in [`src/ui/catalog.ts`](../src/ui/catalog.ts). Each en
 ## Register a component
 
 For example, add a compact summary for a single metric. Append this entry to `components` in
-`src/ui/catalog.ts`, using the existing `z` and `componentProperties` imports:
+`src/components/catalog.ts`, using the existing `z` and `componentProperties` imports:
 
 ```ts
 {
@@ -89,11 +89,11 @@ Then append this entry to the same `renderers` array, keeping the existing entri
 Each component ID should have one renderer registration. Read values from `result.data` and display
 choices from `binding.properties`. If you add interactions, declare their supported actions and use
 `act` with the action types in [`src/workspace/contracts.ts`](../src/workspace/contracts.ts).
-`DataTable` in the same renderer file provides a drill-down example.
+[`DataTable`](../src/ui/data-table.tsx) provides a drill-down example.
 
 ## Tell the agent when to use it
 
-The catalog's `description` is passed to the agent automatically by `agentCatalog()`. Write it as
+The catalog's `description` is passed to the agent automatically by `agentCatalog()` in [`src/analysis/composition.ts`](../src/analysis/composition.ts). Write it as
 selection guidance: the user's intent, the required data shape, when another view is better, and
 what each option means. `roles` and `units` enforce compatibility; the description guides the choice
 among compatible components.

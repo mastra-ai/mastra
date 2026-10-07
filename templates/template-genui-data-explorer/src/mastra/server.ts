@@ -1,3 +1,5 @@
+import { maximumBody, boundedBody } from "../server/http.ts";
+import { deployment, authorizedProxy } from "../server/deployment.ts";
 import { z } from "zod";
 import { registerApiRoute } from "@mastra/core/server";
 import type { Config } from "@mastra/core/mastra";
@@ -5,35 +7,6 @@ import { workspaceRuntime } from "../workspace/runtime.ts";
 import type { WorkspaceEngine } from "../workspace/engine.ts";
 import { renderAckSchema, requestedSession } from "../workspace/contracts.ts";
 
-const maximumBody = 2 * 1024 * 1024;
-async function boundedBody(request: Request) {
-  if (Number(request.headers.get("content-length")) > maximumBody) return;
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(5000)]);
-  const cancel = () => {
-    void reader.cancel().catch(() => {});
-  };
-  signal.addEventListener("abort", cancel, { once: true });
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  try {
-    while (true) {
-      const next = await reader.read();
-      signal.throwIfAborted();
-      if (next.done) return Buffer.concat(chunks).toString("utf8");
-      bytes += next.value.byteLength;
-      if (bytes > maximumBody) {
-        cancel();
-        return;
-      }
-      chunks.push(next.value);
-    }
-  } finally {
-    signal.removeEventListener("abort", cancel);
-    reader.releaseLock();
-  }
-}
 const studioPages = /^\/(?:agents|tools|workflows|observability)(?:\/[^/.]+)*\/?$/;
 const discovery =
   /^\/api\/(?:agents(?:\/[^/]+(?:\/tools)?)?|tools(?:\/[^/]+)?|workflows(?:\/[^/]+)?|observability(?:\/.*)?|telemetry(?:\/.*)?|studio-config|system\/(?:version|capabilities))\/?$/;
@@ -43,14 +16,9 @@ export function nativeServer(
   ports: { agentPort: number; webPort: number },
 ): NonNullable<Config["server"]> {
   const runtime = workspaceRuntime(engine);
-  const hosts = [`127.0.0.1:${ports.agentPort}`, `localhost:${ports.agentPort}`];
-  const origins = [
-    ...hosts.map((host) => `http://${host}`),
-    `http://127.0.0.1:${ports.webPort}`,
-    `http://localhost:${ports.webPort}`,
-  ];
+  const connection = deployment(ports);
   return {
-    host: "127.0.0.1",
+    host: connection.agentHost,
     port: ports.agentPort,
     cors: false,
     bodySizeLimit: maximumBody,
@@ -58,8 +26,13 @@ export function nativeServer(
     middleware: async (context, next) => {
       const host = context.req.header("host");
       const origin = context.req.header("origin");
-      if (!host || !hosts.includes(host) || (origin && !origins.includes(origin)))
-        return context.json({ error: "Only local workspace requests are accepted." }, 403);
+      if (
+        !host ||
+        !connection.agentHosts.includes(host) ||
+        (origin && !connection.origins.includes(origin)) ||
+        !authorizedProxy(context.req.raw, connection.token)
+      )
+        return context.json({ error: "Only authorized workspace requests are accepted." }, 403);
       const path = context.req.path,
         method = context.req.method;
       const protectedWorkspace =

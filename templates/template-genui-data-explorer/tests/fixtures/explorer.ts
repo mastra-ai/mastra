@@ -2,7 +2,7 @@ import type { MastraModelConfig } from "@mastra/core/llm";
 import { openDataSource } from "../../data-sources/registry.ts";
 import type { SourceRegistration, SourceSettings } from "../../data-sources/source.ts";
 import { defaultSourceId, sources } from "../../data-sources/sources.ts";
-import { DataExplorer } from "./explorer.ts";
+import { DataExplorer } from "../../src/analysis/explorer.ts";
 
 /** Server configuration is the only source-selection and model-selection surface. */
 export async function createExplorer(

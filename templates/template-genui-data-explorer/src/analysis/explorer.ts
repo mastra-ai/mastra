@@ -1,7 +1,9 @@
 import type { TelemetrySink } from "../observability/telemetry.ts";
 import type { Memory } from "@mastra/memory";
-import { components, acceptedWorkspace } from "../ui/catalog.ts";
-import type { ComponentDeclaration, ComponentBinding } from "../ui/catalog.ts";
+import { components } from "../components/catalog.ts";
+import { acceptedWorkspace } from "../analysis/composition.ts";
+import type { ComponentDeclaration, ComponentBinding } from "../components/catalog.ts";
+
 import { randomUUID } from "node:crypto";
 import { Mastra } from "@mastra/core/mastra";
 import { RequestContext } from "@mastra/core/request-context";
@@ -12,7 +14,7 @@ import {
   hasAvailableData,
 } from "../../data-sources/source.ts";
 import type { DataSource, SourceDescriptor } from "../../data-sources/source.ts";
-import { analyticalWorkflow, bounded, sessionFrom } from "./workflow.ts";
+import { analyticalWorkflow, bounded } from "./workflow.ts";
 import type { Session } from "./workflow.ts";
 import { explorerAgent } from "../mastra/agent.ts";
 import { LIMITS, questionSchema } from "./contracts.ts";

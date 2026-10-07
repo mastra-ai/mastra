@@ -7,7 +7,7 @@ process.env.COPILOTKIT_TELEMETRY_DISABLED = "true";
 const { workspaceServer } = await import("./server.ts");
 import { SalesSource } from "../../data-sources/sales/source.ts";
 import { groupingColumn } from "../../data-sources/source.ts";
-import { components } from "../../src/ui/catalog.ts";
+import { components } from "../../src/components/catalog.ts";
 
 const directory = process.env.TEST_DIRECTORY;
 if (!directory) throw new Error("A test directory is required.");

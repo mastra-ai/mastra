@@ -1,4 +1,4 @@
-import { proxyWorkspace } from "../../../src/workspace/proxy.ts";
+import { proxyWorkspace } from "../../../src/server/proxy.ts";
 import { requestedSession } from "../../../src/workspace/contracts.ts";
 export const runtime = "nodejs";
 function proxySession(request: Request, path: string) {

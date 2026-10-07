@@ -7,7 +7,8 @@ import { it, expect } from "vitest";
 import { MastraAgent } from "@ag-ui/mastra";
 import type { BaseEvent } from "@ag-ui/core";
 import { createWorkspace } from "../../src/workspace/create.ts";
-import { components, validateComposition, compositionInputSchema } from "../../src/ui/catalog.ts";
+import { components } from "../../src/components/catalog.ts";
+import { validateComposition, compositionInputSchema } from "../../src/analysis/composition.ts";
 import { z } from "zod";
 import { workspaceId, threadId } from "../../src/workspace/contracts.ts";
 import { referenceFixture, cohortFixture } from "../fixtures/reference.ts";
@@ -776,7 +777,8 @@ it("workspace transactions preserve complete state on real store failure and res
 });
 
 it("enabled catalog validates bindings and custom display schemas", async () => {
-  const { validateCatalog, validateComposition } = await import("../../src/ui/catalog.ts");
+  const { validateCatalog } = await import("../../src/components/catalog.ts");
+  const { validateComposition } = await import("../../src/analysis/composition.ts");
   expect(() => validateCatalog([...components, components[0]!])).toThrow("duplicate");
   const dir = await mkdtemp(join(tmpdir(), "workspace-catalog-"));
   const salesPath = join(dir, "sales.sqlite");

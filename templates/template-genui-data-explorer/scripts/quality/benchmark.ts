@@ -4,7 +4,8 @@ import type { OpenAICompatibleConfig } from "@mastra/core/llm";
 import type { DataSource, AnalysisRequest } from "../../data-sources/source.ts";
 import { DataExplorer } from "../../src/analysis/explorer.ts";
 import { LIMITS } from "../../src/analysis/contracts.ts";
-import { components } from "../../src/ui/catalog.ts";
+import { components } from "../../src/components/catalog.ts";
+
 import { qualityReport } from "./evaluation.ts";
 import type { QualityCase, Observation } from "./evaluation.ts";
 

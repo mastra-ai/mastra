@@ -1,9 +1,10 @@
 import type { AnalysisRequest } from "../../data-sources/source.ts";
-import type { ComponentBinding } from "../../src/ui/catalog.ts";
+import type { ComponentBinding } from "../../src/components/catalog.ts";
+
 import { z } from "zod";
 import { representationSchema } from "../../src/analysis/contracts.ts";
 import { sourceDescriptorSchema } from "../../data-sources/source.ts";
-import { acceptedWorkspaceSchema } from "../../src/ui/catalog.ts";
+import { acceptedWorkspaceSchema } from "../../src/analysis/composition.ts";
 import { randomUUID } from "node:crypto";
 import type { MastraModelConfig, LanguageModel } from "@mastra/core/llm";
 

@@ -14,8 +14,8 @@ import type {
 import { runReadProcess } from "../../data-sources/read-process.ts";
 import { DataExplorer } from "../../src/analysis/explorer.ts";
 import { LIMITS } from "../../src/analysis/contracts.ts";
-import type { AnalysisEvent, Outcome } from "../../src/analysis/contracts.ts";
-import { createExplorer } from "../../src/analysis/create.ts";
+import type { AnalysisEvent } from "../../src/analysis/contracts.ts";
+import { createExplorer } from "../fixtures/explorer.ts";
 import { analysisServer } from "../fixtures/analysis-server.ts";
 import { referenceFixture } from "../fixtures/reference.ts";
 import { ReferenceSource } from "../fixtures/reference-source.ts";

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFile, mkdir, writeFile, mkdtemp } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { request as httpRequest } from "node:http";
 import type { ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -376,6 +377,136 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
     );
   } finally {
     await stop();
+    await new Promise<void>((resolve) => provider.server.close(() => resolve()));
+  }
+});
+
+test("separate UI and Mastra processes use the authenticated proxy without sharing model credentials", async ({
+  page,
+}) => {
+  const { directory } = locationSchema.parse(
+    JSON.parse(await readFile(".data/standalone.json", "utf8")),
+  );
+  const data = await mkdtemp(join(directory, ".data", "separate-servers-"));
+  const { referenceFixture } = await import("../fixtures/reference.ts");
+  referenceFixture(join(data, "sales.sqlite")).db.close();
+  const provider = deterministicOpenAI();
+  await new Promise<void>((resolve) => provider.server.listen(0, "127.0.0.1", resolve));
+  const address = provider.server.address();
+  if (!address || typeof address === "string") throw new Error("Missing provider address.");
+  const token = "synthetic-separate-server-proxy-credential";
+  const agentOrigin = "http://127.0.0.1:4135";
+  const webOrigin = "http://127.0.0.1:3135";
+  const shared = {
+    ...process.env,
+    MASTRA_SERVER_URL: agentOrigin,
+    WEB_ORIGIN: webOrigin,
+    WORKSPACE_PROXY_TOKEN: token,
+    COPILOTKIT_TELEMETRY_DISABLED: "true",
+  };
+  let logs = "";
+  const children: ChildProcess[] = [];
+  const launch = (args: string[], env: NodeJS.ProcessEnv) => {
+    const child = spawn(process.execPath, args, {
+      cwd: directory,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout?.on("data", (chunk) => {
+      logs += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      logs += String(chunk);
+    });
+    children.push(child);
+  };
+  try {
+    launch([".mastra/output/index.mjs"], {
+      ...shared,
+      AGENT_PORT: "4135",
+      WEB_PORT: "3135",
+      AGENT_HOST: "127.0.0.1",
+      DATA_DIRECTORY: data,
+      OPENAI_API_KEY: "synthetic-provider-key",
+      ANALYSIS_BASE_URL: `http://127.0.0.1:${address.port}/v1`,
+    });
+    // The UI deliberately has neither a usable source nor model credentials; only the URL selects its backend.
+    launch(
+      ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3135"],
+      {
+        ...shared,
+        AGENT_PORT: "1",
+        WEB_PORT: "3135",
+        OPENAI_API_KEY: "",
+        SOURCE_ID: "not-used-by-ui",
+      },
+    );
+    await expect
+      .poll(
+        async () => {
+          try {
+            return (
+              await fetch(`${agentOrigin}/workspace`, { headers: { "x-workspace-token": token } })
+            ).status;
+          } catch {
+            return 0;
+          }
+        },
+        { timeout: 60000, message: logs },
+      )
+      .toBe(200);
+    for (const headers of [
+      {},
+      { "x-workspace-token": "incorrect" },
+      { "x-workspace-token": token, origin: "https://untrusted.example" },
+      { "x-workspace-token": token, host: "untrusted.example" },
+    ]) {
+      // Node fetch normalizes Host; send the raw header to exercise the native middleware.
+      const status = await new Promise<number | undefined>((resolve, reject) => {
+        const req = httpRequest(`${agentOrigin}/workspace`, { headers }, (response) => {
+          response.resume();
+          resolve(response.statusCode);
+        });
+        req.once("error", reject);
+        req.end();
+      });
+      expect(status, JSON.stringify(headers)).toBe(403);
+    }
+    expect(
+      (
+        await fetch(`${agentOrigin}/workspace`, {
+          headers: { "x-workspace-token": token, origin: webOrigin },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await fetch(`${agentOrigin}/api/agents/dataExplorer/generate`, {
+          method: "POST",
+          headers: { "x-workspace-token": token },
+        })
+      ).status,
+    ).toBe(403);
+    await ready(webOrigin);
+    await page.goto(webOrigin);
+    await page.getByPlaceholder("Ask about Sales…").fill("Show monthly bookings");
+    await page.getByPlaceholder("Ask about Sales…").press("Enter");
+    await expect(page.getByText("Revision 1 · Saved locally", { exact: false })).toBeVisible();
+    await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
+    expect(await page.content()).not.toContain(token);
+    expect(await page.content()).not.toContain("synthetic-provider-key");
+    expect(provider.calls.length).toBeGreaterThan(0);
+  } finally {
+    await Promise.all(
+      children.map(
+        (child) =>
+          new Promise<void>((resolve) => {
+            if (child.exitCode !== null) return resolve();
+            child.once("exit", () => resolve());
+            child.kill("SIGTERM");
+          }),
+      ),
+    );
     await new Promise<void>((resolve) => provider.server.close(() => resolve()));
   }
 });

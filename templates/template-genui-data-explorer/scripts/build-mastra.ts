@@ -2,14 +2,14 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runtimeConfiguration } from "../src/mastra/configuration.ts";
+import { sourceId } from "../src/mastra/configuration.ts";
 import { prepareSource, sources } from "./sources.ts";
 
 // The native bundler imports its entry to inspect configuration. Give that import
 // disposable stores so a cold build neither needs nor changes application data.
 const directory = await mkdtemp(join(tmpdir(), "genui-build-"));
 try {
-  await prepareSource(sources, runtimeConfiguration().sourceId, {
+  await prepareSource(sources, sourceId, {
     path: join(directory, "sales.sqlite"),
   });
   process.exitCode = await new Promise<number>((resolve, reject) => {

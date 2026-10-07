@@ -1,4 +1,4 @@
-import { runtimeConfiguration } from "../src/mastra/configuration.ts";
+import { sourceId } from "../src/mastra/configuration.ts";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -28,8 +28,7 @@ for (const port of [agentPort, webPort])
     );
     probe.listen(port, "127.0.0.1", () => probe.close(() => resolve()));
   });
-const configuration = runtimeConfiguration();
-await prepareSource(sources, configuration.sourceId, {
+await prepareSource(sources, sourceId, {
   path: resolve(process.env.DATA_DIRECTORY ?? ".data", "sales.sqlite"),
 });
 await new Promise<void>((resolve, reject) => {
@@ -127,7 +126,14 @@ async function awaitStartup() {
       [`http://127.0.0.1:${agentPort}/workspace`, `http://127.0.0.1:${webPort}`].map(
         async (url) => {
           try {
-            return (await fetch(url, { signal: AbortSignal.timeout(1000) })).status === 200;
+            const headers: Record<string, string> = {};
+            if (
+              url === `http://127.0.0.1:${agentPort}/workspace` &&
+              process.env.WORKSPACE_PROXY_TOKEN
+            )
+              headers["x-workspace-token"] = process.env.WORKSPACE_PROXY_TOKEN;
+            const response = await fetch(url, { headers, signal: AbortSignal.timeout(1000) });
+            return response.status === 200;
           } catch {
             return false;
           }
