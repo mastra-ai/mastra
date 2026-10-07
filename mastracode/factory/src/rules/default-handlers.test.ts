@@ -1116,11 +1116,11 @@ describe('built-in board and integration handlers', () => {
   it('uses the same issue and pull-request identities as board Intake', async () => {
     expect(await defaultGithubRules.issueOpened?.(githubContext('issueOpened'))).toMatchObject({
       source: 'github-issue',
-      sourceKey: 'github-issue:42',
+      sourceKey: 'github:10:issue:42',
     });
     expect(await defaultGithubRules.pullRequestOpened?.(githubContext('pullRequestOpened'))).toMatchObject({
       source: 'github-pr',
-      sourceKey: 'github-pr:17',
+      sourceKey: 'github:10:pull-request:17',
     });
   });
 
@@ -1157,7 +1157,7 @@ describe('built-in board and integration handlers', () => {
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'github-pr',
-      sourceKey: 'github-pr:17',
+      sourceKey: 'github:10:pull-request:17',
     });
   });
 

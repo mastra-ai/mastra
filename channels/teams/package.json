@@ -1,6 +1,6 @@
 {
   "name": "@mastra/teams",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Microsoft Teams integration for Mastra agents — a ChannelProvider over @chat-adapter/teams with per-agent bot provisioning (Entra + Teams Developer Portal), webhooks, and streaming replies",
   "license": "Apache-2.0",
   "type": "module",

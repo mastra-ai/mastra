@@ -5371,6 +5371,14 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5512,6 +5520,14 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
   reason?: string | undefined;
 };
 
@@ -19241,6 +19257,7 @@ export type GetSystemPackages_Response = {
   isDev: boolean;
   cmsEnabled: boolean;
   liveKitConnectionRouteEnabled: boolean;
+  liveKitRecordingRouteEnabled?: boolean | undefined;
   editorSource?: ('code' | 'db') | undefined;
   editorSourceCapabilities?:
     | {
