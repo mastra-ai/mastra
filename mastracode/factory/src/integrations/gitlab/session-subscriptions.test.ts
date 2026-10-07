@@ -47,6 +47,7 @@ function gitlabStub(overrides: Partial<typeof rows> = {}) {
   return {
     integrationStorage: { subscriptions: {} },
     sourceControlStorage: {
+      sessions: { getBySessionId: vi.fn(async () => null) },
       projectRepositories: { get: vi.fn(async () => data.projectRepository) },
       connections: { get: vi.fn(async () => data.connection) },
       repositories: { get: vi.fn(async () => data.repository) },
@@ -133,6 +134,32 @@ describe('GitLab subscription entry points', () => {
       'gitlab_subscribe_mr',
       'gitlab_unsubscribe_mr',
     ]);
+  });
+
+  it('gates on the factory, reading the session own link from its row when the state has none', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      scope: '/worktrees/a',
+      session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
+      getState: () => ({ factoryProjectId: 'resource-1' }),
+    });
+    const stub = gitlabStub();
+    expect(Object.keys(createGitLabSubscriptionTools(requestContext, stub))).toEqual([
+      'gitlab_subscribe_mr',
+      'gitlab_unsubscribe_mr',
+    ]);
+    await expect(subscribeCurrentSessionToMergeRequest(requestContext, 17, 'explicit-tool', stub)).rejects.toThrow(
+      /not backed by a GitLab repository/,
+    );
+
+    (stub.sourceControlStorage!.sessions.getBySessionId as ReturnType<typeof vi.fn>).mockResolvedValue({
+      projectRepositoryId: 'project-repository-1',
+    });
+    await expect(subscribeCurrentSessionToMergeRequest(requestContext, 17, 'explicit-tool', stub)).resolves.toBe(17);
+    expect(stub.sourceControlStorage!.sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
   });
 
   it('auto-subscribes the active GitLab session to a merge request it created', async () => {

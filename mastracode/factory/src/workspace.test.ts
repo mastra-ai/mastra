@@ -2364,7 +2364,13 @@ describe('GitHub session workspace preparation', () => {
     const workspace = await resolver({ requestContext });
     const tools = createGithubSubscriptionTools(requestContext, integration);
 
-    expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+    // Subscriptions gate on the factory, so a factory session always has them beside refresh.
+    expect(Object.keys(tools)).toEqual([
+      'github_refresh_token',
+      'github_upsert_factory_triage_comment',
+      'github_subscribe_pr',
+      'github_unsubscribe_pr',
+    ]);
     await expect(tools.github_refresh_token!.execute!({}, {} as never)).rejects.toThrow(
       'active Factory sandbox workspace',
     );
@@ -2427,7 +2433,9 @@ describe('GitHub session workspace preparation', () => {
     const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
 
     expect(await resolver({ requestContext })).toBeUndefined();
-    expect(createGithubSubscriptionTools(requestContext, integration)).toEqual({});
+    expect(Object.keys(createGithubSubscriptionTools(requestContext, integration))).not.toContain(
+      'github_refresh_token',
+    );
   });
 
   it('refreshes a Slack-shaped GitHub session after lazy startup and on later reuse', async () => {

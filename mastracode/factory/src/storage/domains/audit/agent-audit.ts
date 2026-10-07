@@ -45,17 +45,28 @@ function parsePushedBranch(command: string): string | undefined {
   return match?.[2];
 }
 
+/** The `owner/repo` a pull request URL names, as GitHub prints it. */
+function pullRequestRepository(url: string): string | undefined {
+  return url.match(/^https:\/\/[^/]+\/([^/]+\/[^/]+)\/pull\/\d+$/)?.[1];
+}
+
 /**
  * Detect externally-visible git and GitHub side effects in a completed tool
  * call and record `factory.agent.*` audit events for them. One command can emit
  * multiple events (`git commit && git push` emits both). Never throws.
+ *
+ * `resolveRepositorySlugs` names the repositories the session may target so a
+ * pull request can be attributed to one of them; a URL elsewhere is still
+ * audited, with a warning and no `repository`.
  */
 export async function observeAgentGitAction({
   audit,
   toolContext,
+  resolveRepositorySlugs,
 }: {
   audit: AuditAgentEmitter;
   toolContext: ToolObserverContext;
+  resolveRepositorySlugs?: (sessionId: string) => Promise<string[]>;
 }): Promise<void> {
   try {
     if (toolContext.toolName !== 'execute_command' || toolContext.error) return;
@@ -86,12 +97,19 @@ export async function observeAgentGitAction({
 
     const pullRequestUrl = runsPullRequestCreate(rawCommand) ? createdPullRequestUrl(toolContext.output) : undefined;
     if (pullRequestUrl) {
+      const slug = pullRequestRepository(pullRequestUrl);
+      const slugs =
+        resolveRepositorySlugs && controller?.resourceId ? await resolveRepositorySlugs(controller.resourceId) : [];
+      const repository = slug && slugs.find(candidate => candidate.toLowerCase() === slug.toLowerCase());
+      if (slugs.length > 0 && !repository) {
+        console.warn("[Audit] Pull request URL is not in this Factory's environment", { url: pullRequestUrl });
+      }
       await audit.emitAgent({
         requestContext: toolContext.context,
         input: {
           action: 'factory.agent.pr_opened',
           targets: [{ type: 'pull_request', id: pullRequestUrl }, ...targets],
-          metadata: { url: pullRequestUrl },
+          metadata: { url: pullRequestUrl, ...(repository ? { repository } : {}) },
         },
       });
     }
