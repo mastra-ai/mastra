@@ -1,6 +1,8 @@
-import type { StepFlowEntry, WorkflowRunState } from '../..';
+import type { StepFlowEntry, WorkflowRunState, WorkflowSleepTimer } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { MASTRA_AUTH_TOKEN_KEY } from '../../../request-context';
+import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
@@ -58,14 +60,162 @@ export async function processWorkflowWaitForEvent(
   });
 }
 
-export async function processWorkflowSleep(
+function sanitizeRequestContext(requestContext: Record<string, any> | undefined): Record<string, any> {
+  const sanitized = { ...(requestContext ?? {}) };
+  delete sanitized[MASTRA_AUTH_TOKEN_KEY];
+  return sanitized;
+}
+
+async function updateSleepTimers({
+  workflowsStore,
+  workflowId,
+  runId,
+  update,
+  requestContext,
+}: {
+  workflowsStore: WorkflowsStorage;
+  workflowId: string;
+  runId: string;
+  update: (sleepTimers: Record<string, WorkflowSleepTimer>) => Record<string, WorkflowSleepTimer>;
+  requestContext?: Record<string, any>;
+}) {
+  const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+  if (!snapshot || typeof snapshot === 'string') {
+    throw new Error(`Workflow snapshot not found for runId ${runId}`);
+  }
+
+  await workflowsStore.updateWorkflowState({
+    workflowName: workflowId,
+    runId,
+    opts: {
+      status: snapshot.status,
+      sleepTimers: update(snapshot.sleepTimers ?? {}),
+      ...(requestContext ? { requestContext } : {}),
+      expectedStatus: snapshot.status,
+    },
+  });
+}
+
+async function persistSleepTimer(args: {
+  workflowsStore: WorkflowsStorage;
+  workflowId: string;
+  runId: string;
+  timer: WorkflowSleepTimer;
+  requestContext: Record<string, any>;
+}) {
+  await updateSleepTimers({
+    ...args,
+    update: sleepTimers => ({ ...sleepTimers, [args.timer.id]: args.timer }),
+  });
+}
+
+async function removeSleepTimer(args: {
+  workflowsStore: WorkflowsStorage;
+  workflowId: string;
+  runId: string;
+  timerId: string;
+}) {
+  await updateSleepTimers({
+    ...args,
+    update: sleepTimers => {
+      const updated = { ...sleepTimers };
+      delete updated[args.timerId];
+      return updated;
+    },
+  });
+}
+
+export function schedulePersistedSleepTimer({
+  pubsub,
+  workflowsStore,
+  workflowId,
+  runId,
+  timer,
+}: {
+  pubsub: PubSub;
+  workflowsStore: WorkflowsStorage;
+  workflowId: string;
+  runId: string;
+  timer: WorkflowSleepTimer;
+}) {
+  const callback = async () => {
+    const { continuation } = timer;
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+    if (!snapshot || typeof snapshot === 'string') {
+      throw new Error(`Workflow snapshot not found for runId ${runId}`);
+    }
+    const output = continuation.prevResult.status === 'success' ? continuation.prevResult.output : undefined;
+
+    if (timer.emitStepEvents) {
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: {
+            id: timer.stepId,
+            status: 'success',
+            payload: output,
+            output,
+            startedAt: timer.startedAt,
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: timer.stepId,
+            metadata: {},
+          },
+        },
+      });
+    }
+
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.run',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        ...continuation,
+        stepResults: snapshot.context,
+        activeStepsPath: snapshot.activeStepsPath,
+        requestContext: snapshot.requestContext,
+        state: (snapshot.context as any).__state ?? snapshot.value ?? {},
+      },
+    });
+
+    await removeSleepTimer({ workflowsStore, workflowId, runId, timerId: timer.id });
+  };
+
+  setTimeout(() => void callback().catch(() => {}), Math.max(0, timer.dueAt - Date.now()));
+}
+
+async function processSleep(
+  args: ProcessorArgs,
   {
+    pubsub,
+    stepExecutor,
+    step,
+    workflowsStore,
+  }: {
+    pubsub: PubSub;
+    stepExecutor: StepExecutor;
+    step: Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>;
+    workflowsStore: WorkflowsStorage;
+  },
+) {
+  const {
     workflow,
     workflowId,
     runId,
     executionPath,
     stepResults,
-    activeStepsPath,
     resumeSteps,
     timeTravel,
     restart,
@@ -75,224 +225,92 @@ export async function processWorkflowSleep(
     requestContext,
     actor,
     perStep,
-  }: ProcessorArgs,
-  {
-    pubsub,
-    stepExecutor,
-    step,
-  }: {
+    outputOptions,
+  } = args;
+  const emitStepEvents = workflow.options.emitStepEvents !== false;
+  const startedAt = Date.now();
+
+  if (emitStepEvents) {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-waiting',
+        payload: {
+          id: step.id,
+          status: 'waiting',
+          payload: prevResult.status === 'success' ? prevResult.output : undefined,
+          startedAt,
+        },
+      },
+    });
+  }
+
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+  const resolveArgs = {
+    workflowId,
+    step: step as any,
+    runId,
+    stepResults,
+    requestContext: reqContext,
+    input: prevResult.status === 'success' ? prevResult.output : undefined,
+    resumeData,
+    actor,
+  };
+  const duration =
+    step.type === 'sleep'
+      ? await stepExecutor.resolveSleep(resolveArgs)
+      : await stepExecutor.resolveSleepUntil(resolveArgs);
+  const timer: WorkflowSleepTimer = {
+    id: `${step.id}:${executionPath.join('.')}`,
+    stepId: step.id,
+    startedAt,
+    dueAt: startedAt + Math.max(0, duration),
+    emitStepEvents,
+    continuation: {
+      executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+      resumeSteps,
+      timeTravel,
+      restart,
+      prevResult: prevResult as WorkflowSleepTimer['continuation']['prevResult'],
+      resumeData,
+      parentWorkflow,
+      actor,
+      perStep,
+      outputOptions,
+    },
+  };
+
+  await persistSleepTimer({
+    workflowsStore,
+    workflowId,
+    runId,
+    timer,
+    requestContext: sanitizeRequestContext(requestContext),
+  });
+  schedulePersistedSleepTimer({ pubsub, workflowsStore, workflowId, runId, timer });
+}
+
+export async function processWorkflowSleep(
+  args: ProcessorArgs,
+  dependencies: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
+    workflowsStore: WorkflowsStorage;
   },
 ) {
-  // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
-  // `workflows` routing publishes below are never gated — they drive execution.
-  const emitStepEvents = workflow.options.emitStepEvents !== false;
-  const startedAt = Date.now();
-  if (emitStepEvents) {
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
-      type: 'watch',
-      runId,
-      data: {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: step.id,
-          status: 'waiting',
-          payload: prevResult.status === 'success' ? prevResult.output : undefined,
-          startedAt,
-        },
-      },
-    });
-  }
-
-  // Create a proper RequestContext from the plain object passed in ProcessorArgs
-  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
-
-  const duration = await stepExecutor.resolveSleep({
-    workflowId,
-    step,
-    runId,
-    stepResults,
-    requestContext: reqContext,
-    input: prevResult?.status === 'success' ? prevResult.output : undefined,
-    resumeData,
-    actor,
-  });
-
-  setTimeout(
-    async () => {
-      if (emitStepEvents) {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              status: 'success',
-              payload: prevResult.status === 'success' ? prevResult.output : undefined,
-              output: prevResult.status === 'success' ? prevResult.output : undefined,
-              startedAt,
-              endedAt: Date.now(),
-            },
-          },
-        });
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-finish',
-            payload: {
-              id: step.id,
-              metadata: {},
-            },
-          },
-        });
-      }
-
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          workflowId,
-          runId,
-          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resumeSteps,
-          timeTravel,
-          restart,
-          stepResults,
-          prevResult,
-          resumeData,
-          parentWorkflow,
-          activeStepsPath,
-          requestContext,
-          actor,
-          perStep,
-        },
-      });
-    },
-    duration < 0 ? 0 : duration,
-  );
+  return processSleep(args, dependencies);
 }
 
 export async function processWorkflowSleepUntil(
-  {
-    workflow,
-    workflowId,
-    runId,
-    executionPath,
-    stepResults,
-    activeStepsPath,
-    resumeSteps,
-    timeTravel,
-    restart,
-    prevResult,
-    resumeData,
-    parentWorkflow,
-    requestContext,
-    actor,
-    perStep,
-  }: ProcessorArgs,
-  {
-    pubsub,
-    stepExecutor,
-    step,
-  }: {
+  args: ProcessorArgs,
+  dependencies: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
+    workflowsStore: WorkflowsStorage;
   },
 ) {
-  // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
-  // `workflows` routing publish below is never gated — it drives execution.
-  const emitStepEvents = workflow.options.emitStepEvents !== false;
-  const startedAt = Date.now();
-
-  // Create a proper RequestContext from the plain object passed in ProcessorArgs
-  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
-
-  const duration = await stepExecutor.resolveSleepUntil({
-    workflowId,
-    step,
-    runId,
-    stepResults,
-    requestContext: reqContext,
-    input: prevResult?.status === 'success' ? prevResult.output : undefined,
-    resumeData,
-    actor,
-  });
-
-  if (emitStepEvents) {
-    await pubsub.publish(`workflow.events.v2.${runId}`, {
-      type: 'watch',
-      runId,
-      data: {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: step.id,
-          status: 'waiting',
-          payload: prevResult.status === 'success' ? prevResult.output : undefined,
-          startedAt,
-        },
-      },
-    });
-  }
-
-  setTimeout(
-    async () => {
-      if (emitStepEvents) {
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              status: 'success',
-              payload: prevResult.status === 'success' ? prevResult.output : undefined,
-              output: prevResult.status === 'success' ? prevResult.output : undefined,
-              startedAt,
-              endedAt: Date.now(),
-            },
-          },
-        });
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-step-finish',
-            payload: {
-              id: step.id,
-              metadata: {},
-            },
-          },
-        });
-      }
-
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          workflowId,
-          runId,
-          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
-          resumeSteps,
-          timeTravel,
-          restart,
-          stepResults,
-          prevResult,
-          resumeData,
-          parentWorkflow,
-          activeStepsPath,
-          requestContext,
-          actor,
-          perStep,
-        },
-      });
-    },
-    duration < 0 ? 0 : duration,
-  );
+  return processSleep(args, dependencies);
 }

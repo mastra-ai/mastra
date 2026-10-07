@@ -402,6 +402,29 @@ export interface NestedWorkflowParent {
   foreachIndex?: number;
 }
 
+export interface WorkflowSleepTimer {
+  id: string;
+  stepId: string;
+  startedAt: number;
+  dueAt: number;
+  emitStepEvents: boolean;
+  continuation: {
+    executionPath: number[];
+    resumeSteps: string[];
+    prevResult: SerializedStepResult<any, any, any, any>;
+    timeTravel?: TimeTravelExecutionParams;
+    restart?: RestartExecutionParams;
+    resumeData?: any;
+    parentWorkflow?: any;
+    actor?: any;
+    perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  };
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
@@ -417,6 +440,7 @@ export interface WorkflowRunState {
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths: Record<string, number[]>;
+  sleepTimers?: Record<string, WorkflowSleepTimer>;
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;

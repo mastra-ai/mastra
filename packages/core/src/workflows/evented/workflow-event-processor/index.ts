@@ -701,6 +701,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
+        sleepTimers: {},
         activeStepsPath: restart?.activeStepsPath ?? {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
@@ -1362,6 +1363,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
           step,
+          workflowsStore: (await this.mastra.getStorage()?.getStore('workflows'))!,
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -1389,6 +1391,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
           step,
+          workflowsStore: (await this.mastra.getStorage()?.getStore('workflows'))!,
         },
       );
     } else if (step?.type === 'foreach' && executionPath.length === 1) {

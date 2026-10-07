@@ -97,9 +97,11 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { schedulePersistedSleepTimer } from '../workflows/evented/workflow-event-processor/sleep';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire } from '../workflows/scheduler/cron';
+import type { WorkflowRunState } from '../workflows/types';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -4158,7 +4160,37 @@ export class Mastra<
     };
   }
 
+  async #restoreEventedSleepTimers(): Promise<void> {
+    const workflowsStore = await this.#storage?.getStore('workflows');
+    if (!workflowsStore) return;
+
+    const timers: Array<{ workflowId: string; runId: string; timer: NonNullable<WorkflowRunState['sleepTimers']>[string] }> = [];
+    const eventedWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'evented');
+
+    for (const workflow of eventedWorkflows) {
+      if (workflow.options.autoRestartActiveRuns === false) continue;
+
+      const activeRuns = await workflow.listActiveWorkflowRuns();
+      for (const run of activeRuns.runs) {
+        const snapshot = run.snapshot;
+        if (!snapshot || typeof snapshot === 'string') continue;
+        for (const timer of Object.values(snapshot.sleepTimers ?? {})) {
+          timers.push({ workflowId: workflow.id, runId: run.runId, timer });
+        }
+      }
+    }
+
+    if (timers.length === 0) return;
+
+    await this.__ensureExecutionWorkersStarted();
+    for (const { workflowId, runId, timer } of timers) {
+      schedulePersistedSleepTimer({ pubsub: this.pubsub, workflowsStore, workflowId, runId, timer });
+    }
+  }
+
   public async restartAllActiveWorkflowRuns(): Promise<void> {
+    await this.#restoreEventedSleepTimers();
+
     const activeRuns = await this.listActiveWorkflowRuns();
     if (activeRuns.runs.length > 0) {
       this.#logger.debug(
