@@ -15,6 +15,42 @@ function repository(provider: 'github' | 'gitlab', externalId: string, slug: str
 }
 
 describe('cardRepositorySlug', () => {
+  describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'])('%s with both provider ids', source => {
+    const provider = source.startsWith('github-') ? 'github' : 'gitlab';
+    const metadata = { repository: 'acme/stored', githubRepositoryId: 101, gitlabProjectId: '202' };
+
+    it('uses the source provider when both ids match linked repositories', () => {
+      const repositories = [repository('gitlab', '202', 'acme/gitlab'), repository('github', '101', 'acme/github')];
+
+      expect(cardRepositorySlug(source, metadata, undefined, repositories)).toBe(`acme/${provider}`);
+    });
+
+    it('falls back to the stored slug when only the other provider id matches', () => {
+      const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+      const repositories = [repository(otherProvider, otherProvider === 'github' ? '101' : '202', 'acme/other')];
+
+      expect(cardRepositorySlug(source, metadata, undefined, repositories)).toBe('acme/stored');
+      expect(
+        cardRepositorySlug(source, { githubRepositoryId: 101, gitlabProjectId: '202' }, undefined, repositories),
+      ).toBeUndefined();
+    });
+
+    it('ignores the other provider id when the source provider id is missing', () => {
+      const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+      const otherId = provider === 'github' ? { gitlabProjectId: '101' } : { githubRepositoryId: 101 };
+
+      expect(
+        cardRepositorySlug(source, otherId, undefined, [repository(otherProvider, '101', 'acme/other')]),
+      ).toBeUndefined();
+    });
+  });
+
+  it.each(['linear-issue', 'manual'])('preserves stable-id lookup for %s cards', source => {
+    expect(
+      cardRepositorySlug(source, { gitlabProjectId: '101' }, undefined, [repository('gitlab', '101', 'acme/gitlab')]),
+    ).toBe('acme/gitlab');
+  });
+
   it('matches a provider id only against repositories from the same provider', () => {
     const gitlabRepository = repository('gitlab', '101', 'acme/gitlab');
     const repositories = [gitlabRepository, repository('github', '101', 'acme/github')];

@@ -130,6 +130,52 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
 });
 
 describe('useStartFactoryRun in a mixed-provider factory', () => {
+  describe.each(['github', 'gitlab'] as const)('a %s card with both provider ids', provider => {
+    it.each(['both match', 'only the other provider matches'])(
+      'creates the session in the source provider when %s',
+      async matchCase => {
+        const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+        const targetSlug = `acme/${provider}-renamed`;
+        const providerWorkItem: StartFactoryRunWorkItem = {
+          ...workItem,
+          source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
+          sourceKey: `${provider}-issue:7`,
+          metadata: {
+            ...workItem.metadata,
+            repository: matchCase === 'both match' ? 'acme/old-name' : targetSlug,
+            githubRepositoryId: 101,
+            gitlabProjectId: '101',
+          },
+        };
+        const calls = stubEndpoints([
+          { id: 'other-repo', provider: otherProvider, externalId: '101', slug: `acme/${otherProvider}` },
+          {
+            id: 'source-repo',
+            provider,
+            externalId: matchCase === 'both match' ? '101' : '999',
+            slug: targetSlug,
+          },
+        ]);
+        const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+        await waitFor(() => expect(result.current.enabled).toBe(true));
+
+        await result.current.start.mutateAsync({
+          branch: 'factory/item-1',
+          threadTitle: 'Fix login bug',
+          workItem: providerWorkItem,
+        });
+
+        expect(calls.sessionsCreatedFor).toEqual(['source-repo']);
+        expect(calls.patches).toEqual(
+          matchCase === 'both match' ? [{ metadata: { ...providerWorkItem.metadata, repository: targetSlug } }] : [],
+        );
+        expect(calls.started()).toMatchObject({
+          workItem: { input: { metadata: { ...providerWorkItem.metadata, repository: targetSlug } } },
+        });
+      },
+    );
+  });
+
   it('starts in GitHub when GitLab has the same external id', async () => {
     const calls = stubEndpoints([
       { id: 'gitlab-repo', provider: 'gitlab', externalId: '101', slug: 'acme/gitlab' },
