@@ -20,11 +20,14 @@ describe('AskUser', () => {
   describe('when Other is selected for a single-select question', () => {
     const payload: AskUserPayload = { question: 'Pick a fruit', options: [{ label: 'Apple' }, { label: 'Banana' }] };
 
-    it('focuses a custom answer without submitting the UI choice', () => {
+    it('focuses the input inside the Other row without submitting the UI choice', () => {
       const { onSubmit } = renderAskUser(payload);
-      fireEvent.click(screen.getByRole('radio', { name: 'Other…' }));
+      fireEvent.click(screen.getByRole('group', { name: 'Custom answer' }));
 
-      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Your answer' }));
+      const customAnswerRow = screen.getByRole('group', { name: 'Custom answer' });
+      expect(document.activeElement).toBe(within(customAnswerRow).getByRole('textbox', { name: 'Your answer' }));
+      expect(within(customAnswerRow).getByRole('radio', { name: 'Other…' })).toBeTruthy();
+      expect(screen.queryByText('Your answer')).toBeNull();
       expect(onSubmit).not.toHaveBeenCalled();
     });
 
@@ -160,6 +163,21 @@ describe('AskUser', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
 
       expect(onSubmit).toHaveBeenCalledExactlyOnceWith(['Cheese']);
+    });
+
+    it('keeps the checkbox mounted and restores the draft when Other is checked again', () => {
+      renderAskUser(payload);
+      const customAnswerCheckbox = screen.getByRole('checkbox', { name: 'Other…' });
+      fireEvent.click(customAnswerCheckbox);
+      const customAnswerRow = screen.getByRole('group', { name: 'Custom answer' });
+      fireEvent.change(within(customAnswerRow).getByRole('textbox'), { target: { value: 'Roasted peppers' } });
+      fireEvent.click(customAnswerCheckbox);
+
+      expect(screen.getByRole('checkbox', { name: 'Other…' })).toBe(customAnswerCheckbox);
+      expect(within(customAnswerRow).queryByRole('textbox')).toBeNull();
+      fireEvent.click(customAnswerCheckbox);
+      expect(within(customAnswerRow).getByRole<HTMLInputElement>('textbox').value).toBe('Roasted peppers');
+      expect(document.activeElement).toBe(within(customAnswerRow).getByRole('textbox'));
     });
   });
 

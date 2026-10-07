@@ -1,6 +1,6 @@
 import { Check, MessageCircleQuestion } from 'lucide-react';
 import { useState } from 'react';
-import type { ChangeEvent, ComponentProps, KeyboardEvent, ReactNode } from 'react';
+import type { ChangeEvent, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -190,25 +190,68 @@ function getAnswerToSubmit({
   return answerLabels.length > 0 ? answerLabels : undefined;
 }
 
-const AskUserCustomAnswerInput = ({
+interface AskUserCustomOptionRowProps extends Pick<
+  ComponentProps<typeof Input>,
+  'value' | 'onChange' | 'onKeyDown' | 'disabled'
+> {
+  control: ReactNode;
+  isSelected: boolean;
+}
+
+const AskUserCustomOptionRow = ({
+  control,
+  isSelected,
   value,
   onChange,
   onKeyDown,
   disabled,
-}: Pick<ComponentProps<typeof Input>, 'value' | 'onChange' | 'onKeyDown' | 'disabled'>) => (
-  <Field>
-    <FieldLabel>Your answer</FieldLabel>
-    <Input
-      value={value}
-      onChange={onChange}
-      onKeyDown={onKeyDown}
-      placeholder="Type your answer..."
+}: AskUserCustomOptionRowProps) => {
+  const handleRowClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (disabled || event.target !== event.currentTarget) return;
+    if (isSelected) {
+      event.currentTarget.querySelector<HTMLInputElement>('input[type="text"]')?.focus();
+      return;
+    }
+    event.currentTarget.querySelector<HTMLElement>('[role="radio"], [role="checkbox"]')?.click();
+  };
+
+  return (
+    <FieldItem
+      role="group"
+      aria-label="Custom answer"
+      aria-disabled={disabled || undefined}
       disabled={disabled}
-      size="sm"
-      autoFocus
-    />
-  </Field>
-);
+      onClick={handleRowClick}
+      className={cn(
+        'items-start gap-2.5 rounded-lg bg-fill px-3 py-2 data-disabled:opacity-50',
+        !isSelected && 'state-layer',
+        isSelected && 'border border-border focus-within:border-border-focus',
+      )}
+    >
+      {control}
+      {isSelected ? (
+        <Input
+          type="text"
+          aria-label="Your answer"
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder="Other…"
+          disabled={disabled}
+          variant="unstyled"
+          className="h-auto min-w-0 flex-1 px-0 text-body"
+          autoFocus
+        />
+      ) : (
+        <FieldLabel className="flex-1">
+          <Txt as="span" variant="body" tone="ink">
+            Other…
+          </Txt>
+        </FieldLabel>
+      )}
+    </FieldItem>
+  );
+};
 
 const AskUserInput = ({
   payload,
@@ -309,15 +352,6 @@ const AskUserInput = ({
     );
   }
 
-  const customAnswerInput = isCustomAnswerSelected ? (
-    <AskUserCustomAnswerInput
-      value={answerText}
-      onChange={handleAnswerTextChange}
-      onKeyDown={handleAnswerTextKeyDown}
-      disabled={isSubmitting}
-    />
-  ) : undefined;
-
   const selectedOptionLabel = selectedOptionLabels[0];
   const selectedOptionValue = selectedOptionLabel === undefined ? '' : getOptionRadioValue(selectedOptionLabel);
   const selectedRadioValue = isCustomAnswerSelected ? customAnswerValue : selectedOptionValue;
@@ -343,19 +377,22 @@ const AskUserInput = ({
               }
             />
           ))}
-          <AskUserOptionRow
-            label="Other…"
+          <AskUserCustomOptionRow
+            isSelected={isCustomAnswerSelected}
+            value={answerText}
+            onChange={handleAnswerTextChange}
+            onKeyDown={handleAnswerTextKeyDown}
             disabled={isSubmitting}
             control={
               <Checkbox
                 className="mt-0.5"
+                aria-label="Other…"
                 disabled={isSubmitting}
                 checked={isCustomAnswerSelected}
                 onCheckedChange={handleCustomAnswerCheckedChange}
               />
             }
           />
-          {customAnswerInput}
           <AskUserSubmit className="mt-1 justify-self-start" disabled={!canSubmitAnswer} onClick={handleSubmitAnswer}>
             Submit answer
           </AskUserSubmit>
@@ -377,16 +414,18 @@ const AskUserInput = ({
               control={<RadioGroupItem className="mt-0.5" value={getOptionRadioValue(option.label)} />}
             />
           ))}
-          <AskUserOptionRow
-            label="Other…"
+          <AskUserCustomOptionRow
+            isSelected={isCustomAnswerSelected}
+            value={answerText}
+            onChange={handleAnswerTextChange}
+            onKeyDown={handleAnswerTextKeyDown}
             disabled={isSubmitting}
-            control={<RadioGroupItem className="mt-0.5" value={customAnswerValue} />}
+            control={<RadioGroupItem aria-label="Other…" className="mt-0.5" value={customAnswerValue} />}
           />
         </Fieldset>
       )}
       {!isMultiSelect && isCustomAnswerSelected ? (
         <div className="mt-2 grid gap-2">
-          {customAnswerInput}
           <AskUserSubmit className="justify-self-start" disabled={!canSubmitAnswer} onClick={handleSubmitAnswer} />
         </div>
       ) : null}

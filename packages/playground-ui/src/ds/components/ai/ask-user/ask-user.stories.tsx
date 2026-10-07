@@ -50,7 +50,7 @@ export const SingleSelectCustomAnswer: Story = {
   ...SingleSelect,
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('radio', { name: 'Other…' }));
+    await userEvent.click(canvas.getByRole('group', { name: 'Custom answer' }));
     const input = canvas.getByRole('textbox', { name: 'Your answer' });
     await expect(input).toHaveFocus();
     await userEvent.type(input, 'Staging, using the isolated customer environment.');
