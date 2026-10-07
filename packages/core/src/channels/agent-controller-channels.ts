@@ -2,11 +2,11 @@ import type { Message, Thread } from 'chat';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
-import { MastraFGAPermissions } from '../auth/ee';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentController } from '../agent-controller/agent-controller';
 import type { Session } from '../agent-controller/session';
 import type { AgentControllerRequestContext } from '../agent-controller/types';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';

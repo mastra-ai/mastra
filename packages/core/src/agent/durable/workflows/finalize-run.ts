@@ -184,7 +184,7 @@ export async function runDurableFinishSideEffects({
             agentId: initData.agentId,
             requestContext: effectiveRequestContext,
             permission,
-            actor: initData.options.actor,
+            actor: initData.options?.actor,
           })
       : undefined;
 

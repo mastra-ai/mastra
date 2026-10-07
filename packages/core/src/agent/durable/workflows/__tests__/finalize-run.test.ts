@@ -57,7 +57,7 @@ describe('runDurableFinishSideEffects', () => {
       runId: 'run-1',
       initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
       messageListState: makeMessageListState(),
-      mastra: { getLogger: () => undefined } as any,
+      mastra: { getLogger: () => undefined, getServer: () => undefined } as any,
     });
 
     expect(flushMessages).toHaveBeenCalledTimes(1);

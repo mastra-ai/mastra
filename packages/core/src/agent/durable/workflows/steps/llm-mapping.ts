@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import type { PubSub } from '../../../../events/pubsub';
 import {
   commitToolResult,
@@ -12,7 +13,6 @@ import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payl
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
-import { MastraFGAPermissions } from '../../../../auth/ee';
 import { DurableStepIds } from '../../constants';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry } from '../../run-registry';
@@ -21,6 +21,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableAgenticExecutionOutput,
+  DurableAgenticWorkflowInput,
   SerializableDurableState,
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
@@ -75,7 +76,7 @@ export function createDurableLLMMappingStep() {
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
     execute: async params => {
-      const { inputData, mastra, requestContext } = params;
+      const { inputData, mastra, requestContext, getInitData } = params;
       const {
         llmOutput,
         toolResults,
@@ -477,7 +478,7 @@ export function createDurableLLMMappingStep() {
             agentId: _agentId,
             requestContext: authorizationRequestContext,
             permission,
-            actor: authorizationRequestContext?.get('actor'),
+            actor: (getInitData?.() as DurableAgenticWorkflowInput | undefined)?.options?.actor,
           });
         await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
         if (!state.threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
