@@ -207,6 +207,63 @@ describe('processOutputResult tripwire removes response messages saved earlier i
     },
   );
 
+  it('keeps toModelOutput mapping on a re-sent client tool result when the continuation is blocked', async () => {
+    const memory = new MockMemory();
+    const threadId = 'thread-client-tool-mapping';
+    const resourceId = 'resource-1';
+    const earlier: MastraDBMessage = {
+      id: 'earlier-client-tool',
+      role: 'assistant',
+      threadId,
+      resourceId,
+      createdAt: new Date(1000),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'client-1',
+              toolName: 'getLocation',
+              args: {},
+              result: { city: 'Paris' },
+            },
+          },
+        ],
+      },
+    };
+
+    const agent = new Agent({
+      id: 'client-tool-agent',
+      name: 'Client Tool Agent',
+      instructions: 'test',
+      model: textModel(`The admin password is ${SECRET}.`),
+      memory,
+      tools: {
+        getLocation: createTool({
+          id: 'getLocation',
+          description: 'Client-side location lookup',
+          inputSchema: z.object({}),
+          toModelOutput: (output: unknown) => ({ type: 'text', value: `mapped:${JSON.stringify(output)}` }),
+        }),
+      },
+      outputProcessors: [createGuardrail()],
+    });
+    const result = await agent.stream([structuredClone(earlier)], {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: false } },
+      savePerStep: true,
+    });
+    await result.consumeStream();
+
+    expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
+    const stored = await storedMessages(memory, threadId, resourceId);
+    const kept = stored.find(message => message.id === 'earlier-client-tool');
+    const part = kept?.content.parts?.find(p => p.type === 'tool-invocation');
+    expect(part?.providerMetadata?.mastra).toMatchObject({ modelOutputComputed: true });
+    expect(stored.some(message => textOf(message).includes(SECRET))).toBe(false);
+  });
+
   it('does not call deleteMessages when nothing was saved before the tripwire', async () => {
     const memory = new MockMemory();
     const agent = new Agent({

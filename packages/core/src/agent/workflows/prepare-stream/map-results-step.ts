@@ -11,7 +11,7 @@ import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { MessageList } from '../../message-list';
+import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
@@ -86,9 +86,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // merge into such a message, so a stored copy that changed during this run is put back to the
     // content it had when the run started. Only ids actually found in storage are touched, so runs
     // that saved nothing early never write. Output only ever merges into the latest message, so that
-    // is the only one snapshotted.
-    const latestMessage = messageList.get.all.db().at(-1);
-    const earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
+    // is the only one snapshotted, after client tool output mapping has enriched it (below).
+    let earlierTurnSnapshot: MastraDBMessage | undefined;
 
     const undoSavedResponseMessages = async () => {
       const threadId = memoryData.thread?.id ?? threadIdFromArgs;
@@ -263,6 +262,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       tools: convertedTools,
       logger: capabilities.logger,
     });
+
+    const latestMessage = messageList.get.all.db().at(-1);
+    earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
