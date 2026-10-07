@@ -43,7 +43,7 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
-import { execute } from '../../../stream/aisdk/v5/execute';
+import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
 import { MastraModelOutput } from '../../../stream/base/output';
@@ -2004,6 +2004,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 specificationVersion: currentStep.model.specificationVersion,
+                stripToolsWhenNone: sendsNativeResponseFormat(currentStep.structuredOutput, currentStep.model),
               })
             : undefined;
           modelSpanTracker?.setInferenceContext?.({

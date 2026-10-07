@@ -266,6 +266,8 @@ export class DynamicModelProcessor implements Processor {
 }
 ```
 
+Returning `toolChoice: 'none'` stops the model from calling tools but still sends the tool definitions, so earlier tool calls and results stay in the conversation. Mastra only drops the tool definitions when the step also sends a structured-output schema to the model.
+
 The method receives the current `stepNumber`, `model`, `tools`, `toolChoice`, `messages`, and more. Return an object with any properties you want to override for that step, for example `{ model, toolChoice, tools, systemMessages }`.
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinputstep) for all available arguments and return types.
