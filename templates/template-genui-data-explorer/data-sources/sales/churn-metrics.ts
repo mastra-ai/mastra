@@ -118,16 +118,6 @@ export function customerChurn(db: DatabaseSync, metadata: DatasetMetadata, perio
   };
 }
 
-export function monthlyCustomerChurn(
-  db: DatabaseSync,
-  metadata: DatasetMetadata,
-  monthStart: string,
-) {
-  if (!monthStart.endsWith("-01"))
-    throw new Error("Monthly churn requires the first day of a calendar month.");
-  return customerChurn(db, metadata, { start: monthStart, end: shiftMonths(monthStart, 1) });
-}
-
 /** Each row has its own opening population; it is not a partition of the period rate. */
 export function churnSeries(
   db: DatabaseSync,
@@ -180,14 +170,6 @@ export function churnSeries(
     ],
     rows,
   };
-}
-
-export function trailingCustomerChurn(
-  db: DatabaseSync,
-  metadata: DatasetMetadata,
-  end: string = metadata.coverage.end,
-) {
-  return customerChurn(db, metadata, { start: shiftMonths(end, -12), end });
 }
 
 export function revenueChurn(db: DatabaseSync, metadata: DatasetMetadata, period: Period) {

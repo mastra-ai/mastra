@@ -49,9 +49,12 @@ export function analysisServer(explorer: DataExplorer) {
         "content-type": "application/x-ndjson",
         "cache-control": "no-store",
       });
-      for await (const event of explorer.stream(input, { signal: controller.signal })) {
-        if (!response.destroyed) response.write(`${JSON.stringify(event)}\n`);
-      }
+      await explorer.analyze(input, {
+        signal: controller.signal,
+        onEvent: (event) => {
+          if (!response.destroyed) response.write(`${JSON.stringify(event)}\n`);
+        },
+      });
       response.end();
     } catch {
       if (!response.headersSent) response.writeHead(400, { "content-type": "application/json" });

@@ -270,46 +270,60 @@ it("chart capability checks reject aggregate substitutes and preserve supported 
   const dir = await mkdtemp(join(tmpdir(), "cohort-request-"));
   const path = join(dir, "sales.sqlite");
   referenceFixture(path).db.close();
-  const explorer = new DataExplorer(new SalesSource(path), provider.model, { catalog: components });
+  const app = await createWorkspace({
+    settings: { path },
+    workspacePath: join(dir, "workspace.sqlite"),
+    memoryPath: join(dir, "memory.sqlite"),
+    model: provider.model,
+  });
   try {
-    let published = false;
-    const question = {
-      workspaceId,
-      threadId,
-      requestId: "cohort",
-      baseRevision: 0,
-      question: "show a cohort chart of churn for last 12 months",
-    };
-    const result = await explorer.analyze(question, {
-      onComplete: () => {
-        published = true;
-      },
+    const run = (requestId: string, question: string) =>
+      app.engine.run(
+        {
+          workspaceId,
+          threadId,
+          requestId,
+          question,
+          baseRevision: app.engine.snapshot().workspace.revision,
+        },
+        new AbortController(),
+        async (requestContext, session) => {
+          const result = await app.engine.explorer.agent.generate(question, {
+            requestContext,
+            abortSignal: session.controller.signal,
+          });
+          return { finishReason: result.finishReason };
+        },
+      );
+    const result = await run("cohort", "show a cohort chart of churn for last 12 months");
+    expect(result.outcome).toMatchObject({
+      status: "unsupported",
+      message: expect.stringContaining("did not produce chart data"),
     });
-    expect(result.status).toBe("unsupported");
-    expect(result.message).toContain("did not produce chart data");
-    expect(published).toBe(false);
-    expect(explorer.lastComplete(workspaceId)).toEqual([]);
-    const supported = await explorer.analyze({
-      ...question,
-      requestId: "filtered-cohort",
-      question: "Show a bookings chart for the Enterprise cohort grouped by month in March 2025",
-    });
-    expect(supported.status).toBe("complete");
-    expect(supported.results[0]?.data.request).toMatchObject({
+    expect(result.snapshot.workspace).toMatchObject({ revision: 0, results: [], components: [] });
+    expect(app.engine.store.load(workspaceId)).toBeUndefined();
+    const supported = await run(
+      "filtered-cohort",
+      "Show a bookings chart for the Enterprise cohort grouped by month in March 2025",
+    );
+    expect(supported.outcome).toMatchObject({ status: "complete" });
+    expect(supported.snapshot.workspace.revision).toBe(1);
+    expect(supported.snapshot.workspace.results[0]?.data.request).toMatchObject({
       groupBy: "month",
       filters: { segment: "Enterprise" },
     });
-    const saved = explorer.lastComplete(workspaceId);
-    const heatmap = await explorer.analyze({
-      ...question,
-      requestId: "heatmap",
-      question: "Show a bookings heatmap for March 2025",
+    const saved = app.engine.store.load(workspaceId);
+    expect(saved).toEqual(supported.snapshot.workspace);
+    const heatmap = await run("heatmap", "Show a bookings heatmap for March 2025");
+    expect(heatmap.outcome).toMatchObject({
+      status: "unsupported",
+      message: expect.stringContaining("did not produce a verified matrix"),
     });
-    expect(heatmap.status).toBe("unsupported");
-    expect(heatmap.message).toContain("did not produce a verified matrix");
-    expect(explorer.lastComplete(workspaceId)).toEqual(saved);
+    expect(heatmap.snapshot.workspace).toEqual(saved);
+    expect(app.engine.store.load(workspaceId)).toEqual(saved);
   } finally {
-    await explorer.close();
+    await app.engine.close();
+    await app.storage.close();
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -337,7 +351,6 @@ it("a verified scalar cannot complete a visual request without composition", asy
     );
     expect(outcome).toMatchObject({ status: "failed", code: "invalid-composition" });
     expect(saved).toBe(false);
-    expect(explorer.lastComplete(workspaceId)).toEqual([]);
     expect(provider.calls[1]?.toolChoice).toEqual({ type: "required" });
   } finally {
     await explorer.close();

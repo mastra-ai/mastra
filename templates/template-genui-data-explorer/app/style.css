@@ -63,14 +63,6 @@ body {
   background: var(--surface);
   color: var(--ink);
 }
-@media (max-width: 1100px) {
-  .app-header {
-    flex-wrap: wrap;
-  }
-  .chat {
-    height: calc(100dvh - 12rem);
-  }
-}
 h1 {
   font-size: 1.35rem;
   margin: 0;
@@ -268,18 +260,12 @@ input {
   border-radius: 0.35rem;
   padding: 0.35rem;
 }
-.controls,
 .chart-selection {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   margin: 0.75rem 0;
-}
-.controls label {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
 }
 .card-footer {
   display: grid;
@@ -396,6 +382,14 @@ td {
   padding: 2rem;
   text-align: center;
   color: var(--subtle);
+}
+@media (max-width: 1100px) {
+  .app-header {
+    flex-wrap: wrap;
+  }
+  .chat {
+    height: calc(100dvh - 12rem);
+  }
 }
 @media (max-width: 700px) {
   .app-header {

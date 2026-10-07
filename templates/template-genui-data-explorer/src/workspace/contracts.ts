@@ -54,7 +54,6 @@ export const chatSessionSchema = z.strictObject({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
-export type ChatSession = z.infer<typeof chatSessionSchema>;
 export const sessionIdSchema = z.union([z.literal("local-workspace"), z.string().uuid()]);
 export function requestedSession(request: Request) {
   const values = new URL(request.url).searchParams.getAll("session");

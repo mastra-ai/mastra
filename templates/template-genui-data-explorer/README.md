@@ -1,8 +1,9 @@
 # GenUI Data Explorer
 
-Ask questions about your data and get interactive charts, tables, and metric cards. A Mastra agent
-chooses the view for each answer from a React component catalog, rendered through CopilotKit.
-The included Sales dataset lets you try generative UI without connecting a database.
+Ask questions about your data and explore the answers with interactive charts, tables, and metric
+cards. A Mastra agent selects React components from a catalog to present each answer in a CopilotKit
+chat. Start with the included sample Sales dataset to try generative UI without connecting your own
+database.
 
 ## Why we built this
 
@@ -13,6 +14,7 @@ how it looks and behaves.
 
 ## Prerequisites
 
+- **Node.js 24.15.0 or later** and NPM.
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the
   default `gpt-4.1-mini` model. Optionally set `ANALYSIS_MODEL` to another OpenAI model ID available
   to your account.

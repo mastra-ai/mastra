@@ -9,9 +9,7 @@ import {
 } from "../../data-sources/sales/opportunity-metrics.ts";
 import {
   customerChurn,
-  monthlyCustomerChurn,
   revenueChurn,
-  trailingCustomerChurn,
   churnSeries,
   customerCohorts,
 } from "../../data-sources/sales/churn-metrics.ts";
@@ -52,7 +50,7 @@ it("counts accounts, first cancellation and capped gross MRR loss", () => {
   const { db, metadata } = referenceFixture();
   try {
     const period = { start: "2025-01-01", end: "2025-02-01" };
-    expect(monthlyCustomerChurn(db, metadata, period.start)).toMatchObject({
+    expect(customerChurn(db, metadata, period)).toMatchObject({
       numerator: 1,
       denominator: 3,
       reactivatedCustomers: 1,
@@ -71,7 +69,9 @@ it("counts accounts, first cancellation and capped gross MRR loss", () => {
       denominator: 3,
       reactivatedCustomers: 1,
     });
-    expect(trailingCustomerChurn(db, metadata, "2025-10-01").denominator).toBe(3);
+    expect(
+      customerChurn(db, metadata, { start: "2024-10-01", end: "2025-10-01" }).denominator,
+    ).toBe(3);
   } finally {
     db.close();
   }

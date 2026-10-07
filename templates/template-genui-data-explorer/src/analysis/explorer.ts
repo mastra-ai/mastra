@@ -48,7 +48,6 @@ export class DataExplorer {
   readonly #source: DataSource;
   readonly #descriptor: SourceDescriptor;
   readonly #active = new Set<string>();
-  readonly #lastComplete = new Map<string, readonly VerifiedResult[]>();
   constructor(
     source: DataSource,
     model: MastraModelConfig,
@@ -79,9 +78,6 @@ export class DataExplorer {
   }
   describe(): SourceDescriptor {
     return structuredClone(this.#descriptor);
-  }
-  lastComplete(workspaceId: string): readonly VerifiedResult[] {
-    return structuredClone(this.#lastComplete.get(workspaceId) ?? []);
   }
   async analyze(
     input: unknown,
@@ -300,7 +296,6 @@ export class DataExplorer {
             );
           await options.onComplete?.(session);
           controller.signal.throwIfAborted();
-          this.#lastComplete.set(question.workspaceId, structuredClone(session.results));
         }
       }
     } catch (error) {
@@ -336,42 +331,6 @@ export class DataExplorer {
       this.#active.delete(question.workspaceId);
     }
     return finish(outcome);
-  }
-  async *stream(
-    input: unknown,
-    options: { signal?: AbortSignal } = {},
-  ): AsyncGenerator<AnalysisEvent> {
-    const queue: AnalysisEvent[] = [];
-    let wake: (() => void) | undefined;
-    let done = false;
-    const controller = new AbortController();
-    const cancel = () => controller.abort();
-    options.signal?.addEventListener("abort", cancel, { once: true });
-    if (options.signal?.aborted) cancel();
-    const completion = this.analyze(input, {
-      signal: controller.signal,
-      onEvent: (event) => {
-        queue.push(event);
-        wake?.();
-      },
-    }).finally(() => {
-      done = true;
-      wake?.();
-    });
-    try {
-      while (!done || queue.length) {
-        if (queue.length) yield queue.shift()!;
-        else
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-      }
-      await completion;
-    } finally {
-      controller.abort();
-      options.signal?.removeEventListener("abort", cancel);
-      await completion;
-    }
   }
   async close(): Promise<void> {
     await this.#source.close();

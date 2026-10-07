@@ -35,7 +35,6 @@
     "@copilotkit/runtime": "1.77.0",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
-    "@mastra/evals": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
@@ -47,6 +46,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@mastra/evals": "latest",
     "@playwright/test": "1.63.0",
     "@types/node": "24.19.1",
     "@types/react": "19.3.0",

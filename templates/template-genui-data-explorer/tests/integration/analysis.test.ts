@@ -70,8 +70,8 @@ function fixtureSource(
 }
 async function eventsOf(explorer: DataExplorer, input = question()) {
   const events: AnalysisEvent[] = [];
-  for await (const event of explorer.stream(input)) events.push(event);
-  return { events, outcome: events.at(-1)!.outcome! };
+  const outcome = await explorer.analyze(input, { onEvent: (event) => events.push(event) });
+  return { events, outcome };
 }
 
 it("analysis_returns_grounded_churn_and_growth", async () => {
@@ -176,7 +176,7 @@ it("analysis_returns_grounded_churn_and_growth", async () => {
   );
   for (const call of provider.calls) expect(call.maxOutputTokens).toBe(1024);
   expect(JSON.stringify(provider.calls[0]!.prompt)).toContain("2026-09-30");
-  expect(explorer.lastComplete("workspace-1")).toEqual(outcome.results);
+  expect(events.at(-1)?.outcome).toEqual(outcome);
 });
 
 it("unsafe_queries_and_unsupported_claims_are_rejected", async () => {
@@ -272,12 +272,13 @@ it("analysis_limits_and_dependency_recovery_are_observable", async () => {
   });
   expect(failed.provider.calls).toHaveLength(1);
   const repeat = explorerFor(new ReferenceSource(), [booking], { repeat: true });
-  expect(await repeat.explorer.analyze(question())).toMatchObject({
+  const publishRepeated = vi.fn();
+  expect(await repeat.explorer.analyze(question(), { onComplete: publishRepeated })).toMatchObject({
     status: "failed",
     code: "budget-exceeded",
   });
   expect(repeat.provider.calls.length).toBeLessThanOrEqual(8);
-  expect(repeat.explorer.lastComplete("workspace-1")).toEqual([]);
+  expect(publishRepeated).not.toHaveBeenCalled();
   for (const change of [
     (result: AnalysisResult) => ({
       ...result,
@@ -349,9 +350,11 @@ it("analysis_limits_and_dependency_recovery_are_observable", async () => {
   const delayedExplorer = explorerFor(delayed.source, [booking]).explorer;
   const controller = new AbortController();
   const pendingEvents: AnalysisEvent[] = [];
+  const publishDelayed = vi.fn();
   const pending = delayedExplorer.analyze(question(), {
     signal: controller.signal,
     onEvent: (event) => pendingEvents.push(event),
+    onComplete: publishDelayed,
   });
   await vi.waitFor(() => expect(delayed.attempts()).toBe(1));
   expect(await delayedExplorer.analyze(question("Competing request", "second"))).toMatchObject({
@@ -363,7 +366,8 @@ it("analysis_limits_and_dependency_recovery_are_observable", async () => {
   release({} as AnalysisResult);
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(pendingEvents.filter((event) => event.type === "terminal")).toHaveLength(1);
-  expect(delayedExplorer.lastComplete("workspace-1")).toEqual([]);
+  expect(pendingEvents.at(-1)?.outcome).toMatchObject({ status: "cancelled", results: [] });
+  expect(publishDelayed).not.toHaveBeenCalled();
   // Full public deadline also bounds a provider which ignores AbortSignal.
   vi.useFakeTimers();
   const stalled = explorerFor(new ReferenceSource(), [booking], { stall: true });
@@ -518,7 +522,10 @@ it("source_contract_rejects_incomplete_results_and_recovers", async () => {
     return result;
   });
   const { explorer } = explorerFor(fixture.source, [booking]);
-  const first = await explorer.analyze(question());
+  const publish = vi.fn();
+  const first = await explorer.analyze(question(), { onComplete: publish });
+  expect(publish).toHaveBeenCalledTimes(1);
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ results: first.results }));
   expect(first.status).toBe("complete");
   for (const scenario of [
     "incomplete",
@@ -535,7 +542,9 @@ it("source_contract_rejects_incomplete_results_and_recovers", async () => {
   ]) {
     mode = scenario;
     const before = fixture.attempts();
-    const failure = await explorer.analyze(question("Retry the observed metric", scenario));
+    const failure = await explorer.analyze(question("Retry the observed metric", scenario), {
+      onComplete: publish,
+    });
     expect(failure).toMatchObject({ status: "failed", results: [] });
     expect(failure.code).toBe(
       scenario === "incomplete"
@@ -545,7 +554,7 @@ it("source_contract_rejects_incomplete_results_and_recovers", async () => {
           : "invalid-result",
     );
     expect(fixture.attempts() - before).toBe(1);
-    expect(explorer.lastComplete("workspace-1")).toEqual(first.results);
+    expect(publish).toHaveBeenCalledTimes(1);
   }
   const injected = fixtureSource((result) => ({
     ...result,
@@ -563,15 +572,20 @@ it("source_contract_rejects_incomplete_results_and_recovers", async () => {
   expect(
     await explorer.analyze(question("Read again", "rate"), {
       onEvent: (event) => rateEvents.push(event),
+      onComplete: publish,
     }),
   ).toMatchObject({ status: "failed", code: "rate-limit", results: [] });
   expect(fixture.attempts() - before).toBe(2);
   expect(rateEvents.filter((event) => event.stage === "retrying")).toHaveLength(1);
+  expect(publish).toHaveBeenCalledTimes(1);
   mode = "transient";
   rateAttempts = 0;
-  const recovered = await explorer.analyze(question("Read again", "recovery"));
+  const recovered = await explorer.analyze(question("Read again", "recovery"), {
+    onComplete: publish,
+  });
   expect(recovered.status).toBe("complete");
   expect(recovered.results[0]!.data.provenance).toEqual(first.results[0]!.data.provenance);
   expect(recovered.results[0]!.queryId).not.toBe(first.results[0]!.queryId);
-  expect(explorer.lastComplete("workspace-1")).toEqual(recovered.results);
+  expect(publish).toHaveBeenCalledTimes(2);
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ results: recovered.results }));
 });

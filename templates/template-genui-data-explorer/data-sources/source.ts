@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export type Scalar = string | number | boolean | null;
 export type SourceSettings = Readonly<Record<string, Scalar>>;
-export type DateRange = z.infer<typeof dateRangeSchema>;
 export type AnalysisRequest = z.infer<typeof analysisRequestSchema>;
 export type SourceDescriptor = z.infer<typeof sourceDescriptorSchema>;
 export type AnalysisResult = z.infer<typeof analysisResultSchema>;
