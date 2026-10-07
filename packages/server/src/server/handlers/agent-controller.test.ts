@@ -614,6 +614,74 @@ describe('agent-controller routes', () => {
       expect(persisted).not.toHaveBeenCalled();
     });
 
+    it('rejects a caller mapped to another resource before claiming a suspended tool', async () => {
+      const session = await getRouteSession('user-suspend-owner');
+      const claim = vi.spyOn(session, 'claimToolSuspension');
+      const respond = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-suspend-intruder');
+
+      const result = await AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-suspend-owner',
+        toolCallId: 'suspended-call',
+        resumeData: { answer: 'yes' },
+        requestContext,
+      } as any).catch((error: unknown) => error);
+
+      expect(result).toBeInstanceOf(HTTPException);
+      expect((result as HTTPException).status).toBe(403);
+      expect(claim).not.toHaveBeenCalled();
+      expect(respond).not.toHaveBeenCalled();
+    });
+
+    it('rejects a caller mapped to another resource before steering its session', async () => {
+      const session = await getRouteSession('user-steer-owner');
+      const steer = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-steer-intruder');
+
+      const result = await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-steer-owner',
+        message: 'change course',
+        requestContext,
+      } as any).catch((error: unknown) => error);
+
+      expect(result).toBeInstanceOf(HTTPException);
+      expect((result as HTTPException).status).toBe(403);
+      expect(steer).not.toHaveBeenCalled();
+    });
+
+    it('rejects a mismatched caller before creating a session for the other resource', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const create = vi.spyOn(controller, 'createSession');
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-fresh-intruder');
+
+      for (const route of [
+        AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
+        AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE,
+        STEER_AGENT_CONTROLLER_SESSION_ROUTE,
+      ]) {
+        const result = await (route.handler as any)({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-fresh-owner',
+          toolCallId: 'fresh-call',
+          approved: true,
+          resumeData: {},
+          message: 'hi',
+          requestContext,
+        }).catch((error: unknown) => error);
+        expect((result as HTTPException).status).toBe(403);
+      }
+      expect(create).not.toHaveBeenCalled();
+    });
+
     it('lets a caller mapped to the session resource answer its armed gate', async () => {
       const session = await getRouteSession('user-gate-self');
       const decision = session.approval.arm({ toolName: 'write_file', toolCallId: 'self-call' });

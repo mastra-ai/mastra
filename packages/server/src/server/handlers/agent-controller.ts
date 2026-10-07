@@ -78,6 +78,18 @@ function getAgentControllerOrThrow(
   return controller;
 }
 
+/**
+ * Reject a caller whose mapped resource is not the session resource in the URL.
+ * Runs before getSession so a mismatched caller never creates a session or
+ * thread under another resource, and before any gate or claim is touched.
+ */
+function assertCallerOwnsResource(requestContext: RequestContext | undefined, resourceId: string): void {
+  const callerResourceId = getContextResourceId(requestContext);
+  if (callerResourceId && callerResourceId !== resourceId) {
+    throw new HTTPException(403, { message: 'Access denied: session belongs to a different resource' });
+  }
+}
+
 async function getSession(
   controller: AgentController<any>,
   resourceId: string,
@@ -687,13 +699,10 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, approved, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
+      // Answering consumes the gate or the stored-approval claim, and the agent's
+      // own check only runs afterwards, so check ownership first.
+      assertCallerOwnsResource(requestContext, resourceId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      // Check ownership before touching the gate or the stored-approval claim:
-      // answering consumes them, and the agent's own check only runs afterwards.
-      const callerResourceId = getContextResourceId(requestContext);
-      if (callerResourceId && callerResourceId !== session.identity.getResourceId()) {
-        throw new HTTPException(403, { message: 'Access denied: session belongs to a different resource' });
-      }
       // Resolve the parked approval gate so the session's own run loop drives the
       // continuation and emits its events to subscribers (the open SSE stream).
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
@@ -752,6 +761,7 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, resumeData, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
+      assertCallerOwnsResource(requestContext, resourceId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       // A resumed tool drives the run to its next terminal or suspension boundary.
       // Awaiting it holds this request open until the continuation finishes, which
@@ -792,6 +802,7 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
+      assertCallerOwnsResource(requestContext, resourceId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       ackBackgroundSessionWork({
         work: session.steer({ content: message, requestContext }),
