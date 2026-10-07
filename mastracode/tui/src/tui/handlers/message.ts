@@ -63,7 +63,10 @@ function syncQuietThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMes
       )
     : undefined;
   const thinking = state.quietMode && state.hideThinkingBlock && latest?.type === 'reasoning';
-  state.idleCounter?.setThinking(thinking);
+  if (!state.idleCounter || state.idleCounter.isThinking() === thinking) return;
+  state.idleCounter.setThinking(thinking);
+  // Redraw the Working row now so its label swaps without waiting for the next tick.
+  ctx.updateStatusLine();
 }
 
 function isToolPart(part: MessagePart): boolean {

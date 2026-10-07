@@ -976,6 +976,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 processorId: chunk.payload?.processorId,
               };
               self.#finishReason = 'other';
+              // The tripwire terminates the stream without a `finish` chunk, so settle the
+              // status here; otherwise the run stays 'running' forever.
+              if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                self.#status = 'tripwire';
+              }
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 

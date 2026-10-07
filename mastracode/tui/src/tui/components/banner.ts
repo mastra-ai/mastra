@@ -1,88 +1,95 @@
 /**
- * ASCII art banner for the Mastra Code TUI header.
- * Renders "MASTRA CODE" or "MASTRA" in block-letter art with a green gradient.
+ * Startup header: the Mastra logo in Braille next to the app title and project info.
+ *
+ * The logo is the icon from LogoWithoutText (playground-ui), traced from its SVG path onto the Braille dot
+ * grid, then mirrored around the middle circle so it is exactly symmetric (the source path is slightly
+ * uneven). A dot lights when ≥55% of it is covered, which keeps the circles round at this size.
  */
-import chalk from 'chalk';
+import type { Component } from '@earendil-works/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 
 import { theme } from '../theme.js';
 
-// Mastra brand green gradient stops (left → right)
-const GRADIENT_STOPS = ['#085314', '#0d8020', '#16c858', '#62f69d', '#a1fac7'];
-
-// Full "MASTRA CODE" banner (42 chars wide)
-const FULL_ART = [
-  '█▀▄▀█ ▄▀█ █▀ ▀█▀ █▀█ ▄▀█   █▀▀ █▀█ █▀▄ █▀▀',
-  '█ ▀ █ █▀█ ▀█  █  █▀▄ █▀█   █   █ █ █ █ █▀▀',
-  '▀   ▀ ▀ ▀ ▀▀  ▀  ▀ ▀ ▀ ▀   ▀▀▀ ▀▀▀ ▀▀  ▀▀▀',
+/** 16 columns × 5 rows: the header logo. */
+export const LOGO_HEADER = [
+  '   ⣠⣶⣶⣄  ⣠⣶⣶⣄',
+  '   ⢻⣿⣿⣿  ⣿⣿⣿⡟',
+  ' ⢀⣀ ⠈⠻⣿⣄⣠⣿⠟⢻⣷⣀⡀',
+  '⢰⣿⣿⣿⡄ ⣿⣿⣿⣿ ⢸⣿⣿⣿⡆',
+  '⠈⠻⠿⠟⠁ ⠙⠿⠿⠋ ⠈⠻⠿⠟⠁',
 ];
 
-// Short "MASTRA" banner (24 chars wide)
-const SHORT_ART = ['█▀▄▀█ ▄▀█ █▀ ▀█▀ █▀█ ▄▀█', '█ ▀ █ █▀█ ▀█  █  █▀▄ █▀█', '▀   ▀ ▀ ▀ ▀▀  ▀  ▀ ▀ ▀ ▀'];
+/** 24 columns × 7 rows: setup screens. */
+export const LOGO_LARGE = [
+  '     ⣴⣾⣿⣷⣦⡀  ⢀⣴⣾⣿⣷⣦',
+  '    ⢸⣿⣿⣿⣿⣿⡇  ⢸⣿⣿⣿⣿⣿⡇',
+  '     ⠻⢿⣿⣿⣿⡇  ⢸⣿⣿⣿⣿⣿',
+  '       ⠈⢻⣿⣷⡀⢀⣾⣿⡟⠙⢿⣿⣆',
+  ' ⣴⣾⣿⣿⣶⡀  ⣿⣿⣿⣿⣿⣿  ⢸⣿⣿⣿⣷⣦',
+  '⠸⣿⣿⣿⣿⣿⡇  ⣿⣿⣿⣿⣿⣿  ⢸⣿⣿⣿⣿⣿⠇',
+  ' ⠹⢿⣿⡿⠟⠁  ⠘⠿⣿⣿⠿⠃  ⠈⠻⢿⣿⡿⠏',
+];
 
-/**
- * Interpolate between two hex colors.
- */
-function lerpColor(hex1: string, hex2: string, t: number): [number, number, number] {
-  const r1 = parseInt(hex1.slice(1, 3), 16);
-  const g1 = parseInt(hex1.slice(3, 5), 16);
-  const b1 = parseInt(hex1.slice(5, 7), 16);
-  const r2 = parseInt(hex2.slice(1, 3), 16);
-  const g2 = parseInt(hex2.slice(3, 5), 16);
-  const b2 = parseInt(hex2.slice(5, 7), 16);
-  return [Math.round(r1 + (r2 - r1) * t), Math.round(g1 + (g2 - g1) * t), Math.round(b1 + (b2 - b1) * t)];
+/** Logo rows in the accent color, padded to a common width. */
+export function renderLogo(rows: string[] = LOGO_HEADER): string[] {
+  const w = Math.max(...rows.map(r => visibleWidth(r)));
+  return rows.map(r => theme.fg('accent', r) + ' '.repeat(w - visibleWidth(r)));
 }
 
-/**
- * Color a single character based on its horizontal position in the gradient.
- */
-function gradientChar(ch: string, colIdx: number, totalCols: number): string {
-  if (ch === ' ') return ' ';
-  const t = totalCols <= 1 ? 0.5 : colIdx / (totalCols - 1);
-  const segmentCount = GRADIENT_STOPS.length - 1;
-  const segment = Math.min(Math.floor(t * segmentCount), segmentCount - 1);
-  const frac = t * segmentCount - segment;
-  const [r, g, b] = lerpColor(GRADIENT_STOPS[segment]!, GRADIENT_STOPS[segment + 1]!, frac);
-  return chalk.rgb(r, g, b)(ch);
+export interface HeaderOptions {
+  version: string;
+  appName?: string;
+  /** Muted info lines (Project, Resource ID, Branch, Worktree of). */
+  info: string[];
 }
 
-/**
- * Apply left-to-right purple gradient to a line of text.
- */
-function colorLine(line: string): string {
-  const chars = [...line];
-  return chars.map((ch, i) => gradientChar(ch, i, chars.length)).join('');
-}
+const LOGO_GAP = 3;
 
 /**
- * Render the banner header for the TUI.
- *
- * @param version - App version string (e.g. "0.2.0")
- * @param appName - App name. Block art is only used for "Mastra Code" (default).
- * @returns Styled multi-line string ready for display.
+ * Header lines for a given width:
+ * - wide: logo, then title + info beside it (the info block is padded to the logo's 5 rows)
+ * - narrow: logo stacked above title + info
+ * - very narrow or a custom app name: one text line
  */
-export function renderBanner(version: string, appName?: string): string {
+export function renderHeader(width: number, { version, appName, info }: HeaderOptions): string[] {
   const name = appName || 'Mastra Code';
+  const compact =
+    theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', name)) + theme.fg('dim', ` v${version}`);
+  if (name !== 'Mastra Code' || width < 30) return [compact];
 
-  // Custom app names get the simple text format (no Mastra branding)
-  if (name !== 'Mastra Code') {
-    return theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', name)) + theme.fg('dim', ` v${version}`);
-  }
-
-  const cols = process.stdout.columns || 80;
-
-  // Narrow terminal — compact single line
-  if (cols < 30) {
-    return (
-      theme.fg('accent', '◆') + ' ' + theme.bold(theme.fg('accent', 'Mastra Code')) + theme.fg('dim', ` v${version}`)
+  const title = theme.bold(theme.fg('text', name)) + theme.fg('dim', ` v${version}`);
+  // Long info (a branch name, a worktree path) is cut with … so the header never wraps.
+  const fit = (room: number) =>
+    info.map(l =>
+      theme.fg('muted', visibleWidth(l) <= room ? l : [...l].slice(0, Math.max(0, room - 1)).join('') + '…'),
     );
+  const logo = renderLogo();
+  const logoWidth = visibleWidth(logo[0]!);
+  const room = width - logoWidth - LOGO_GAP;
+
+  // Side by side while the title fits next to the logo; the info lines shorten to the space left.
+  if (visibleWidth(title) <= room) {
+    const infoLines = fit(room);
+    // Keep the block as tall as the logo: without a worktree line there are only 3 info lines, so a
+    // blank row goes under the title instead.
+    const block = infoLines.length + 1 < logo.length ? [title, '', ...infoLines] : [title, ...infoLines];
+    const top = Math.floor((logo.length - block.length) / 2);
+    return logo.map((row, i) => row + ' '.repeat(LOGO_GAP) + (block[i - top] ?? ''));
   }
+  return [...logo, '', title, ...fit(width)];
+}
 
-  // Select art based on available width
-  const art = cols >= 50 ? FULL_ART : SHORT_ART;
-  const coloredLines = art.map(line => colorLine(line));
+/** Startup header component; re-lays out on resize. */
+export class HeaderComponent implements Component {
+  constructor(
+    private options: HeaderOptions,
+    private paddingX = 1,
+  ) {}
 
-  // Append version below the art
-  coloredLines.push(theme.fg('dim', `v${version}`));
+  invalidate(): void {}
 
-  return coloredLines.join('\n');
+  render(width: number): string[] {
+    const pad = ' '.repeat(this.paddingX);
+    return renderHeader(width - this.paddingX * 2, this.options).map(l => pad + l);
+  }
 }
