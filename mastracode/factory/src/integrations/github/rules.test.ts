@@ -488,8 +488,12 @@ describe('GithubRules', () => {
       configVersion: 'factory-config-v1',
     });
 
-    await service.ingest(issueClosed('delivery-closed-race', 'completed'));
-    await service.ingest(issueClosed('delivery-closed-race', 'completed'));
+    await expect(service.ingest(issueClosed('delivery-closed-race', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await expect(service.ingest(issueClosed('delivery-closed-race', 'completed'))).resolves.toEqual({
+      status: 'replayed',
+    });
 
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(1);

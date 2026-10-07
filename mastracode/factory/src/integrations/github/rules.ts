@@ -701,7 +701,7 @@ export class GithubRules {
         const result = await evaluateOnce(current, ingressIdentity, pullRequestIntake);
         if (result.status !== 'stale' || attempt === STALE_EVALUATION_ATTEMPTS || !current) return result;
         const reread = await this.options.storage.get({ orgId: current.orgId, id: current.id });
-        if (!reread) return result;
+        if (!reread) return { status: 'missing' };
         current = reread;
       }
     };

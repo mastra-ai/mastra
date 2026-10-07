@@ -576,19 +576,17 @@ export async function handleGithubWebhook(
   const metadata = normalizeGithubWebhookMetadata(parsed);
   console.info('[GitHub Webhook]', metadata);
 
-  if (options.ingestFactoryEvent) {
-    const ingested = await options.ingestFactoryEvent(parsed);
-    // Nothing was stored for a stale evaluation, so a redelivery of this event is evaluated again.
-    if ((ingested as { status?: string } | undefined)?.status === 'stale') {
-      return {
-        status: 503,
-        body: { error: 'stale', message: 'The work item kept changing during rule evaluation; redeliver this event.' },
-      };
-    }
-  }
+  // Nothing is stored for a stale evaluation, so failing the delivery lets a redelivery evaluate it again.
+  const stale =
+    options.ingestFactoryEvent &&
+    ((await options.ingestFactoryEvent(parsed)) as { status?: string } | undefined)?.status === 'stale';
+  const staleResult = {
+    status: 503,
+    body: { error: 'stale', message: 'The work item kept changing during rule evaluation; redeliver this event.' },
+  } as const;
 
   if (!options.controller) {
-    return { status: 202, body: { ok: true } };
+    return stale ? staleResult : { status: 202, body: { ok: true } };
   }
 
   const result = await dispatchGithubWebhook(parsed, {
@@ -605,5 +603,6 @@ export async function handleGithubWebhook(
   if (result.failed > 0) {
     console.warn(`[GitHub Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
   }
+  if (stale) return staleResult;
   return { status: 202, body: { ok: true, ...(result.ignored ? { ignored: true as const } : {}) } };
 }

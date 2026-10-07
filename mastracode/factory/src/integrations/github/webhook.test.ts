@@ -1,4 +1,6 @@
+import { createHmac } from 'node:crypto';
 import { RequestContext } from '@mastra/core/request-context';
+import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubSignalSubscriptionRow } from './subscriptions.js';
 
@@ -24,7 +26,7 @@ function githubWithSessionRow(
 }
 
 const githubStub = githubWithSessionRow(null);
-import { classifyGithubWebhook, dispatchGithubWebhook } from './webhook.js';
+import { classifyGithubWebhook, dispatchGithubWebhook, handleGithubWebhook } from './webhook.js';
 import type { FactorySessionOwner, GithubWebhookDispatchIntegration, ParsedGithubWebhook } from './webhook.js';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
@@ -709,5 +711,37 @@ describe('dispatchGithubWebhook org seeding', () => {
     expect(result.delivered).toBe(1);
     expect(state.factoryOrgUnresolved).toBe(true);
     expect(state.factoryOrgId).toBeUndefined();
+  });
+});
+
+describe('handleGithubWebhook', () => {
+  it('still notifies subscribed sessions when rule ingress stays stale (#25884)', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    getRepositoryCollaboratorPermission.mockResolvedValue('write');
+    const listSubscriptions = vi.fn(async () => []);
+    const app = new Hono();
+    app.post('/', async c => {
+      const result = await handleGithubWebhook(c, {
+        github: { ...githubStub, webhookSecret: 'secret' } as never,
+        controller: {} as never,
+        listSubscriptions,
+        ingestFactoryEvent: async () => ({ status: 'stale' }),
+      });
+      return c.json(result.body, result.status);
+    });
+    const body = JSON.stringify(parsed('pull_request', 'closed').payload);
+    const res = await app.request('/', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'pull_request',
+        'x-github-delivery': 'delivery-stale',
+        'x-hub-signature-256': `sha256=${createHmac('sha256', 'secret').update(body).digest('hex')}`,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(503);
+    expect(listSubscriptions).toHaveBeenCalled();
   });
 });
