@@ -981,6 +981,13 @@ export class Mastra<
     [topic: string]: ((event: Event) => Promise<void> | void)[];
   } = {};
   #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
+  // Unscoped internal workflow ids that every process registers identically
+  // (e.g. the evented durable-agent loop), so any process's workers can run
+  // them. The pubsub proxy never tags their events `localOnly`.
+  #distributedInternalWorkflowIds = new Set<string>();
+  // Workflow ids already warned about for a `localOnly` start with no local
+  // consumer, so the warning fires once per id rather than per event.
+  #warnedStrandedLocalWorkflowIds = new Set<string>();
   // Tracks last-activity timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
   // resumed. The timestamp is refreshed every time the run resolves its own
@@ -1053,7 +1060,7 @@ export class Mastra<
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
                 const isOwnedHere = (() => {
-                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1061,7 +1068,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -1076,6 +1083,23 @@ export class Mastra<
                   return false;
                 })();
                 if (isOwnedHere) {
+                  // A local-only start in a process that consumes no workflow
+                  // events (e.g. `MASTRA_WORKERS=false`) is dropped by the
+                  // transport. Say so instead of hanging silently.
+                  if (
+                    topic === 'workflows' &&
+                    !self.__hasLocalWorkflowExecution() &&
+                    !self.#warnedStrandedLocalWorkflowIds.has(wfId ?? '')
+                  ) {
+                    self.#warnedStrandedLocalWorkflowIds.add(wfId ?? '');
+                    self
+                      .getLogger()
+                      ?.warn(
+                        `Workflow event "${event.type}" for workflow "${wfId}" (run "${rId}") is local to this process, ` +
+                          `but this process has no running workflow workers, so the event will not be processed. ` +
+                          `Start workers in this process (mastra.startWorkers()) to run it.`,
+                      );
+                  }
                   return target.publish(topic, event, { localOnly: true });
                 }
               } else if (isRunLocalTopic(topic)) {
@@ -3767,8 +3791,13 @@ export class Mastra<
    *   instance keyed by run, and the bare `${id}` slot is never overwritten by
    *   a run-scoped registration — so a run-scoped lookup can never resolve a
    *   *different* run's instance via an id scan.
+   *
+   * Pass `{ distributed: true }` (unscoped only) when every process registers
+   * the workflow identically, so any process's workers can execute its runs.
+   * Its events then travel through the shared pubsub instead of being kept
+   * local to the publishing process.
    */
-  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
+  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string, options?: { distributed?: boolean }) {
     workflow.__markInternal();
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
@@ -3791,6 +3820,11 @@ export class Mastra<
       this.#sweepStaleRunScopedWorkflows();
     } else {
       this.#internalMastraWorkflows[workflow.id] = workflow;
+      if (options?.distributed) {
+        this.#distributedInternalWorkflowIds.add(workflow.id);
+      } else {
+        this.#distributedInternalWorkflowIds.delete(workflow.id);
+      }
     }
   }
 
@@ -3892,6 +3926,22 @@ export class Mastra<
       return !!this.#internalMastraWorkflows[id];
     }
     return !!this.#internalMastraWorkflows[id];
+  }
+
+  /**
+   * Whether this internal workflow event must stay in this process. A
+   * run-scoped registration always qualifies; an unscoped one does unless it
+   * was registered `distributed`. A distributed workflow's `workflows` events
+   * stay local while this process runs workflow workers (so runs stay pinned
+   * to the process that started them) and only cross processes when it
+   * can't run them itself. Its `workflows-finish` events always cross, since
+   * the process waiting for the result may not be the one that ran it.
+   */
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
+    if (!this.__hasInternalWorkflow(id, runId)) return false;
+    if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
+    if (!this.#distributedInternalWorkflowIds.has(id)) return true;
+    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
   }
 
   /**
@@ -7112,6 +7162,8 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#executionWorkersStarted = false;
+    // Workers are gone again, so a stranded workflow event should warn again.
+    this.#warnedStrandedLocalWorkflowIds.clear();
   }
 
   /**

@@ -237,6 +237,50 @@ describe('DurableAgent observability tracing', () => {
     }
   }, 30000);
 
+  it('nests the resumed AGENT_RUN span under the suspended span instead of opening a second root (#25718)', async () => {
+    const { spy, agentSpans, agentSpanOpts } = await spyOnSpans();
+
+    try {
+      const baseAgent = new Agent({
+        id: 'trace-agent-resume',
+        name: 'Trace Agent (resume)',
+        instructions: 'You are a test assistant',
+        model: createToolCallThenTextModel() as LanguageModelV2,
+        tools: {
+          get_weather: createTool({
+            id: 'get_weather',
+            description: 'Get the weather',
+            inputSchema: z.object({ city: z.string() }),
+            requireApproval: true,
+            execute: async ({ city }) => ({ forecast: `Sunny in ${city}` }),
+          }),
+        },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      registerWithMockObservability(durableAgent as unknown as Agent);
+
+      const result = await durableAgent.stream('What is the weather in Paris?');
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'tool-call-approval') break;
+      }
+
+      const resumed = await durableAgent.approveToolCall({ runId: result.runId });
+      for await (const _chunk of resumed.fullStream) {
+        // Drain the resumed segment.
+      }
+
+      expect(agentSpans).toHaveLength(2);
+      const [original] = agentSpans;
+      const resumedOpts = agentSpanOpts[1];
+      expect(resumedOpts.name).toContain('(resumed)');
+      expect(resumedOpts.resumedFromSpanId).toBe(original.id);
+      expect(resumedOpts.tracingOptions?.traceId).toBe(original.traceId);
+      expect(resumedOpts.metadata?.resumedFromSpanId).toBe(original.id);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
   it('omits toolCalls from the MODEL_GENERATION endGeneration output for a text-only durable run', async () => {
     const { spy } = await spyOnSpans();
 

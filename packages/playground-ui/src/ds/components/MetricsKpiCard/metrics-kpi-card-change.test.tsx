@@ -12,6 +12,15 @@ describe('MetricsKpiCardChange', () => {
     [250000, '×2.5K'],
     [187681, '×1.9K'],
   ])('formats %s as %s', (changePct, expected) => {
-    expect(renderToStaticMarkup(<MetricsKpiCardChange changePct={changePct} />)).toContain(expected);
+    expect(renderToStaticMarkup(<MetricsKpiCardChange changePct={changePct} comparison="vs previous 24h" />)).toContain(
+      expected,
+    );
+  });
+
+  it('describes the change against the previous window', () => {
+    const markup = renderToStaticMarkup(
+      <MetricsKpiCardChange changePct={-8.2} comparison="vs previous 7d" prevValue="9,400" />,
+    );
+    expect(markup).toContain('-8.2% vs previous 7d (9,400)');
   });
 });

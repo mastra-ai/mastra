@@ -5,6 +5,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
+import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
 import { createSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
@@ -26,7 +27,7 @@ import type {
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
-import { executeWithContextSync, getRootExportSpan, getStepAvailableToolNames } from '../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan } from '../../../observability/utils';
 import type {
   CachedLLMStepResponse,
   InputProcessorOrWorkflow,
@@ -41,6 +42,7 @@ import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
+import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
@@ -75,6 +77,7 @@ import {
   EAGER_TOOL_EXECUTION_KEY,
   GENERATE_ID_KEY,
   INITIAL_SIGNAL_ECHOES_KEY,
+  MEMORY_CONFIG_KEY,
   MEMORY_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
@@ -90,6 +93,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
@@ -1831,6 +1835,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           model: currentStep.model,
           downloadRetries,
           downloadConcurrency,
+          skipUnavailableAttachments: inputData.skipUnavailableAttachments,
         });
         const llmPromptForModel =
           currentStep.model?.specificationVersion === 'v4'
@@ -1840,11 +1845,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               : messageList.get.all.aiV5.llmPrompt;
         let downloadError: MastraError | undefined;
         let inputMessages = await llmPromptForModel(messageListPromptArgs).catch(error => {
-          if (!(error instanceof MastraError) || error.id !== 'DOWNLOAD_ASSETS_FAILED') {
+          if (!isDownloadAssetsError(error)) {
             throw error;
           }
           downloadError = error;
           return [];
+        });
+        await persistUnavailableAttachments({
+          messageList,
+          memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
+          readOnly: readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig')?.readOnly,
+          logger,
         });
         let cachedResponse: CachedLLMStepResponse | undefined;
         const requestStepRunner = new ProcessorRunner({
@@ -1983,14 +1994,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tool set + per-step settings, then open the inference span. Doing this
           // immediately before execute() ensures the span's startTime excludes
           // input processor / prepareStep / processLLMRequest work, and that
-          // availableTools / toolChoice reflect any per-step mutations.
+          // tools / availableTools / toolChoice reflect any per-step mutations.
+          // availableTools is derived from the serialized definitions so the
+          // two can't disagree. Skipped when tracing is off or the trace was
+          // not sampled (a no-op span still hands out a tracker).
+          const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
+            ? getToolDefinitionsForTracing({
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                specificationVersion: currentStep.model.specificationVersion,
+              })
+            : undefined;
           modelSpanTracker?.setInferenceContext?.({
             parameters: currentStep.modelSettings as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
-            availableTools: getStepAvailableToolNames(
-              currentStep.tools as Record<string, unknown> | undefined,
-              currentStep.activeTools as readonly string[] | undefined,
-            ),
+            availableTools: inferenceTools?.map(tool => tool.name) ?? [],
+            tools: inferenceTools,
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
@@ -2722,6 +2742,29 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
+      // Nothing recovered an attachment download failure. Rather than failing the
+      // turn (and every later turn that replays the same history), retry once with
+      // unavailable attachments replaced by a placeholder.
+      let skipUnavailableAttachments = inputData.skipUnavailableAttachments;
+      if (
+        !apiErrorRetryResult?.retry &&
+        !skipUnavailableAttachments &&
+        runState.state.hasErrored &&
+        isDownloadAssetsError(runState.state.apiError)
+      ) {
+        logger?.warn('Could not download an attachment; retrying without unavailable attachments', {
+          runId,
+          error: runState.state.apiError.message,
+        });
+        skipUnavailableAttachments = true;
+        apiErrorRetryResult = { retry: true };
+        runState.setState({
+          hasErrored: false,
+          apiError: undefined,
+          deferredErrorChunk: undefined,
+        });
+      }
+
       if (apiErrorRetryResult?.retry && options?.abortSignal?.aborted) {
         cleanupProviderToolSpans(true);
         await options.onAbort?.({
@@ -2784,6 +2827,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messages,
           processorRetryCount: nextProcessorRetryCount,
           ...(activeFallbackModelIndex > 0 ? { fallbackModelIndex: activeFallbackModelIndex } : {}),
+          ...(skipUnavailableAttachments ? { skipUnavailableAttachments } : {}),
         };
       }
 

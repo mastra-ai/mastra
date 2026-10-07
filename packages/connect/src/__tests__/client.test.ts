@@ -315,6 +315,24 @@ describe('proxyRequest', () => {
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
   });
 
+  it('drops caller-supplied authorization headers so the platform bearer is never corrupted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', {
+      method: 'GET',
+      path: 'api/v10/users/@me/guilds',
+      // Mixed casing: a tool-set `Authorization` would otherwise survive the
+      // spread alongside the client's lowercase `authorization` and the two
+      // would be joined into one invalid header value.
+      headers: { Authorization: 'Bot tool-token', 'Proxy-Authorization': 'Basic x', 'x-custom': 'v1' },
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    const sent = new Headers(init.headers);
+    expect(sent.get('authorization')).toBe(`Bearer ${client.accessToken}`);
+    expect(sent.get('proxy-authorization')).toBeNull();
+    expect(sent.get('x-custom')).toBe('v1');
+  });
+
   it('rejects baseUrlOverride values that are not safe HTTPS URLs before sending the request', async () => {
     const fetchMock = vi.fn();
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });

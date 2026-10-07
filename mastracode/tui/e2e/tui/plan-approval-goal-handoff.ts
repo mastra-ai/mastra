@@ -107,8 +107,12 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Goal\s+●\s+done/i, terminal, 15_000);
     // Give a stray second goal run time to surface before checking for one.
     await new Promise(resolve => setTimeout(resolve, 1_000));
-    if (/Unexpected second goal run\.|Goal\s+◌\s+waiting/i.test(terminal.serialize().view)) {
+    const view = terminal.serialize().view;
+    if (/Unexpected second goal run\.|Goal\s+◌\s+waiting/i.test(view)) {
       throw new Error('A second goal run started after the plan goal was judged done');
+    }
+    if (!/▐build▌/.test(view) || /▐plan▌/.test(view)) {
+      throw new Error('Mode did not stay in Build after the plan goal was judged done');
     }
     terminal.keyCtrlC();
   },

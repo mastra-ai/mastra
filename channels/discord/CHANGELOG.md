@@ -1,5 +1,32 @@
 # @mastra/discord
 
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Fixed a Discord Gateway reconnect storm that could trip Discord's connection abuse limit (>1000 connects in a short window) and get the bot token force-reset. The provider now owns the Gateway reconnection loop: failed connects (invalid token, Message Content privileged intent not enabled) back off exponentially instead of retrying instantly, a revoked token parks reconnection until new credentials arrive, and exactly one loop runs per installation — credential rotations and `disconnect()` now stop the previous loop instead of leaking it. ([#26095](https://github.com/mastra-ai/mastra/pull/26095))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Fixed Discord installs staying "pending" forever after completing the bot invite. Discord's invite flow doesn't notify the server when it finishes, so the provider now exposes `reconcileInstallation(agentId)` — it activates a pending install when the server can attribute the newly joined guild to it, and Studio calls it when you return, so the agent shows "Connected" right away: ([#25993](https://github.com/mastra-ai/mastra/pull/25993))
+
+  ```ts
+  const info = await discord.reconcileInstallation('my-agent');
+  // info?.status === 'active' once the invite finished
+  ```
+
+  When the new guild can't be attributed safely (several invites in flight, or the bot joined more than one guild), the install stays pending and activates on its first interaction, as before. Invite attribution expires after 30 minutes and never crosses a bot credential change. `listInstallations()` is now a pure read.
+
+### Patch Changes
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 1.2.1
 
 ### Patch Changes

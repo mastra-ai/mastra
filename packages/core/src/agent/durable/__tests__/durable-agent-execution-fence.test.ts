@@ -1321,8 +1321,9 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     }
     expect(claims.map(claim => claim.generation)).toEqual([1, 2]);
     // The fence reaches the evented engine's writes through the async context
-    // of the publish, so the run's events must not leave this process.
-    expect(pubsub.workflowEvents.filter(event => !event.localOnly)).toEqual([]);
+    // of the publish, so the events that drive the run must not leave this
+    // process. `workflows-finish` may: it drives no writes.
+    expect(pubsub.workflowEvents.filter(event => event.topic === 'workflows' && !event.localOnly)).toEqual([]);
 
     resumed.cleanup();
     started.cleanup();

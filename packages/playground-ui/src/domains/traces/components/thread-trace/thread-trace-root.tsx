@@ -116,14 +116,10 @@ export function ThreadTraceRoot({
 
   return (
     <ThreadTraceContext.Provider value={contextValue}>
-      {/* Chat-like: opens on the latest turn, follows it while rows grow until the reader scrolls
-          up, and keeps the reading position when older turns are prepended. */}
-      <MessageScrollerProvider
-        defaultScrollPosition="end"
-        autoScroll
-        preserveScrollOnPrepend
-        onReachStart={onLoadOlder}
-      >
+      {/* Opens on the latest turn and keeps the reading position when older turns are prepended.
+          No auto-follow: turns are settled before mount, so the only growth at the end comes from
+          the reader expanding a row, which must not move the view. */}
+      <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
         <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
           <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
             {children}

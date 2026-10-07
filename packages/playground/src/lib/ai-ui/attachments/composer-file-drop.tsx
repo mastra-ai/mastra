@@ -1,4 +1,5 @@
 import { FileDropBackdrop } from '@mastra/playground-ui/components/FileDropBackdrop';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -23,9 +24,9 @@ export const ComposerFileDrop = ({ disabled, children }: { disabled?: boolean; c
       disabled={disabled}
     >
       {error && (
-        <p role="alert" className="text-ui-sm">
+        <Txt variant="caption" role="alert">
           {error}
-        </p>
+        </Txt>
       )}
       {children}
     </FileDropBackdrop>

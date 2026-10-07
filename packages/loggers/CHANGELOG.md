@@ -1,5 +1,38 @@
 # @mastra/loggers
 
+## 1.3.5-alpha.1
+
+### Patch Changes
+
+- `FileTransport` log queries now read the log file as a stream instead of loading it synchronously, so `listLogs()` no longer blocks the event loop and paginated queries only keep the requested page in memory. `listLogsByRunId()` now finds matching logs beyond the first 100 records. ([#26191](https://github.com/mastra-ai/mastra/pull/26191))
+
+- Updated dependencies [[`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936)]:
+  - @mastra/core@1.75.0-alpha.8
+
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- `HttpTransport` no longer buffers logs without limit while its endpoint is unavailable. The buffer is now capped by `maxBufferSize` (default 10,000 entries); when it is full, the oldest logs are dropped first. Use `getDroppedLogCount()` to see how many logs were dropped. Only one flush request is sent at a time, so an outage no longer triggers a new failing request for every log written. Destroying the transport now sends every buffered batch before it finishes, not just the first one. `batchSize` and `maxBufferSize` must be positive integers; the constructor now throws for values such as `0`, `Infinity`, or `2.5` (leave `batchSize` unset to use the default of 100). ([#25958](https://github.com/mastra-ai/mastra/pull/25958))
+
+  ```ts
+  import { HttpTransport } from '@mastra/loggers/http';
+
+  const transport = new HttpTransport({
+    url: 'https://logs.example.com/ingest',
+    maxBufferSize: 5_000,
+  });
+
+  transport.getDroppedLogCount(); // number of logs dropped because the buffer exceeded maxBufferSize
+  ```
+
+- Fixed `HttpTransport` retrying logs that the endpoint will never accept. When the endpoint rejects a batch as invalid, such as with a 400 or 413 response, the transport stops retrying right away. It drops that batch and counts it in `getDroppedLogCount()`, so newer logs are no longer stuck behind it. ([#26079](https://github.com/mastra-ai/mastra/pull/26079))
+
+  Temporary failures are still retried, including network errors, timeouts, rate limits and server errors. If the server sends a `Retry-After` header, the transport waits that long before retrying, up to the request `timeout`.
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
 ## 1.3.4
 
 ### Patch Changes

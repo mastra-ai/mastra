@@ -1,5 +1,47 @@
 # @mastra/memory
 
+## 1.36.0-alpha.6
+
+### Patch Changes
+
+- Fixed agent runs stopping with "Interrupted" when an Observational Memory reflection didn't compress enough on its first try. The reflector retries at a stronger compression level, but each retry was reported as a failure, and the agent controller cancelled the run before the retry could finish. Retry attempts are now marked as retrying, so only a final failure stops the run. ([#26105](https://github.com/mastra-ai/mastra/pull/26105))
+
+- Updated dependencies [[`e554c6d`](https://github.com/mastra-ai/mastra/commit/e554c6d7ff40805950f37a230ede4e2db82fc426), [`7736c40`](https://github.com/mastra-ai/mastra/commit/7736c40dedd54ce840f834f7de862e64895cd3a8), [`bf982e9`](https://github.com/mastra-ai/mastra/commit/bf982e91512d5fb864984b44e649f104b7a9d7a4), [`da4eac9`](https://github.com/mastra-ai/mastra/commit/da4eac96c1856b81dd132183bccb3247de1d427f), [`539b958`](https://github.com/mastra-ai/mastra/commit/539b958da37c302f0b8bee5d9ce2b063c63ab09a), [`810b48d`](https://github.com/mastra-ai/mastra/commit/810b48dd77d992966a47ca5920e3c32267521b3a), [`7a5c69e`](https://github.com/mastra-ai/mastra/commit/7a5c69e59d6f23b68c44887b15a674715e8c876f), [`fb03761`](https://github.com/mastra-ai/mastra/commit/fb0376186c5fc8fc633c38d13a8dcc7c976318d8), [`6a4f0bd`](https://github.com/mastra-ai/mastra/commit/6a4f0bd01016fba8d8dea5159a18c6a400237256), [`07440af`](https://github.com/mastra-ai/mastra/commit/07440affa587b68f8348eb68e92fc1aa1817b61f), [`3439cb2`](https://github.com/mastra-ai/mastra/commit/3439cb236f17bd248a326ff7f2c934cfb9974936)]:
+  - @mastra/core@1.75.0-alpha.8
+
+## 1.36.0-alpha.5
+
+### Patch Changes
+
+- Fixed Observational Memory degenerate-output detection so very long lines are truncated and retained, repeated short lines share the existing bounded budget, and genuinely repetitive output remains rejected. ([#25212](https://github.com/mastra-ai/mastra/pull/25212))
+
+  Fixes #24354.
+
+- Fixed Observational Memory recording completed background-task tool results as `null`. A `null` stored model output now falls back to the actual tool result, matching how `@mastra/core` replays tool results, so the Observer, token counting, and recall see the real result. ([#25961](https://github.com/mastra-ai/mastra/pull/25961))
+
+- Bumped probe-image-size to ^7.4.0 in @mastra/memory to pick up the fix for a quadratic-time denial of service in its SVG parser (GHSA-gjj5-9665-rwrc). Bumped the smol-toml pin in @mastra/code-sdk from 1.8.0 to 1.9.0 for a parser security fix. No API changes. ([#25966](https://github.com/mastra-ai/mastra/pull/25966))
+
+- Updated dependencies [[`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`4cf860a`](https://github.com/mastra-ai/mastra/commit/4cf860a5a550a21fabce43010e6f1c95710e155c), [`dac82ea`](https://github.com/mastra-ai/mastra/commit/dac82eaa324b66acad38d468799fa4e66594107f), [`97644a7`](https://github.com/mastra-ai/mastra/commit/97644a78cafe8276026509c56a70108075e950b7), [`0a37598`](https://github.com/mastra-ai/mastra/commit/0a375986869049865023d765337db427b6e27436), [`018ae9d`](https://github.com/mastra-ai/mastra/commit/018ae9d2f4ebfd3bd6f267d0010171a546cb3abf), [`c498e24`](https://github.com/mastra-ai/mastra/commit/c498e249038d08a2e2fc31eed7ba4ca5e7fa1aa8), [`045d583`](https://github.com/mastra-ai/mastra/commit/045d583852e55d0c1c518d2f5f9c33b48243cf7d)]:
+  - @mastra/core@1.75.0-alpha.7
+
+## 1.36.0-alpha.4
+
+### Patch Changes
+
+- Fixed Observational Memory saving a cut-off or empty observation when the observer or reflector model call failed partway through. This covered streams that ended early (for example Gemini reporting a finish reason of `other`) and transient provider errors such as a 429 or 500. These calls now retry the whole request from the original prompt instead of continuing from the partial reply, so only complete replies are saved. Fixes [#24810](https://github.com/mastra-ai/mastra/issues/24810). ([#25058](https://github.com/mastra-ai/mastra/pull/25058))
+
+- Updated dependencies [[`499f480`](https://github.com/mastra-ai/mastra/commit/499f480c86ba137356367e6b6281ba02b42d8169)]:
+  - @mastra/core@1.75.0-alpha.6
+
+## 1.36.0-alpha.3
+
+### Patch Changes
+
+- Observational memory no longer sends the Observer attachments that the agent recorded as unavailable. The Observer still sees their `[Image #1: ...]` or `[File #1: ...]` line in the transcript. See #23705. ([#25051](https://github.com/mastra-ai/mastra/pull/25051))
+
+- Updated dependencies [[`8a5278a`](https://github.com/mastra-ai/mastra/commit/8a5278a8ab3fc6d4ae81073c7cef100954b4f0ef), [`7a50f76`](https://github.com/mastra-ai/mastra/commit/7a50f76900eb1488f755090651deae87b57cbab1), [`6cb981b`](https://github.com/mastra-ai/mastra/commit/6cb981bc62994e4c775864204617af70a7db3c4a), [`616ef0f`](https://github.com/mastra-ai/mastra/commit/616ef0fa482a7724f5e93609ab4f3960e3784a17), [`9168424`](https://github.com/mastra-ai/mastra/commit/9168424453b5c0d793e0ddaa8066dceec60f619a), [`873b67e`](https://github.com/mastra-ai/mastra/commit/873b67e1e80e33cedf1809bf51f342cf7e9e654f), [`c96dab0`](https://github.com/mastra-ai/mastra/commit/c96dab05e69601667bc237ff2b27b9cb7d1f50c6)]:
+  - @mastra/core@1.75.0-alpha.5
+
 ## 1.36.0-alpha.2
 
 ### Patch Changes

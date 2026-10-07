@@ -155,9 +155,9 @@ export interface DiscordProviderConfig {
    */
   waitUntil?: WaitUntilFn;
   /**
-   * Start the Gateway WebSocket (core-owned) so the bot receives DMs, @mentions,
-   * and reactions in addition to slash commands. Set `false` for interactions-
-   * only serverless deployments. Forwarded to the adapter entry as `gateway`.
+   * Start the Gateway WebSocket (provider-owned reconnect loop with backoff)
+   * so the bot receives DMs, @mentions, and reactions in addition to slash
+   * commands. Set `false` for interactions-only serverless deployments.
    *
    * @default true
    */
@@ -291,4 +291,40 @@ export interface DiscordInstallation {
   commandVersions?: Record<string, string>;
   /** When the installation was created. */
   installedAt: Date;
+  /**
+   * The bot's guild ids at the moment a pending invite was issued. Lets
+   * {@link DiscordProvider.reconcileInstallation} confirm the install after the
+   * operator completes the invite in another tab: exactly one guild appearing
+   * since the snapshot is the authorized guild, so the install activates
+   * without waiting for a first interaction. `undefined` when the snapshot
+   * couldn't be taken (or the bot is in too many guilds to page) — the install
+   * then activates only via the first interaction, as before. Cleared on
+   * activation.
+   */
+  guildSnapshot?: string[];
+  /**
+   * When the invite flow that owns {@link guildSnapshot} was last (re)started.
+   * The snapshot is only trusted for a bounded claim window after this moment
+   * (see `SNAPSHOT_TTL_MS` in `reconcile.ts`) — an abandoned Connect click must
+   * not claim a guild the bot joins days later. Set on every invite-flow
+   * `connect()`, including when the fetch that should have produced
+   * {@link guildSnapshot} failed. Cleared on activation.
+   */
+  snapshotAt?: Date;
+  /**
+   * The Discord application {@link guildSnapshot} was taken against. A baseline
+   * from app A says nothing about app B's membership — after `configure()`
+   * swaps the bot token, every guild B was already in would look newly
+   * authorized. Reconciliation and snapshot reuse require it to match the
+   * current app. Cleared on activation.
+   */
+  snapshotApplicationId?: string;
+  /**
+   * The guild `connect()` explicitly targeted (`options.guildId`) when the
+   * pending invite was issued, if any. Reconciliation only auto-activates this
+   * install on that guild — a different guild appearing in the bot's
+   * membership contradicts the caller's intent and waits for an authoritative
+   * first interaction instead. Cleared on activation.
+   */
+  targetGuildId?: string;
 }

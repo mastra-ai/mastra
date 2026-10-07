@@ -3,10 +3,10 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 

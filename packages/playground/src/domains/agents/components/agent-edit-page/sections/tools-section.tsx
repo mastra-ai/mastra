@@ -2,6 +2,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/pla
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { useTools } from '@mastra/react/hooks/tools';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -10,7 +11,6 @@ import { Controller, useWatch } from 'react-hook-form';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { EntityAccordionItem } from '@/domains/cms';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;
