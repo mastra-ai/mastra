@@ -63,9 +63,10 @@ describe('Knowledge', () => {
       }
 
       await vi.waitFor(() =>
-        expect(warn).toHaveBeenCalledWith('Knowledge structure reconciliation failed; call reconcile() to retry', {
-          error,
-        }),
+        expect(warn).toHaveBeenCalledWith(
+          'Knowledge startup reconciliation failed; durable importer runs remain recoverable',
+          { error },
+        ),
       );
     },
   );
