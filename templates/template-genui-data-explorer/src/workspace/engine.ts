@@ -27,15 +27,37 @@ export class WorkspaceEngine {
     this.explorer = explorer;
     this.store = store;
     this.catalog = validateCatalog(entries);
+    this.store.registerLegacy(workspaceId, threadId);
   }
-  cancel(requestId: string) {
-    const active = this.#active.get(workspaceId);
+  sessionForThread(id: string) {
+    return this.store.sessionForThread(id);
+  }
+  createSession(): WorkspaceSnapshot {
+    const id = randomUUID();
+    this.store.createSession({
+      id,
+      threadId: `chat-${id}`,
+      revision: 0,
+      source: this.explorer.describe(),
+      results: [],
+      components: [],
+      filters: {},
+      messages: [],
+    });
+    return this.snapshot(id);
+  }
+  cancel(requestId: string, id = workspaceId) {
+    const active = this.#active.get(id);
     if (active?.requestId === requestId)
       active.controller.abort(
         new SourceError("cancelled", "Analysis cancelled. The last saved workspace is preserved."),
       );
   }
-  snapshot(): WorkspaceSnapshot {
+  snapshot(id = workspaceId): WorkspaceSnapshot {
+    const session = this.store.session(id);
+    const sessions = this.store.sessions();
+    const workspaceId = session.id,
+      threadId = session.threadId;
     const source = this.explorer.describe();
     const catalog = this.catalog.map(({ id, version, defaults }) => ({ id, version, defaults }));
     const workspace = this.store.load(workspaceId) ?? {
@@ -48,6 +70,11 @@ export class WorkspaceEngine {
       filters: {},
       messages: [],
     };
+    if (workspace.id !== session.id || workspace.threadId !== session.threadId)
+      throw new WorkspaceError(
+        "recovery-required",
+        "Saved chat identity is inconsistent. Restore a compatible local store.",
+      );
     workspace.messages = workspace.messages.map((message) => {
       if (message.role !== "assistant") return message;
       const results = workspace.results.filter(
@@ -64,6 +91,7 @@ export class WorkspaceEngine {
       )
     )
       return {
+        sessions,
         catalog,
         workspace,
         status: "recovery-required",
@@ -102,6 +130,7 @@ export class WorkspaceEngine {
     const latest = this.store.latest(workspaceId);
     if (latest && latest.status !== "complete")
       return {
+        sessions,
         catalog,
         workspace: { ...workspace, components },
         ...(latest.question
@@ -114,6 +143,7 @@ export class WorkspaceEngine {
           "The last request was interrupted before saving. The last complete revision is shown. Explicitly retry with a new request ID.",
       };
     return {
+      sessions,
       catalog,
       workspace: { ...workspace, components },
       status: "saved",
@@ -185,12 +215,13 @@ export class WorkspaceEngine {
   }
   repeated(question: Question, action?: WorkspaceAction, correction?: Correction) {
     return this.store.request(
-      workspaceId,
+      question.workspaceId,
       question.requestId,
       this.requestPayload(question, action, correction),
     );
   }
   async synchronizeConversation(workspace: Workspace) {
+    const threadId = workspace.threadId;
     const memory = await this.explorer.agent.getMemory();
     if (!memory) return;
     await memory.deleteThread(threadId);
@@ -203,6 +234,7 @@ export class WorkspaceEngine {
       await memory.saveMessages({
         messages: workspace.messages.map((message, index) => ({
           ...message,
+          id: `${workspace.id}:${message.id}`,
           threadId,
           resourceId: "local-demo-user",
           createdAt: new Date(index),
@@ -222,11 +254,12 @@ export class WorkspaceEngine {
     onCommit?: (workspace: Workspace) => void,
     correction?: Correction,
   ) {
-    const initial = this.snapshot();
+    const { workspaceId, threadId } = question;
+    const initial = this.snapshot(workspaceId);
     if (initial.status === "recovery-required")
       throw new WorkspaceError("recovery-required", initial.message);
-    if (question.workspaceId !== workspaceId || question.threadId !== threadId)
-      throw new WorkspaceError("invalid-input", "Only the local demo workspace is available.");
+    if (question.threadId !== initial.workspace.threadId)
+      throw new WorkspaceError("invalid-input", "Select a saved chat with its matching thread.");
     const payload = this.requestPayload(question, action, correction);
     const duplicate = this.store.request(workspaceId, question.requestId, payload);
     if (duplicate) {
@@ -235,7 +268,7 @@ export class WorkspaceEngine {
           "invalid-input",
           "This request is running or was interrupted. Reload and explicitly retry with a new request ID.",
         );
-      return { duplicate: true, snapshot: this.snapshot(), outcome: duplicate.response };
+      return { duplicate: true, snapshot: this.snapshot(workspaceId), outcome: duplicate.response };
     }
     /* Preserve accepted bindings during display-only catalog recovery. */
     const canonical = this.store.load(workspaceId) ?? initial.workspace;
@@ -343,7 +376,7 @@ export class WorkspaceEngine {
         committed = next;
         return {
           duplicate: false,
-          snapshot: this.snapshot(),
+          snapshot: this.snapshot(workspaceId),
           outcome: {
             status: "complete",
             message: previousView ? "Overview restored." : "View removed.",
@@ -544,7 +577,7 @@ export class WorkspaceEngine {
           /* The visible outcome remains unsaved even if the journal cannot be updated. */
         }
       }
-      return { duplicate: false, snapshot: this.snapshot(), outcome };
+      return { duplicate: false, snapshot: this.snapshot(workspaceId), outcome };
     } finally {
       try {
         await this.synchronizeConversation(this.store.load(workspaceId) ?? canonical);
@@ -556,8 +589,12 @@ export class WorkspaceEngine {
       release();
     }
   }
-  acknowledgeRender(input: { revision: number; resultId: string; componentId: string }) {
-    const snapshot = this.snapshot();
+  acknowledgeRender(
+    input: { revision: number; resultId: string; componentId: string },
+    id = workspaceId,
+  ) {
+    const snapshot = this.snapshot(id);
+    const { id: workspaceId, threadId } = snapshot.workspace;
     const binding = snapshot.workspace.components.find(
       (item) => item.id === input.componentId && item.resultId === input.resultId,
     );

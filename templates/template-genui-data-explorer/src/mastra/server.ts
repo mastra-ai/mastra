@@ -1,8 +1,9 @@
+import { z } from "zod";
 import { registerApiRoute } from "@mastra/core/server";
 import type { Config } from "@mastra/core/mastra";
 import { workspaceRuntime } from "../workspace/runtime.ts";
 import type { WorkspaceEngine } from "../workspace/engine.ts";
-import { renderAckSchema } from "../workspace/contracts.ts";
+import { renderAckSchema, requestedSession } from "../workspace/contracts.ts";
 
 const maximumBody = 2 * 1024 * 1024;
 async function boundedBody(request: Request) {
@@ -64,6 +65,7 @@ export function nativeServer(
       const protectedWorkspace =
         (path === "/workspace" && method === "GET") ||
         (path === "/render-ack" && method === "POST") ||
+        (path === "/sessions" && method === "POST") ||
         (path.startsWith("/copilotkit/") && ["GET", "POST"].includes(method));
       if (
         protectedWorkspace ||
@@ -88,7 +90,33 @@ export function nativeServer(
     apiRoutes: [
       registerApiRoute("/workspace", {
         method: "GET",
-        handler: (context) => context.json(engine.snapshot()),
+        handler: (context) => {
+          try {
+            return context.json(engine.snapshot(requestedSession(context.req.raw)));
+          } catch {
+            return context.json(
+              { error: "Saved chat is unavailable. Select a compatible local chat." },
+              400,
+            );
+          }
+        },
+      }),
+      registerApiRoute("/sessions", {
+        method: "POST",
+        handler: async (context) => {
+          try {
+            const body = await boundedBody(context.req.raw);
+            if (body === undefined)
+              return context.json({ error: "Request body exceeds 2 MiB." }, 413);
+            z.strictObject({}).parse(JSON.parse(body));
+            return context.json(engine.createSession(), 201);
+          } catch {
+            return context.json(
+              { error: "Chat creation failed. Check local storage and retry." },
+              400,
+            );
+          }
+        },
       }),
       registerApiRoute("/render-ack", {
         method: "POST",
@@ -97,7 +125,10 @@ export function nativeServer(
             const body = await boundedBody(context.req.raw);
             if (body === undefined)
               return context.json({ error: "Request body exceeds 2 MiB." }, 413);
-            engine.acknowledgeRender(renderAckSchema.parse(JSON.parse(body)));
+            engine.acknowledgeRender(
+              renderAckSchema.parse(JSON.parse(body)),
+              requestedSession(context.req.raw),
+            );
             return new Response(undefined, { status: 204 });
           } catch {
             return context.json({ error: "A current saved verified view is required." }, 400);

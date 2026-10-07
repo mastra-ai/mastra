@@ -42,6 +42,35 @@ body {
   gap: 1rem;
   padding: 1.25rem 2rem;
 }
+.chat-session-actions {
+  display: flex;
+  align-items: end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.chat-history {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--subtle);
+}
+.chat-history select {
+  width: 15rem;
+  max-width: 100%;
+  padding: 0.55rem;
+  border: 1px solid var(--edge);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+@media (max-width: 1100px) {
+  .app-header {
+    flex-wrap: wrap;
+  }
+  .chat {
+    height: calc(100dvh - 12rem);
+  }
+}
 h1 {
   font-size: 1.35rem;
   margin: 0;

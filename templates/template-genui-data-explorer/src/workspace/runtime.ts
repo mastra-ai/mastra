@@ -12,7 +12,7 @@ import {
 } from "@copilotkit/runtime/v2";
 import { WorkspaceEngine } from "./engine.ts";
 import { WorkspaceError } from "./store.ts";
-import { requestProperties, threadId, workspaceId, workspaceSchema } from "./contracts.ts";
+import { requestProperties, workspaceSchema } from "./contracts.ts";
 
 /** Only this guarded agent is registered with the official runtime. Native execution remains guarded. */
 export class WorkspaceAgent extends AbstractAgent {
@@ -41,7 +41,8 @@ export class WorkspaceAgent extends AbstractAgent {
       };
       void (async () => {
         try {
-          const snapshot = this.engine.snapshot();
+          const { id: workspaceId, threadId } = this.engine.sessionForThread(input.threadId);
+          const snapshot = this.engine.snapshot(workspaceId);
           const properties = requestProperties.parse(input.forwardedProps);
           if (
             input.threadId !== threadId ||
@@ -158,17 +159,20 @@ export class WorkspaceAgent extends AbstractAgent {
 class WorkspaceRunner extends InMemoryAgentRunner {
   readonly engine: WorkspaceEngine;
   constructor(engine: WorkspaceEngine) {
-    super({ onConcurrentRun: "supersede", maxThreads: 1, maxRunsPerThread: 20 });
+    super({ onConcurrentRun: "supersede", maxThreads: 100, maxRunsPerThread: 20 });
     this.engine = engine;
   }
   override connect(request: Parameters<InMemoryAgentRunner["connect"]>[0]): Observable<BaseEvent> {
-    if (request.threadId !== threadId)
+    let snapshot;
+    try {
+      snapshot = this.engine.snapshot(this.engine.sessionForThread(request.threadId).id);
+    } catch {
       return of({
         type: EventType.RUN_ERROR,
         code: "invalid-input",
-        message: "Only the local thread is available.",
+        message: "Select an available saved chat.",
       });
-    const snapshot = this.engine.snapshot();
+    }
     return of(
       { type: EventType.STATE_SNAPSHOT, snapshot },
       { type: EventType.MESSAGES_SNAPSHOT, messages: snapshot.workspace.messages },
@@ -192,15 +196,23 @@ export function workspaceRuntime(engine: WorkspaceEngine) {
     if (request.method !== "POST" || !new URL(request.url).pathname.endsWith("/run"))
       return handler(request);
     let requestId: string | undefined;
+    let sessionId: string | undefined;
     try {
       const body: unknown = await request.clone().json();
       if (body && typeof body === "object" && "runId" in body && typeof body.runId === "string")
         requestId = body.runId;
+      if (
+        body &&
+        typeof body === "object" &&
+        "threadId" in body &&
+        typeof body.threadId === "string"
+      )
+        sessionId = engine.sessionForThread(body.threadId).id;
     } catch {
       return handler(request);
     }
     const cancel = () => {
-      if (requestId) engine.cancel(requestId);
+      if (requestId && sessionId) engine.cancel(requestId, sessionId);
     };
     request.signal.addEventListener("abort", cancel, { once: true });
     try {

@@ -57,6 +57,7 @@ question that created them, with formatted USD values and calendar dates. Techni
 evidence stays on the server; **Source details** exposes the
 metric definition when needed.
 
+- Choose **New chat** to start an empty conversation. Use **Chat history** to return to any saved chat, including an empty one. Each chat keeps its own messages, cards, filters and model memory; the Sales dataset is shared. Creating or opening a chat makes no model call. The browser remembers its last selection. Switching during generation stops this browser’s run and preserves its last accepted revision.
 - Use **Dark mode** or **Light mode** in the header. The dark palette is inspired by Dracula; the choice persists in this browser.
 - Use **Collapse** and **Expand** to fold a card while keeping its question and answer together. This changes only the current presentation and makes no model call.
 - Hover a chart point or select its month/category button to see its value. **Inspect selected records**
@@ -349,7 +350,7 @@ its journal without another model call; reusing the ID with different input fail
 interaction cancels and awaits the older analysis; stale output cannot replace the newer revision.
 Failed saves and interrupted runs remain explicitly incomplete while the previous accepted revision
 stays visible. Retry with a new request ID after restoring service or write permissions. Do not delete
-stores to conceal an error. The local demo uses one fixed workspace, thread and server-owned identity;
+stores to conceal an error. The local demo uses server-issued workspace/thread pairs and a server-owned local identity;
 it is not a multi-user deployment or an authentication system.
 
 The saved workspace is bounded to 24 cards and 1 MiB; remove a card, reuse card IDs or request fewer records if that

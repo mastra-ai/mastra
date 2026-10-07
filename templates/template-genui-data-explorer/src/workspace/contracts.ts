@@ -47,6 +47,20 @@ export function savedCardTurn(workspace: Workspace, componentId: string) {
   const binding = workspace.components.find((item) => item.id === componentId);
   return workspace.results.find((item) => item.resultId === binding?.resultId)?.requestId;
 }
+export const chatSessionSchema = z.strictObject({
+  id: z.string().min(1).max(128),
+  threadId: z.string().min(1).max(128),
+  title: z.string().min(1).max(80),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ChatSession = z.infer<typeof chatSessionSchema>;
+export const sessionIdSchema = z.union([z.literal("local-workspace"), z.string().uuid()]);
+export function requestedSession(request: Request) {
+  const values = new URL(request.url).searchParams.getAll("session");
+  if (values.length > 1) throw new Error("Select one chat session.");
+  return sessionIdSchema.parse(values[0] ?? "local-workspace");
+}
 export const workspaceId = "local-workspace";
 export const threadId = "local-thread";
 export const actionSchema = z.discriminatedUnion("type", [
@@ -82,6 +96,7 @@ export const requestProperties = z.strictObject({
   correction: correctionSchema.optional(),
 });
 export interface WorkspaceSnapshot {
+  sessions: ChatSession[];
   lastRequest?: { question: string; requestId: string } | undefined;
   catalog?: { id: string; version: string; defaults: { pageSize: number } }[] | undefined;
   workspace: Workspace;

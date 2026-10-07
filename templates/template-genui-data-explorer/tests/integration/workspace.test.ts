@@ -1,3 +1,5 @@
+import { DatabaseSync } from "node:sqlite";
+import { WorkspaceAgent } from "../../src/workspace/runtime.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1074,6 +1076,163 @@ it("result-bound composition preserves custom properties without axes and object
       expect(schema.safeParse({ components: [{ ...binding, properties }] }).success).toBe(false);
   } finally {
     await explorer.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("new chats persist empty sessions and isolate history, memory, filters, replay and cancellation", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "workspace-sessions-"));
+  const path = join(dir, "sales.sqlite");
+  referenceFixture(path).db.close();
+  const provider = workspaceModel({ delayMs: 150 });
+  const settings = {
+    settings: { path },
+    workspacePath: join(dir, "workspace.sqlite"),
+    memoryPath: join(dir, "memory.sqlite"),
+    model: provider.model,
+  };
+  let app = await createWorkspace(settings);
+  const execute = (
+    workspace: ReturnType<typeof app.engine.snapshot>["workspace"],
+    requestId: string,
+    question: string,
+  ) => {
+    const agent = new WorkspaceAgent(app.engine);
+    return new Promise<BaseEvent[]>((resolve) => {
+      const events: BaseEvent[] = [];
+      agent
+        .run({
+          threadId: workspace.threadId,
+          runId: requestId,
+          messages: [...workspace.messages, { id: requestId, role: "user", content: question }],
+          state: {},
+          context: [],
+          tools: [],
+          forwardedProps: { baseRevision: workspace.revision },
+        })
+        .subscribe({ next: (event) => events.push(event), complete: () => resolve(events) });
+    });
+  };
+  try {
+    const legacy = app.engine.snapshot().workspace;
+    await execute(legacy, "shared-request", "Show monthly bookings LEGACY_MARKER");
+    const previous = app.engine.snapshot().workspace;
+    const calls = provider.calls.length;
+    const fresh = app.engine.createSession().workspace;
+    const unused = app.engine.createSession().workspace;
+    expect(provider.calls).toHaveLength(calls);
+    expect(fresh).toMatchObject({
+      revision: 0,
+      messages: [],
+      components: [],
+      results: [],
+      filters: {},
+    });
+    expect(fresh.id).not.toBe(previous.id);
+    expect(fresh.threadId).not.toBe(previous.threadId);
+    expect(app.engine.snapshot().workspace).toEqual(previous);
+    expect(app.engine.snapshot().sessions).toHaveLength(3);
+    const start = provider.calls.length;
+    await execute(fresh, "shared-request", "Show monthly bookings FRESH_MARKER");
+    expect(JSON.stringify(provider.calls.slice(start))).not.toContain("LEGACY_MARKER");
+    const accepted = app.engine.snapshot(fresh.id).workspace;
+    expect(accepted.revision).toBe(1);
+    expect(accepted.messages[0]?.content).toContain("FRESH_MARKER");
+    expect(
+      app.engine.snapshot(fresh.id).sessions.find((session) => session.id === fresh.id)?.title,
+    ).toContain("FRESH_MARKER");
+    const recalled = await app.memory.recall({
+      threadId: fresh.threadId,
+      resourceId: "local-demo-user",
+      perPage: 50,
+    });
+    expect(JSON.stringify(recalled)).toContain("FRESH_MARKER");
+    expect(JSON.stringify(recalled)).not.toContain("LEGACY_MARKER");
+    const originalMemory = await app.memory.recall({
+      threadId: previous.threadId,
+      resourceId: "local-demo-user",
+      perPage: 50,
+    });
+    expect(JSON.stringify(originalMemory)).toContain("LEGACY_MARKER");
+    expect(JSON.stringify(originalMemory)).not.toContain("FRESH_MARKER");
+    const noModel = async () => {
+      throw new Error("An interaction must not invoke a model.");
+    };
+    const filter = {
+      workspaceId: fresh.id,
+      threadId: fresh.threadId,
+      requestId: "filter",
+      baseRevision: 1,
+      question: "Apply a filter",
+    };
+    const action = {
+      type: "filter" as const,
+      componentId: accepted.components[0]!.id,
+      field: "segment" as const,
+      value: "SMB",
+    };
+    await app.engine.run(filter, new AbortController(), noModel, action);
+    expect(app.engine.snapshot(fresh.id).workspace.filters).toEqual({ segment: "SMB" });
+    expect(app.engine.snapshot().workspace).toEqual(previous);
+    expect((await app.engine.run(filter, new AbortController(), noModel, action)).duplicate).toBe(
+      true,
+    );
+    await expect(
+      app.engine.run(
+        { ...filter, requestId: "mismatch", threadId },
+        new AbortController(),
+        noModel,
+      ),
+    ).rejects.toThrow("matching thread");
+    expect(() => app.engine.snapshot("unknown")).toThrow("unavailable");
+    expect(() => app.engine.sessionForThread("unknown")).toThrow("unavailable");
+    const unknown = await execute({ ...fresh, threadId: "unknown" }, "forged", "Show bookings");
+    expect(unknown.some((event) => event.type === "RUN_ERROR")).toBe(true);
+    // Matching request IDs in different chats cannot cancel one another.
+    const crossed = await execute(
+      { ...fresh, messages: previous.messages },
+      "crossed-history",
+      "Show bookings",
+    );
+    expect(crossed.some((event) => event.type === "RUN_ERROR")).toBe(true);
+    const cancelled = execute(
+      app.engine.snapshot(fresh.id).workspace,
+      "parallel",
+      "Show slow monthly bookings CANCEL_MARKER",
+    );
+    const running = execute(unused, "parallel", "Show slow monthly bookings OTHER_MARKER");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    app.engine.cancel("parallel", fresh.id);
+    await Promise.all([running, cancelled]);
+    expect(app.engine.snapshot(fresh.id).status).toBe("incomplete");
+    expect(app.engine.snapshot(unused.id).workspace.revision).toBe(1);
+    expect(app.engine.snapshot(fresh.id).workspace.revision).toBe(2);
+    const empty = app.engine.createSession().workspace;
+    const before = app.engine.snapshot().sessions;
+    const db = new DatabaseSync(settings.workspacePath);
+    try {
+      db.exec(
+        "CREATE TRIGGER deny_new_chat BEFORE INSERT ON workspaces BEGIN SELECT RAISE(ABORT,'test failure'); END;",
+      );
+      expect(() => app.engine.createSession()).toThrow("Could not create");
+      expect(app.engine.snapshot().sessions).toEqual(before);
+      db.exec("DROP TRIGGER deny_new_chat;");
+    } finally {
+      db.close();
+    }
+    await app.engine.close();
+    await app.storage.close();
+    app = await createWorkspace(settings);
+    expect(app.engine.snapshot(empty.id).workspace).toEqual(empty);
+    expect(app.engine.snapshot(fresh.id).workspace).toMatchObject({
+      revision: 2,
+      filters: { segment: "SMB" },
+    });
+    expect(app.engine.snapshot().workspace).toEqual(previous);
+    expect(app.engine.snapshot().sessions).toHaveLength(4);
+  } finally {
+    await app.engine.close();
+    await app.storage.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

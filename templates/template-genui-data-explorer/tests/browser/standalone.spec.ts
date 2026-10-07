@@ -298,6 +298,44 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
       end: churnEnd,
     });
     expect(churn?.data.table?.rows).toHaveLength(12);
+    const previousCalls = provider.calls.length;
+    const previousChat = await saved();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await expect(page.getByText("Revision 0 · Saved locally", { exact: false })).toBeVisible();
+    const selected = await page.getByLabel("Chat history", { exact: true }).inputValue();
+    const freshResponse = await page.request.get(
+      `http://127.0.0.1:${webPort}/api/workspace?session=${selected}`,
+    );
+    const fresh = z
+      .object({ workspace: workspaceSchema })
+      .parse(await freshResponse.json()).workspace;
+    expect(fresh.messages).toEqual([]);
+    expect(fresh.components).toEqual([]);
+    expect(fresh.id).not.toBe(previousChat.id);
+    expect(provider.calls).toHaveLength(previousCalls);
+    await page.reload();
+    await expect(page.getByLabel("Chat history", { exact: true })).toHaveValue(fresh.id);
+    await page.getByLabel("Chat history", { exact: true }).selectOption(previousChat.id);
+    await expect(page.getByText("Revision 6 · Saved locally", { exact: false })).toBeVisible();
+    expect((await saved()).components).toEqual(previousChat.components);
+    expect(provider.calls).toHaveLength(previousCalls);
+    expect((await fetch(`http://127.0.0.1:${agentPort}/workspace?session=unknown`)).status).toBe(
+      400,
+    );
+    expect(
+      (
+        await fetch(`http://127.0.0.1:${agentPort}/sessions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ threadId: previousChat.threadId }),
+        })
+      ).status,
+    ).toBe(400);
+    await page.screenshot({
+      path: testInfo.outputPath("production-chat-history.png"),
+      fullPage: true,
+    });
+
     await stop();
     const traces = new DatabaseSync(join(data, "traces.sqlite"), { readOnly: true });
     const tables = traces
@@ -329,6 +367,7 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
           cleanShutdown: true,
           builtStart: true,
           nativeCancellation: true,
+          newChatAndHistory: true,
           uploadLimitBytes: 2 * 1024 * 1024,
         },
         null,

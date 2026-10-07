@@ -1,4 +1,5 @@
-import { renderAckSchema } from "../../src/workspace/contracts.ts";
+import { z } from "zod";
+import { renderAckSchema, requestedSession } from "../../src/workspace/contracts.ts";
 import { createServer } from "node:http";
 import { workspaceRuntime } from "../../src/workspace/runtime.ts";
 import type { WorkspaceEngine } from "../../src/workspace/engine.ts";
@@ -26,9 +27,11 @@ export function workspaceServer(
       response.end("Only local workspace requests are accepted.");
       return;
     }
-    if (request.url === "/workspace" && request.method === "GET") {
+    const url = new URL(request.url ?? "/", `http://${host}`);
+    const nativeRequest = new Request(url);
+    if (url.pathname === "/workspace" && request.method === "GET") {
       try {
-        const snapshot = engine.snapshot();
+        const snapshot = engine.snapshot(requestedSession(nativeRequest));
         response.writeHead(200, {
           "content-type": "application/json",
           "cache-control": "no-store",
@@ -47,14 +50,26 @@ export function workspaceServer(
       }
       return;
     }
-    if (request.url === "/render-ack" && request.method === "POST") {
+    if (["/render-ack", "/sessions"].includes(url.pathname) && request.method === "POST") {
       try {
         let body = "";
         for await (const chunk of request) {
           body += String(chunk);
           if (Buffer.byteLength(body) > 1024) throw new Error("Request too large.");
         }
-        engine.acknowledgeRender(renderAckSchema.parse(JSON.parse(body)));
+        if (url.pathname === "/sessions") {
+          z.strictObject({}).parse(JSON.parse(body));
+          response.writeHead(201, {
+            "content-type": "application/json",
+            "cache-control": "no-store",
+          });
+          response.end(JSON.stringify(engine.createSession()));
+          return;
+        }
+        engine.acknowledgeRender(
+          renderAckSchema.parse(JSON.parse(body)),
+          requestedSession(nativeRequest),
+        );
         response.writeHead(204);
       } catch {
         response.writeHead(400);

@@ -42,7 +42,13 @@ async function stop() {
   });
 }
 async function saved(page: Page) {
-  const response = await page.request.get("/api/workspace");
+  const selected = await page.evaluate(
+    () =>
+      document.querySelector<HTMLSelectElement>('select[aria-label="Chat history"]')?.value ??
+      localStorage.getItem("explorer-chat") ??
+      "local-workspace",
+  );
+  const response = await page.request.get(`/api/workspace?session=${encodeURIComponent(selected)}`);
   expect(response.ok()).toBe(true);
   const body: unknown = await response.json();
   if (!body || typeof body !== "object" || !("workspace" in body))
@@ -86,7 +92,7 @@ function input(
   question = "Show monthly bookings",
 ) {
   return {
-    threadId,
+    threadId: workspace.threadId,
     runId: requestId,
     messages: [...workspace.messages, { id: requestId, role: "user", content: question }],
     state: {},
@@ -293,7 +299,11 @@ test("inline views format answers, collapse without removing the conversation an
     page.getByRole("button", { name: "Expand Monthly bookings", exact: true }),
   ).toHaveAttribute("aria-expanded", "false");
   await expect(answer.getByRole("img")).toBeHidden();
-  await expect(page.getByText("Show a chart of last month sales", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByTestId("copilot-user-message")
+      .getByText("Show a chart of last month sales", { exact: true }),
+  ).toBeVisible();
   expect((await saved(page)).components).toEqual(first.components);
   expect((await saved(page)).revision).toBe(1);
   expect(await readFile(join(directory, "calls.json"), "utf8")).toBe(calls);
@@ -768,4 +778,112 @@ test("monthly ECharts preserves verified connector dates and point values", asyn
   await page.getByRole("button", { name: "Back to overview", exact: true }).click();
   await revision(page, 3);
   await expect(chart.getByRole("heading", { name: "Monthly bookings", exact: true })).toBeVisible();
+});
+
+test("new chat starts clean and saved history restores independently across reloads and tabs", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/");
+  await ask(page, "Show monthly bookings ORIGINAL_SESSION", 1);
+  const original = await saved(page);
+  const calls = Number(await readFile(join(directory, "calls.json"), "utf8"));
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await revision(page, 0);
+  await expect(page.getByRole("heading", { name: "Start with a question" })).toBeVisible();
+  await expect(page.locator(".card")).toHaveCount(0);
+  await expect(
+    page
+      .getByTestId("copilot-user-message")
+      .getByText("Show monthly bookings ORIGINAL_SESSION", { exact: true }),
+  ).toHaveCount(0);
+  const fresh = await saved(page);
+  expect(fresh.id).not.toBe(original.id);
+  expect(Number(await readFile(join(directory, "calls.json"), "utf8"))).toBe(calls);
+  await page.reload();
+  await revision(page, 0);
+  expect((await saved(page)).id).toBe(fresh.id);
+  await ask(page, "Show monthly bookings NEW_SESSION", 1);
+  const prompt = await readFile(join(directory, "prompt.json"), "utf8");
+  expect(prompt).toContain("NEW_SESSION");
+  expect(prompt).not.toContain("ORIGINAL_SESSION");
+  await page.getByLabel("Chat history", { exact: true }).selectOption(original.id);
+  await revision(page, 1);
+  await expect(
+    page
+      .getByTestId("copilot-user-message")
+      .getByText("Show monthly bookings ORIGINAL_SESSION", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByTestId("copilot-user-message")
+      .getByText("Show monthly bookings NEW_SESSION", { exact: true }),
+  ).toHaveCount(0);
+  expect((await saved(page)).components).toEqual(original.components);
+  const other = await context.newPage();
+  await other.goto("/");
+  await expect(other.getByLabel("Chat history", { exact: true })).toHaveValue(original.id);
+  await page.getByLabel("Chat history", { exact: true }).selectOption(fresh.id);
+  await expect(page.getByLabel("Chat history", { exact: true })).toHaveValue(fresh.id);
+  await expect(other.getByLabel("Chat history", { exact: true })).toHaveValue(original.id);
+  await stop();
+  await start();
+  await page.reload();
+  await revision(page, 1);
+  await expect(
+    page
+      .getByTestId("copilot-user-message")
+      .getByText("Show monthly bookings NEW_SESSION", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Chat history", { exact: true }).selectOption(original.id);
+  await revision(page, 1);
+  expect((await saved(page)).components).toEqual(original.components);
+  expect((await page.request.get("/api/workspace?session=unknown")).status()).toBe(400);
+  expect((await page.request.post("/api/sessions", { data: { id: original.id } })).status()).toBe(
+    400,
+  );
+  expect(
+    (
+      await page.request.post("/api/sessions", {
+        data: {},
+        headers: { origin: "https://foreign.test" },
+      })
+    ).status(),
+  ).toBe(403);
+  await other.close();
+});
+
+test("creating a chat during generation stops the old run without leaking late views", async ({
+  page,
+}) => {
+  await stop();
+  await start({ DELAY_CLEANUP: "true" });
+  await page.goto("/");
+  await ask(page, "Show monthly bookings", 1);
+  const original = await saved(page);
+  const input = page.getByPlaceholder("Ask about Sales…");
+  await input.fill("Show slow monthly bookings CANCELLED_SESSION");
+  await input.press("Enter");
+  await expect(
+    page.getByText("Reading the source and preparing your view…", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => {
+      try {
+        return await readFile(join(directory, "cleanup-ready"), "utf8");
+      } catch {
+        return "pending";
+      }
+    })
+    .toBe("ready");
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await revision(page, 0);
+  const fresh = await saved(page);
+  expect(fresh.id).not.toBe(original.id);
+  await expect(page.locator(".card")).toHaveCount(0);
+  // Return immediately; the UI must follow cancellation through native cleanup.
+  await page.getByLabel("Chat history", { exact: true }).selectOption(original.id);
+  await expect(page.locator(".notice")).toHaveAttribute("data-status", "incomplete");
+  expect((await saved(page)).revision).toBe(1);
+  expect((await saved(page)).components).toEqual(original.components);
 });

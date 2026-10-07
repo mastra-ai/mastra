@@ -85,7 +85,9 @@ const catalog = components.map((entry) => ({
 }));
 const alternative = process.env.ALTERNATIVE_GROUPING === "true";
 const monthEnd = process.env.MONTH_END_DATES === "true";
-const source = alternative || monthEnd ? new SalesSource(salesPath) : undefined;
+const delayedCleanup = process.env.DELAY_CLEANUP === "true";
+let reads = 0;
+const source = alternative || monthEnd || delayedCleanup ? new SalesSource(salesPath) : undefined;
 const app = await createWorkspace({
   ...(source
     ? {
@@ -99,6 +101,11 @@ const app = await createWorkspace({
                 request: import("../../data-sources/source.ts").AnalysisRequest,
                 context?: import("../../data-sources/source.ts").SourceExecutionContext,
               ) => {
+                if (delayedCleanup && ++reads > 1) {
+                  context?.trackCleanup?.(new Promise((resolve) => setTimeout(resolve, 2500)));
+                  writeFileSync(join(directory, "cleanup-ready"), "ready");
+                  await new Promise((resolve) => setTimeout(resolve, 1500));
+                }
                 const result = await source.execute(request, context);
                 if (alternative && result.table && result.table.kind !== "records") {
                   result.table.grouping = "calendarTick";

@@ -18,7 +18,14 @@ import {
   useRenderTool,
 } from "@copilotkit/react-core/v2";
 import { z } from "zod";
-import { workspaceSchema, threadId, overviewFor, savedCardTurn } from "../workspace/contracts.ts";
+import {
+  workspaceSchema,
+  chatSessionSchema,
+  sessionIdSchema,
+  workspaceId,
+  overviewFor,
+  savedCardTurn,
+} from "../workspace/contracts.ts";
 import type { WorkspaceAction, WorkspaceSnapshot } from "../workspace/contracts.ts";
 import { components } from "./catalog.ts";
 import type { ComponentDeclaration } from "./catalog.ts";
@@ -30,6 +37,7 @@ import type {
 } from "@copilotkit/react-core/v2";
 
 const snapshotSchema = z.strictObject({
+  sessions: z.array(chatSessionSchema),
   lastRequest: z.strictObject({ question: z.string(), requestId: z.string() }).optional(),
   workspace: workspaceSchema,
   status: z.enum(["saved", "working", "incomplete", "recovery-required"]),
@@ -44,26 +52,48 @@ const snapshotSchema = z.strictObject({
     )
     .optional(),
 });
-interface Bootstrap {
-  state: { snapshot?: WorkspaceSnapshot; error?: string };
-  subscribers: Set<() => void>;
-  load: () => Promise<void>;
+const selectionKey = "explorer-chat";
+function selectedSession() {
+  try {
+    return sessionIdSchema.parse(localStorage.getItem(selectionKey) ?? workspaceId);
+  } catch {
+    return workspaceId;
+  }
 }
-const bootstrap: Bootstrap = {
-  state: {},
+interface BootstrapState {
+  snapshot?: WorkspaceSnapshot;
+  error?: string;
+}
+const bootstrap = {
+  state: initialState(),
   subscribers: new Set<() => void>(),
-  load: async () => {
+  generation: 0,
+  accept(snapshot: WorkspaceSnapshot) {
+    bootstrap.generation++;
+    bootstrap.state = { snapshot };
     try {
-      const response = await fetch("/api/workspace", { cache: "no-store" });
-      if (!response.ok) throw new Error();
-      bootstrap.state = { snapshot: snapshotSchema.parse(await response.json()) };
+      localStorage.setItem(selectionKey, snapshot.workspace.id);
     } catch {
-      bootstrap.state = {
-        error:
-          "Could not load the saved workspace. Check the local agent and storage, then retry; saved data is preserved.",
-      };
+      /* Storage may be disabled. */
     }
     for (const subscriber of bootstrap.subscribers) subscriber();
+  },
+  async load(id = selectedSession(), signal?: AbortSignal) {
+    const generation = ++bootstrap.generation;
+    try {
+      const response = await fetch(`/api/workspace?session=${encodeURIComponent(id)}`, {
+        cache: "no-store",
+        signal: signal ?? null,
+      });
+      if (!response.ok)
+        throw new Error(
+          "Could not open this saved chat. Check the local agent and storage, then retry.",
+        );
+      const snapshot = snapshotSchema.parse(await response.json());
+      if (generation === bootstrap.generation && !signal?.aborted) bootstrap.accept(snapshot);
+    } catch (error) {
+      if (generation === bootstrap.generation && !signal?.aborted) throw error;
+    }
   },
 };
 function subscribe(subscriber: () => void) {
@@ -72,7 +102,10 @@ function subscribe(subscriber: () => void) {
     bootstrap.subscribers.delete(subscriber);
   };
 }
-const initialBootstrap: Bootstrap["state"] = {};
+function initialState(): BootstrapState {
+  return {};
+}
+const initialBootstrap: BootstrapState = {};
 function value() {
   return bootstrap.state;
 }
@@ -84,7 +117,16 @@ export default function WorkspaceClient() {
   const snapshot = loaded.snapshot;
   const [retry, setRetry] = useState(0);
   useEffect(() => {
-    void bootstrap.load();
+    const controller = new AbortController();
+    void bootstrap.load(selectedSession(), controller.signal).catch(() => {
+      if (controller.signal.aborted) return;
+      bootstrap.state = {
+        error:
+          "Could not open the saved chat. Check the local agent and storage, or open the initial chat.",
+      };
+      for (const subscriber of bootstrap.subscribers) subscriber();
+    });
+    return () => controller.abort();
   }, [retry]);
   if (!snapshot)
     return (
@@ -92,10 +134,23 @@ export default function WorkspaceClient() {
         <h1>Mastra GenUI Data Explorer</h1>
         <p role="status">{loaded.error ?? "Loading the saved local workspace…"}</p>
         <button onClick={() => setRetry(retry + 1)}>Retry connection</button>
+        <button
+          onClick={() => {
+            try {
+              localStorage.removeItem(selectionKey);
+            } catch {
+              /* Storage may be disabled. */
+            }
+            setRetry(retry + 1);
+          }}
+        >
+          Open initial chat
+        </button>
       </header>
     );
   return (
     <CopilotKit
+      key={snapshot.workspace.id}
       runtimeUrl="/api/copilotkit"
       agentId="dataExplorer"
       useSingleEndpoint={false}
@@ -110,10 +165,12 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
   const { agent, isReady } = useAgent({
     agentId: "workspace-agent",
     runtimeAgentId: "dataExplorer",
-    threadId,
+    threadId: initial.workspace.threadId,
   });
   const { copilotkit } = useCopilotKit();
   const [notice, setNotice] = useState<string>();
+  const [switching, setSwitching] = useState(false);
+  const sessionTransition = useRef(false);
   const [dismissedFeedback, setDismissedFeedback] = useState<string>();
   const [theme, setTheme] = useState("light");
   useEffect(() => {
@@ -146,6 +203,39 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
   const snapshot = parsed.success ? parsed.data : initial;
   useRenderTool({ name: "*", render: () => null });
   useEffect(() => {
+    if (snapshot.status !== "working") return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
+      try {
+        const response = await fetch(
+          `/api/workspace?session=${encodeURIComponent(snapshot.workspace.id)}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        if (response.ok && !controller.signal.aborted && !agent.isRunning) {
+          const latest = snapshotSchema.parse(await response.json());
+          if (latest.status !== "working" && !controller.signal.aborted && !agent.isRunning) {
+            agent.setMessages(latest.workspace.messages);
+            agent.setState(latest);
+            return;
+          }
+        }
+      } catch {
+        /* Keep the accepted view while the local server reconnects. */
+      }
+      if (!controller.signal.aborted)
+        timer = setTimeout(() => {
+          void refresh();
+        }, 500);
+    };
+    void refresh();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [agent, snapshot.workspace.id, snapshot.status]);
+
+  useEffect(() => {
     if (snapshot.status !== "saved") return;
     const frame = requestAnimationFrame(() => {
       for (const binding of snapshot.workspace.components) {
@@ -153,7 +243,7 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
           `[data-result="${CSS.escape(binding.resultId)}"]`,
         );
         if (!card || !card.getBoundingClientRect().width) continue;
-        void fetch("/api/workspace", {
+        void fetch(`/api/workspace?session=${encodeURIComponent(snapshot.workspace.id)}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -166,6 +256,32 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
     });
     return () => cancelAnimationFrame(frame);
   }, [snapshot]);
+  const changeSession = async (id?: string) => {
+    if (sessionTransition.current || id === snapshot.workspace.id) return;
+    sessionTransition.current = true;
+    setSwitching(true);
+    setNotice(undefined);
+    try {
+      if (agent.isRunning) await copilotkit.stopAgent({ agent });
+      if (id) await bootstrap.load(id);
+      else {
+        const response = await fetch("/api/sessions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        });
+        if (!response.ok) throw new Error();
+        bootstrap.accept(snapshotSchema.parse(await response.json()));
+      }
+    } catch {
+      setNotice(
+        "Could not change chats. Your saved conversations are preserved. Check the local server and retry.",
+      );
+    } finally {
+      sessionTransition.current = false;
+      setSwitching(false);
+    }
+  };
   const act = async (action: WorkspaceAction) => {
     setNotice(undefined);
     try {
@@ -209,7 +325,8 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
             Boolean(correction) ||
             snapshot.status !== "saved" ||
             snapshot.message.startsWith("A saved renderer changed.")),
-        isRunning: agent.isRunning,
+        isRunning: agent.isRunning || switching,
+        isSwitching: switching,
       }}
     >
       <header className="app-header">
@@ -217,18 +334,45 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
           <h1>Mastra GenUI Data Explorer</h1>
           <p>Ask about Sales. Explore the results with charts, comparisons and records.</p>
         </div>
-        <button
-          onClick={() => {
-            const selected = theme === "dark" ? "light" : "dark";
-            setTheme(selected);
-            document.documentElement.dataset.theme = selected;
-            document.documentElement.classList.toggle("dark", selected === "dark");
-            localStorage.setItem("explorer-theme", selected);
-          }}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {theme === "dark" ? "Light mode" : "Dark mode"}
-        </button>
+        <div className="chat-session-actions">
+          <label className="chat-history">
+            Chat history
+            <select
+              aria-label="Chat history"
+              value={snapshot.workspace.id}
+              disabled={switching || !isReady}
+              onChange={(event) => {
+                void changeSession(event.target.value);
+              }}
+            >
+              {snapshot.sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={switching || !isReady}
+            onClick={() => {
+              void changeSession();
+            }}
+          >
+            {switching ? "Opening chat…" : "New chat"}
+          </button>
+          <button
+            onClick={() => {
+              const selected = theme === "dark" ? "light" : "dark";
+              setTheme(selected);
+              document.documentElement.dataset.theme = selected;
+              document.documentElement.classList.toggle("dark", selected === "dark");
+              localStorage.setItem("explorer-theme", selected);
+            }}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </button>
+        </div>
       </header>
       <main>
         <section className="chat" aria-label="Copilot conversation">
@@ -238,7 +382,7 @@ function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
           </div>
           <CopilotChat
             agentId="workspace-agent"
-            threadId={threadId}
+            threadId={initial.workspace.threadId}
             labels={{ chatInputPlaceholder: "Ask about Sales…" }}
             input={ConversationInputSlot}
             onSubmitMessage={() => {
@@ -290,6 +434,7 @@ interface ViewState {
   feedbackVisible: boolean;
   dismissFeedback: () => void;
   isRunning: boolean;
+  isSwitching: boolean;
 }
 const ViewContext = createContext<ViewState | undefined>(undefined);
 function useView() {
@@ -298,8 +443,16 @@ function useView() {
   return view;
 }
 function ConversationInput(props: CopilotChatInputProps) {
-  const { snapshot, notice, correction, correct, feedbackVisible, dismissFeedback, isRunning } =
-    useView();
+  const {
+    snapshot,
+    notice,
+    correction,
+    correct,
+    feedbackVisible,
+    dismissFeedback,
+    isRunning,
+    isSwitching,
+  } = useView();
   const submitting = useRef(false);
   const [applying, setApplying] = useState(false);
   const busy = isRunning || applying;
@@ -377,11 +530,11 @@ function ConversationInput(props: CopilotChatInputProps) {
       )}
       <CopilotChatInput
         {...props}
-        isRunning={Boolean(props.isRunning) || applying}
+        isRunning={Boolean(props.isRunning) || busy}
         {...(props.onSubmitMessage
           ? {
               onSubmitMessage: (value: string) => {
-                if (!submitting.current) return props.onSubmitMessage?.(value);
+                if (!submitting.current && !isSwitching) return props.onSubmitMessage?.(value);
               },
             }
           : {})}
