@@ -130,6 +130,14 @@ The second parameter is an options object:
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      '(Agent only) Whether to stream sub-agent progress as `data-tool-agent` and `data-tool-agent-step` parts when the agent delegates to sub-agents. `handleChatStream()` and `chatRoute()` enable this by default.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'includeTextStreamParts',
     type: 'boolean',
     description: '(Workflow only) Whether to include text stream parts in the output.',
