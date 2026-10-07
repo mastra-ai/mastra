@@ -657,3 +657,60 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
     expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('openai/gpt-4o'))).toBe(true);
   });
 });
+
+describe("execute toolChoice 'none' request shape (issue #25908)", () => {
+  const lookup = {
+    type: 'function' as const,
+    description: 'Return a fact for a key',
+    inputSchema: z.object({ key: z.string() }),
+    execute: async () => ({ value: 'fact' }),
+  };
+
+  async function captureCallOptions(structuredOutput?: { schema: typeof schema }) {
+    const captured: any[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async (options: any) => {
+        captured.push(options);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-none', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"suggestions":["ship"]}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const stream = execute({
+      runId: 'test-run-id-tool-choice-none',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      tools: { lookup } as any,
+      toolChoice: 'none',
+      structuredOutput,
+    });
+    await readStream(stream);
+    return captured[0];
+  }
+
+  it('sends the tools with toolChoice none when no structured output is requested', async () => {
+    const options = await captureCallOptions();
+    expect(options.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    expect(options.toolChoice).toEqual({ type: 'none' });
+  });
+
+  it('drops the tools with toolChoice none when structured output is requested (#14459)', async () => {
+    const options = await captureCallOptions({ schema });
+    expect(options.tools).toBeUndefined();
+    expect(options.toolChoice).toEqual({ type: 'none' });
+    expect(options.responseFormat?.type).toBe('json');
+  });
+});

@@ -75,19 +75,23 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   toolChoice,
   activeTools,
   targetVersion = 'v2',
+  structuredOutput = false,
 }: {
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
   /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6, 'v4' for AI SDK v7. Defaults to 'v2'. */
   targetVersion?: ModelSpecVersion;
+  /** True when the model is asked for structured output directly. With toolChoice 'none', tools are then dropped. */
+  structuredOutput?: boolean;
 }): {
   tools: PreparedTool[] | undefined;
   toolChoice: PreparedToolChoice | undefined;
 } {
-  if (toolChoice === 'none') {
-    // When toolChoice is 'none', strip tools entirely — providers like Gemini reject
-    // requests that combine tools + structured output (response_format: json_schema)
+  if (toolChoice === 'none' && (structuredOutput || Object.keys(tools || {}).length === 0)) {
+    // Providers like Gemini reject requests that combine tools + structured output
+    // (response_format: json_schema), so drop tools in that case only. Otherwise keep
+    // them: providers like Bedrock strip tool history from requests without tools.
     return {
       tools: undefined,
       toolChoice: { type: 'none' as const },
@@ -252,17 +256,26 @@ export function getToolDefinitionsForTracing<TOOLS extends Record<string, Tool>>
   toolChoice,
   activeTools,
   specificationVersion,
+  structuredOutput,
 }: {
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
   specificationVersion?: string;
+  structuredOutput?: boolean;
 }): ModelToolDefinition[] | undefined {
   try {
-    // Pass the real toolChoice through: 'none' strips tools from the provider
-    // request, and the span must not claim tools the model never received.
+    // Pass the real toolChoice and structuredOutput through: 'none' with structured
+    // output strips tools from the provider request, and the span must not claim
+    // tools the model never received.
     const targetVersion = specificationVersion === 'v4' ? 'v4' : specificationVersion === 'v3' ? 'v3' : 'v2';
-    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice, activeTools, targetVersion });
+    const { tools: prepared } = prepareToolsAndToolChoice({
+      tools,
+      toolChoice,
+      activeTools,
+      targetVersion,
+      structuredOutput,
+    });
     if (!prepared?.length) return undefined;
     return prepared.map(tool =>
       tool.type === 'function'

@@ -2004,6 +2004,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 specificationVersion: currentStep.model.specificationVersion,
+                structuredOutput: !!currentStep.structuredOutput?.schema && !currentStep.structuredOutput?.model,
               })
             : undefined;
           modelSpanTracker?.setInferenceContext?.({

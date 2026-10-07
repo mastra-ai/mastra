@@ -458,8 +458,25 @@ describe('prepareToolsAndToolChoice', () => {
         tools: { workflowTool },
         toolChoice: 'none',
         activeTools: undefined,
+        structuredOutput: true,
       });
       expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+
+    it('should keep tools when toolChoice is "none" so providers keep tool history (#25908)', () => {
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Return a fact for a key',
+        inputSchema: z.object({ key: z.string() }),
+        execute: async () => ({ value: 'fact' }),
+      });
+      const result = prepareToolsAndToolChoice({
+        tools: { lookup },
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
+      expect(result.tools?.map(t => t.name)).toEqual(['lookup']);
       expect(result.toolChoice).toEqual({ type: 'none' });
     });
   });
@@ -666,7 +683,25 @@ describe('getToolDefinitionsForTracing', () => {
     expect(getToolDefinitionsForTracing({ tools: {}, toolChoice: undefined, activeTools: undefined })).toBeUndefined();
   });
 
-  it("returns undefined when toolChoice is 'none' (tools are stripped from the request)", () => {
+  it("returns undefined when toolChoice is 'none' with structured output (tools are stripped from the request)", () => {
+    const weatherTool = createTool({
+      id: 'get_weather',
+      description: 'Get the weather for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => 'sunny',
+    });
+
+    const result = getToolDefinitionsForTracing({
+      tools: { get_weather: weatherTool as any },
+      toolChoice: 'none',
+      activeTools: undefined,
+      structuredOutput: true,
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it("keeps tools when toolChoice is 'none' without structured output (#25908)", () => {
     const weatherTool = createTool({
       id: 'get_weather',
       description: 'Get the weather for a city',
@@ -680,6 +715,6 @@ describe('getToolDefinitionsForTracing', () => {
       activeTools: undefined,
     });
 
-    expect(result).toBeUndefined();
+    expect(result?.map(tool => tool.name)).toEqual(['get_weather']);
   });
 });
