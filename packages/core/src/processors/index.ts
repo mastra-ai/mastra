@@ -896,8 +896,8 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    *
    * `processToolResult` changes the result; `processToolModelOutput` changes only what
    * the model reads. It runs once per result, after all `processToolResult` rewrites
-   * and after the tool's `toModelOutput` mapping, so processor order between the two
-   * hooks does not matter. Output processors run in sequence, each seeing the previous
+   * and after the tool's `toModelOutput` mapping, wherever the processor sits in the
+   * list. Output processors run in sequence, each seeing the previous
    * `modelOutput`. The final value is stored as `providerMetadata.mastra.modelOutput`,
    * persists with the message, and is used on every later prompt. The stored and
    * streamed `result` is never changed. Like `processToolResult`, it does not run for
