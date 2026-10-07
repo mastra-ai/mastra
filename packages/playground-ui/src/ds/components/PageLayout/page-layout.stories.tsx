@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BoxesIcon, PlusIcon } from 'lucide-react';
+import { ArrowLeftIcon, BoxesIcon, PlusIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
@@ -79,35 +79,67 @@ export const Container: Story = {
   ),
 };
 
+function ComparisonHeader({ eyebrow, reserveTopSpace }: { eyebrow?: ReactNode; reserveTopSpace?: boolean }) {
+  return (
+    <PageHeader reserveTopSpace={reserveTopSpace}>
+      {eyebrow}
+      <PageHeader.Title>Resources</PageHeader.Title>
+      <PageHeader.Description>Page details.</PageHeader.Description>
+      <PageHeader.Action>
+        <Button>Edit</Button>
+      </PageHeader.Action>
+    </PageHeader>
+  );
+}
+
+const backLink = (
+  <PageHeader.Eyebrow>
+    <a href="#resources">
+      <ArrowLeftIcon aria-hidden />
+      Back to resources
+    </a>
+  </PageHeader.Eyebrow>
+);
+
 export const TopBarSpacingComparison: Story = {
   render: () => (
-    <div className="grid grid-cols-3">
+    <div className="grid grid-cols-4">
       <div>
         <Txt variant="caption" tone="muted">
-          With top bar
+          With top bar (default)
         </Txt>
         <StoryFrame>
-          <PageLayout breadcrumbs={crumbs} headerActions={headerActions} reserveTopBar header={pageHeader}>
+          <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
             <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
       <div>
         <Txt variant="caption" tone="muted">
-          Reserved top bar
+          No bar + reserveTopSpace
         </Txt>
         <StoryFrame>
-          <PageLayout reserveTopBar header={pageHeader}>
+          <PageLayout header={<ComparisonHeader reserveTopSpace />}>
             <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
       <div>
         <Txt variant="caption" tone="muted">
-          Default without top bar
+          No bar + reserveTopSpace + Back link
         </Txt>
         <StoryFrame>
-          <PageLayout header={pageHeader}>
+          <PageLayout header={<ComparisonHeader reserveTopSpace eyebrow={backLink} />}>
+            <div className="mt-6">{resourceList}</div>
+          </PageLayout>
+        </StoryFrame>
+      </div>
+      <div>
+        <Txt variant="caption" tone="muted">
+          No bar (default unchanged)
+        </Txt>
+        <StoryFrame>
+          <PageLayout header={<ComparisonHeader />}>
             <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
@@ -117,18 +149,18 @@ export const TopBarSpacingComparison: Story = {
   play: async ({ canvasElement }) => {
     const layouts = canvasElement.querySelectorAll<HTMLElement>('[data-slot="page-layout"]');
     const offsets = Array.from(layouts, layout => {
-      const header = layout.querySelector('[data-slot="page-layout-header"]');
-      if (!header) throw new Error('Missing page layout header');
+      const title = layout.querySelector('[data-slot="page-header-title"]');
+      if (!title) throw new Error('Missing page header title');
       const body = within(within(layout).getByRole('main')).getByRole('list');
       const top = layout.getBoundingClientRect().top;
       return {
-        header: header.getBoundingClientRect().top - top,
+        title: title.getBoundingClientRect().top - top,
         body: body.getBoundingClientRect().top - top,
       };
     });
 
-    await expect(offsets.map(offset => offset.header)).toEqual([56, 56, 16]);
-    await expect(offsets[1]?.body).toBe(offsets[0]?.body);
+    await expect(offsets.map(offset => offset.title)).toEqual([60, 60, 60, 20]);
+    await expect(offsets.map(offset => offset.body)).toEqual([134, 134, 134, 94]);
   },
 };
 

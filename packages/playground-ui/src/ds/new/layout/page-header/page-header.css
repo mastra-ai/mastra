@@ -1,6 +1,13 @@
 @layer properties, theme, base, components, utilities;
 
 @layer components {
+  [data-reserve-top-space='true'] > [data-slot='page-header-eyebrow'] {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: calc(var(--spacing) * 10);
+  }
+
   [data-slot='page-header-title'] > svg {
     width: var(--spacing-icon-lg);
     height: var(--spacing-icon-lg);
