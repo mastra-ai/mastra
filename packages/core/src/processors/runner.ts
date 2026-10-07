@@ -2494,6 +2494,9 @@ export class ProcessorRunner {
    * Run processToolModelOutput on all output processors that implement it.
    * Called once per tool result, after runProcessToolResult and after the tool's
    * `toModelOutput` mapping. Each processor sees the previous processor's output.
+   * An awaited background task runs it twice. It is skipped for client-side tools and
+   * for durable tool calls on a worker other than the one that started, resumed, or
+   * recovered the run.
    * Returns the final model-facing output; the tool result itself is never touched.
    */
   async runProcessToolModelOutput(
