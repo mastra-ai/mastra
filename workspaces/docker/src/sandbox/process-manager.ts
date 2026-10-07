@@ -309,6 +309,12 @@ class DockerProcessHandle extends ProcessHandle {
           killInfo = await killExec.inspect();
         }
         if (killInfo.ExitCode !== 0) {
+          // The spawn wrapper removes the PGID file when the command exits on its
+          // own, so a kill racing a natural exit finds nothing to read. If the
+          // command's exec has already stopped there is nothing to kill: report
+          // false quietly and let the natural exit result stand.
+          const selfInfo = await this._exec.inspect().catch(() => undefined);
+          if (selfInfo && !selfInfo.Running) return false;
           throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
         }
 

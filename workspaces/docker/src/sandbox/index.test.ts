@@ -1447,12 +1447,52 @@ describe('DockerSandbox', () => {
         inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       });
 
-      const killed = await handle.kill();
-      expect(killed).toBe(false);
-      expect(killStream.destroy).toHaveBeenCalledOnce();
+      // The target command is still running, so the failure is genuine.
+      mockExec.inspect.mockResolvedValue({ Running: true, ExitCode: null, Pid: 42 });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      // The process stream was not destroyed, so wait() has not been resolved by kill().
-      expect(mockStream.destroy).not.toHaveBeenCalled();
+      try {
+        const killed = await handle.kill();
+        expect(killed).toBe(false);
+        expect(killStream.destroy).toHaveBeenCalledOnce();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('failed unexpectedly'),
+          expect.objectContaining({ message: 'kill helper exited with code 1' }),
+        );
+
+        // The process stream was not destroyed, so wait() has not been resolved by kill().
+        expect(mockStream.destroy).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('should not warn when the helper exits non-zero because the command already exited naturally', async () => {
+      // The spawn wrapper removes the PGID file when the command exits on its
+      // own, so a kill racing a natural exit makes the helper exit 1. The
+      // command's exec has stopped, so there is nothing to kill.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sh -c "printf ready; exit 0"');
+
+      const killStream = { destroy: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(killStream),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+      });
+      mockExec.inspect.mockResolvedValue({ Running: false, ExitCode: 0, Pid: 42 });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const killed = await handle.kill();
+        expect(killed).toBe(false);
+        expect(warn).not.toHaveBeenCalled();
+        expect(mockStream.destroy).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it('should mark explicit kill results as killed without timeout', async () => {
