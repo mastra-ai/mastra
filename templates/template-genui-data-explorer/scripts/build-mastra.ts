@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +22,8 @@ try {
         env: {
           ...process.env,
           OPENAI_API_KEY: "",
+          // Configuration inspection needs a token; the built server reads its own at startup.
+          WORKSPACE_PROXY_TOKEN: randomBytes(32).toString("hex"),
           TEMPLATE_DIRECTORY: process.cwd(),
           DATA_DIRECTORY: directory,
           MASTRA_BUILD_SKIP_INSTALL: "1",

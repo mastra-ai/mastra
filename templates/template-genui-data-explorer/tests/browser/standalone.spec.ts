@@ -23,12 +23,12 @@ async function stop() {
     child.kill("SIGTERM");
   });
 }
-async function ready(url: string) {
+async function ready(url: string, headers: Record<string, string> = {}) {
   await expect
     .poll(
       async () => {
         try {
-          return (await fetch(url)).status;
+          return (await fetch(url, { headers })).status;
         } catch {
           return 0;
         }
@@ -43,6 +43,8 @@ function start(directory: string, env: Record<string, string>, command = "dev") 
     cwd: directory,
     env: {
       ...process.env,
+      NODE_ENV: "development",
+      WORKSPACE_PROXY_TOKEN: "",
       OPENAI_API_KEY: "synthetic-local-provider",
       AGENT_PORT: String(agentPort),
       WEB_PORT: String(webPort),
@@ -70,6 +72,7 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
   const address = provider.server.address();
   if (!address || typeof address === "string") throw new Error();
   const env = { DATA_DIRECTORY: data, ANALYSIS_BASE_URL: `http://127.0.0.1:${address.port}/v1` };
+  let agentHeaders: Record<string, string> = {};
   try {
     start(directory, { ...env, OPENAI_API_KEY: "" });
     await expect.poll(() => launcher?.exitCode).not.toBeNull();
@@ -189,7 +192,7 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
       const question = `Cancel monthly bookings ${cancelledRequest}`;
       const interrupted = fetch(`http://127.0.0.1:${agentPort}/copilotkit/agent/dataExplorer/run`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...agentHeaders },
         signal: cancellation.signal,
         body: JSON.stringify({
           threadId: "local-thread",
@@ -251,8 +254,76 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
           }
         })
         .toBe(true);
-    start(directory, env, "start");
-    await ready(`http://127.0.0.1:${agentPort}/workspace`);
+    for (const command of ["start", "start:agent"]) {
+      for (const invalid of ["", "short", " ".repeat(32)]) {
+        start(directory, { ...env, WORKSPACE_PROXY_TOKEN: invalid }, command);
+        await expect.poll(() => launcher?.exitCode).not.toBeNull();
+        expect(launcher?.exitCode).not.toBe(0);
+        expect(output).toContain("Production requires WORKSPACE_PROXY_TOKEN");
+      }
+    }
+    const token = "synthetic-production-workspace-token";
+    agentHeaders = { authorization: `Bearer ${token}` };
+    start(directory, { ...env, WORKSPACE_PROXY_TOKEN: token }, "start");
+    await ready(`http://127.0.0.1:${agentPort}/workspace`, agentHeaders);
+    for (const [path, method] of [
+      ["/workspace", "GET"],
+      ["/api/agents", "GET"],
+      ["/api/observability/traces", "GET"],
+      ["/sessions", "POST"],
+      ["/render-ack", "POST"],
+      ["/copilotkit/agent/dataExplorer/run", "POST"],
+    ] as const) {
+      for (const headers of [{}, { authorization: "Bearer incorrect" }]) {
+        const response = await fetch(`http://127.0.0.1:${agentPort}${path}`, {
+          method,
+          headers: { "content-type": "application/json", ...headers },
+          ...(method === "POST" ? { body: "{}" } : {}),
+        });
+        expect(response.status, `${method} ${path}`).toBe(401);
+      }
+    }
+    expect(
+      (await fetch(`http://127.0.0.1:${agentPort}/api/agents`, { headers: agentHeaders })).status,
+    ).toBe(200);
+    expect(
+      (
+        await fetch(`http://127.0.0.1:${agentPort}/api/agents/data-explorer/generate`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...agentHeaders },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(403);
+    const capabilities = await fetch(`http://127.0.0.1:${agentPort}/api/auth/capabilities`);
+    expect(await capabilities.json()).toMatchObject({ enabled: true });
+    const signIn = await fetch(`http://127.0.0.1:${agentPort}/api/auth/credentials/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "workspace@example.test", password: token }),
+    });
+    expect(signIn.status).toBe(200);
+    const cookie = signIn.headers.get("set-cookie")?.split(";")[0];
+    expect(cookie).toBeTruthy();
+    expect(
+      (
+        await fetch(`http://127.0.0.1:${agentPort}/api/agents`, {
+          headers: { cookie: cookie! },
+        })
+      ).status,
+    ).toBe(200);
+    const authenticatedStudio = await page.context().newPage();
+    await authenticatedStudio.goto(`http://127.0.0.1:${agentPort}/agents`);
+    await authenticatedStudio.getByRole("button", { name: "Sign in", exact: true }).first().click();
+    await expect(authenticatedStudio).toHaveURL(/\/login\?/);
+    await authenticatedStudio.reload();
+    await authenticatedStudio.getByLabel(/^Email/).fill("workspace@example.test");
+    await authenticatedStudio.getByLabel(/^Password/).fill(token);
+    await authenticatedStudio.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(
+      authenticatedStudio.getByText("Data Explorer", { exact: true }).first(),
+    ).toBeVisible();
+    await authenticatedStudio.close();
     await ready(`http://127.0.0.1:${webPort}`);
     page = await page.context().newPage();
     await page.goto(`http://127.0.0.1:${webPort}`);
@@ -320,14 +391,18 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
     await expect(page.getByText("Revision 6 · Saved locally", { exact: false })).toBeVisible();
     expect((await saved()).components).toEqual(previousChat.components);
     expect(provider.calls).toHaveLength(previousCalls);
-    expect((await fetch(`http://127.0.0.1:${agentPort}/workspace?session=unknown`)).status).toBe(
-      400,
-    );
+    expect(
+      (
+        await fetch(`http://127.0.0.1:${agentPort}/workspace?session=unknown`, {
+          headers: agentHeaders,
+        })
+      ).status,
+    ).toBe(400);
     expect(
       (
         await fetch(`http://127.0.0.1:${agentPort}/sessions`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...agentHeaders },
           body: JSON.stringify({ threadId: previousChat.threadId }),
         })
       ).status,
@@ -367,6 +442,7 @@ test("standalone_template_runs_grounded_workspace", async ({ page }, testInfo) =
           nativeSpanCount: spans.length,
           cleanShutdown: true,
           builtStart: true,
+          productionAuthentication: true,
           nativeCancellation: true,
           newChatAndHistory: true,
           uploadLimitBytes: 2 * 1024 * 1024,
@@ -421,7 +497,7 @@ test("separate UI and Mastra processes use the authenticated proxy without shari
     children.push(child);
   };
   try {
-    launch([".mastra/output/index.mjs"], {
+    launch([".mastra/output/index.mjs", "--production"], {
       ...shared,
       AGENT_PORT: "4135",
       WEB_PORT: "3135",
@@ -455,12 +531,12 @@ test("separate UI and Mastra processes use the authenticated proxy without shari
         { timeout: 60000, message: logs },
       )
       .toBe(200);
-    for (const headers of [
-      {},
-      { "x-workspace-token": "incorrect" },
-      { "x-workspace-token": token, origin: "https://untrusted.example" },
-      { "x-workspace-token": token, host: "untrusted.example" },
-    ]) {
+    for (const [headers, expectedStatus] of [
+      [{}, 401],
+      [{ "x-workspace-token": "incorrect" }, 401],
+      [{ "x-workspace-token": token, origin: "https://untrusted.example" }, 403],
+      [{ "x-workspace-token": token, host: "untrusted.example" }, 403],
+    ] as const) {
       // Node fetch normalizes Host; send the raw header to exercise the native middleware.
       const status = await new Promise<number | undefined>((resolve, reject) => {
         const req = httpRequest(`${agentOrigin}/workspace`, { headers }, (response) => {
@@ -470,7 +546,7 @@ test("separate UI and Mastra processes use the authenticated proxy without shari
         req.once("error", reject);
         req.end();
       });
-      expect(status, JSON.stringify(headers)).toBe(403);
+      expect(status, JSON.stringify(headers)).toBe(expectedStatus);
     }
     expect(
       (

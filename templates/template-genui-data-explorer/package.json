@@ -23,7 +23,7 @@
     "diagnostics": "node --env-file-if-exists=.env scripts/diagnostics.ts",
     "build:agent": "tsc -p tsconfig.build.json && node --experimental-strip-types scripts/build-mastra.ts",
     "build:ui": "NEXT_TELEMETRY_DISABLED=1 next build",
-    "start:agent": "node --env-file-if-exists=.env .mastra/output/index.mjs",
+    "start:agent": "node --env-file-if-exists=.env .mastra/output/index.mjs --production",
     "start:ui": "node --env-file-if-exists=.env node_modules/next/dist/bin/next start"
   },
   "dependencies": {
@@ -33,18 +33,18 @@
     "@copilotkit/react-core": "1.77.0",
     "@copilotkit/react-ui": "1.77.0",
     "@copilotkit/runtime": "1.77.0",
-    "@mastra/client-js": "1.51.2",
+    "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
-    "@mastra/libsql": "1.25.0",
-    "@mastra/memory": "1.35.0",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
     "@mastra/observability": "latest",
     "echarts": "6.1.0",
     "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "rxjs": "7.8.1",
-    "zod": "4.6.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
@@ -52,9 +52,15 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "mastra": "latest",
-    "oxfmt": "0.71.0",
+    "oxfmt": "0.59.0",
     "typescript": "5.9.3",
-    "vitest": "4.1.0"
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@graphql-tools/utils@<12.0.1": "12.0.3",
+    "katex@<0.18.2": "0.18.2",
+    "tinypool@<2.1.2": "2.1.2",
+    "undici@<6.29.0": "6.29.0"
   },
   "engines": {
     "node": ">=24.15.0"

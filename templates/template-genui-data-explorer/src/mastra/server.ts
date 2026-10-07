@@ -1,7 +1,7 @@
 import { maximumBody, boundedBody } from "../server/http.ts";
 import { deployment, authorizedProxy } from "../server/deployment.ts";
 import { z } from "zod";
-import { registerApiRoute } from "@mastra/core/server";
+import { registerApiRoute, SimpleAuth } from "@mastra/core/server";
 import type { Config } from "@mastra/core/mastra";
 import { workspaceRuntime } from "../workspace/runtime.ts";
 import type { WorkspaceEngine } from "../workspace/engine.ts";
@@ -10,19 +10,36 @@ import { renderAckSchema, requestedSession } from "../workspace/contracts.ts";
 const studioPages = /^\/(?:agents|tools|workflows|observability)(?:\/[^/.]+)*\/?$/;
 const discovery =
   /^\/api\/(?:agents(?:\/[^/]+(?:\/tools)?)?|tools(?:\/[^/]+)?|workflows(?:\/[^/]+)?|observability(?:\/.*)?|telemetry(?:\/.*)?|studio-config|system\/(?:version|capabilities))\/?$/;
+
+function productionAuth(token: string | undefined) {
+  // The CLI's dev bundle shares the output directory with production builds.
+  if (process.env.NODE_ENV !== "production" && !process.argv.includes("--production"))
+    return undefined;
+  if (!token || token.trim().length < 32 || token !== token.trim())
+    throw new Error(
+      "Production requires WORKSPACE_PROXY_TOKEN with at least 32 characters and no surrounding whitespace. Set the same secret on Mastra and Next.js.",
+    );
+  return new SimpleAuth({
+    tokens: { [token]: { id: "workspace", name: "Workspace" } },
+    headers: ["x-workspace-token"],
+  });
+}
+
 /** Native execution/memory APIs cannot bypass the canonical workspace authority. */
 export function nativeServer(
   engine: WorkspaceEngine,
   ports: { agentPort: number; webPort: number },
 ): NonNullable<Config["server"]> {
-  const runtime = workspaceRuntime(engine);
   const connection = deployment(ports);
+  const auth = productionAuth(connection.token);
+  const runtime = workspaceRuntime(engine);
   return {
     host: connection.agentHost,
     port: ports.agentPort,
     cors: false,
     bodySizeLimit: maximumBody,
     timeout: 65_000,
+    ...(auth ? { auth } : {}),
     middleware: async (context, next) => {
       const host = context.req.header("host");
       const origin = context.req.header("origin");
@@ -30,7 +47,7 @@ export function nativeServer(
         !host ||
         !connection.agentHosts.includes(host) ||
         (origin && !connection.origins.includes(origin)) ||
-        !authorizedProxy(context.req.raw, connection.token)
+        (!auth && !authorizedProxy(context.req.raw, connection.token))
       )
         return context.json({ error: "Only authorized workspace requests are accepted." }, 403);
       const path = context.req.path,
@@ -45,6 +62,7 @@ export function nativeServer(
         (method === "GET" &&
           (discovery.test(path) ||
             path === "/" ||
+            path === "/login" ||
             studioPages.test(path) ||
             path.startsWith("/assets/") ||
             path === "/favicon.ico"))

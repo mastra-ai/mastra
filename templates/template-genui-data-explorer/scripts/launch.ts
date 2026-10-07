@@ -48,7 +48,7 @@ const production = process.argv.includes("--production");
 const agent = spawn(
   process.execPath,
   production
-    ? [".mastra/output/index.mjs"]
+    ? [".mastra/output/index.mjs", "--production"]
     : ["node_modules/mastra/dist/index.js", "dev", "--dir", "src/mastra"],
   {
     stdio: "inherit",

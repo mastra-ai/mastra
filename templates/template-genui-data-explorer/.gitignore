@@ -6,6 +6,8 @@ coverage/
 *.tsbuildinfo
 !package-lock.json
 !.npmrc
+.env
+.env.*
 !.env.example
 .next/
 next-env.d.ts

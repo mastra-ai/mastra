@@ -50,6 +50,30 @@ the Mastra `compose` tool selects registered views and the server validates thei
 
 ## Separate servers
 
+### Production authentication
+
+The production Mastra bundle enables `SimpleAuth` for its API routes and for Studio when included
+in a deployment. Before `npm start` or `npm run start:agent`, set `WORKSPACE_PROXY_TOKEN` to a
+random secret of at least 32 characters, without surrounding whitespace. Generate one with:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Store it in `.env` or your deployment's secret manager, on both servers. Production startup fails
+when the token is missing or invalid. `npm run build:agent` uses a disposable token for configuration
+inspection; the generated server requires the runtime secret and does not retain that build token.
+The Mastra production build enables authentication even when `NODE_ENV` is unset at startup.
+Local `npm run dev` does not require authentication by default and remains bound to loopback.
+
+Direct API clients can send `Authorization: Bearer <token>`. The existing Next.js proxy sends
+`x-workspace-token`, which the same provider accepts. Studio's native sign-in accepts the token
+as its password. Authentication preserves the restrictions on native execution and memory writes.
+`SimpleAuth` uses static tokens without automatic expiration; rotate the secret and restart both
+servers when needed. It does not authenticate visitors to the Next.js application.
+
+### Connection settings
+
 The default `npm run dev` and `npm start` launch both processes on loopback for a local single-user
 workspace. For separate servers, keep the browser on the Next.js origin:
 

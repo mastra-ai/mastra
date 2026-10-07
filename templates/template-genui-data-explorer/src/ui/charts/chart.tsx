@@ -129,9 +129,7 @@ export default function Charts(props: RendererProps) {
           {active.denominator !== undefined && (
             <span>
               {" "}
-              · {
-                result.data.table?.columns.find((column) => column.key === "numerator")?.label
-              }:{" "}
+              · {result.data.table?.columns.find((column) => column.key === "numerator")?.label}:{" "}
               {active.numerator} / {active.denominator}
             </span>
           )}
