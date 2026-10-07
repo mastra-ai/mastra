@@ -24,10 +24,14 @@ describe('Knowledge structure reconciliation', () => {
 
   it('applies the node description bound to scope descriptions', () => {
     expect(() =>
-      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'x'.repeat(401) }] }),
+      validateKnowledgeStructurePlan({
+        scopes: [{ address: 'scope:a', name: 'A', metadata: { description: 'x'.repeat(401) } }],
+      }),
     ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
     expect(() =>
-      validateKnowledgeStructurePlan({ scopes: [{ address: 'scope:a', name: 'A', description: 'x'.repeat(400) }] }),
+      validateKnowledgeStructurePlan({
+        scopes: [{ address: 'scope:a', name: 'A', metadata: { description: 'x'.repeat(400) } }],
+      }),
     ).not.toThrow();
   });
 
@@ -65,7 +69,6 @@ describe('Knowledge structure reconciliation', () => {
           ],
         },
       ],
-      retrofit: false,
     });
   });
 
