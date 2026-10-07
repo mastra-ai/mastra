@@ -1240,11 +1240,31 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           }
         }
-        if (environment!.workspaceSetupCommand && !gate.workspace.setupDone) {
-          await timedPhase('workspace.setup(workspace)', () =>
-            runSetupCommand(target, gate.root, environment!.workspaceSetupCommand!),
-          );
-          await gate.workspace.markSetupDone();
+        const workspaceCommand = environment!.workspaceSetupCommand;
+        if (workspaceCommand && !gate.workspace.setupDone) {
+          // Fatal on its first failure, skipped afterwards: like the per-repo
+          // commands, a workspace command that keeps failing must not wedge
+          // every start of the session.
+          if (hasFailedSetupCommand(session.id, `workspace:${workspaceCommand}`)) {
+            console.warn('[Mastra Factory] Skipping workspace setup command that already failed this session', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+            });
+          } else {
+            try {
+              await timedPhase('workspace.setup(workspace)', () =>
+                runSetupCommand(target, gate.root, workspaceCommand),
+              );
+              await gate.workspace.markSetupDone();
+            } catch (error) {
+              if (!(error instanceof SetupCommandError)) throw error;
+              recordFailedSetupCommand(session.id, `workspace:${workspaceCommand}`);
+              throw new SetupCommandError(
+                `${error.message}. The sandbox stays usable: the workspace setup command is skipped for the rest of the session — retry your command, then fix it in the environment settings or run it manually.`,
+                error.code,
+              );
+            }
+          }
         }
       } finally {
         record();
