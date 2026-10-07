@@ -374,16 +374,30 @@ type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>
 
 type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
 
+const RESOLVED_TOOL_INVOCATION_STATES = new Set<string>(['result', 'output-error', 'output-denied']);
+
 /**
  * Tool calls a sub-agent made that never got a result. A tool without a server-side
  * `execute` (a client tool) ends the sub-agent's run at the tool-calls step, and
  * nothing in a delegation can run it, so the call stays unresolved.
+ *
+ * Calls that failed or were declined also have no tool-result, but the loop records
+ * them in the response messages (`output-error` / `output-denied`), so those count as
+ * resolved too.
  */
 function getPendingSubAgentToolCalls(
   toolCalls: SubAgentToolCall[] | undefined,
   toolResults: SubAgentToolResult[] | undefined,
+  responseMessages: MastraDBMessage[],
 ): SubAgentPendingToolCall[] {
   const resolvedIds = new Set((toolResults ?? []).map(toolResult => toolResult.payload.toolCallId));
+  for (const message of responseMessages) {
+    for (const part of message.content.parts ?? []) {
+      if (part.type === 'tool-invocation' && RESOLVED_TOOL_INVOCATION_STATES.has(part.toolInvocation.state)) {
+        resolvedIds.add(part.toolInvocation.toolCallId);
+      }
+    }
+  }
   return (toolCalls ?? [])
     .filter(toolCall => !toolCall.payload.providerExecuted && !resolvedIds.has(toolCall.payload.toolCallId))
     .map(toolCall => ({
@@ -5980,6 +5994,7 @@ export class Agent<
                 const subAgentPendingToolCalls = getPendingSubAgentToolCalls(
                   generateResult.toolCalls,
                   generateResult.toolResults,
+                  agentResponseMessages,
                 );
                 if (subAgentPendingToolCalls.length > 0) {
                   logPendingSubAgentToolCalls(this.logger, agentName, subAgentPendingToolCalls);
@@ -6134,7 +6149,7 @@ export class Agent<
                 const isSuspending = !!(requireToolApproval || suspendedPayload || resumeSchema);
                 const subAgentPendingToolCalls = isSuspending
                   ? []
-                  : getPendingSubAgentToolCalls(await streamResult.toolCalls, streamToolResults);
+                  : getPendingSubAgentToolCalls(await streamResult.toolCalls, streamToolResults, agentResponseMessages);
                 if (subAgentPendingToolCalls.length > 0) {
                   logPendingSubAgentToolCalls(this.logger, agentName, subAgentPendingToolCalls);
                 }

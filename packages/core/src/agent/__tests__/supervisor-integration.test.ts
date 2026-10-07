@@ -356,6 +356,180 @@ describe('Supervisor Pattern Integration Tests', () => {
       expect(capturedContext!.result.subAgentPendingToolCalls).toBeUndefined();
     });
 
+    it('should not report a sub-agent tool call that errored as pending (generate)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const lookupTool = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async () => {
+          throw new Error('lookup failed');
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'erroring-tool-sub-agent',
+        name: 'erroring-tool-sub-agent',
+        description: 'Sub-agent whose tool throws',
+        instructions: 'You look things up.',
+        model: makeSubAgentModelWithTool('lookup', { query: 'x' }),
+        tools: { lookup: lookupTool },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: makeSupervisorModel('erroringToolSubAgent', 'look up x'),
+        agents: { erroringToolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+      const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
+
+      await supervisorAgent.generate('Look up x', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+
+      expect(capturedContext).toBeDefined();
+      // The sub-agent saw the tool error and recovered on its next step
+      expect(capturedContext!.result.finishReason).toBe('stop');
+      expect(capturedContext!.result.subAgentPendingToolCalls).toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('no server-side execute'), expect.anything());
+    });
+
+    it('should not report a sub-agent tool call that errored as pending (stream)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const lookupTool = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async () => {
+          throw new Error('lookup failed');
+        },
+      });
+
+      let subAgentCallCount = 0;
+      const subAgent = new Agent({
+        id: 'stream-erroring-tool-sub-agent',
+        name: 'stream-erroring-tool-sub-agent',
+        description: 'Sub-agent whose tool throws',
+        instructions: 'You look things up.',
+        model: new MockLanguageModelV2({
+          doStream: async () => {
+            subAgentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream(
+                subAgentCallCount === 1
+                  ? [
+                      { type: 'stream-start', warnings: [] },
+                      { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                      {
+                        type: 'tool-call',
+                        toolCallId: 'sub-call-1',
+                        toolName: 'lookup',
+                        input: JSON.stringify({ query: 'x' }),
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'tool-calls',
+                        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                      },
+                    ]
+                  : [
+                      { type: 'stream-start', warnings: [] },
+                      { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: 'Recovered answer' },
+                      { type: 'text-end', id: 'text-1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                      },
+                    ],
+              ),
+            };
+          },
+        }),
+        tools: { lookup: lookupTool },
+      });
+
+      let supervisorCallCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doStream: async () => {
+          supervisorCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream(
+              supervisorCallCount === 1
+                ? [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'supervisor-call-1',
+                      toolName: 'agent-streamErroringToolSubAgent',
+                      input: JSON.stringify({ prompt: 'look up x' }),
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]
+                : [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'stream-supervisor',
+        name: 'stream-supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { streamErroringToolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+      const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
+
+      const stream = await supervisorAgent.stream('Look up x', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+      await stream.consumeStream();
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.result.text).toBe('Recovered answer');
+      expect(capturedContext!.result.finishReason).toBe('stop');
+      expect(capturedContext!.result.subAgentPendingToolCalls).toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('no server-side execute'), expect.anything());
+      expect(JSON.stringify(supervisorModel.doStreamCalls[1]!.prompt)).not.toContain('were never run');
+    });
+
     it('should report sub-agent tool calls without execute as pending (generate)', async () => {
       let capturedContext: DelegationCompleteContext | undefined;
       const addToCartTool = createTool({
