@@ -139,14 +139,25 @@ export interface ParitySnapshot {
   chunks: string[];
   /** Each chunk's `type`, in the same order as `chunks`, for exact type matching (use with `chunksOfType`). */
   chunkTypes: string[];
-  /** Each chunk's payload, in the same order as `chunks`, normalised by `normalizePayload`. */
+  /**
+   * Each chunk's payload, in the same order as `chunks`, normalised by
+   * `normalizePayload`. `object` and `object-result` chunks record their parsed
+   * value here as `{ object }`, because those chunks carry it outside `payload`.
+   */
   chunkPayloads: unknown[];
   /** Concatenated `text-delta` payloads, as a streaming consumer would render them. */
   streamedText: string;
   /** Sorted defined payload keys, reason, usage and normalised contents of the last `finish` chunk. */
   finishChunk: { payloadKeys: string[]; reason: unknown; usage: unknown; payload: unknown };
   /** `getFullOutput()` as a non-streaming consumer reads it. */
-  fullOutput: { text: string | undefined; finishReason: string | undefined; usage: unknown; keys: string[] };
+  fullOutput: {
+    text: string | undefined;
+    finishReason: string | undefined;
+    usage: unknown;
+    keys: string[];
+    /** The parsed structured output, when the run ran with one. */
+    object: unknown;
+  };
   /**
    * Whether the turn ran a continuation after suspending. Scenario bookkeeping
    * rather than consumer output, but it is derived from the chunk sequence both
@@ -246,8 +257,11 @@ interface TurnChunks {
   error?: ParityRunError;
 }
 
-/** `from`/`type`/`payload` are shared by every chunk `fullStream` emits. */
-type StreamChunk = { from?: string; type: string; payload?: any };
+/**
+ * `from`/`type`/`payload` are shared by every chunk `fullStream` emits.
+ * Structured-output chunks additionally carry the parsed value on `object`.
+ */
+type StreamChunk = { from?: string; type: string; payload?: any; object?: unknown };
 
 /**
  * Drains one stream into `acc`, returning the suspended tool call's id when the
@@ -271,7 +285,18 @@ async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promi
       const toolName = chunk.payload?.toolName;
       acc.chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
       acc.chunkTypes.push(chunk.type);
-      acc.chunkPayloads.push(normalizePayload(chunk.payload));
+      // `object` and `object-result` chunks carry the parsed value at the top
+      // level rather than in `payload`, so it is folded into the recorded payload
+      // — otherwise the value a consumer receives is never compared.
+      if (chunk.type === 'object' || chunk.type === 'object-result') {
+        const payload = normalizePayload(chunk.payload);
+        acc.chunkPayloads.push({
+          ...(typeof payload === 'object' && payload !== null ? payload : {}),
+          object: normalizePayload(chunk.object),
+        });
+      } else {
+        acc.chunkPayloads.push(normalizePayload(chunk.payload));
+      }
       if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
       if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
       if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
@@ -393,6 +418,8 @@ async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot>
       usage: full?.usage,
       // A run whose `getFullOutput()` rejected has no full output to read.
       keys: full ? Object.keys(full).sort() : [],
+      // The object the run parsed, when it ran with structured output.
+      object: full?.object,
     },
     resumed,
     // Omitted rather than set to `undefined`, so a turn that did not fail

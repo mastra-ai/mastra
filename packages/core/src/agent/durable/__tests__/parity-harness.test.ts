@@ -9,6 +9,7 @@ import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import type { PublicStructuredOutputOptions } from '../../types';
 import type {
   CapturedRequest,
   EngineObservation,
@@ -16,6 +17,7 @@ import type {
   EngineRunResult,
   ModelTape,
   ParityEngine,
+  ParityStreamOptions,
 } from './parity-harness';
 import {
   chunksOfType,
@@ -691,6 +693,118 @@ describe('expectEngineParity', () => {
     expect(results.durable!.turns[0]!.error).toMatchObject({ name: 'TypeError' });
 
     await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
+  });
+
+  const FLAT_SCHEMA = z.object({ reply: z.string(), number: z.number() });
+  const PARSED = { reply: 'hi', number: 7 };
+
+  /**
+   * The two ways the wrapped engines' structured-output chunks differ from
+   * plain's (both COR-1390, both pre-existing): they emit `object-result` after
+   * `step-finish` and `finish` rather than before them, and their `step-finish`
+   * payload does not carry the parsed object. Declaring both as the expectation
+   * keeps every parsed value itself compared.
+   */
+  function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation {
+    return {
+      requests: plain.requests,
+      turns: plain.turns.map(turn => {
+        const objectIndex = turn.chunkTypes.indexOf('object-result');
+        if (objectIndex < 0) return turn;
+        const move = <T>(list: T[]): T[] => [
+          ...list.slice(0, objectIndex),
+          ...list.slice(objectIndex + 1),
+          list[objectIndex]!,
+        ];
+        const chunkTypes = move(turn.chunkTypes);
+        const chunkPayloads = move(turn.chunkPayloads);
+        const stepFinish = chunkTypes.indexOf('step-finish');
+        const payload = chunkPayloads[stepFinish] as { output?: Record<string, unknown> } | undefined;
+        if (payload?.output && 'object' in payload.output) {
+          const output = { ...payload.output };
+          delete output.object;
+          chunkPayloads[stepFinish] = { ...payload, output };
+        }
+        return { ...turn, chunks: move(turn.chunks), chunkTypes, chunkPayloads };
+      }),
+    };
+  }
+
+  const DECLARE_OBJECT_CHUNKS = {
+    durable: {
+      reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+      expect: declareWrappedObjectChunks,
+    },
+    evented: {
+      reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+      expect: declareWrappedObjectChunks,
+    },
+  };
+
+  function structuredScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+    return {
+      model: { respond: () => textOnlyTape(JSON.stringify(PARSED)) },
+      buildAgent: ({ model }) =>
+        new Agent({ id: 'parity-structured', name: 'Parity Structured', instructions: 'Be brief', model }),
+      input: 'structured',
+      // Plain and durable declare `structuredOutput` differently, which is why
+      // the harness leaves it out of `ParityStreamOptions`: a scenario that needs
+      // it widens the option type where it builds them.
+      options: { structuredOutput: { schema: FLAT_SCHEMA } } as ParityStreamOptions & {
+        structuredOutput?: PublicStructuredOutputOptions<any>;
+      },
+      ...overrides,
+    };
+  }
+
+  it('records the structured output a run parsed, and compares it', async () => {
+    const results = await expectEngineParity(structuredScenario({ differences: DECLARE_OBJECT_CHUNKS }));
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(turn.fullOutput.object).toEqual(PARSED);
+
+      const index = turn.chunkTypes.indexOf('object-result');
+      expect(index).toBeGreaterThanOrEqual(0);
+      // The parsed value rides the chunk itself, not its payload, so recording
+      // the payload alone would have thrown the value away.
+      expect(turn.chunkPayloads[index]).toEqual({ object: PARSED });
+      expect(turn.chunkPayloads[turn.chunkTypes.indexOf('object')]).toEqual({ object: PARSED });
+    }
+
+    // The order difference the declaration above covers is real, on both sides.
+    const plainTypes = results.plain!.turns[0]!.chunkTypes;
+    expect(plainTypes.indexOf('object-result')).toBeLessThan(plainTypes.indexOf('step-finish'));
+    expect(results.durable!.turns[0]!.chunkTypes.at(-1)).toBe('object-result');
+  });
+
+  it('fails when engines parse different objects', async () => {
+    const error = await expectEngineParity(
+      structuredScenario({
+        // The model answers with its instructions, which is the only lever a
+        // scenario has to make one engine parse a different object.
+        model: { respond: request => textOnlyTape(JSON.stringify({ reply: systemText(request), number: 7 })) },
+        buildAgent: ({ engine, model }) =>
+          new Agent({
+            id: 'parity-structured',
+            name: 'Parity Structured',
+            instructions: engine === 'durable' ? 'B' : 'A',
+            model,
+          }),
+        engines: ['plain', 'durable'],
+        differences: {
+          durable: DECLARE_OBJECT_CHUNKS.durable,
+        },
+      }),
+    ).catch((e: Error) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    // Both places the parsed value is recorded report the divergence: the
+    // structured-output chunk's payload and `getFullOutput()`.
+    expect(message).toMatch(/chunkPayloads\[\d+\]\.object\.reply/);
+    expect(message).toMatch(/fullOutput\.object\.reply/);
+    expect(message).toContain('"B"');
   });
 
   it('normalizes only message createdAt stamps and an unset includeRawChunks', () => {
