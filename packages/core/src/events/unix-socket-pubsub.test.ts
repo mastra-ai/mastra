@@ -1280,6 +1280,40 @@ describe('UnixSocketPubSub', () => {
     });
   });
 
+  const maxSocketPathBytes = ({ darwin: 104, linux: 108 } as Record<string, number>)[process.platform];
+  it.skipIf(!maxSocketPathBytes)('becomes the broker at a socket path of the maximum platform length', async () => {
+    const base = await socketPath('');
+    const basenameBytes = Buffer.byteLength('.leases.sock');
+    // base + '/' + padding + '/' + basename
+    const padding = maxSocketPathBytes! - Buffer.byteLength(base) - 2 - basenameBytes;
+    expect(padding).toBeGreaterThan(0);
+    const dir = join(base, 'd'.repeat(padding));
+    await mkdir(dir);
+    const path = join(dir, '.leases.sock');
+    expect(Buffer.byteLength(path)).toBe(maxSocketPathBytes);
+
+    const first = new UnixSocketPubSub(path);
+    const second = new UnixSocketPubSub(path);
+    pubsubs.push(first, second);
+    const received = vi.fn();
+    await first.subscribe('limit', received);
+    await second.publish('limit', makeEvent({ type: 'limit' }));
+
+    await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(['s', 'ab'])('elects a broker at the short socket name %s', async name => {
+    const path = await socketPath(name);
+    const first = new UnixSocketPubSub(path);
+    const second = new UnixSocketPubSub(path);
+    pubsubs.push(first, second);
+    const received = vi.fn();
+    await first.subscribe('short', received);
+    await second.publish('short', makeEvent({ type: 'short' }));
+
+    await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
+  });
+
   it('reclaims a stale socket file', async () => {
     const path = await socketPath();
     await writeFile(path, 'stale');

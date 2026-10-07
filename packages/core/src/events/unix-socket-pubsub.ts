@@ -1153,11 +1153,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
    * broker's file is at socketPath by then.
    */
   async #bindIfAbsent(): Promise<boolean> {
-    const privatePath = join(
-      dirname(this.socketPath),
-      `.${Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex')}`,
-    );
-    const server = await this.#listen(privatePath);
+    const { server, privatePath } = await this.#listenAtPrivatePath();
     let published = false;
     try {
       const identity = await fileIdentity(privatePath);
@@ -1181,6 +1177,28 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       throw new Error('UnixSocketPubSub is closed');
     }
     return true;
+  }
+
+  /**
+   * The private name is never longer than the shared basename: the platform's
+   * socket path limit applies to the whole path, so a longer name could fail
+   * to bind where the shared path fits. Short names can collide with another
+   * candidate or a leftover file, so a taken name is retried.
+   */
+  async #listenAtPrivatePath(): Promise<{ server: net.Server; privatePath: string }> {
+    const sharedName = basename(this.socketPath);
+    const nameLength = Math.min(13, Buffer.byteLength(sharedName));
+    for (let attempt = 1; ; attempt++) {
+      const hex = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex');
+      const name = nameLength > 1 ? `.${hex.slice(0, nameLength - 1)}` : hex.slice(0, 1);
+      if (name === sharedName) continue;
+      const privatePath = join(dirname(this.socketPath), name);
+      try {
+        return { server: await this.#listen(privatePath), privatePath };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE' || attempt >= 5) throw error;
+      }
+    }
   }
 
   #listen(path: string): Promise<net.Server> {
