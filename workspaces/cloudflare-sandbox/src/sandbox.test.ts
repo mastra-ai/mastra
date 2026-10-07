@@ -364,8 +364,7 @@ describe('CloudflareSandbox', () => {
       }
 
       function failProbe(bridge: FakeBridge, result: { exitCode?: number; error?: { error: string } }) {
-        bridge.onExec = request =>
-          request.argv.join(' ').includes('mountpoint -q') ? result : { exitCode: 0 };
+        bridge.onExec = request => (request.argv.join(' ').includes('mountpoint -q') ? result : { exitCode: 0 });
       }
 
       it('rejects when the probe exits non-zero', async () => {
