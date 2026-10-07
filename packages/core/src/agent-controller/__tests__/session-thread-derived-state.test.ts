@@ -231,6 +231,45 @@ describe('AgentController thread-derived session state', () => {
     expect(session.model.get()).toBe('');
   });
 
+  it('emits selection changes when thread lifecycle operations reset or hydrate state', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'selection-events');
+    const session = await controller.createSession({
+      id: 'selection-events-session',
+      resourceId: 'selection-events-resource',
+      ownerId: 'owner',
+      createInitialThread: false,
+    });
+    const threadA = await session.thread.create({ id: 'selection-events-a' });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+
+    const selectionEvents: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      if (event.type === 'mode_changed' || event.type === 'model_changed') selectionEvents.push(event);
+    });
+
+    await session.thread.create({ id: 'selection-events-b' });
+    expect(selectionEvents).toEqual([
+      { type: 'mode_changed', modeId: 'build', previousModeId: 'plan' },
+      { type: 'model_changed', modelId: 'openai/gpt-5.5' },
+    ]);
+
+    selectionEvents.length = 0;
+    await session.thread.switch({ threadId: threadA.id });
+    expect(selectionEvents).toEqual([
+      { type: 'mode_changed', modeId: 'plan', previousModeId: 'build' },
+      { type: 'model_changed', modelId: 'anthropic/claude-opus-4-6' },
+    ]);
+
+    selectionEvents.length = 0;
+    await session.thread.delete({ threadId: threadA.id });
+    expect(selectionEvents).toEqual([
+      { type: 'mode_changed', modeId: 'build', previousModeId: 'plan' },
+      { type: 'model_changed', modelId: 'openai/gpt-5.5' },
+    ]);
+  });
+
   it('hydrates the same thread settings in sessions with different scopes', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'scopes');
