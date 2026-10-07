@@ -211,6 +211,10 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     } else {
       this.persistedRecordId = appendResult?.recordId ?? record.id;
     }
+    // Storage redirects an append aimed at a retired generation to the head; report that head.
+    if (committedRecord.id !== this.persistedRecordId) {
+      committedRecord = (await getLineageHead(this.storage, record)) ?? committedRecord;
+    }
 
     await this.indexObservationGroups(
       processed.observations,
