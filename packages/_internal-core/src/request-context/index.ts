@@ -212,13 +212,26 @@ function isPlainObjectOrArray(value: unknown): boolean {
 const SPAN_PROJECTION_MAX_DEPTH = 8;
 
 /**
+ * Maximum number of plain objects/arrays one `serializeForSpan()` call copies.
+ * The depth limit alone does not bound work: shared (non-circular) references
+ * are expanded once per path, so a small graph can fan out exponentially.
+ */
+const SPAN_PROJECTION_NODE_BUDGET = 10_000;
+
+/**
  * Builds a plain-data copy of a request-context value for span export.
  * Plain objects and arrays are copied and walked; every non-plain value at any
  * depth (class instances, functions, Map/Set, etc.) is collapsed to
  * `[${typeof value}]` so live objects — and any credentials they hold — never
- * reach the trace serializer. Dates are kept. Cycles become `[Circular]`.
+ * reach the trace serializer. Dates are kept. Cycles become `[Circular]`, and
+ * once the shared node budget is spent remaining containers become `[Truncated]`.
  */
-function projectForSpan(value: unknown, ancestors: WeakSet<object>, depth: number): unknown {
+function projectForSpan(
+  value: unknown,
+  ancestors: WeakSet<object>,
+  depth: number,
+  budget: { remaining: number },
+): unknown {
   if (
     value === null ||
     value === undefined ||
@@ -240,15 +253,24 @@ function projectForSpan(value: unknown, ancestors: WeakSet<object>, depth: numbe
   const obj = value as object;
   if (ancestors.has(obj)) return '[Circular]';
   if (depth >= SPAN_PROJECTION_MAX_DEPTH) return '[MaxDepth]';
+  if (budget.remaining <= 0) return '[Truncated]';
+  budget.remaining--;
 
   ancestors.add(obj);
   try {
     if (Array.isArray(obj)) {
-      return obj.map(item => projectForSpan(item, ancestors, depth + 1));
+      // Use the intrinsic map so an own `map` override can't return the original array.
+      return Array.prototype.map.call(obj, item => projectForSpan(item, ancestors, depth + 1, budget));
     }
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(obj)) {
-      out[key] = projectForSpan((obj as Record<string, unknown>)[key], ancestors, depth + 1);
+      // defineProperty keeps an own `__proto__` key as data instead of changing the copy's prototype.
+      Object.defineProperty(out, key, {
+        value: projectForSpan((obj as Record<string, unknown>)[key], ancestors, depth + 1, budget),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
     return out;
   } catch {
@@ -608,12 +630,13 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    */
   serializeForSpan(): Record<string, unknown> {
     const safe: Record<string, unknown> = {};
+    const budget = { remaining: SPAN_PROJECTION_NODE_BUDGET };
     for (const [key, value] of this.registry.entries()) {
       if (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY) continue;
       if (key === MASTRA_AUTH_TOKEN_KEY) {
         safe[key] = '[REDACTED]';
       } else {
-        safe[key] = projectForSpan(value, new WeakSet(), 0);
+        safe[key] = projectForSpan(value, new WeakSet(), 0, budget);
       }
     }
     return safe;

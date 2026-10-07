@@ -645,6 +645,46 @@ describe('RequestContext', () => {
       expect(JSON.stringify(result['deep'])).toContain('[MaxDepth]');
     });
 
+    it('should bound fan-out from shared references with a node budget', () => {
+      let level: unknown = { leaf: true };
+      for (let i = 0; i < 7; i++) level = Array.from({ length: 10 }, () => level);
+      const ctx = new RequestContext();
+      ctx.set('fanout', level);
+
+      const start = Date.now();
+      const json = JSON.stringify(ctx.serializeForSpan());
+
+      expect(json).toContain('[Truncated]');
+      expect(Date.now() - start).toBeLessThan(2000);
+    });
+
+    it('should not let an array override map to bypass the projection', () => {
+      class TelegramAdapter {
+        staticBotToken = '123456789:FAKEtelegramTOKEN';
+      }
+      const arr: unknown[] = [new TelegramAdapter()];
+      (arr as unknown as { map: () => unknown }).map = () => arr;
+      const ctx = new RequestContext();
+      ctx.set('list', arr);
+
+      const result = ctx.serializeForSpan();
+
+      expect(result['list']).not.toBe(arr);
+      expect(JSON.stringify(result)).not.toContain('FAKEtelegramTOKEN');
+    });
+
+    it('should keep an own __proto__ key as data', () => {
+      const value = JSON.parse('{"__proto__": {"polluted": true}, "ok": 1}');
+      const ctx = new RequestContext();
+      ctx.set('value', value);
+
+      const projected = ctx.serializeForSpan()['value'] as Record<string, unknown>;
+
+      expect(Object.getPrototypeOf(projected)).toBe(Object.prototype);
+      expect(Object.keys(projected)).toEqual(['__proto__', 'ok']);
+      expect(Object.getOwnPropertyDescriptor(projected, '__proto__')?.value).toEqual({ polluted: true });
+    });
+
     it('should omit the channel render context entirely', () => {
       class SlackAdapter {
         appToken = 'xapp-FAKE';
