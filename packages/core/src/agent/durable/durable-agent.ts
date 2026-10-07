@@ -2106,7 +2106,7 @@ export class DurableAgent<
   #isRunExecuting(runId: string): boolean {
     return (
       this.#runRegistry.get(runId) !== undefined ||
-      globalRunRegistry.get(runId) !== undefined ||
+      (globalRunRegistry.has(runId) && globalRunRegistry.get(runId) !== undefined) ||
       agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
     );
   }
@@ -2119,7 +2119,9 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
-    const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
+    const controller = (
+      this.#runRegistry.get(runId) ?? (globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined)
+    )?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
