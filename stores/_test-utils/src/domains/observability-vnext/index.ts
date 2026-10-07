@@ -505,12 +505,32 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 output: { text: 'preview answer' },
                 error: { name: 'TypeError', message: 'preview failure', stack: 'not returned' },
               },
+              {
+                ...template,
+                traceId: 'selected-string-preview',
+                spanId: 'selected-string-preview',
+                output: '[1] cited answer from the source',
+                error: null,
+              },
             ],
             scores: [],
             feedback: [],
           },
           capabilities.traceQuerySpanWriteModel,
         );
+
+        // A plain-text output that looks like JSON must still preview as text in every store.
+        const stringOutput = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'selected-string-preview' } },
+              select: ['outputPreview'],
+            }),
+          ),
+        );
+        if (!('traces' in stringOutput)) throw new Error('Expected traces');
+        expect(stringOutput.traces[0]?.outputPreview).toBe('[1] cited answer from the source');
 
         const selected = await storage.queryTraces(
           planTraceQuery(

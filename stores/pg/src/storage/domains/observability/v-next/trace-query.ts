@@ -1008,8 +1008,11 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    // The driver parses jsonb, so a string output loses its quotes; re-encode it like the other stores' JSON text.
     ...(plan.select?.includes('outputPreview')
-      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      ? {
+          outputPreview: coreStorage.buildOutputPreview(row.output == null ? null : JSON.stringify(row.output)) ?? null,
+        }
       : {}),
     ...(plan.select?.includes('errorPreview')
       ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
