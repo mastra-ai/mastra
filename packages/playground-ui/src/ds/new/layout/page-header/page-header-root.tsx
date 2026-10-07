@@ -10,7 +10,7 @@ import { PageHeaderTitle } from './page-header-title';
 import { cn } from '@/lib/utils';
 
 export type PageHeaderRootProps = ComponentPropsWithoutRef<'header'> & {
-  reserveTopSpace?: boolean;
+  spacing?: 'default' | 'breathing';
 };
 
 function isSlot(child: ReactNode, type: ElementType) {
@@ -32,15 +32,20 @@ function groupSlots(items: ReactNode[]) {
   return { eyebrows, icons, headline, below, actions };
 }
 
-export function PageHeaderRoot({ children, className, reserveTopSpace = false, ...props }: PageHeaderRootProps) {
+export function PageHeaderRoot({ children, className, spacing = 'default', ...props }: PageHeaderRootProps) {
   const items = Children.toArray(children);
   const { eyebrows, icons, headline, below, actions } = groupSlots(items);
   const hasControls = icons.length > 0 || actions.length > 0;
 
   return (
     <header
-      className={cn('relative flex w-full flex-col', !hasControls && 'gap-1', className, reserveTopSpace && 'pt-10')}
-      data-reserve-top-space={reserveTopSpace || undefined}
+      className={cn(
+        'relative flex w-full flex-col',
+        !hasControls && 'gap-1',
+        className,
+        spacing === 'breathing' && 'pt-10',
+      )}
+      data-page-header-spacing={spacing === 'breathing' ? spacing : undefined}
       {...props}
     >
       {eyebrows}

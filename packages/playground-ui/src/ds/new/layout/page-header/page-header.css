@@ -1,7 +1,7 @@
 @layer properties, theme, base, components, utilities;
 
 @layer components {
-  [data-reserve-top-space='true'] > [data-slot='page-header-eyebrow'] {
+  [data-page-header-spacing='breathing'] > [data-slot='page-header-eyebrow'] {
     position: absolute;
     inset-inline: 0;
     top: 0;

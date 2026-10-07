@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowLeftIcon, BoxesIcon, PlusIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
 import { ActionRow } from '../ActionRow';
@@ -79,9 +79,15 @@ export const Container: Story = {
   ),
 };
 
-function ComparisonHeader({ eyebrow, reserveTopSpace }: { eyebrow?: ReactNode; reserveTopSpace?: boolean }) {
+function ComparisonHeader({
+  eyebrow,
+  spacing,
+}: {
+  eyebrow?: ReactNode;
+  spacing?: ComponentProps<typeof PageHeader>['spacing'];
+}) {
   return (
-    <PageHeader reserveTopSpace={reserveTopSpace}>
+    <PageHeader spacing={spacing}>
       {eyebrow}
       <PageHeader.Title>Resources</PageHeader.Title>
       <PageHeader.Description>Page details.</PageHeader.Description>
@@ -116,20 +122,20 @@ export const TopBarSpacingComparison: Story = {
       </div>
       <div>
         <Txt variant="caption" tone="muted">
-          No bar + reserveTopSpace
+          No bar + breathing spacing
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader reserveTopSpace />}>
+          <PageLayout header={<ComparisonHeader spacing="breathing" />}>
             <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
       <div>
         <Txt variant="caption" tone="muted">
-          No bar + reserveTopSpace + Back link
+          No bar + breathing spacing + Back link
         </Txt>
         <StoryFrame>
-          <PageLayout header={<ComparisonHeader reserveTopSpace eyebrow={backLink} />}>
+          <PageLayout header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>
             <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
