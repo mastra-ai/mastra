@@ -13,17 +13,20 @@
  *
  * The recovery legs (`durable-recover`, `evented-recover`) restart a run that is
  * cut off inside step 2's tool call, using the shared `restart-harness.ts`
- * unchanged. The harness runs both `sigkill` and `inprocess` mechanisms; the
- * in-process restart harness models the same "fresh module graph over the
- * persisted snapshot" cut for both, so one restart test per engine and variant
- * covers the mechanism (the T20 port's precedent).
+ * unchanged. The harness runs both `sigkill` and `inprocess` mechanisms per cell
+ * (16 recovery cells); the frozen in-process restart harness simulates fresh
+ * singletons over the persisted snapshot, not process death, so it cannot model a
+ * `sigkill`. The port therefore runs one restart test per engine and variant — 8
+ * cells — with the mechanism collapsed, matching the T20 port's precedent. This is
+ * an explicit scope reduction, not a weakened check: every assertion the harness
+ * makes on a recovery cell still runs, just once instead of twice.
  *
- * Two expressibility notes, neither a weakened check:
- * - `restart-harness.ts` reports the terminal finish chunk's usage but not a
- *   separate resolved full-output usage, so the recovery legs assert the usage
- *   values and key sets; the harness's "terminal finish usage equals the resolved
- *   full output usage" check is asserted on all twelve main cells, where both
- *   surfaces are visible.
+ * Two further expressibility notes:
+ * - `restart-harness.ts` reports only the resolved full-output usage, not a separate
+ *   terminal finish-chunk usage, so the recovery legs assert the resolved usage
+ *   values and key sets and *skip* the harness's "terminal finish usage equals the
+ *   resolved full output usage" comparison rather than faking it. That comparison is
+ *   asserted on all twelve main cells, where both surfaces are visible.
  * - Like the T20 port, the recovery legs run without Memory (recovery reads the
  *   conversation from the persisted snapshot); no T85 claim depends on memory.
  */
@@ -182,7 +185,12 @@ function createStepTool(log: Commit[]): ReturnType<typeof createTool> {
 type Surfaces = {
   text: string | null;
   usage: Usage | null;
-  terminalUsage: Usage | null;
+  /**
+   * The terminal finish chunk's usage. `undefined` means this surface is not exposed by the
+   * driver (the recovery legs, whose `restart-harness.ts` reports only the resolved full-output
+   * usage); the terminal-vs-resolved comparison is then skipped and recorded as not ported.
+   */
+  terminalUsage?: Usage | null;
   finishes: number;
   commits: number[];
   modelCalls: number;
@@ -213,13 +221,20 @@ function assertHarnessChecks(where: string, surfaces: Surfaces) {
     }
   }
 
-  expect(
-    JSON.stringify(canonical(terminalUsage)),
-    `${where}: terminal finish usage equals the resolved full output usage`,
-  ).toBe(JSON.stringify(canonical(usage)));
-  expect(sortedKeys(terminalUsage).join(','), `${where}: terminal finish and resolved usage expose the same keys`).toBe(
-    usageKeys.join(','),
-  );
+  // The harness asserts "terminal finish usage equals the resolved full output usage" and the
+  // matching key sets on every cell. That needs both surfaces; `restart-harness.ts` exposes only
+  // the resolved full-output usage, so the recovery legs (where `terminalUsage` is `undefined`)
+  // assert the resolved surface above and skip — rather than fake — this comparison.
+  if (terminalUsage !== undefined) {
+    expect(
+      JSON.stringify(canonical(terminalUsage)),
+      `${where}: terminal finish usage equals the resolved full output usage`,
+    ).toBe(JSON.stringify(canonical(usage)));
+    expect(
+      sortedKeys(terminalUsage).join(','),
+      `${where}: terminal finish and resolved usage expose the same keys`,
+    ).toBe(usageKeys.join(','));
+  }
 
   expect(modelCalls, `${where}: the run reached the third model call`).toBeGreaterThanOrEqual(3);
 }
@@ -416,9 +431,9 @@ describe('T85 detail usage counters across recovery', () => {
         assertHarnessChecks(`${kind}-recover/${variant}`, {
           text: recovered.text ?? null,
           usage,
-          // The harness's terminal-vs-resolved comparison is asserted on the main
-          // legs; here the reported finish usage is the only usage surface.
-          terminalUsage: usage,
+          // `restart-harness.ts` exposes only the resolved full-output usage; the harness's
+          // terminal-vs-resolved comparison needs a second surface it does not provide, so it is
+          // not ported here (asserted on the main legs instead). See the file header.
           finishes,
           commits,
           modelCalls: (modelCalls.get(1) ?? 0) + (modelCalls.get(2) ?? 0),

@@ -208,6 +208,12 @@ describe('T30 untilIdle wake-up ceiling', () => {
         observed.set(engine, assertHarnessChecks(`${engine}/${variant}`, await runOnEngine(engine, variant)));
       }
 
+      // The script's own cap is what ended the run: the loop kept re-dispatching until the harness
+      // stopped answering, rather than settling on its own.
+      for (const engine of ENGINES) {
+        expect(observed.get(engine)!.cappedBy, `${engine}/${variant}: the script's cap ended the run`).toBe('harness');
+      }
+
       // The harness compares the contract, not the chunk payloads.
       expect(observed.get('durable'), `${variant}: durable contract`).toEqual(observed.get('plain'));
     });

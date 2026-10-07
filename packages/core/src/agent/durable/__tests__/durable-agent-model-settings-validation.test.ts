@@ -129,5 +129,18 @@ describe('T17 modelSettings.timeout validation (plain, durable, evented)', () =>
       expect(results[engine]!.requests).toHaveLength(1);
       expect(turn!.streamedText).toBe('ok');
     }
+
+    // The harness's contract includes the chunk-type sequence (`types: list.map(c => c.type)`),
+    // so pin it literally: cross-engine equality alone would pass even if all three engines
+    // drifted together.
+    expect(results.plain!.turns.at(-1)!.chunkTypes).toEqual([
+      'start',
+      'step-start',
+      'text-start',
+      'text-delta',
+      'text-end',
+      'step-finish',
+      'finish',
+    ]);
   });
 });

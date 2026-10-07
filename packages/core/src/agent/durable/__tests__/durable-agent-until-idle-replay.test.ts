@@ -155,6 +155,13 @@ async function runOnEngine(engine: Engine, variant: Variant): Promise<T19Run> {
   });
   await host.startWorkers();
 
+  if (engine === 'evented') {
+    // Without atomic storage the evented agent silently runs on the default engine, which would
+    // make "evented == plain" a durable-vs-plain comparison.
+    const engineType = (runner as { getWorkflow?: () => { engineType?: string } }).getWorkflow?.().engineType;
+    expect(engineType, 'evented workflow engine type').toBe('evented');
+  }
+
   try {
     const options: Record<string, unknown> = {
       memory: { thread: `t19-thread-${engine}`, resource: `t19-resource-${engine}` },

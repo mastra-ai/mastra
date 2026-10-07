@@ -155,10 +155,21 @@ describe('durable agent usage that the provider never reported', () => {
           expect(usage?.inputTokens, `${engine}: inputTokens`).toBe(2);
           expect(usage?.outputTokens, `${engine}: outputTokens`).toBe(2);
         }
+        const finishPayload = turn.finishChunk.payload as
+          | { isContinued?: unknown; output?: { isContinued?: unknown } }
+          | undefined;
         observed[engine] = {
           variant,
           usage,
           usageKeys: Object.keys(usage ?? {}).sort(),
+          // The harness records the finish chunk's `isContinued` and `usage` in the compared
+          // contract (GH #23341); recorded here too, and compared across engines.
+          finishPayloads: [
+            {
+              isContinued: finishPayload?.isContinued ?? finishPayload?.output?.isContinued ?? null,
+              usage: turn.finishChunk.usage ?? null,
+            },
+          ],
           text: turn.text,
           commits: commits(log),
         };

@@ -367,6 +367,11 @@ describe('T16 generate API: generate() / resumeGenerate() / structured output (p
         }
       }
 
+      // The plain engine resolves `generate()` through `doGenerate`; durable and evented stream
+      // internally. Pin plain's first call so the generate path itself is exercised — the helper's
+      // recording model throws on `doGenerate`, so this case is driven directly.
+      expect(runs.get('plain')!.calls[0], 'plain generate() used the doGenerate path').toBe('generate');
+
       // The harness compares both cells' contracts with a deep equality check.
       const plain = contractOf(runs.get('plain')!, variant);
       for (const engine of ['durable', 'evented'] as const) {
