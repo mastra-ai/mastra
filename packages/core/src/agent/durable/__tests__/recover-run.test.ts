@@ -81,14 +81,20 @@ function makeMockModel(modelId?: string): LanguageModelV2 {
   }) as unknown as LanguageModelV2;
 }
 
-function createDurableWithStore(agentId: string, store = new InMemoryStore(), pubsub?: PubSub) {
+/** Creates a registered durable agent with deterministic storage and model responses. */
+function createDurableWithStore(
+  agentId: string,
+  store = new InMemoryStore(),
+  pubsub?: PubSub,
+  cleanupTimeoutMs?: number,
+) {
   const baseAgent = new Agent({
     id: agentId,
     name: agentId,
     instructions: 'x',
     model: makeMockModel(),
   });
-  const agent = createDurableAgent({ agent: baseAgent, pubsub, ...(pubsub ? { cache: false } : {}) });
+  const agent = createDurableAgent({ agent: baseAgent, pubsub, cleanupTimeoutMs, ...(pubsub ? { cache: false } : {}) });
   void new Mastra({
     agents: { [agentId]: agent as any },
     storage: store,
@@ -364,6 +370,111 @@ describe('DurableAgent.recover(runId)', () => {
     await globalRunRegistry.get(runId)?.workflowExecution;
     recovered.cleanup();
   });
+
+  it.each([
+    { cleanupTimeoutMs: undefined, suspendAgain: false, finishReason: 'stop' },
+    { cleanupTimeoutMs: 0, suspendAgain: false, finishReason: 'stop' },
+    { cleanupTimeoutMs: 0, suspendAgain: true, finishReason: 'stop' },
+    { cleanupTimeoutMs: 0, suspendAgain: false, finishReason: 'error' },
+    { cleanupTimeoutMs: 0, suspendAgain: false, finishReason: 'abort' },
+  ] as const)(
+    'keeps bulk-recovered thread events with cleanupTimeoutMs=$cleanupTimeoutMs, suspendAgain=$suspendAgain, finishReason=$finishReason',
+    async ({ cleanupTimeoutMs, suspendAgain, finishReason }) => {
+      ({ agent, store } = createDurableWithStore('agent-A', new InMemoryStore(), undefined, cleanupTimeoutMs));
+      const runId = `bulk-recovered-continuation-${cleanupTimeoutMs ?? 'default'}`;
+      await seed(store, runId, 'running', 'agent-A');
+      const publish = vi.spyOn(agent.getPubSub(), 'publish');
+      const restart = vi.fn(async () => {
+        await seed(store, runId, 'suspended', 'agent-A');
+        await emitChunkEvent(agent.pubsub, runId, {
+          type: 'tool-call-suspended',
+          runId,
+          from: 'AGENT',
+          payload: { toolCallId: 'call-1', toolName: 'read_page', args: {}, suspendPayload: {} },
+        } as any);
+        return { status: 'suspended' as const };
+      });
+      let finishResume!: () => void;
+      const resumeSettled = new Promise<void>(resolve => {
+        finishResume = resolve;
+      });
+      let resumeCount = 0;
+      const resume = vi.fn(async () => {
+        if (suspendAgain && ++resumeCount === 1) {
+          await seed(store, runId, 'suspended', 'agent-A');
+          await emitChunkEvent(agent.pubsub, runId, {
+            type: 'tool-call-suspended',
+            runId,
+            from: 'AGENT',
+            payload: { toolCallId: 'call-2', toolName: 'read_page', args: {}, suspendPayload: {} },
+          } as any);
+          return { status: 'suspended' as const };
+        }
+        await emitChunkEvent(agent.pubsub, runId, {
+          type: 'text-delta',
+          runId,
+          from: 'AGENT',
+          payload: { text: 'one recovered answer' },
+        } as any);
+        await emitFinishEvent(agent.pubsub, runId, {
+          output: { text: 'one recovered answer', steps: [] },
+          stepResult: { reason: finishReason },
+        } as any);
+        await resumeSettled;
+        return { status: finishReason === 'error' ? ('failed' as const) : ('success' as const) };
+      });
+      vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+        createRun: vi.fn(async () => ({ restart, resume, runId })),
+        deleteWorkflowRunById: vi.fn(async () => {}),
+      } as any);
+      const subscription = await agent.subscribeToThread({ threadId: 't', resourceId: 'r' });
+      const parts: any[] = [];
+      const reading = (async () => {
+        for await (const part of subscription.stream) parts.push(part);
+      })();
+      const resumeCleanups: Array<() => void> = [];
+      try {
+        const result = await agent.recoverActiveRuns({ runId });
+        expect(result).toEqual({ recovered: [{ runId, status: 'success' }], succeeded: 1, failed: 0 });
+        await vi.waitFor(() => expect(parts.some(part => part.type === 'tool-call-suspended')).toBe(true));
+
+        const resumed = await agent.resume(runId, {}, { toolCallId: 'call-1' });
+        resumeCleanups.push(resumed.cleanup);
+        if (suspendAgain) {
+          await vi.waitFor(() =>
+            expect(
+              parts.some(part => part.type === 'tool-call-suspended' && part.payload.toolCallId === 'call-2'),
+            ).toBe(true),
+          );
+          expect(globalRunRegistry.get(runId)).toBeDefined();
+          const resumedAgain = await agent.resume(runId, {}, { toolCallId: 'call-2' });
+          resumeCleanups.push(resumedAgain.cleanup);
+        }
+        const terminalType = finishReason === 'abort' ? 'abort' : 'finish';
+        await vi.waitFor(() => expect(parts.some(part => part.type === terminalType)).toBe(true));
+        expect(globalRunRegistry.get(runId)).toBeDefined();
+        const resumedExecution = globalRunRegistry.get(runId)?.workflowExecution;
+        finishResume();
+        await resumedExecution;
+        expect(publish.mock.calls.filter(([, event]) => event.type === 'run-registered')).toHaveLength(1);
+        expect(parts.filter(part => part.type === 'text-delta').map(part => part.payload.text)).toEqual([
+          'one recovered answer',
+        ]);
+        expect(resume).toHaveBeenCalledTimes(suspendAgain ? 2 : 1);
+        if (cleanupTimeoutMs === 0) {
+          await vi.waitFor(() => {
+            expect(globalRunRegistry.get(runId)).toBeUndefined();
+            expect(agent.runRegistry.get(runId)).toBeUndefined();
+          });
+        }
+      } finally {
+        finishResume();
+        subscription.unsubscribe();
+        await reading;
+        for (const cleanup of resumeCleanups) cleanup();
+      }
+    },
+  );
 
   it('keeps the recovered broadcast when the run suspends and resumes again', async () => {
     const runId = 'recovered-continuation';

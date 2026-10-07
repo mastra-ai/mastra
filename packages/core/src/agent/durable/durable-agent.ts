@@ -3228,6 +3228,7 @@ export class DurableAgent<
         if (result?.status === 'failed') {
           throw new Error((result as any).error?.message || 'Workflow recover failed');
         }
+        return result?.status;
       })
       .catch(async error => {
         const leaseLossError = recoveryLease.getLossError();
@@ -3819,22 +3820,32 @@ export class DurableAgent<
         // `recover()`. We don't surface the per-run stream here — bulk
         // callers only care about counts — so we just await the workflow
         // execution promise that `recover()` parks on the registry entry,
-        // capture any failure it surfaces via `onError`, and drop the
-        // stream.
-        const { cleanup } = await this.recover(targetRunId, {
+        // capture any failure it surfaces via `onError`, and release the
+        // stream only after the run reaches a non-suspended terminal.
+        const { output, cleanup } = await this.recover(targetRunId, {
           onError: ({ error }) => {
             runError = error instanceof Error ? error : new Error(String(error));
           },
         });
+        let shouldCleanup = true;
         try {
           const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
-          if (workflowExecution) {
-            await workflowExecution;
+          const status = await workflowExecution;
+          if (runError) throw runError;
+          shouldCleanup = status !== 'suspended';
+          if (!shouldCleanup && this.#cleanupTimeoutMs === 0) {
+            // Bulk callers have no cleanup handle. Keep observing across pauses,
+            // then release resources after both the stream and resumed workflow
+            // settle. FINISH can arrive before the workflow saves its final result.
+            // Execution errors are already surfaced by the stream's onError.
+            void output
+              .consumeStream()
+              .then(() => globalRunRegistry.get(targetRunId)?.workflowExecution)
+              .then(cleanup, cleanup);
           }
         } finally {
-          cleanup();
+          if (shouldCleanup) cleanup();
         }
-        if (runError) throw runError;
         recovered.push({ runId: targetRunId, status: 'success' });
         succeeded++;
       } catch (error) {
