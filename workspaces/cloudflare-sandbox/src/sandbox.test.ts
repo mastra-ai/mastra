@@ -354,6 +354,90 @@ describe('CloudflareSandbox', () => {
       expect(bridge.mounts).toHaveLength(1);
     });
 
+    describe('fails closed when a mount cannot be verified or restored', () => {
+      async function mountedSandbox(id: string) {
+        const bridge = createFakeBridge({ apiToken: 'secret' });
+        const sandbox = createSandbox(bridge, { id });
+        await sandbox._start();
+        await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+        return { bridge, sandbox };
+      }
+
+      function failProbe(bridge: FakeBridge, result: { exitCode?: number; error?: { error: string } }) {
+        bridge.onExec = request =>
+          request.argv.join(' ').includes('mountpoint -q') ? result : { exitCode: 0 };
+      }
+
+      it('rejects when the probe exits non-zero', async () => {
+        const { bridge, sandbox } = await mountedSandbox('fc-1');
+        failProbe(bridge, { exitCode: 2 });
+
+        await expect(sandbox.executeCommand('true')).rejects.toThrow(/Could not verify mounts/);
+        await expect(sandbox.writeFiles([{ path: 'a.txt', content: 'x' }])).rejects.toThrow(/Could not verify/);
+        expect(bridge.files.size).toBe(0);
+      });
+
+      it('rejects when the probe emits an error event', async () => {
+        const { bridge, sandbox } = await mountedSandbox('fc-2');
+        failProbe(bridge, { error: { error: 'container gone' } });
+
+        await expect(sandbox.executeCommand('true')).rejects.toThrow(/container gone/);
+      });
+
+      it('rejects when the re-mount fails, then recovers once it succeeds', async () => {
+        const { bridge, sandbox } = await mountedSandbox('fc-3');
+        bridge.sleep();
+        bridge.failMounts = true;
+
+        await expect(sandbox.readFile('/workspace/data/a.txt')).rejects.toThrow(/Mount unavailable/);
+        expect(sandbox.mounts.get('/workspace/data')?.state).toBe('error');
+
+        bridge.failMounts = false;
+        const result = await sandbox.executeCommand('echo ok');
+
+        expect(result.success).toBe(true);
+        expect(sandbox.mounts.get('/workspace/data')?.state).toBe('mounted');
+        expect(bridge.activeMounts.has('/workspace/data')).toBe(true);
+      });
+
+      it('makes concurrent operations wait for an in-flight mount', async () => {
+        const bridge = createFakeBridge({ apiToken: 'secret' });
+        const sandbox = createSandbox(bridge, { id: 'fc-4' });
+        await sandbox._start();
+
+        const mounting = sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+        const command = sandbox.executeCommand('echo hi');
+        await mounting;
+        await command;
+
+        const probeIndex = bridge.execs.findIndex(exec => exec.argv.join(' ').includes('mountpoint -q'));
+        expect(probeIndex).toBe(0);
+        expect(bridge.mounts).toHaveLength(1);
+      });
+
+      it('rejects operations when the initial mount failed', async () => {
+        const bridge = createFakeBridge({ apiToken: 'secret' });
+        bridge.failMounts = true;
+        const sandbox = createSandbox(bridge, { id: 'fc-5' });
+        await sandbox._start();
+
+        const result = await sandbox.mount(fakeFilesystem(r2Config), '/workspace/data');
+        expect(result.success).toBe(false);
+
+        await expect(sandbox.executeCommand('true')).rejects.toThrow(/Mount unavailable/);
+      });
+
+      it('rejects operations for a mount without a usable config', async () => {
+        const bridge = createFakeBridge({ apiToken: 'secret' });
+        const sandbox = createSandbox(bridge, { id: 'fc-6' });
+        await sandbox._start();
+        await sandbox.mount(fakeFilesystem({ ...r2Config, sessionToken: 'tmp' }), '/workspace/data');
+
+        await expect(sandbox.executeCommand('true')).rejects.toThrow(/sessionToken/);
+        expect(bridge.mounts).toHaveLength(0);
+      });
+    });
+
     it('does not probe when nothing is mounted', async () => {
       const bridge = createFakeBridge({ apiToken: 'secret' });
       const sandbox = createSandbox(bridge, { id: 'wake-3' });
