@@ -146,12 +146,15 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
         this.filter,
       );
       if (files.length === 0) return;
+      const currentTurn = currentTurnContents(messageList);
       const notes = await uploadPromptFiles(files, {
         workspace: this.workspace,
         requestContext,
         maxFileSize: this.maxFileSize,
         cache: cacheOf(state),
         abortSignal,
+        // A file of the thread history must never block the thread: only a file of this turn stops it.
+        noteSandboxFailures: !files.some(file => isOfCurrentTurn(file, currentTurn)),
       });
       return { prompt: replaceParts(prompt, notes) };
     } catch (error) {
@@ -308,18 +311,28 @@ export interface PromptUploadOptions {
   maxFileSize: FileUploadMaxFileSize;
   cache: UploadCache;
   abortSignal?: AbortSignal;
+  /** When the sandbox can't take the files, note why instead of throwing. */
+  noteSandboxFailures?: boolean;
 }
+
+/** The failures that come from the sandbox rather than from a file or from user code. */
+const SANDBOX_FAILURES = new Set<string>([
+  FILE_UPLOAD_ERROR_CODES.NO_SANDBOX,
+  FILE_UPLOAD_ERROR_CODES.NO_WRITE_CAPABILITY,
+  FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED,
+]);
 
 /**
  * Uploads the files and returns, for each one, the note that replaces it in
  * the prompt. A file that is too large or can't be decoded gets a note saying
- * why; a setup problem throws a `FileUploadError` and uploads nothing.
+ * why. A setup problem throws a `FileUploadError` and uploads nothing, unless
+ * `noteSandboxFailures` turns a sandbox failure into notes.
  *
  * @internal Shared with `UnsupportedFileHandler`.
  */
 export async function uploadPromptFiles(
   files: PromptFile[],
-  { workspace, requestContext, maxFileSize, cache, abortSignal }: PromptUploadOptions,
+  { workspace, requestContext, maxFileSize, cache, abortSignal, noteSandboxFailures }: PromptUploadOptions,
 ): Promise<Map<PromptFilePart, string>> {
   const directory = uploadDirectoryOf(requestContext);
   const notes = new Map<PromptFilePart, string>();
@@ -329,9 +342,20 @@ export async function uploadPromptFiles(
     if ('rejection' in loaded) notes.set(file.part, rejectedNote(file.fileName, loaded.rejection));
     else ready.push({ file, ...loaded, relativePath: buildUploadPath({ ...file, directory, hash: loaded.hash }) });
   }
-  await placeFiles(ready, workspace, requestContext, cache, abortSignal);
+  let sandboxFailure: string | undefined;
+  try {
+    await placeFiles(ready, workspace, requestContext, cache, abortSignal);
+  } catch (error) {
+    if (!noteSandboxFailures || !(error instanceof FileUploadError) || !SANDBOX_FAILURES.has(error.code)) throw error;
+    sandboxFailure = error.message;
+  }
+  // After a sandbox failure, only the paths placed earlier in the request are in the cache.
   for (const { file, relativePath, size } of ready) {
-    notes.set(file.part, uploadedNote({ ...file, path: cache.paths.get(relativePath)!, size }));
+    const path = cache.paths.get(relativePath);
+    notes.set(
+      file.part,
+      path ? uploadedNote({ ...file, path, size }) : rejectedNote(file.fileName, sandboxFailure ?? 'not uploaded'),
+    );
   }
   return notes;
 }
@@ -378,6 +402,24 @@ export function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Ma
         }),
   );
 }
+
+/**
+ * Base64 content of the inline files of the new messages, to tell a file of
+ * this turn from one of the thread history in the prompt. A link Mastra
+ * downloads has no base64 to match, so it counts as history.
+ */
+function currentTurnContents(messageList: MessageList | undefined): Set<string> {
+  const contents = new Set<string>();
+  for (const { data } of messageList ? newFiles(messageList) : []) {
+    const { isDataUri, base64Content } = parseDataUri(data);
+    if (isDataUri && !BASE64_DATA_URI.test(data)) continue;
+    contents.add(base64Content.replace(/\s+/g, ''));
+  }
+  return contents;
+}
+
+const isOfCurrentTurn = ({ data }: PromptFile, currentTurn: Set<string>) =>
+  typeof data === 'string' && currentTurn.has(data.replace(/\s+/g, ''));
 
 /**
  * Names of the files of the messages, by their base64 content. The prompt

@@ -248,7 +248,7 @@ name: report.pdf
 reason: File "report.pdf" is 31457280 bytes, over the 10485760 byte limit.
 ```
 
-A setup problem stops the turn, whichever file it affects: no sandbox, a sandbox that can't write, a failed write, or a `filter` or `maxFileSize` that fails. Nothing is changed, so the thread works again once the setup is fixed. A turn without a file to upload checks nothing, so scorers, agent networks, and calls without a thread keep working.
+When the sandbox can't take the files, because there is no sandbox, it can't write, or a write fails, a file of the current turn stops the turn. A file of the thread history gets a note with the reason instead, and the turn goes on. A `filter` or `maxFileSize` that fails stops the turn, whichever file it affects. Nothing is changed in storage, so the thread works again once the setup is fixed. A turn without a file to upload checks nothing, so scorers, agent networks, and calls without a thread keep working.
 
 The processor stops a turn by calling `abort()` with `retry: false`. The model isn't called. `agent.generate()` resolves with `result.tripwire` set instead of rejecting, and `agent.stream()` emits a `tripwire` chunk.
 

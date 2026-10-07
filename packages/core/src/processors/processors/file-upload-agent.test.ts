@@ -1467,6 +1467,60 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
       expect(prompts).toEqual([]);
     });
 
+    // A stored file would otherwise block every turn of the thread until the sandbox recovers.
+    it.each([
+      [
+        'the sandbox fails',
+        () =>
+          createFakeSandbox({
+            executeCommand: async () => {
+              throw new Error('sandbox unreachable');
+            },
+          }).sandbox,
+        'Files could not be written to the sandbox.',
+      ],
+      [
+        'the workspace resolves no sandbox',
+        () => (() => undefined) as unknown as WorkspaceSandboxResolver,
+        'The workspace resolved no sandbox to upload files to.',
+      ],
+      [
+        'the sandbox cannot write files',
+        () => createFakeSandbox({ writeFiles: undefined, executeCommand: undefined }).sandbox,
+        'Sandbox "Fake Sandbox" supports neither writeFiles nor executeCommand, so files cannot be uploaded to it.',
+      ],
+    ])(
+      'replaces a file of the thread history with a note when %s, and the turn goes on',
+      async (_label, sandbox, reason) => {
+        const { agent, prompts, memory } = createHarness(sandbox());
+        await seedHistory(memory, [storedFileRow('user', 10)]);
+
+        const result = await agent.generate('Just say hi', { memory: MEMORY });
+
+        expect(result.tripwire).toBeUndefined();
+        expect(prompts).toHaveLength(1);
+        expect(filePartsIn(prompts[0])).toEqual([]);
+        expect(textsIn(prompts[0])[0]).toBe(['[File not uploaded]', 'name: old.pdf', `reason: ${reason}`].join('\n'));
+      },
+    );
+
+    it('still stops the turn when the sandbox fails for a file of the current turn, even with history files', async () => {
+      const { sandbox } = createFakeSandbox({
+        executeCommand: async () => {
+          throw new Error('sandbox unreachable');
+        },
+      });
+      const { agent, prompts, memory } = createHarness(sandbox);
+      await seedHistory(memory, [storedFileRow('user', 10)]);
+
+      const result = await agent.generate([userMessage(file(Buffer.from('new'), 'new.txt', 'text/plain'))], {
+        memory: MEMORY,
+      });
+
+      expect(result.tripwire?.metadata).toMatchObject({ code: FILE_UPLOAD_ERROR_CODES.UPLOAD_FAILED });
+      expect(prompts).toEqual([]);
+    });
+
     it('replaces a file of the thread history that is too large with a note, and the turn goes on', async () => {
       const { sandbox, writes } = createFakeSandbox();
       const { agent, prompts, memory } = createHarness(sandbox, { maxFileSize: () => 4 });
