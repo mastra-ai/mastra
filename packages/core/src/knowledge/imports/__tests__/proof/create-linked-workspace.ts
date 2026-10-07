@@ -18,6 +18,8 @@ await rename(join(output, 'src/calendar.ts.template'), join(output, 'src/calenda
 const packagePath = join(output, 'package.json');
 const packageJson = (await readFile(packagePath, 'utf8'))
   .replace('__CORE_PATH__', join(root, 'packages/core'))
+  .replace('__NODE_TYPES_PATH__', join(root, 'node_modules/@types/node'))
+  .replace('__TYPESCRIPT_PATH__', join(root, 'node_modules/typescript'))
   .replace('__LIBSQL_PATH__', join(root, 'stores/libsql'))
   .replace('__PG_PATH__', join(root, 'stores/pg'));
 await writeFile(packagePath, packageJson, 'utf8');
