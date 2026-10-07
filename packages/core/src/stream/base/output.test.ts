@@ -688,6 +688,93 @@ describe('MastraModelOutput', () => {
       expect(toolCalls.length).toBeGreaterThan(0);
       expect(toolCalls[0].payload.args).toEqual({ query: 'SELECT 1' });
     });
+
+    it('does not emit a synthetic empty-args tool-call when the input stream had no deltas', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', title: 'My tool' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', args: { query: 'SELECT 1' } as any },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      const toolCallChunks = emitted.filter(chunk => chunk.type === 'tool-call');
+      expect(toolCallChunks).toHaveLength(1);
+      expect(toolCallChunks[0]!.payload).toMatchObject({ args: { query: 'SELECT 1' }, title: 'My tool' });
+      expect(emitted.findIndex(chunk => chunk.type === 'tool-call-input-streaming-end')).toBeLessThan(
+        emitted.findIndex(chunk => chunk.type === 'tool-call'),
+      );
+      expect((await output.toolCalls).map(tc => tc.payload.args)).toEqual([{ query: 'SELECT 1' }]);
+    });
+
+    it('records an empty-args tool-call at step end when no final tool-call arrives', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const toolCalls = await output.toolCalls;
+      expect(toolCalls).toHaveLength(1);
+      expect(toolCalls[0]!.payload).toMatchObject({ toolCallId, toolName: 'my-tool', args: {} });
+    });
   });
 
   describe('usage raw passthrough', () => {
