@@ -56,6 +56,8 @@ const RESERVED_THREAD_METADATA_KEYS = {
   observationThreshold: true,
   reflectionThreshold: true,
   tokenUsage: true,
+  ownerId: true,
+  createdBy: true,
   thinkingLevel: true,
   notifications: true,
 } satisfies Record<ReservedThreadMetadataKey, true>;
