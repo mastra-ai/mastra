@@ -2,17 +2,16 @@ import { EntityType } from '@mastra/core/observability';
 import { useTraceVolumeMetrics } from '@mastra/react/hooks/metrics';
 import { keepPreviousData } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useDrilldown } from '../hooks/use-drilldown';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { formatCount, formatPercent } from '../lib/chart-format';
 import { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
 import { MetricsShareList } from '@/ds/components/MetricsShareList';
-import { useLinkComponent } from '@/lib/framework';
 
 type Entity = 'agents' | 'workflows' | 'tools';
 
@@ -26,10 +25,18 @@ const COLUMNS = [{ label: 'Error rate' }];
 const errorRate = (errors: number, runs: number) => formatPercent(runs > 0 ? errors / runs : 0);
 
 /** Runs per agent, workflow or tool, ranked, with each one's error rate; a row opens its traces. */
-export function TraceVolumeCard() {
-  const { Link } = useLinkComponent();
+export type TraceVolumeCardProps = {
+  /** Called from the "View in Traces" button with the entity type of the open tab. */
+  onViewTraces?: (entityType: EntityType) => void;
+  /** Called from the "View errors in Logs" button with the entity type of the open tab. */
+  onViewErrors?: (entityType: EntityType) => void;
+  /** Called with the entity type of the open tab and the clicked row's name. */
+  onEntityClick?: (entityType: EntityType, name: string) => void;
+};
+
+export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: TraceVolumeCardProps) {
   const [entity, setEntity] = useState<Entity>('agents');
-  const { getTracesHref, getLogsHref } = useDrilldown();
+  const rootEntityType = ROOT_ENTITY[entity];
   const volume = useTraceVolumeMetrics({
     ...useMetricsFilters(),
     queryOptions: { placeholderData: keepPreviousData },
@@ -46,7 +53,7 @@ export function TraceVolumeCard() {
     share: r.completed + r.errors,
     value: formatCount(r.completed + r.errors),
     cells: [errorRate(r.errors, r.completed + r.errors)],
-    href: getTracesHref({ rootEntityType: ROOT_ENTITY[entity], entityName: r.name }),
+    onClick: onEntityClick && (() => onEntityClick(rootEntityType, r.name)),
   }));
   const errorsOf = new Map(source.map(r => [r.name, r.errors]));
   const total = [...byEntity.agents, ...byEntity.workflows, ...byEntity.tools].reduce(
@@ -54,24 +61,16 @@ export function TraceVolumeCard() {
     0,
   );
 
-  return (
-    <ChartCard
-      title="Trace volume"
-      description="Runs and calls, with error rate."
-      summary={{ value: formatCount(total), label: 'runs and calls' }}
-      actions={
-        <>
-          <OpenInTracesButton href={getTracesHref({ rootEntityType: ROOT_ENTITY[entity] })} LinkComponent={Link} />
-          <OpenErrorsInLogsButton
-            href={getLogsHref({ rootEntityType: ROOT_ENTITY[entity], status: 'error' })}
-            LinkComponent={Link}
-          />
-        </>
-      }
-      isLoading={volume.isLoading}
-      isUpdating={volume.isPlaceholderData}
-      isError={volume.isError}
-    >
+  const layout = {
+    title: 'Trace volume',
+    description: 'Runs and calls, with error rate.',
+    actions: (onViewTraces || onViewErrors) && (
+      <>
+        {onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(rootEntityType)} />}
+        {onViewErrors && <OpenErrorsInLogsButton onClick={() => onViewErrors(rootEntityType)} />}
+      </>
+    ),
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsCard.Tabs<Entity> value={entity} onValueChange={setEntity}>
           <MetricsCard.Tab value="agents">Agents</MetricsCard.Tab>
@@ -80,7 +79,24 @@ export function TraceVolumeCard() {
         </MetricsCard.Tabs>
         <MetricsShareList.Header columns={COLUMNS} valueLabel="Runs" />
       </MetricsCard.Toolbar>
-      <ChartArea isError={volume.isError}>
+    ),
+  };
+
+  if (volume.isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={<MetricsCard.Summary value={formatCount(total)} label="runs and calls" isLoading={volume.isLoading} />}
+      isUpdating={volume.isPlaceholderData}
+    >
+      <ChartArea>
         <MetricsShareList
           key={entity}
           rows={rows}
@@ -94,7 +110,6 @@ export function TraceVolumeCard() {
             return { value: formatCount(runs), cells: [errorRate(errors, runs)] };
           }}
           emptyState="No runs in this range."
-          LinkComponent={Link}
           isLoading={volume.isLoading}
         />
       </ChartArea>

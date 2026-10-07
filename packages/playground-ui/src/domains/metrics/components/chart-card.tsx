@@ -5,33 +5,29 @@ import { cn } from '@/lib/utils';
 export type ChartCardProps = {
   title: string;
   description?: string;
-  /** The card's headline number, top right. */
-  summary?: { value: string; label?: string };
-  /** Top-bar buttons revealed on hover, e.g. "Open in Traces". */
+  /** The headline number, top right: a `MetricsCard.Summary`. Its slot has a fixed width, so the title wraps the same loading or loaded. */
+  summary?: ReactNode;
+  /** Top-bar buttons revealed on hover, e.g. "View in Traces". */
   actions?: ReactNode;
-  /** First load: the summary shows a skeleton (charts take their own `isLoading`). */
-  isLoading?: boolean;
-  /** A new range or filter is loading: the previous data stays on screen, dimmed. */
+  /** Tabs and legend above the body; they stay in every state. */
+  toolbar?: ReactNode;
+  /** Previous data stays on screen, dimmed, while a new range or filter loads. */
   isUpdating?: boolean;
-  /** The data failed to load: the summary hides (the chart's `ChartArea` says why). */
-  isError?: boolean;
   className?: string;
   children: ReactNode;
 };
 
 /**
- * A chart card for the Observe pages: title, description, summary value and hover actions.
- * The content is a flex column (so `height="fill"` charts end cards in a row on one line) and
- * doesn't clip, so row hover insets and tooltips can reach past its edge.
+ * Pure layout for a metrics chart card. The body has a fixed height, so the loading,
+ * error, empty and loaded states take the same room and nothing shifts around the card.
  */
 export function ChartCard({
   title,
   description,
   summary,
   actions,
-  isLoading = false,
+  toolbar,
   isUpdating = false,
-  isError = false,
   className,
   children,
 }: ChartCardProps) {
@@ -41,12 +37,11 @@ export function ChartCard({
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title={title} description={description} />
         {actions && <MetricsCard.Actions reveal="hover">{actions}</MetricsCard.Actions>}
-        {summary && !isError && (
-          <MetricsCard.Summary value={summary.value} label={summary.label} isLoading={isLoading} className={fade} />
-        )}
+        {summary && <div className={cn('order-last flex w-24 shrink-0 justify-end', fade)}>{summary}</div>}
       </MetricsCard.TopBar>
-      <MetricsCard.Content className={cn('flex h-full flex-col gap-4 overflow-visible', fade)}>
-        {children}
+      <MetricsCard.Content className="flex flex-col gap-4 overflow-visible">
+        {toolbar}
+        <div className={cn('relative flex h-60 min-h-0 min-w-0 flex-col', fade)}>{children}</div>
       </MetricsCard.Content>
     </MetricsCard>
   );
