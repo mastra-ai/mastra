@@ -583,9 +583,10 @@ Pass `scope: null` to deliberately share entries across all callers. Only use th
 ```typescript title="src/mastra/agents/cached-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { ResponseCache } from '@mastra/core/processors'
-import { RedisCache } from '@mastra/redis'
+import { RedisServerCache } from '@mastra/redis'
+import Redis from 'ioredis'
 
-const cache = new RedisCache({ url: process.env.REDIS_URL })
+const cache = new RedisServerCache({ client: new Redis(process.env.REDIS_URL!) })
 
 export const agent = new Agent({
   id: 'cached-agent',
