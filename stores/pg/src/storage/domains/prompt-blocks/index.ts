@@ -180,6 +180,9 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
   async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
     const { promptBlock } = input;
+    // @khayalek-known-mastra-violation KV-PG-008
+    // A failed insert must never clean up another request's draft.
+    let inserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -204,6 +207,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         ],
       );
 
+      inserted = true;
       // 2. Extract snapshot fields and create version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = promptBlock;
       const versionId = crypto.randomUUID();
@@ -230,10 +234,12 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       // Best-effort cleanup
       try {
         const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [promptBlock.id],
-        );
+        if (inserted) {
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [promptBlock.id],
+          );
+        }
       } catch {
         // Ignore cleanup errors
       }
