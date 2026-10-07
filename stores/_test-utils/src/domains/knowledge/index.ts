@@ -23,6 +23,17 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await store.createNode({ id: OTHER_SCOPE_ID, name: 'Other', isScope: true, scopeIds: [] });
     });
 
+    it('rejects the deprecated curation cursor methods without touching storage', async () => {
+      const before = await store.listActivity({ scopeIds: [ORG_SCOPE_ID] });
+      await expect(store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' })).rejects.toThrow(
+        'Knowledge curation cursors were removed',
+      );
+      await expect(
+        store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
+      ).rejects.toThrow('Knowledge curation cursors were removed');
+      expect(await store.listActivity({ scopeIds: [ORG_SCOPE_ID] })).toEqual(before);
+    });
+
     it('rolls back node-plus-record creation when record scope validation fails', async () => {
       const scopeIds = [ORG_SCOPE_ID, PROJECT_SCOPE_ID];
       const before = {
