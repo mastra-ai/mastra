@@ -1,15 +1,15 @@
 import { useObservabilityCapabilities } from './use-observability-capabilities';
 
 /**
- * Field/value discovery needs both trace query and discovery support. `enabled` stays
- * false while capabilities load; servers without the capabilities endpoint fall back to `true`.
+ * Whether the store supports trace query field/value discovery. Callers combine it with
+ * `useTraceQueryAvailable` when they also need the trace query API. `enabled` stays false
+ * while capabilities load; servers without the capabilities endpoint fall back to `true`.
  */
 export const useTraceQueryDiscoveryAvailable = (): { isLoading: boolean; enabled: boolean } => {
   const { data, isLoading } = useObservabilityCapabilities();
-  const capabilities = data?.capabilities;
 
   return {
     isLoading,
-    enabled: !isLoading && (capabilities?.traceQuery ?? true) && (capabilities?.traceQueryDiscovery ?? true),
+    enabled: !isLoading && (data?.capabilities.traceQueryDiscovery ?? true),
   };
 };

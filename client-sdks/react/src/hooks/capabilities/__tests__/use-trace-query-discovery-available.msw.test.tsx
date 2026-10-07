@@ -61,7 +61,7 @@ describe('useTraceQueryDiscoveryAvailable', () => {
   });
 
   describe('when the server reports discovery without trace query', () => {
-    it('is not enabled', async () => {
+    it('is enabled, leaving the trace query gate to the caller', async () => {
       server.use(
         http.get(CAPABILITIES_URL, () =>
           HttpResponse.json({
@@ -73,7 +73,7 @@ describe('useTraceQueryDiscoveryAvailable', () => {
 
       const { result } = renderHook(() => useTraceQueryDiscoveryAvailable(), { wrapper: makeWrapper() });
 
-      await waitFor(() => expect(result.current).toEqual({ isLoading: false, enabled: false }));
+      await waitFor(() => expect(result.current).toEqual({ isLoading: false, enabled: true }));
     });
   });
 
