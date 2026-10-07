@@ -6,4 +6,4 @@ Added run fencing for durable agents. Redis stores now reject writes from a dura
 
 Claims are stored as keys in the same database, so no setup is needed.
 
-Requires `@mastra/core` 1.76.0 or later.
+Requires `@mastra/core` 1.76.0 or a later 1.x release.

@@ -6,4 +6,4 @@ Added run fencing for durable agents. Turso stores now reject writes from a dura
 
 Turso uses the run fencing in `@mastra/libsql`. Claims are kept in two new tables, `mastra_workflow_run_owners` and `mastra_memory_run_fences`, which are created on init. If you set `disableInit: true`, create them before upgrading. Durable agent runs fail to start until the tables exist.
 
-Requires `@mastra/core` 1.76.0 or later.
+Requires `@mastra/core` 1.76.0 or a later 1.x release.
