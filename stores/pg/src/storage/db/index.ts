@@ -18,6 +18,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
+import { buildConnectionStringPoolConfig } from '../../shared/pool-config';
 import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
@@ -134,10 +135,13 @@ export function resolvePgConfig(config: PgDomainConfig): {
   // Config to create new pool
   let pool: Pool;
   if ('connectionString' in config) {
-    pool = new Pool({
-      connectionString: config.connectionString,
-      ssl: config.ssl,
-    });
+    // Parse the URL ourselves so an explicit `ssl` wins over `sslmode=` (see #17307).
+    pool = new Pool(
+      buildConnectionStringPoolConfig(
+        { connectionString: config.connectionString, ssl: config.ssl },
+        { max: 10, idleTimeoutMillis: 10000 },
+      ),
+    );
   } else {
     pool = new Pool({
       host: config.host,
