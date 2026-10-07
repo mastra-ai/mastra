@@ -165,6 +165,18 @@ export async function supportsRunFencing(store: WorkflowsStorage | MemoryStorage
   return typeof store?.supportsRunFencing === 'function' && (await store.supportsRunFencing());
 }
 
+/**
+ * Generation of the latest storage claim on a run, which is what the claiming
+ * execution tags its stream events with. Undefined when storage holds no claim
+ * for the run, including runs fenced by a pubsub lease, whose events carry no
+ * generation.
+ */
+export async function readRunGeneration(mastra: Mastra | undefined, runId: string): Promise<number | undefined> {
+  const store = await mastra?.getStorage()?.getStore('workflows');
+  if (!(await supportsRunFencing(store))) return undefined;
+  return (await store!.getRunOwnership({ runId }))?.generation;
+}
+
 /** The claim an execution holds on a run, as carried on its RequestContext. */
 export interface DurableExecutionClaim {
   executionId: string;

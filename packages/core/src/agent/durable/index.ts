@@ -106,6 +106,9 @@ export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRe
 // Lets shared test suites simulate a process crash
 export { __resetExecutionFencesForTests } from './execution-fence';
 
+// Lets observers outside core (the server's observe route) skip a lost execution's events
+export { readRunGeneration } from './execution-fence';
+
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
 export { agentThreadStreamRuntime } from '../thread-stream-runtime';

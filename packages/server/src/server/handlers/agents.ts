@@ -6,7 +6,12 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '@mastra/core/agent/durable';
+import {
+  AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
+  DurableStepIds,
+  readRunGeneration,
+} from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
@@ -2620,6 +2625,12 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       let handleEvent: ((event: any) => void) | null = null;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
+      // A replay from an offset can start past the marker of the execution that
+      // took the run over, and would then accept what the lost execution still
+      // publishes, its finish included. Follow the run's current claim instead.
+      // Runs fenced by a pubsub lease have no generation and are unaffected.
+      let newestGeneration = offset ? await readRunGeneration(mastra, runId) : undefined;
+
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -2658,7 +2669,6 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           resetIdleTimer(controller);
 
-          let newestGeneration: number | undefined;
           handleEvent = (event: any) => {
             // Another execution took the run over: drop what the superseded one
             // still publishes. The takeover marker itself is not a stream event.

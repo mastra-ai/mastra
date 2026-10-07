@@ -36,6 +36,7 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import {
   ExecutionFence,
   fencePubSub,
+  readRunGeneration,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
   RUN_ACTIVE_ERROR_ID,
@@ -4204,6 +4205,12 @@ export class DurableAgent<
     const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
 
+    // A replay from an offset can start past the marker of the execution that
+    // took the run over, and would then accept what the lost execution still
+    // publishes, its finish included. Follow the run's current claim instead.
+    // Runs fenced by a pubsub lease have no generation and are unaffected.
+    const minGeneration = options?.offset ? await readRunGeneration(this.#mastra, runId) : undefined;
+
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -4216,6 +4223,7 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
+      minGeneration,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       onChunk: options?.onChunk,
