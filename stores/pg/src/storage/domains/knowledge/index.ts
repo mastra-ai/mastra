@@ -547,8 +547,9 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
       let inspection = await this.#inspectSchemaWithExecutor(tx);
-      if (inspection.status === 'incompatible-reset-required' && (await this.#isEmptyPublishedV1Layout(tx))) {
-        // Earlier releases created empty Knowledge tables for every app. Replacing them loses nothing.
+      if (inspection.status === 'incompatible-reset-required' && (await this.#isPublishedV1Layout(tx))) {
+        // Knowledge v1 was experimental and its data is not migrated: replace the published v1 layout,
+        // discarding any rows it holds.
         const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
           .map(table => `"${table}"`)
           .join(', ');
@@ -571,11 +572,11 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /**
-   * True when the only Knowledge objects are the empty tables and indexes published v1 adapters
-   * created for every app. Anything else (rows, v2 tables, unknown tables, views, triggers, extra
-   * indexes) needs an explicit reset.
+   * True when the only Knowledge objects are the tables and indexes published v1 adapters created,
+   * with or without rows. Anything else (v2 tables, unknown tables, views, triggers, extra indexes)
+   * needs an explicit reset.
    */
-  async #isEmptyPublishedV1Layout(executor: Executor): Promise<boolean> {
+  async #isPublishedV1Layout(executor: Executor): Promise<boolean> {
     const schema = this.#schemaName ?? null;
     const relations = await executor.execute({
       sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
@@ -600,10 +601,6 @@ export class KnowledgePG extends KnowledgeStorage {
       args: [schema, tables, schema, tables],
     });
     if (dependents.rows.length > 0) return false;
-    for (const table of tables) {
-      const rows = await executor.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
-      if (rows.rows.length > 0) return false;
-    }
     return true;
   }
 

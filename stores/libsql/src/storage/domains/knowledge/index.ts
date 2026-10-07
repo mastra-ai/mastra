@@ -287,8 +287,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async #initializeSchema(tx: Executor): Promise<void> {
     const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
     let inspection = await this.#inspectSchema(tx);
-    if (inspection.status === 'incompatible-reset-required' && (await this.#isEmptyPublishedV1Layout(tx))) {
-      // Earlier releases created empty Knowledge tables for every app. Replacing them loses nothing.
+    if (inspection.status === 'incompatible-reset-required' && (await this.#isPublishedV1Layout(tx))) {
+      // Knowledge v1 was experimental and its data is not migrated: replace the published v1 layout,
+      // discarding any rows it holds.
       for (const table of [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]) {
         await tx.execute(`DROP TABLE IF EXISTS "${table}"`);
       }
@@ -361,28 +362,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   /**
-   * True when the only Knowledge objects are the empty tables and indexes published v1 adapters
-   * created for every app. Anything else (rows, v2 tables, unknown tables, views, triggers) needs an
+   * True when the only Knowledge objects are the tables and indexes published v1 adapters created,
+   * with or without rows. Anything else (v2 tables, unknown tables, views, triggers) needs an
    * explicit reset.
    */
-  async #isEmptyPublishedV1Layout(executor: Executor): Promise<boolean> {
+  async #isPublishedV1Layout(executor: Executor): Promise<boolean> {
     const objects = await executor.execute(
       "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
     );
-    const tables: string[] = [];
     for (const row of objects.rows) {
       const type = String(row.type);
       const name = String(row.name);
-      if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) {
-        tables.push(name);
-        continue;
-      }
+      if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) continue;
       const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
       if (type !== 'index' || !knownIndex) return false;
-    }
-    for (const table of tables) {
-      const rows = await executor.execute(`SELECT 1 FROM "${table}" LIMIT 1`);
-      if (rows.rows.length > 0) return false;
     }
     return true;
   }

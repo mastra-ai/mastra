@@ -100,6 +100,8 @@ async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>)
 createKnowledgeSchemaResetTests(async () => {
   const client = createClient({ url: ':memory:' });
   await seedPublishedKnowledgeV1(client);
+  // A host-added index makes the layout unrecognized, so init must refuse and only reset may replace it.
+  await client.execute('CREATE INDEX custom_knowledge_index ON mastra_knowledge_nodes (name)');
   await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
   await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
   await client.execute({
@@ -142,11 +144,18 @@ createKnowledgeSchemaResetTests(async () => {
 });
 
 describe('KnowledgeLibSQL initialization', () => {
-  it('replaces the empty v1 tables every published LibSQL store created', async () => {
+  it('replaces the v1 tables every published LibSQL store created, discarding their rows', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
+      await client.execute(
+        `INSERT INTO mastra_knowledge_nodes (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','task','legacy body','[]','legacy',1,NULL,'2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')`,
+      );
+      await client.execute(
+        "INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES ('thread', 'curate', 'k', '2026-01-01T00:00:00.000Z')",
+      );
       await client.execute('CREATE TABLE existing_domain (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO existing_domain (id) VALUES ('preserved')");
 
       const store = new KnowledgeLibSQL({ client });
       await store.init();
@@ -156,9 +165,8 @@ describe('KnowledgeLibSQL initialization', () => {
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
       );
       expect(new Set(tables.rows.map(row => String(row.name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
-      expect((await client.execute("SELECT name FROM sqlite_master WHERE name = 'existing_domain'")).rows).toHaveLength(
-        1,
-      );
+      expect((await client.execute('SELECT id FROM mastra_knowledge_nodes')).rows).toEqual([]);
+      expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
     } finally {
       client.close();
     }
@@ -170,11 +178,15 @@ describe('KnowledgeLibSQL initialization', () => {
     const client = createClient({ url });
     try {
       await seedPublishedKnowledgeV1(client);
+      await client.execute(
+        `INSERT INTO mastra_knowledge_nodes (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','task','legacy body','[]','legacy',1,NULL,'2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')`,
+      );
       const store = new LibSQLStore({ id: 'upgraded', url });
       await store.init();
 
       const knowledge = await store.getStore('knowledge');
       expect(await knowledge?.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect(await knowledge?.getNode('legacy')).toBeNull();
       await store.close();
     } finally {
       client.close();
@@ -182,10 +194,11 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
-  it('names the reset call when v1 tables hold rows', async () => {
+  it('names the reset call when the Knowledge layout is not one Mastra published', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
+      await client.execute('CREATE INDEX custom_knowledge_index ON mastra_knowledge_nodes (name)');
       await client.execute(
         "INSERT INTO mastra_knowledge_cursors (sourceThreadId, agent, lastKnowledgeId, updatedAt) VALUES ('thread', 'curate', 'k', '2026-01-01T00:00:00.000Z')",
       );

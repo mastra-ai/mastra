@@ -100,6 +100,8 @@ createKnowledgeSchemaResetTests(async () => {
   const schemaName = `knowledge_reset_contract_${Date.now()}`;
   await pool.query(`CREATE SCHEMA "${schemaName}"`);
   await seedPublishedKnowledgeV1(schemaName);
+  // A host-added index makes the layout unrecognized, so init must refuse and only reset may replace it.
+  await pool.query(`CREATE INDEX custom_knowledge_index ON "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (name)`);
   await pool.query(`CREATE TABLE "${schemaName}".knowledge_unrelated_domain (id TEXT PRIMARY KEY)`);
   await pool.query(`INSERT INTO "${schemaName}".knowledge_unrelated_domain (id) VALUES ('preserved')`);
   await pool.query(
@@ -202,7 +204,11 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
       expect(await tableExists(emptySchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
 
       const rowsStore = new KnowledgePG({ pool: searchPathPool, schemaName: rowsSchema });
-      await expect(rowsStore.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      await rowsStore.init();
+      expect(await rowsStore.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
+      expect(await otherCursors()).toEqual([{ sourceThreadId: 'thread' }]);
+
       await rowsStore.dangerouslyReset();
       expect(await rowsStore.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
       expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
@@ -216,11 +222,16 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
     }
   });
 
-  it('replaces the empty v1 tables every published PostgreSQL store created', async () => {
-    const schemaName = `knowledge_empty_v1_${Date.now()}`;
+  it('replaces the v1 tables every published PostgreSQL store created, discarding their rows', async () => {
+    const schemaName = `knowledge_v1_rows_${Date.now()}`;
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
     try {
       await seedPublishedKnowledgeV1(schemaName);
+      await pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
+      );
+      await pool.query(`CREATE TABLE "${schemaName}".knowledge_unrelated_domain (id TEXT PRIMARY KEY)`);
+      await pool.query(`INSERT INTO "${schemaName}".knowledge_unrelated_domain (id) VALUES ('preserved')`);
 
       const store = createStore(schemaName);
       await store.init();
@@ -231,6 +242,10 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
         [schemaName],
       );
       expect(new Set(tables.rows.map(row => String(row.table_name)))).toEqual(new Set(KNOWLEDGE_TABLE_NAMES));
+      expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`)).rows).toEqual([]);
+      expect((await pool.query(`SELECT id FROM "${schemaName}".knowledge_unrelated_domain`)).rows).toEqual([
+        { id: 'preserved' },
+      ]);
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     }
@@ -266,8 +281,13 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
       });
 
       expect(knowledgeInit).not.toHaveBeenCalled();
+      expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`)).rows).toEqual([
+        { id: 'legacy' },
+      ]);
       preV2CoreInit.mockRestore();
-      await expect(store.getStore('knowledge')).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+      const knowledge = await store.getStore('knowledge');
+      expect(await knowledge?.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+      expect(await knowledge?.getNode('legacy')).toBeNull();
     } finally {
       await store.close();
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
