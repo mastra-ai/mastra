@@ -33,7 +33,7 @@ const post = (app: Hono, body: string, headers: Record<string, string> = {}) =>
   });
 
 describe('custom-route resource check body limit', () => {
-  const limits = { maxSize: 64, onError: () => ({ error: 'too big' }) };
+  const limits = { maxSize: 64, onError: (err: unknown) => err };
 
   it('does not read a body over the configured limit, so its resource id is never approved', async () => {
     const { app, authorizeUserResource, handler } = await setup(limits);
@@ -44,6 +44,13 @@ describe('custom-route resource check body limit', () => {
     expect(await response.json()).toEqual({ resource: 'mapped' });
     expect(authorizeUserResource).not.toHaveBeenCalled();
     expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('trusts a declared content-length over the limit without reading the body', async () => {
+    const { app, authorizeUserResource } = await setup(limits);
+    const response = await post(app, JSON.stringify({ resourceId: 'session-r' }), { 'content-length': '300' });
+    expect(response.status).toBe(200);
+    expect(authorizeUserResource).not.toHaveBeenCalled();
   });
 
   it('stops reading at the limit when content-length is absent (streamed body)', async () => {
