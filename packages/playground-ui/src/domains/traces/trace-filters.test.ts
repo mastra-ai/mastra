@@ -54,6 +54,20 @@ describe('saveTraceFiltersToStorage', () => {
 
     expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error');
   });
+
+  describe('when a tags filter carries an operator', () => {
+    it.each([
+      ['filterTags=production&filterTags=staging&filterTags.op=notIn', 'notIn'],
+      ['filterTags=&filterTags.op=exists', 'exists'],
+      ['filterTags=&filterTags.op=notExists', 'notExists'],
+    ])('restores %s with its operator', (query, operatorId) => {
+      saveTraceFiltersToStorage(new URLSearchParams(query), KEY);
+
+      const restored = loadTraceFiltersFromStorage(KEY);
+      expect(restored?.get('filterTags.op')).toBe(operatorId);
+      expect(restored?.getAll('filterTags')).toEqual(new URLSearchParams(query).getAll('filterTags'));
+    });
+  });
 });
 
 describe('TRACE_FILTER_BAR_OPERATORS', () => {
@@ -493,6 +507,18 @@ describe('presence-only filter URL params', () => {
         ]);
       },
     );
+  });
+
+  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
+    it.each([
+      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
+      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
+      'filterSpanError=boom&filterSpanError.op=in',
+    ])('drops the token for %s', query => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
+        { fieldId: 'traceId', value: 'abc' },
+      ]);
+    });
   });
 
   describe('when the feedback comment carries a presence operator', () => {

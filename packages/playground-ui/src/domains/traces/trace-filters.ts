@@ -669,6 +669,13 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     const operatorId = readTraceFilterOperator(searchParams, paramName);
     const raw = searchParams.getAll(paramName);
 
+    // Presence-only fields can't match a value; a hand-edited URL that gives
+    // them one would show a chip for a filter that is never applied. A pending
+    // chip (empty value, no operator yet) must still survive the round-trip.
+    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
+      if (operatorId ? !isPresenceOperator(operatorId) : Boolean(raw[0])) continue;
+    }
+
     if (fieldId === 'tags' || isManyOperator(operatorId)) {
       // An empty `filterTags=` sentinel keeps the pill alive after a Reset
       // (neutral state = no selections) so users can re-pick without losing
@@ -680,12 +687,6 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     // Text and synthetic single-value fields: include empty strings so
     // pending-but-not-yet-filled filters survive URL round-trips.
     const value = raw[0];
-    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
-      // Presence-only fields can't match a value; a hand-edited URL that gives
-      // them one would show a chip for a filter that is never applied.
-      const isPresence = operatorId === 'exists' || operatorId === 'notExists';
-      if (operatorId ? !isPresence : Boolean(value)) continue;
-    }
     if (value !== undefined) tokens.push({ fieldId, value, ...(operatorId ? { operatorId } : {}) });
   }
 
@@ -718,6 +719,8 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
       for (const value of searchParams.getAll(param)) {
         next.append(param, value);
       }
+      const operatorId = readTraceFilterOperator(searchParams, param);
+      if (operatorId && searchParams.has(param)) next.set(traceFilterOperatorParam(param), operatorId);
       continue;
     }
     preserve(param);
