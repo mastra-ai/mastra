@@ -7893,6 +7893,49 @@ describe('Agent signals', () => {
     expect(restored[1]).toMatchObject({ contents: 'second steer' });
   });
 
+  it('queues a retained signal it queued locally but forwarded during drain when it later owns the run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const streamMock = vi.fn();
+    const agent = { id: 'drain-forward-agent', stream: streamMock } as unknown as Agent<any, any, any, any>;
+    const threadId = 'drain-forward-thread';
+    const resourceId = 'drain-forward-user';
+    const options = { memory: { thread: threadId, resource: resourceId } } as any;
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(agent, createFakeThreadRun('drain-forward-run', finished), options, pubsub);
+    const queued = runtime.sendMessage(agent, 'drained notification', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'drain-forward-run' });
+    const enqueued = pubsub.publishedData.find(data => data.type === 'signal-enqueued');
+    expect(enqueued).toBeDefined();
+
+    // Another runtime wins the lease at handoff, so the drain forwards the signal instead of running it.
+    vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(async key => {
+      pubsub.owners.set(key, 'other-owner-run');
+      return false;
+    });
+    finishRun();
+    await waitForCondition(() =>
+      pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run'),
+    );
+    expect(streamMock).not.toHaveBeenCalled();
+
+    // The other owner dies before consuming it; this runtime takes over and the retained event replays.
+    pubsub.owners.clear();
+    runtime.registerRun(agent, createFakeThreadRun('takeover-run', new Promise<void>(() => {})), options, pubsub);
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: { ...enqueued, runId: 'takeover-run' } });
+    await pubsub.flush();
+    await nextTick();
+
+    const restored = runtime.drainPendingSignals('takeover-run', pubsub);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({ contents: 'drained notification' });
+  });
+
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();
