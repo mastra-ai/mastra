@@ -129,7 +129,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     // AWAIT subscription first - ensures listener is registered before any events fire
     try {
-      await pubsub.subscribe('workflows-finish', finishCb);
+      await pubsub.subscribe('workflows-finish', finishCb, { startFrom: 'latest' });
     } catch (err) {
       releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
