@@ -1,4 +1,5 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
+import { Knowledge } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
 import { buildSubconsciousActivitySnapshot } from '@mastra/memory/processors';
 import stripAnsi from 'strip-ansi';
@@ -56,6 +57,9 @@ describe('SubconsciousActivityComponent', () => {
     await store.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
     await store.createNode({ id: scopeIds[1], name: 'User 42', isScope: true, scopeIds: [scopeIds[0]!] });
     await store.createNode({ id: scopeIds[2], name: 'Thread alpha', isScope: true, scopeIds: [scopeIds[1]!] });
+    // Snapshots read with session authority: the resource and thread rungs own themselves.
+    for (const scopeId of scopeIds.slice(1))
+      await store.upsertScopeGrant({ scopeNodeId: scopeId, scopeRefId: scopeId, role: 'owner' });
     const node = await store.createNode({ name: 'Atlas launch', kind: 'project', scopeIds: [scopeIds[2]!] });
     const item = await store.createRecord({
       node,
@@ -66,7 +70,11 @@ describe('SubconsciousActivityComponent', () => {
       metadata: { sourceThreadId: 'private-thread' },
     });
 
-    const produced = await buildSubconsciousActivitySnapshot({ store, scopeIds, recentUpdates: 10 });
+    const produced = await buildSubconsciousActivitySnapshot({
+      knowledge: new Knowledge({ id: 'default', storage }),
+      scopeIds,
+      recentUpdates: 10,
+    });
     const parsed = parseSubconsciousActivitySnapshot(produced);
 
     expect(parsed).toBeDefined();
