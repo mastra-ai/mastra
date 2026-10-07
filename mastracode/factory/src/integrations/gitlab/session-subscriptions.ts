@@ -70,16 +70,16 @@ function parseMergeRequest(value: number | string, target: SessionTarget): numbe
 
 /**
  * Whether the current request comes from a session that merge-request
- * subscriptions can ever apply to: an authenticated org user on a repository
+ * subscriptions can ever apply to: an authenticated org user on a factory
  * session with an active thread. Mirrors the GitHub gate; whether the
- * repository is GitLab-linked is only known after a storage read, so the
- * entry points verify that and fail loudly for the explicit tools.
+ * session's repository is GitLab-linked is only known after a storage read,
+ * so the entry points verify that and fail loudly for the explicit tools.
  */
 function isRepositorySession(requestContext: RequestContext): boolean {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   return Boolean(
     context?.threadId &&
-    context.getState().projectRepositoryId &&
+    context.getState().factoryProjectId &&
     sessionOrgId(requestContext) &&
     sessionUserId(requestContext),
   );
@@ -92,12 +92,19 @@ async function resolveSessionTarget(
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const orgId = sessionOrgId(requestContext);
   const userId = sessionUserId(requestContext);
-  const projectRepositoryId = context?.getState().projectRepositoryId;
-  if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
+  if (!context || !context.threadId || !context.getState().factoryProjectId || !orgId || !userId) {
     throw new Error('GitLab subscriptions require an authenticated repository session with an active thread.');
   }
   const storage = gitlab.sourceControlStorage;
   if (!storage) throw new Error('GitLab source control is unavailable.');
+
+  // Merge requests stay bound to the link the session is filed under: the
+  // controller state names it for dispatched sessions, the session row for
+  // the rest. A session filed under no link cannot subscribe.
+  const projectRepositoryId =
+    context.getState().projectRepositoryId ??
+    (await storage.sessions.getBySessionId(context.resourceId))?.projectRepositoryId;
+  if (!projectRepositoryId) return undefined;
 
   // The handle is scoped to GitLab rows, so a GitHub-linked repository is
   // simply absent here rather than misidentified.
