@@ -26,7 +26,7 @@ interface GrainFillStyle extends CSSProperties {
   '--grain-ink'?: string;
 }
 
-/** A static, decorative gradient. CSS owns the theme; fills share pre-rendered grain masks. */
+/** A static, decorative gradient. CSS owns the theme and shares procedural SVG grain. */
 export function GrainFill({ tone, width, height, className }: GrainFillProps) {
   const statusTone = isStatusTone(tone);
   const style: GrainFillStyle = {
