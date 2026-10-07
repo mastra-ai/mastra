@@ -13,6 +13,7 @@ import type {
   ProcessorDetail,
   ProcessorPhase,
   MastraDBMessage,
+  ExecuteProcessorParams,
   ExecuteProcessorResponse,
 } from '@mastra/react/hooks/processors';
 import { useProcessor, useExecuteProcessor } from '@mastra/react/hooks/processors';
@@ -36,7 +37,12 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
   outputStep: 'Output Step - Process after each LLM response (before tools)',
   toolResult: 'Tool Result - Process tool output before it is added to the message list',
   llmRequest: 'LLM Request - Transform the provider prompt before each LLM call',
+  toolModelOutput: 'Tool Model Output - Change what the model reads from a tool result',
 };
+
+type ExecutablePhase = ExecuteProcessorParams['phase'];
+
+const isExecutablePhase = (phase: ProcessorPhase): phase is ExecutablePhase => phase !== 'toolModelOutput';
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
   const {
@@ -78,7 +84,8 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
   const theme = useCodemirrorTheme();
 
-  const [selectedPhase, setSelectedPhase] = useState<ProcessorPhase>(processor.phases[0] || 'input');
+  const executablePhases = processor.phases.filter(isExecutablePhase);
+  const [selectedPhase, setSelectedPhase] = useState<ExecutablePhase>(executablePhases[0] || 'input');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(processor.configurations[0]?.agentId || '');
   const [testMessage, setTestMessage] = useState('Hello, this is a test message.');
   const [result, setResult] = useState<ExecuteProcessorResponse | null>(null);
@@ -138,7 +145,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               <Select
                 value={selectedPhase}
                 onValueChange={value => {
-                  const phase = processor.phases.find(phase => phase === value);
+                  const phase = executablePhases.find(phase => phase === value);
                   if (phase) setSelectedPhase(phase);
                 }}
               >
@@ -146,7 +153,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                   <SelectValue placeholder="Select phase" />
                 </SelectTrigger>
                 <SelectContent>
-                  {processor.phases.map(phase => (
+                  {executablePhases.map(phase => (
                     <SelectItem key={phase} value={phase}>
                       {phase}
                     </SelectItem>
