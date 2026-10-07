@@ -15,6 +15,7 @@ export const voiceSpeakersResponseSchema = z.array(
 export const generateSpeechBodySchema = z.object({
   text: z.string(),
   speakerId: z.string().optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const transcribeSpeechBodySchema = z.object({
@@ -208,7 +209,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
   responseSchema: speakResponseSchema,
-  handler: async ({ mastra, agentId, text, speakerId, requestContext }) => {
+  handler: async ({ mastra, agentId, text, speakerId, options, requestContext }) => {
     try {
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
@@ -224,7 +225,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
       }
 
       const audioStream = await Promise.resolve()
-        .then(() => voice.speak(text!, { speaker: speakerId! }))
+        .then(() => voice.speak(text!, { ...options, speaker: (options?.speaker as string | undefined) ?? speakerId }))
         .catch(err => {
           if (isMastraVoiceError(err)) {
             throw new HTTPException(400, { message: err.message });

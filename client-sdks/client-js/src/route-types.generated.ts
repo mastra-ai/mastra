@@ -6304,6 +6304,11 @@ export type PostAgentsAgentIdVoiceSpeak_PathParams = GetAgentsAgentIdVoiceSpeake
 export type PostAgentsAgentIdVoiceSpeak_Body = {
   text: string;
   speakerId?: string | undefined;
+  options?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Response;
