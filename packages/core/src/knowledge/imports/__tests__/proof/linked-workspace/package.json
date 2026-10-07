@@ -14,7 +14,7 @@
     "tsx": "^4.23.1"
   },
   "devDependencies": {
-    "@types/node": "22.20.1",
-    "typescript": "^7.0.2"
+    "@types/node": "link:__NODE_TYPES_PATH__",
+    "typescript": "link:__TYPESCRIPT_PATH__"
   }
 }
