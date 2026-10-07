@@ -313,23 +313,27 @@ describe('KnowledgePG published v1 layout', () => {
     },
   );
 
-  it('rejects a populated published layout without mutation and names the reset call', async () => {
+  it('replaces a published layout that holds rows, discarding them and keeping other storage', async () => {
     const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_rows');
     await pool.query(
       `INSERT INTO "${schemaName}".mastra_knowledge_nodes (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
     );
-    const before = await knowledgeObjects(schemaName);
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_threads (id TEXT PRIMARY KEY)`);
+    await pool.query(`INSERT INTO "${schemaName}".mastra_threads (id) VALUES ('preserved')`);
 
-    const init = new KnowledgePG({ pool, schemaName }).init();
-    await expect(init).rejects.toBeInstanceOf(KnowledgeSchemaError);
-    await expect(init).rejects.toThrow(/Knowledge schema reset required.*dangerouslyReset\(\)/);
+    await new KnowledgePG({ pool, schemaName }).init();
 
-    expect(await knowledgeObjects(schemaName)).toEqual(before);
-    const nodes = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_nodes`);
-    expect(nodes.rows.map(row => row.id)).toEqual(['legacy']);
+    const marker = await pool.query(
+      `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
+    );
+    expect(marker.rows[0]?.version).toBe(1);
+    const legacy = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_nodes WHERE id = 'legacy'`);
+    expect(legacy.rows).toEqual([]);
+    const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
+    expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
   });
 
-  it('rejects an empty published layout that a host view depends on', async () => {
+  it('rejects a published layout that a host view depends on', async () => {
     const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_view');
     await pool.query(
       `CREATE VIEW "${schemaName}".host_report AS SELECT id FROM "${schemaName}".mastra_knowledge_nodes`,
@@ -343,7 +347,7 @@ describe('KnowledgePG published v1 layout', () => {
     expect(await knowledgeObjects(schemaName)).toEqual(before);
   });
 
-  it('rolls back and names the dependents when a host foreign key blocks replacing an empty published layout', async () => {
+  it('rolls back and names the dependents when a host foreign key blocks replacing a published layout', async () => {
     const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_fk');
     // Foreign keys are invisible to the view/trigger catalog checks, so only DROP TABLE detects them.
     await pool.query(
@@ -387,7 +391,10 @@ describe('KnowledgePG published v1 layout', () => {
 
       expect(knowledgeInit).not.toHaveBeenCalled();
       preV2CoreInit.mockRestore();
-      await expect(store.getStore('knowledge')).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      // Activating Knowledge replaces the published v1 layout, discarding its rows; threads stay.
+      await store.getStore('knowledge');
+      expect((await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_nodes`)).rows).toEqual([]);
+      expect((await store.stores.memory!.getThreadById({ threadId: 'thread-1' }))?.title).toBe('kept');
     } finally {
       preV2CoreInit.mockRestore();
       await store.close();
@@ -418,7 +425,9 @@ describe('KnowledgePG published v1 layout', () => {
       expect(await tableExists(emptySchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
 
       const rowsStore = new KnowledgePG({ pool: searchPathPool, schemaName: rowsSchema });
-      await expect(rowsStore.init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      await rowsStore.init();
+      expect(await marker(rowsSchema)).toBe(1);
+      expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
       await rowsStore.dangerouslyReset();
       expect(await marker(rowsSchema)).toBe(1);
       expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
@@ -432,7 +441,7 @@ describe('KnowledgePG published v1 layout', () => {
     }
   });
 
-  it('rejects an empty published layout carrying an unfamiliar index', async () => {
+  it('rejects a published layout carrying an unfamiliar index', async () => {
     const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_published_index');
     await pool.query(`CREATE INDEX host_knowledge_index ON "${schemaName}".mastra_knowledge_nodes (name)`);
     const before = await knowledgeObjects(schemaName);
