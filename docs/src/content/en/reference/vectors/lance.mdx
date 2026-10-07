@@ -330,6 +330,94 @@ interface IndexStats {
 }
 ```
 
+### `getIndexCoverage()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    isOptional: true,
+    description: 'Table to inspect. Defaults to `indexName` when omitted.',
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    isOptional: true,
+    description: 'Used as the table name when `tableName` is omitted, matching `upsert()` and `query()`.',
+  },
+]}
+/>
+
+Returns one entry per index on the table:
+
+```typescript
+interface LanceIndexCoverage {
+  indexName: string
+  indexType: string
+  columns: string[]
+  numIndexedRows: number
+  numUnindexedRows: number
+}
+```
+
+### `optimize()`
+
+Runs LanceDB table maintenance. It compacts data files, adds rows written since the index was built to the existing index, and removes old table versions. Mastra never calls it automatically. Concurrent calls for the same table in one process share a single run.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tableName',
+    type: 'string',
+    isOptional: true,
+    description: 'Table to optimize. Defaults to `indexName` when omitted.',
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    isOptional: true,
+    description: 'Used as the table name when `tableName` is omitted.',
+  },
+  {
+    name: 'cleanupOlderThan',
+    type: 'Date',
+    isOptional: true,
+    description:
+      'Remove table versions older than this date. When omitted, LanceDB keeps versions from the last 7 days.',
+  },
+  {
+    name: 'deleteUnverified',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Also delete unverified files newer than 7 days. Only set this when no other process writes to the table, or the table can be corrupted.',
+  },
+]}
+/>
+
+Returns LanceDB `OptimizeStats` (compaction and pruning counts).
+
+#### When to optimize
+
+`upsert()` writes rows outside the existing vector index. `query()` still returns those rows by scanning them without the index, so results stay complete, but queries get slower as unindexed rows grow. LanceDB's `fastSearch()` skips unindexed rows entirely.
+
+`optimize()` adds new rows to the existing index without retraining it. If your data distribution has changed a lot, rebuild the index with `deleteIndex()` and `createIndex()` instead.
+
+LanceDB suggests optimizing after roughly 100,000 modified rows or 20 write operations. Use `getIndexCoverage()` to build your own policy:
+
+```typescript
+const [coverage] = await store.getIndexCoverage({ indexName: 'docs' })
+const total = coverage.numIndexedRows + coverage.numUnindexedRows
+
+if (coverage.numUnindexedRows >= 1_000 && coverage.numUnindexedRows / total >= 0.1) {
+  await store.optimize({ indexName: 'docs' })
+}
+```
+
+Managed LanceDB Cloud and Enterprise maintain tables automatically, so you don't need to call `optimize()` there.
+
 ### `deleteIndex()`
 
 <PropertiesTable

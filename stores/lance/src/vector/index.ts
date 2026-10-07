@@ -1,5 +1,12 @@
 import { connect, Index } from '@lancedb/lancedb';
-import type { Connection, ConnectionOptions, CreateTableOptions, Table, TableLike } from '@lancedb/lancedb';
+import type {
+  Connection,
+  ConnectionOptions,
+  CreateTableOptions,
+  OptimizeStats,
+  Table,
+  TableLike,
+} from '@lancedb/lancedb';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
@@ -50,8 +57,30 @@ interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
+export interface LanceTableTargetParams {
+  tableName?: string;
+  /** Used as the table name when `tableName` is omitted, matching `upsert` and `query`. */
+  indexName?: string;
+}
+
+export interface LanceOptimizeParams extends LanceTableTargetParams {
+  /** Remove table versions older than this date. Defaults to LanceDB's retention (7 days). */
+  cleanupOlderThan?: Date;
+  /** Also delete unverified files newer than 7 days. Only safe when no other writer is active. Defaults to `false`. */
+  deleteUnverified?: boolean;
+}
+
+export interface LanceIndexCoverage {
+  indexName: string;
+  indexType: string;
+  columns: string[];
+  numIndexedRows: number;
+  numUnindexedRows: number;
+}
+
 export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   private lanceClient!: Connection;
+  private optimizeInFlight = new Map<string, Promise<OptimizeStats>>();
 
   /**
    * Creates a new instance of LanceVectorStore
@@ -910,6 +939,104 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  private async openExistingTable(
+    { tableName, indexName }: LanceTableTargetParams,
+    operation: string,
+  ): Promise<{ table: Table; resolvedTableName: string }> {
+    const resolvedTableName = tableName ?? indexName;
+    let validationError: string | undefined;
+    if (!this.lanceClient) {
+      validationError = 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance';
+    } else if (!resolvedTableName) {
+      validationError = 'tableName or indexName is required';
+    } else if (!(await this.lanceClient.tableNames()).includes(resolvedTableName)) {
+      validationError = `Table ${resolvedTableName} does not exist`;
+    }
+    if (validationError || !resolvedTableName) {
+      throw new MastraError({
+        id: createVectorErrorId('LANCE', operation, 'INVALID_ARGS'),
+        text: validationError,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { tableName: resolvedTableName ?? '' },
+      });
+    }
+    return { table: await this.lanceClient.openTable(resolvedTableName), resolvedTableName };
+  }
+
+  /**
+   * Runs LanceDB table maintenance: compacts fragments, adds unindexed rows to existing indexes
+   * (without retraining them), and prunes old table versions.
+   *
+   * Never runs implicitly. Concurrent calls for the same table share a single in-flight run.
+   */
+  async optimize(params: LanceOptimizeParams): Promise<OptimizeStats> {
+    const { table, resolvedTableName } = await this.openExistingTable(params, 'OPTIMIZE');
+
+    const inFlight = this.optimizeInFlight.get(resolvedTableName);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const run = (async () => {
+      try {
+        return await table.optimize({
+          ...(params.cleanupOlderThan ? { cleanupOlderThan: params.cleanupOlderThan } : {}),
+          deleteUnverified: params.deleteUnverified ?? false,
+        });
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createVectorErrorId('LANCE', 'OPTIMIZE', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { tableName: resolvedTableName },
+          },
+          error,
+        );
+      } finally {
+        this.optimizeInFlight.delete(resolvedTableName);
+      }
+    })();
+
+    this.optimizeInFlight.set(resolvedTableName, run);
+    return run;
+  }
+
+  /**
+   * Reports how many rows each index on a table covers. Rows written after an index was built
+   * stay unindexed until `optimize()` runs; use this to decide when to optimize.
+   */
+  async getIndexCoverage(params: LanceTableTargetParams): Promise<LanceIndexCoverage[]> {
+    const { table, resolvedTableName } = await this.openExistingTable(params, 'GET_INDEX_COVERAGE');
+
+    try {
+      const indices = await table.listIndices();
+      const coverage: LanceIndexCoverage[] = [];
+      for (const index of indices) {
+        const stats = await table.indexStats(index.name);
+        coverage.push({
+          indexName: index.name,
+          indexType: stats?.indexType ?? index.indexType,
+          columns: index.columns,
+          numIndexedRows: stats?.numIndexedRows ?? 0,
+          numUnindexedRows: stats?.numUnindexedRows ?? 0,
+        });
+      }
+      return coverage;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('LANCE', 'GET_INDEX_COVERAGE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName: resolvedTableName },
         },
         error,
       );
