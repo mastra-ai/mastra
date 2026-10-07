@@ -2435,6 +2435,27 @@ describe('BraintrustExporter', () => {
       });
     });
 
+    it('should link a run nested with nestUnderParent to its parent', async () => {
+      const nestedRoot = createMockSpan({
+        id: 'judge-root-id',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        traceId: 'turn-trace-id',
+      });
+      nestedRoot.externalParentSpanId = 'turn-span-id';
+      nestedRoot.nestedUnderParent = true;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: nestedRoot,
+      });
+
+      const startSpanCall = mockLogger.startSpan.mock.calls[0][0];
+      expect(startSpanCall.parentSpanIds).toEqual({ spanId: 'turn-span-id', rootSpanId: 'turn-trace-id' });
+    });
+
     it('should not link a root span whose parent was never exported to Braintrust', async () => {
       // A root under an ambient OTEL parent (via the bridge) has a
       // parentSpanId, but that span only exists in the OTEL backend —

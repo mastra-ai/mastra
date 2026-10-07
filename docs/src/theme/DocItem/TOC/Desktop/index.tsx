@@ -2,7 +2,6 @@ import { useDoc } from '@docusaurus/plugin-content-docs/client'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import { type ReactNode } from 'react'
 
-import { FeedbackTrigger } from '@site/src/components/feedback-trigger'
 import SubscribeForm from '@site/src/components/subscribe-form'
 import TOC from '@theme/TOC'
 
@@ -36,8 +35,6 @@ export default function DocItemTOCDesktop(): ReactNode {
       />
       <div className="mt-4 hidden flex-col gap-4 xl:flex">
         <SubscribeForm />
-        {/* TODO: Move feedback to side footer */}
-        <FeedbackTrigger />
       </div>
     </>
   )

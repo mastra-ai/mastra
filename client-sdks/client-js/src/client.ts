@@ -31,6 +31,8 @@ import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
   ListScoresBySpanParams,
+  QuerySpansInput,
+  QuerySpansResult,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
   QueryTracesGroupedInput,
@@ -960,18 +962,22 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the thread.
    * @param workingMemory - The new working memory content.
    * @param resourceId - Optional ID of the resource.
+   * @param mode - `replace` (default) or `merge` to atomically deep-merge a partial JSON object
+   * into resource-scoped schema working memory (requires storage support, e.g. PostgreSQL).
    */
   public updateWorkingMemory({
     agentId,
     threadId,
     workingMemory,
     resourceId,
+    mode,
     requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
     resourceId?: string;
+    mode?: 'replace' | 'merge';
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
@@ -981,6 +987,7 @@ export class MastraClient extends BaseResource {
         body: {
           workingMemory,
           resourceId,
+          ...(mode ? { mode } : {}),
         },
       },
     );
@@ -1154,6 +1161,11 @@ export class MastraClient extends BaseResource {
   /** Queries thread identities using eligible-trace and cross-trace predicates. */
   queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
     return this.observability.queryTraceThreads(params);
+  }
+
+  /** Queries completed spans using a span predicate, returning one row per matching span. */
+  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
+    return this.observability.querySpans(params);
   }
 
   /**

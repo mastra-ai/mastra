@@ -1,5 +1,7 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
+import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks/traces';
+import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks/traces';
 import {
   ActivityIcon,
   BoxIcon,
@@ -32,7 +34,6 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,
@@ -73,12 +74,7 @@ type EntityTypeValue = `${EntityType}`;
 
 export type EntityOptions = { label: string; entityType: EntityTypeValue };
 
-export const ROOT_ENTITY_TYPES = {
-  AGENT: 'agent',
-  WORKFLOW: 'workflow_run',
-  SCORER: 'scorer',
-  INGEST: 'rag_ingestion',
-} as const satisfies Record<string, EntityTypeValue>;
+export { ROOT_ENTITY_TYPES };
 
 export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Agent', entityType: ROOT_ENTITY_TYPES.AGENT },
@@ -124,7 +120,7 @@ export const TRACE_LIST_MODE_PARAM = 'listMode';
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
 export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
 export const TRACE_LIST_MODE_VALUES = new Set(['traces', 'branches'] as const);
-export type TraceListMode = 'traces' | 'branches';
+export type { TraceListMode };
 
 export const TRACE_LIST_MODE_OPTIONS = [
   { label: 'Traces (default)', value: 'traces' },
@@ -190,6 +186,10 @@ const isManyOperator = (operatorId: TraceFilterOperatorId | undefined) => operat
 /** Default operator for a token without one: arrays mean set membership. */
 export const traceFilterTokenOperator = (token: TraceFilterToken): TraceFilterOperatorId =>
   token.operatorId ?? (Array.isArray(token.value) ? 'in' : 'is');
+
+/** The legacy pick-multi neutral value. A text-match literal `Any` is a real word, not the sentinel. */
+export const isLegacyAnyValue = (value: unknown, operatorId: TraceFilterOperatorId): boolean =>
+  value === 'Any' && operatorId !== 'matches' && operatorId !== 'notMatches';
 
 const readTraceFilterOperator = (searchParams: URLSearchParams, valueParam: string) => {
   const raw = searchParams.get(traceFilterOperatorParam(valueParam));
@@ -285,9 +285,13 @@ export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterO
   { id: 'gte', label: 'at least' },
   { id: 'lt', label: 'less than' },
   { id: 'lte', label: 'at most' },
+  { id: 'matches', label: 'matches', freeText: true },
+  { id: 'notMatches', label: 'does not match', freeText: true },
 ];
 
 const TRACE_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists'];
+/** Human-written text fields also support case-insensitive word matching. */
+const TRACE_TEXT_OPERATORS: TraceFilterOperatorId[] = [...TRACE_STRING_OPERATORS, 'matches', 'notMatches'];
 /** Fields every trace carries (`traceId`, `entityName`): presence operators would never be false. */
 const TRACE_REQUIRED_STRING_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'in', 'notIn'];
 const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
@@ -301,6 +305,20 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'notExists',
 ];
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
+const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
+const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
+  in: 'includes',
+  notIn: 'notIncludes',
+  exists: 'exists',
+  notExists: 'notExists',
+};
+
+/** Structural subset of a discovery `canonicalFields` entry. */
+export type TraceQueryCanonicalFieldDescriptor = {
+  path: string;
+  operators: readonly string[];
+  valueSuggestions: boolean;
+};
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
 const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 // The legacy list endpoint only matches by equality.
@@ -409,9 +427,32 @@ const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
 ] as const;
 type TraceFilterRelatedFieldId = (typeof TRACE_FILTER_BAR_RELATED_FIELD_IDS)[number];
 
-const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
+const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error']);
+const TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS = new Set<string>(['spans.name', 'feedback.comment']);
+/** Free text with no value discovery: the values endpoint rejects these paths. */
+const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.comment']);
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
+
+/** The Tags field, or `undefined` until the backend describes `tags`: its operators
+ *  can't be inferred safely from the static catalog. Only UI operators whose query
+ *  operator the backend accepts are offered, and suggestions are wired only when the
+ *  backend says the field has them. */
+function createTagsFilterBarField(
+  canonicalTraceFields: readonly TraceQueryCanonicalFieldDescriptor[],
+  valueSuggestions?: (scope: 'trace', path: string) => FilterBarSuggestionsResolver,
+): FilterBarField | undefined {
+  const descriptor = canonicalTraceFields.find(field => field.path === 'tags');
+  if (!descriptor) return undefined;
+
+  const operators = TRACE_TAGS_OPERATORS.filter(op =>
+    descriptor.operators.includes(TRACE_TAGS_OPERATOR_TO_QUERY_OP[op] ?? ''),
+  );
+  if (operators.length === 0) return undefined;
+
+  const suggestions = descriptor.valueSuggestions ? valueSuggestions?.('trace', 'tags') : undefined;
+  return { ...traceFieldBase('tags'), operators, ...(suggestions ? { suggestions } : {}) };
+}
 
 /** FilterBar field definitions for the trace pages. Fields the query API cannot
  *  filter on (see `TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS`) are omitted, as is the
@@ -423,16 +464,19 @@ export function createTraceFilterBarFields({
   availableEnvironments,
   hiddenFieldIds = [],
   metadataFields = [],
+  canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
 }: {
+  /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
+  canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
   availableEnvironments: string[];
   hiddenFieldIds?: readonly string[];
   /** Discovered `metadata.<key>` paths with a lazy value-suggestions resolver each. */
   metadataFields?: readonly TraceMetadataFilterField[];
   /** Builds a lazy value resolver for a related-scope field (`spans.model`, …). Absent → free text. */
-  valueSuggestions?: (scope: TraceQueryRelatedScope, path: string) => FilterBarSuggestionsResolver;
+  valueSuggestions?: (scope: TraceQueryRelatedScope | 'trace', path: string) => FilterBarSuggestionsResolver;
   /**
    * When false, only fields the legacy list endpoint (`buildTraceListFilters`) can express are offered, each with
    * the `is` operator only: no related-scope (`spans.*`, `scores.*`, `feedback.*`) or metadata fields.
@@ -455,10 +499,10 @@ export function createTraceFilterBarFields({
   });
   const relatedPick = (id: TraceFilterRelatedFieldId): FilterBarField => {
     const [scope, path] = id.split('.') as [TraceQueryRelatedScope, string];
-    const resolver = valueSuggestions?.(scope, path);
+    const resolver = TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS.has(id) ? undefined : valueSuggestions?.(scope, path);
     return {
       ...traceFieldBase(id),
-      operators: TRACE_STRING_OPERATORS,
+      operators: TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS.has(id) ? TRACE_TEXT_OPERATORS : TRACE_STRING_OPERATORS,
       ...(resolver ? { strict: true, suggestions: resolver } : {}),
     };
   };
@@ -511,6 +555,9 @@ export function createTraceFilterBarFields({
       suggestions,
     }));
 
+  const tagsField = createTagsFilterBarField(canonicalTraceFields, valueSuggestions);
+  const tagsFields = tagsField ? [tagsField] : [];
+
   const hidden = new Set(hiddenFieldIds);
   if (!withQueryTrace) {
     return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
@@ -520,7 +567,7 @@ export function createTraceFilterBarFields({
     }));
   }
   return [
-    ...pickFields.sort(byLabel),
+    ...[...pickFields, ...tagsFields].sort(byLabel),
     ...textFields.sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
@@ -538,7 +585,7 @@ export function traceTokensToFilterBarItems(tokens: TraceFilterToken[]): FilterB
     id: token.fieldId,
     fieldId: token.fieldId,
     operatorId: traceFilterTokenOperator(token),
-    value: token.value === 'Any' ? '' : token.value,
+    value: isLegacyAnyValue(token.value, traceFilterTokenOperator(token)) ? '' : token.value,
   }));
 }
 
@@ -579,7 +626,7 @@ function traceGroupToFilterBarGroup(group: TraceFilterGroup): FilterBarGroup {
             id: node.id ?? node.fieldId,
             fieldId: node.fieldId,
             operatorId: traceFilterTokenOperator(node),
-            value: node.value === 'Any' ? '' : node.value,
+            value: isLegacyAnyValue(node.value, traceFilterTokenOperator(node)) ? '' : node.value,
           },
     ),
   };
@@ -633,6 +680,13 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     const operatorId = readTraceFilterOperator(searchParams, paramName);
     const raw = searchParams.getAll(paramName);
 
+    // Presence-only fields can't match a value; a hand-edited URL that gives
+    // them one would show a chip for a filter that is never applied. A pending
+    // chip (empty value, no operator yet) must still survive the round-trip.
+    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
+      if (operatorId ? !isPresenceOperator(operatorId) : Boolean(raw[0])) continue;
+    }
+
     if (fieldId === 'tags' || isManyOperator(operatorId)) {
       // An empty `filterTags=` sentinel keeps the pill alive after a Reset
       // (neutral state = no selections) so users can re-pick without losing
@@ -676,6 +730,8 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
       for (const value of searchParams.getAll(param)) {
         next.append(param, value);
       }
+      const operatorId = readTraceFilterOperator(searchParams, param);
+      if (operatorId && searchParams.has(param)) next.set(traceFilterOperatorParam(param), operatorId);
       continue;
     }
     preserve(param);

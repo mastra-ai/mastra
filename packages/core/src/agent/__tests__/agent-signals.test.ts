@@ -432,7 +432,7 @@ describe('Agent signals', () => {
     expect(reminderSignal.toLLMMessage()).toEqual({
       role: 'user',
       content:
-        '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
+        '<system-reminder enabled="true" path="/tmp/AGENTS.md" type="dynamic-agents-md">Use &lt;safe&gt; content &amp; continue</system-reminder>',
     });
     expect(reminderSignal.toDataPart().data.attributes).toEqual({
       type: 'dynamic-agents-md',
@@ -4356,6 +4356,63 @@ describe('Agent signals', () => {
       }
     });
 
+    it('queues a retained signal this runtime only forwarded when it later owns the run', async () => {
+      const scope = { resourceId: 'forwarded-replay', threadId: 'forwarded-replay' };
+      const pubsub = new ControlledLeasePubSub();
+      const topic = `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`;
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
+      const agent = new Agent({ id: 'forwarded-replay', name: 'Forwarded', instructions: 'Test', model, pubsub });
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        const ownSourceId = pubsub.publishedData.find(data => typeof data.sourceId === 'string')?.sourceId;
+        expect(ownSourceId).toBeTypeOf('string');
+        // Retained replay of a signal this runtime forwarded to a previous owner (lease-lost path)
+        // and therefore never queued locally.
+        const signal = createSignal({ id: 'forwarded-n2', type: 'user-message', contents: 'forwarded notification' });
+        await pubsub.publish(topic, {
+          type: 'signal-enqueued',
+          data: {
+            type: 'signal-enqueued',
+            runId: first.runId,
+            sourceId: ownSourceId,
+            signal: signal.toDataPart().data,
+          },
+        });
+        await pubsub.flush();
+        await nextTick();
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('forwarded notification')).toHaveLength(2);
+      } finally {
+        releaseFirst();
+      }
+    });
+
+    it('does not re-queue the echo of a signal this runtime queued locally', async () => {
+      const scope = { resourceId: 'local-echo', threadId: 'local-echo' };
+      const pubsub = new ControlledLeasePubSub();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
+      const agent = new Agent({ id: 'local-echo', name: 'Echo', instructions: 'Test', model, pubsub });
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'local follow-up' }, scope).accepted;
+        await pubsub.flush();
+        await nextTick();
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(getStreamCount()).toBe(2);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('local follow-up')).toHaveLength(2);
+      } finally {
+        releaseFirst();
+      }
+    });
+
     it.each([false, true])(
       'keeps cancellation ahead of delayed enqueue retries with initial delivery=%s',
       async delivered => {
@@ -7880,6 +7937,54 @@ describe('Agent signals', () => {
     expect(restored).toHaveLength(2);
     expect(restored[0]).toMatchObject({ contents: 'first steer' });
     expect(restored[1]).toMatchObject({ contents: 'second steer' });
+  });
+
+  it('queues a retained signal it queued locally but forwarded during drain when it later owns the run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const streamMock = vi.fn();
+    const agent = { id: 'drain-forward-agent', stream: streamMock } as unknown as Agent<any, any, any, any>;
+    const threadId = 'drain-forward-thread';
+    const resourceId = 'drain-forward-user';
+    const options = { memory: { thread: threadId, resource: resourceId } } as any;
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(agent, createFakeThreadRun('drain-forward-run', finished), options, pubsub);
+    const queued = runtime.sendMessage(agent, 'drained notification', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'drain-forward-run' });
+    const enqueued = pubsub.publishedData.find(data => data.type === 'signal-enqueued');
+    expect(enqueued).toBeDefined();
+
+    // Another runtime wins the lease at handoff, so the drain forwards the signal instead of running it.
+    vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(async key => {
+      pubsub.owners.set(key, 'other-owner-run');
+      return false;
+    });
+    finishRun();
+    await waitForCondition(() =>
+      pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run'),
+    );
+    expect(streamMock).not.toHaveBeenCalled();
+    const forwarded = pubsub.publishedData.find(
+      data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run',
+    );
+
+    // The other owner dies before consuming it; this runtime takes over its run and retained events replay.
+    pubsub.owners.clear();
+    runtime.registerRun(agent, createFakeThreadRun('other-owner-run', new Promise<void>(() => {})), options, pubsub);
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    // The original local enqueue is still a self-echo and must not be queued again.
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: enqueued });
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: forwarded });
+    await pubsub.flush();
+    await nextTick();
+
+    const restored = runtime.drainPendingSignals('other-owner-run', pubsub);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({ contents: 'drained notification' });
   });
 
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {

@@ -1,11 +1,10 @@
 'use client';
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { DatabaseIcon, Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
-import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Field, FieldLabel } from '@/ds/components/Field';
@@ -14,6 +13,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
 import { toast } from '@/utils/toast';
 
 export type SaveAsDatasetItemDialogProps = {
@@ -240,7 +240,9 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>

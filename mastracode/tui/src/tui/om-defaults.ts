@@ -1,7 +1,5 @@
-import { applyOMDefaultIfUnconfigured } from '@mastra/code-sdk/onboarding/om-settings';
+import { seedProviderOMDefault } from '@mastra/code-sdk/onboarding/om-settings';
 import type { OMPack } from '@mastra/code-sdk/onboarding/packs';
-import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
-import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { TUIState } from './state.js';
 
 /** Point both live OM roles at one model, without pinning it to the current thread. */
@@ -14,15 +12,9 @@ export async function applyProviderOMDefaultIfUnconfigured(
   state: TUIState,
   providerId: string,
 ): Promise<OMPack | undefined> {
-  const pack = resolveProviderOMDefault(providerId);
-  // No cheap OM pack for this provider — leave OM open for a later login rather
-  // than pinning observation and reflection to a full-size coding model.
-  if (pack.id === 'custom') return undefined;
+  const pack = seedProviderOMDefault(providerId);
+  if (!pack) return undefined;
 
-  const settings = loadSettings();
-  if (!applyOMDefaultIfUnconfigured(settings, pack)) return undefined;
-
-  saveSettings(settings);
   await applyOMModelToSession(state, pack.modelId);
   return pack;
 }

@@ -13,6 +13,7 @@ import {
   listChannelInstallationsResponseSchema,
   connectChannelResponseSchema,
   disconnectChannelResponseSchema,
+  reconcileChannelResponseSchema,
 } from '../schemas/channels';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
@@ -204,6 +205,46 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
       return await channel.connect(agentId, options);
     } catch (error) {
       return handleError(error, 'Error connecting agent to channel');
+    }
+  },
+});
+
+/**
+ * POST /channels/:platform/:agentId/reconcile - Reconcile an agent's installation
+ *
+ * The explicit write path for connect flows that complete out-of-band (e.g.
+ * Discord's bot invite has no redirect back to the server). Listing stays a
+ * pure read; Studio calls this on window focus while a connect is in flight.
+ * Gated on the same write access as connect — reconciliation can activate the
+ * agent's installation.
+ */
+export const RECONCILE_CHANNEL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/channels/:platform/:agentId/reconcile',
+  responseType: 'json',
+  pathParamSchema: channelAgentPathParams,
+  responseSchema: reconcileChannelResponseSchema,
+  summary: 'Reconcile channel installation',
+  description:
+    'Checks a pending installation against platform state and activates it if its connect flow has completed. Returns the installation, or null when the agent has none or the platform does not support reconciliation.',
+  tags: ['Channels'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, platform, agentId }) => {
+    assertChannelsAvailable();
+    try {
+      const channel = await getChannelOrThrow(mastra, platform);
+
+      // Resolve the agent (404 on unknown) and authorize the write before the
+      // capability check so unknown agents never read as a successful no-op.
+      await assertChannelAgentWriteAccess(mastra, requestContext, agentId, 'connect');
+
+      if (!channel.reconcileInstallation) {
+        return null;
+      }
+
+      return await channel.reconcileInstallation(agentId);
+    } catch (error) {
+      return handleError(error, 'Error reconciling channel installation');
     }
   },
 });

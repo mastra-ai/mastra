@@ -48,11 +48,20 @@ import type {
 } from '../types';
 import {
   createStandardSchemaIssuesError,
+  isValidationError,
   registerToolOutputValidationSchema,
   validateToolInput,
   validateToolOutput,
   validateToolSuspendData,
 } from '../validation';
+
+// Built once: `.describe()` registers schemas in Zod's global registry, which is a
+// strong Map under zod@3.25.x's `zod/v4` shim, so per-build copies would leak.
+const resumeFieldsZodShape = {
+  suspendedToolCallId: z.string().describe('The toolCallId of the suspended tool to resume').nullable().optional(),
+  suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+  resumeData: z.any().describe('The resumeData object created from the resumeSchema of suspended tool').optional(),
+};
 
 /**
  * Merge two RequestContexts so non-serializable values survive the evented
@@ -331,18 +340,7 @@ export class CoreToolBuilder extends MastraBase {
             });
           }
           if (this.isResumableTool) {
-            nextSchema = safeExtendZodObject(nextSchema, {
-              suspendedToolCallId: z
-                .string()
-                .describe('The toolCallId of the suspended tool to resume')
-                .nullable()
-                .optional(),
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
+            nextSchema = safeExtendZodObject(nextSchema, resumeFieldsZodShape);
           }
           this.injectedInputSchema = toStandardSchema(nextSchema);
         } else {
@@ -856,6 +854,10 @@ export class CoreToolBuilder extends MastraBase {
             return outputValidation.error;
           }
           result = outputValidation.data;
+        } else if (isValidationError(result)) {
+          // Mastra tools validate in Tool.execute() and return the error object instead of throwing
+          toolSpan?.end({ output: result, attributes: { success: false } });
+          return result;
         }
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)

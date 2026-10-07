@@ -139,6 +139,9 @@ export interface MastraTUIOptions {
   /** Thread ID requested by `mastracode resume`. */
   resumeThreadId?: string;
 
+  /** Preserve an explicitly configured initial model until a thread selects a pack. */
+  initialModelOverride?: boolean;
+
   /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By
@@ -258,6 +261,8 @@ export interface TUIState {
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
+  /** In-flight creation of the pending new thread, shared by concurrent submissions. */
+  pendingNewThreadCreation?: Promise<void>;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
   /** Landed model-pack fallback for the current thread. */
@@ -292,10 +297,6 @@ export interface TUIState {
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
   /** Previous plan snapshot (keyed by plan file path) for diff display on resubmission */
   previousPlanSnapshot?: { path: string; plan: string };
-  /** User-message follow-ups queued while the agent is running */
-  pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
-  /** FIFO ordering across queued follow-up messages and slash commands */
-  pendingQueuedActions: Array<'message' | 'slash'>;
   /** Follow-up messages rendered while streaming so tool output stays above them */
   followUpComponents: UserMessageComponent[];
   /** Pending signal messages waiting for the stream echo */
@@ -304,8 +305,12 @@ export interface TUIState {
   pendingSlashCommands: string[];
   /** Pending user-message component ids for queued slash commands */
   pendingSlashCommandMessageIds: string[];
+  /** Ctrl+F messages still being handed to the core queue. */
+  pendingQueueSubmissions: number;
   /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
   pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
+  /** Inline tool approval prompt currently waiting for y / a / Y / n. */
+  activeInlineApproval?: { handleInput(data: string): void; handlesExpand?(): boolean };
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
@@ -352,8 +357,6 @@ export interface TUIState {
 
   // ── Goal loop ─────────────────────────────────────────────────────────
   goalManager: GoalManager;
-  /** Track a goal started from plan approval — return to plan mode when it completes */
-  planStartedGoalId?: string;
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -362,11 +365,6 @@ export interface TUIState {
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
-
-  // ── Dedup ────────────────────────────────────────────────────────────
-  /** Texts of queued messages that were locally rendered and fired — used to
-   *  suppress the subscription echo that would otherwise create a duplicate. */
-  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
@@ -473,12 +471,11 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     pendingInlineQuestions: [],
-    pendingFollowUpMessages: [],
-    pendingQueuedActions: [],
     followUpComponents: [],
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
     pendingSlashCommandMessageIds: [],
+    pendingQueueSubmissions: 0,
     pendingApprovalDismiss: null,
 
     // Status line
@@ -496,7 +493,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
     // Goal loop
     goalManager: new GoalManager(),
-    planStartedGoalId: undefined,
 
     // Input
     customSlashCommands: [],

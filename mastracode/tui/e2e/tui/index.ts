@@ -1,4 +1,5 @@
 import { abortFollowupScenario } from './abort-followup.js';
+import { abortQueuedFollowupScenario } from './abort-queued-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
@@ -13,6 +14,7 @@ import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
+import { askUserAnswerHoldsPromptScenario } from './ask-user-answer-holds-prompt.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -94,6 +96,7 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
@@ -109,6 +112,7 @@ import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { modeSwitchAppliesPackModelScenario } from './mode-switch-applies-pack-model.js';
 import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
@@ -238,6 +242,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'abort-followup': abortFollowupScenario,
+  'abort-queued-followup': abortQueuedFollowupScenario,
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
@@ -253,6 +258,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-prompt': apiKeyPromptScenario,
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
+  'ask-user-answer-holds-prompt': askUserAnswerHoldsPromptScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'background-adoption-deferred': backgroundAdoptionDeferredScenario,
@@ -346,6 +352,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'model-search': modelSearchScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
+  'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
   'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
@@ -416,6 +423,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
   'settings-api-keys-navigation': settingsApiKeysNavigationScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
+  'legacy-thread-model-restore': legacyThreadModelRestoreScenario,
+  'saved-thread-model-restore': savedThreadModelRestoreScenario,
   'shell-passthrough-during-run': shellPassthroughDuringRunScenario,
   'shell-passthrough-configured-settings': shellPassthroughConfiguredSettingsScenario,
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,

@@ -67,10 +67,8 @@ export class TaskProgressComponent extends WidthAwareContainer {
     const total = this.tasks.length;
     const hasVisibleTasks = total > 0 && completed !== total;
 
-    if (!hasVisibleTasks) {
-      this.addChild(new Spacer(1));
-      return;
-    }
+    // No tasks: render nothing, so the idle row above the prompt stays the only gap.
+    if (!hasVisibleTasks) return;
 
     this.addChild(new Spacer(1));
 

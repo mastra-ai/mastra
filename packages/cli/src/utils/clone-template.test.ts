@@ -8,9 +8,16 @@ vi.mock('../commands/utils', () => ({
 
 import * as p from '@clack/prompts';
 import { execa } from 'execa';
-import { vol } from 'memfs';
-import type * as MemfsModule from 'memfs';
 import yoctoSpinner from 'yocto-spinner';
+
+// Explicit virtual volume: relative paths resolve against the live `process.cwd()`
+// rather than memfs's implicit `/` default. Created with `vi.hoisted` so the test
+// and the mocked `node:fs/promises` share one volume across `vi.resetModules()`.
+const memfsState = await vi.hoisted(async () => {
+  const { memfs } = await import('memfs');
+  return memfs({}, { process: { ...process, cwd: () => process.cwd() } });
+});
+const { vol } = memfsState;
 
 vi.mock('@clack/prompts', () => ({
   log: {
@@ -56,12 +63,11 @@ beforeEach(() => {
   vi.resetModules();
 });
 
-// Mock fs after importing vol
+// Mock fs to the same explicitly-configured volume as the test assertions.
 vi.mock('node:fs/promises', async () => {
-  const memfs = await vi.importActual<typeof MemfsModule>('memfs');
   return {
-    default: memfs.fs.promises,
-    ...memfs.fs.promises,
+    default: memfsState.fs.promises,
+    ...memfsState.fs.promises,
   };
 });
 

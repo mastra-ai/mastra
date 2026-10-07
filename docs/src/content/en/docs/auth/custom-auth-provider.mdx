@@ -31,8 +31,7 @@ Extend the `MastraAuthProvider` class and implement the required methods:
 
 ```typescript
 import { MastraAuthProvider } from '@mastra/core/server'
-import type { MastraAuthProviderOptions } from '@mastra/core/server'
-import type { HonoRequest } from 'hono'
+import type { MastraAuthProviderOptions, MastraAuthRequest } from '@mastra/core/server'
 
 // Define your user type
 type MyUser = {
@@ -75,7 +74,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
    * Verify the token and return the user
    * Return null if authentication fails
    */
-  async authenticateToken(token: string, request: HonoRequest): Promise<MyUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<MyUser | null> {
     try {
       const response = await fetch(`${this.apiUrl}/verify`, {
         method: 'POST',
@@ -102,7 +101,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
    * Check if the authenticated user is authorized
    * Return true to allow access, false to deny
    */
-  async authorizeUser(user: MyUser, request: HonoRequest): Promise<boolean> {
+  async authorizeUser(user: MyUser, request: MastraAuthRequest): Promise<boolean> {
     // Basic authorization: user must exist and have an ID
     return !!user?.id
   }
@@ -116,13 +115,13 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 Verify the incoming token and return the user object if valid, or `null` if authentication fails.
 
 ```typescript oxfmt:false
-async authenticateToken(token: string, request: HonoRequest): Promise<TUser | null>
+async authenticateToken(token: string, request: MastraAuthRequest): Promise<TUser | null>
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
 | `token` | `string` | The bearer token extracted from the `Authorization` header |
-| `request` | `HonoRequest` | The incoming request object (access headers, cookies, etc.) |
+| `request` | `MastraAuthRequest` | The incoming request. Read headers with `getRequestHeader()` and the underlying web `Request` with `getWebRequest()`, both exported from `@mastra/core/server` |
 
 **Returns**: The user object if authentication succeeds, or `null` if it fails.
 
@@ -133,13 +132,13 @@ The token is automatically extracted from the `Authorization: Bearer <token>` he
 Determine if the authenticated user is allowed to access the resource.
 
 ```typescript oxfmt:false
-async authorizeUser(user: TUser, request: HonoRequest): Promise<boolean> | boolean
+async authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean
 ```
 
 | Parameter | Type | Description |
 | - | - | - |
 | `user` | `TUser` | The user object returned by `authenticateToken` |
-| `request` | `HonoRequest` | The incoming request object |
+| `request` | `MastraAuthRequest` | The incoming request |
 
 **Returns**: `true` to allow access, `false` to deny (returns 403 Forbidden).
 
@@ -152,7 +151,7 @@ The `MastraAuthProviderOptions` interface supports these options:
 | `name` | `string` | Provider name for logging/debugging |
 | `authorizeUser` | `(user, request) => Promise<boolean> \| boolean` | Custom authorization function |
 | `protected` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that require authentication |
-| `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that bypass authentication |
+| `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | Paths that bypass authentication, unless the route sets `requiresAuth: true` |
 
 ### Path Patterns
 
@@ -295,10 +294,17 @@ const auth = new MyAuthProvider({
 ### Role-based Authorization
 
 ```typescript
+import { getWebRequest } from '@mastra/core/server'
+
 const auth = new MyAuthProvider({
   async authorizeUser(user, request) {
-    const path = request.url
-    const method = request.method
+    const webRequest = getWebRequest(request)
+    if (!webRequest) {
+      return false
+    }
+
+    const path = new URL(webRequest.url).pathname
+    const method = webRequest.method
 
     // Admin routes require admin role
     if (path.startsWith('/admin/')) {

@@ -327,12 +327,13 @@ describe('handleMessageStart signals', () => {
     expect(visibleChildren(state)).toHaveLength(1);
     const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
-    const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
-    expect(rendered).toContain('notification from github');
-    expect(rendered).toContain('╭');
-    expect(rendered).toContain('╰');
-    expect(rendered).toContain('high · ci-status · delivered');
-    expect(rendered).toContain('CI failed on main');
+    const lines = stripAnsi((component as NotificationComponent).render(100).join('\n')).split('\n');
+    // Left-bar card: title, details, message, every row on the bar.
+    expect(lines).toEqual([
+      expect.stringMatching(/^▎ notification from github/),
+      expect.stringMatching(/^▎ high · ci-status · delivered/),
+      expect.stringMatching(/^▎ CI failed on main/),
+    ]);
   });
 
   it('wraps long streamed full notifications within the terminal width', () => {
@@ -644,20 +645,22 @@ describe('handleMessageUpdate assistant streaming', () => {
     } as EventHandlerContext;
   });
 
-  it('shows quiet-mode Thinking in the status line while reasoning streams, and nowhere in the chat', () => {
+  it('flags quiet-mode thinking for the Working row while reasoning streams, and shows nothing in the chat', () => {
     const idleCounter = new IdleCounterComponent();
     Object.assign(state, { quietMode: true, hideThinkingBlock: true, idleCounter });
-    const status = () => stripAnsi(idleCounter.render(80).join('')).trim();
+    const updateStatusLine = vi.fn();
+    Object.assign(ctx, { updateStatusLine });
     const chat = () => stripAnsi(state.chatContainer.render(80).join('\n'));
 
     handleMessageStart(ctx, assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part]));
-    expect(status()).toBe('Thinking...');
+    expect(idleCounter.isThinking()).toBe(true);
+    expect(updateStatusLine).toHaveBeenCalledTimes(1);
 
     handleMessageUpdate(
       ctx,
       assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part, { type: 'text', text: 'Answer' }]),
     );
-    expect(status()).toBe('');
+    expect(idleCounter.isThinking()).toBe(false);
 
     handleMessageUpdate(
       ctx,
@@ -667,11 +670,11 @@ describe('handleMessageUpdate assistant streaming', () => {
         { type: 'reasoning', reasoning: 'more' } as Part,
       ]),
     );
-    expect(status()).toBe('Thinking...');
+    expect(idleCounter.isThinking()).toBe(true);
 
     handleMessageEnd(ctx, assistantMessage([{ type: 'text', text: 'Answer' }]));
-    expect(status()).toBe('');
-    expect(chat()).not.toContain('Thinking...');
+    expect(idleCounter.isThinking()).toBe(false);
+    expect(chat()).not.toMatch(/thinking/i);
   });
 
   it('adds spacing as soon as assistant text starts after a user message', () => {

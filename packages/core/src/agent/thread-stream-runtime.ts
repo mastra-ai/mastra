@@ -362,6 +362,9 @@ type AgentThreadRuntimeState = {
   suspendedRunIds: Set<string>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
+  // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
+  locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -519,6 +522,8 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
   return [agentId, resourceId, threadId].map(part => encodeURIComponent(part)).join(':');
 }
 
+const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
+
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
     threadRunsById: new Map(),
@@ -532,6 +537,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspendedRunIds: new Set(),
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
+    locallyQueuedSignalIdsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -767,7 +773,11 @@ export class AgentThreadStreamRuntime {
       if (!active) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (data?.type === 'signal-enqueued') {
-        if (data.sourceId === this.#id || subscription.admittedSignalIds.has(data.signal.id)) return;
+        if (
+          (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
+          subscription.admittedSignalIds.has(data.signal.id)
+        )
+          return;
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
         if (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)) {
           return;
@@ -860,6 +870,7 @@ export class AgentThreadStreamRuntime {
       return;
     subscription.ownedRunIds.clear();
     subscription.admittedSignalIds.clear();
+    state.locallyQueuedSignalIdsByThread.delete(key);
     if (subscription.observers) return;
     state.threadControlSubscriptions.delete(key);
     subscription.unsubscribe();
@@ -1756,6 +1767,20 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Map<string, string | undefined>();
+    ids.delete(signalId);
+    ids.set(signalId, undefined);
+    // Bound memory: retained replays of very old local signals are vanishingly rare, so evict oldest first.
+    if (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.keys().next().value!);
+    state.locallyQueuedSignalIdsByThread.set(key, ids);
+  }
+
+  #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key);
+    return !!ids?.has(signalId) && ids.get(signalId) !== runId;
+  }
+
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
     void this.#publishAndWait(pubsub, key, event).catch(() => {});
   }
@@ -2039,6 +2064,7 @@ export class AgentThreadStreamRuntime {
       if (
         typedPart.type === 'error' ||
         typedPart.type === 'abort' ||
+        typedPart.type === 'tripwire' ||
         (typedPart.type === 'finish' && finishReason !== 'tool-calls')
       ) {
         publishedTerminal = true;
@@ -2568,6 +2594,7 @@ export class AgentThreadStreamRuntime {
     state.suspendedRunIds.clear();
     state.suspensionMetadataByRunId.clear();
     state.pendingSignalsByThread.clear();
+    state.locallyQueuedSignalIdsByThread.clear();
     state.preRunSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.drainingPendingSignalsByThread.clear();
@@ -3149,10 +3176,26 @@ export class AgentThreadStreamRuntime {
     // which subscribers cannot reconcile (and would release a lease that is
     // still being acquired).
     const finished = record.output._waitUntilFinished();
-    void Promise.allSettled(registered ? [finished, registered] : [finished]).then(() => {
+    void Promise.allSettled(registered ? [finished, registered] : [finished]).then(async () => {
+      if (isDisabled?.()) {
+        state.watchedThreadStreamIds.delete(record.streamId);
+        return;
+      }
+      this.#cleanupPreparedRun(state, record.runId);
+
+      // The output settles ahead of the broadcast pump, which awaits one publish
+      // per part. Only the pump marks the run suspended (when it reads the
+      // approval/suspend part), so with pubsub latency the check below would
+      // misread a suspended run as completed. Wait for the pump to drain; a
+      // suspended stream has ended, so it settles. Continuation runs keep their
+      // stream open across the suspension and publish `run-suspended` from the pump.
+      // The stream stays marked as watched while waiting so no second watcher
+      // can attach to this record and publish its terminal event again.
+      if (record.output.status === 'suspended' && !record.continuation && !this.#isSuspendedRun(state, record.runId)) {
+        await Promise.resolve(record.broadcastFinished);
+      }
       state.watchedThreadStreamIds.delete(record.streamId);
       if (isDisabled?.()) return;
-      this.#cleanupPreparedRun(state, record.runId);
 
       if (record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
         void this.#publishRunSuspended(pubsub, key, record).catch(() => {});
@@ -3317,6 +3360,10 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.delete(key);
           if (owns.owner) {
             // Forwarding is a handoff: the signal is no longer locally cancellable.
+            // Echoes of the original enqueue stay suppressed, but the forwarded event must be
+            // queued if this runtime later takes over the owner run.
+            const ids = state.locallyQueuedSignalIdsByThread.get(key);
+            if (ids?.has(signal.id)) ids.set(signal.id, owns.owner);
             await this.#publishAndWait(pubsub, key, {
               type: 'signal-enqueued',
               runId: owns.owner,
@@ -4714,6 +4761,7 @@ export class AgentThreadStreamRuntime {
                 const terminalBoundary =
                   typedPart.type === 'error' ||
                   typedPart.type === 'abort' ||
+                  typedPart.type === 'tripwire' ||
                   (typedPart.type === 'finish' && finishReason !== 'tool-calls');
                 if (terminalBoundary) {
                   // After a final terminal chunk, drain any non-visible trailing
@@ -5131,6 +5179,7 @@ export class AgentThreadStreamRuntime {
           const queue = state.pendingSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.pendingSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId,
@@ -5177,6 +5226,7 @@ export class AgentThreadStreamRuntime {
           const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',

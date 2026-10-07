@@ -930,6 +930,16 @@ describe('Supervisor Pattern Integration Tests', () => {
           parentAgentId: 'supervisor',
         }),
       );
+
+      // The filter receives the model messages the parent LLM saw, not persisted DB messages
+      const { messages } = messageFilterSpy.mock.calls[0]![0];
+      expect(messages).toContainEqual(
+        expect.objectContaining({ role: 'system', content: 'You orchestrate sub-agents.' }),
+      );
+      expect(messages.some(m => m.role === 'tool')).toBe(false);
+      for (const message of messages) {
+        expect(typeof message.content === 'string' || Array.isArray(message.content)).toBe(true);
+      }
     });
 
     it('should call both onDelegationStart and onDelegationComplete in order', async () => {
