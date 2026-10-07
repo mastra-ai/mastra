@@ -41,7 +41,7 @@ export interface MastraDecisionModelInterface {
 }
 
 /** @deprecated Use `MastraDecisionModelInterface` instead. */
-export type MastraEvaluationModelInterface = MastraDecisionModelInterface;
+export interface MastraEvaluationModelInterface extends Omit<MastraDecisionModelInterface, 'doDecide'> {}
 
 export class MastraDecisionModel extends MastraBase implements MastraDecisionModelInterface {
   readonly specificationVersion = 'v4' as const;

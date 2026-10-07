@@ -1,6 +1,13 @@
 import { expectTypeOf } from 'vitest';
 
-import { Classifier, type BooleanAnswer, type ChoiceAnswer, type ClassifierInterface, type ScoreAnswer } from './index';
+import {
+  Classifier,
+  type MastraEvaluationModelInterface,
+  type BooleanAnswer,
+  type ChoiceAnswer,
+  type ClassifierInterface,
+  type ScoreAnswer,
+} from './index';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
 
@@ -44,3 +51,14 @@ const perCallResult = await perCall.decide({
 expectTypeOf(perCallResult.answers.route).toEqualTypeOf<ChoiceAnswer<'docs' | 'support'>>();
 // @ts-expect-error per-call classifiers require questions
 void perCall.decide({ state: 'content' });
+
+// The deprecated interface must stay implementable with only doEvaluate.
+export class LegacyEvaluationModel implements MastraEvaluationModelInterface {
+  readonly specificationVersion = 'v4' as const;
+  readonly provider = 'legacy';
+  readonly modelId = 'legacy';
+  readonly supportedQuestionTypes = ['boolean' as const];
+  doEvaluate: MastraEvaluationModelInterface['doEvaluate'] = async () => {
+    throw new Error('not implemented');
+  };
+}
