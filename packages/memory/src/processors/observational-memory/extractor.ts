@@ -50,7 +50,10 @@ export interface ExtractorConfig<T = unknown> {
   onExtracted?: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
   /** Retry with JSON prompt injection when native structured output returns an empty object. */
   retryStructuredExtractionOnEmptyObject?: boolean;
-  /** Require an inline section in every observer/reflector output. A missing section is recorded as an extraction failure. */
+  /**
+   * Require this inline section in single-thread observer and reflector calls. A missing section is recorded as an
+   * extraction failure, and `UNCHANGED` is skipped rather than stored. Batched multi-thread observer calls treat it as optional.
+   */
   required?: boolean;
 }
 
