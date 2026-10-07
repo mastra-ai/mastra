@@ -2622,6 +2622,7 @@ export class ProcessorRunner {
               tripwireAbort: { reason: error.message, retry: error.options?.retry, metadata: error.options?.metadata },
             },
           });
+          await invokeOnViolation(processor, error);
           throw error;
         }
         processorSpan?.error({ error: error as Error, endSpan: true });
