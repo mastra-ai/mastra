@@ -1,24 +1,4 @@
 {
   "attachment": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"],
-  "temperature": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"],
-  "reasoning": {
-    "thinkingmachines/Inkling:peft:262144": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "thinkingmachines/Inkling": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ]
-  }
+  "temperature": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"]
 }

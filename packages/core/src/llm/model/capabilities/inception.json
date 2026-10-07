@@ -1,18 +1,4 @@
 {
   "temperature": ["mercury-2", "mercury-2.5", "mercury-edit-2"],
-  "structuredOutput": ["mercury-2", "mercury-2.5"],
-  "reasoning": {
-    "mercury-2.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "mercury-2": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ]
-  }
+  "structuredOutput": ["mercury-2", "mercury-2.5"]
 }

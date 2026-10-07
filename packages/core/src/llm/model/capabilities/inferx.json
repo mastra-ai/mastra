@@ -28,22 +28,5 @@
     "Qwen3.6-35B-A3B-fp8-no-thinking",
     "deepseek-v4-flash",
     "gemma-4-31B-it-fp8"
-  ],
-  "reasoning": {
-    "Qwen3.6-27B-FP8": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.6-35B-A3B-FP8": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      }
-    ]
-  }
+  ]
 }

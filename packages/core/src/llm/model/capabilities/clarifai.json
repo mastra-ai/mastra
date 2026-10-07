@@ -24,19 +24,5 @@
     "moonshotai/chat-completion/models/Kimi-K2_6",
     "qwen/qwenLM/models/Qwen3-30B-A3B-Instruct-2507",
     "qwen/qwenLM/models/Qwen3-30B-A3B-Thinking-2507"
-  ],
-  "reasoning": {
-    "openai/chat-completion/models/gpt-oss-120b-high-throughput": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/chat-completion/models/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ]
-  }
+  ]
 }
