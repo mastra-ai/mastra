@@ -379,6 +379,13 @@ describe('trace output previews', () => {
     expect(buildOutputPreview('{"text":"cut off')).toBeUndefined();
   });
 
+  it('previews only message lists as messages', () => {
+    expect(buildOutputPreview([1, 2])).toBe('[1,2]');
+    expect(buildOutputPreview([])).toBeUndefined();
+    expect(buildOutputPreview({ messages: [] })).toBeUndefined();
+    expect(buildOutputPreview([{ role: 'user', content: 'question' }])).toBeUndefined();
+  });
+
   it('extracts error name and message without the stack', () => {
     expect(buildErrorPreview({ name: 'TypeError', message: 'bad input', stack: 'secret' })).toBe(
       'TypeError: bad input',

@@ -528,6 +528,22 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           errorPreview: 'TypeError: preview failure',
         });
 
+        const paged = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'selected-preview' } },
+              pagination: { page: 0, perPage: 25 },
+              select: ['outputPreview', 'errorPreview'],
+            }),
+          ),
+        );
+        if (!('traces' in paged)) throw new Error('Expected traces');
+        expect(paged.traces[0]).toMatchObject({
+          outputPreview: 'preview answer',
+          errorPreview: 'TypeError: preview failure',
+        });
+
         const plain = await storage.queryTraces(
           planTraceQuery(
             parseTraceQueryRequest({

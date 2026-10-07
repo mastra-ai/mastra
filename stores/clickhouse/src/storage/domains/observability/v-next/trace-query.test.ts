@@ -42,19 +42,22 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 
 describe('ClickHouse advanced trace query', () => {
   it('hydrates selected root previews after page selection', () => {
-    const selectedPlan = plan({ select: ['outputPreview', 'errorPreview'] });
-    const keyset = compileClickHouseTraceQuery(selectedPlan);
-    expect(keyset.query).toContain('r.output AS output');
-    expect(keyset.query).toContain('r.error AS selectedError');
-
+    const key = { traceId: 'trace', rootSpanId: 'root', startedAt: TIME_RANGE.from, endedAt: TIME_RANGE.to };
+    const keysetPlan = plan({ select: ['outputPreview', 'errorPreview'] });
     const pagePlan = plan({ pagination: { page: 0, perPage: 25 }, select: ['outputPreview', 'errorPreview'] });
-    const page = compileClickHouseTraceQuery(pagePlan);
-    expect(page.query).not.toContain('r.output AS output');
-    const payload = compileClickHouseTraceRootPayloads(
-      [{ traceId: 'trace', rootSpanId: 'root', startedAt: TIME_RANGE.from, endedAt: TIME_RANGE.to }],
-      pagePlan.result === 'traces' ? pagePlan : undefined,
+    for (const selected of [keysetPlan, pagePlan]) {
+      const compiled = compileClickHouseTraceQuery(selected);
+      expect(compiled.query).not.toContain('r.output');
+      expect(compiled.query).not.toContain('selectedError');
+    }
+
+    if (keysetPlan.result !== 'traces' || pagePlan.result !== 'traces') throw new Error('Expected trace plans');
+    expect(compileClickHouseTraceRootPayloads([key], keysetPlan).query).toContain(
+      'SELECT traceId, spanId AS rootSpanId, output, error AS selectedError\n',
     );
-    expect(payload.query).toContain('input, output, error AS selectedError');
+    expect(compileClickHouseTraceRootPayloads([key], pagePlan).query).toContain(
+      'SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input, output, error AS selectedError\n',
+    );
   });
 
   it('compiles root duration predicates from root timestamps', () => {

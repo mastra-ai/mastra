@@ -131,13 +131,6 @@ const TRACE_SELECT = `
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
 
-function traceSelect(plan: TrustedTraceQueryPlan): string {
-  if (plan.result !== 'traces' || plan.paginationMode === 'page') return TRACE_SELECT;
-  return `${TRACE_SELECT}${plan.select?.includes('outputPreview') ? ', r.output AS output' : ''}${
-    plan.select?.includes('errorPreview') ? ', r.error AS selectedError' : ''
-  }`;
-}
-
 /** Candidate columns carried through the page-mode window sort (no payload blobs). */
 const TRACE_PAGE_COLUMNS = [
   'traceId',
@@ -553,7 +546,7 @@ export function compileClickHouseTraceQuery(
   deltaHead?: DeltaWatermark,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceCandidates(plan, traceSelect(plan), parameters);
+  const ctes = compileClickHouseTraceCandidates(plan, TRACE_SELECT, parameters);
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.result === 'groups') {
@@ -649,11 +642,11 @@ LIMIT ${limit}`,
 }
 
 /**
- * Fetches the metadata/input payloads for page-mode rows. Looks rows up by the
- * trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
- * granules are read. A root can have unmerged versions in different `endedAt`
- * partitions, so `endedAt` is part of the key: the payload comes from the same
- * version as the candidate row.
+ * Fetches the payloads of the rows already on a page: metadata/input for page-mode rows, plus
+ * any selected previews. Looks rows up by the trace_roots sort-key prefix `(startedAt, traceId)`,
+ * so only the page's granules are read. A root can have unmerged versions in different `endedAt`
+ * partitions, so `endedAt` is part of the key: the payload comes from the same version as the
+ * candidate row.
  */
 export function compileClickHouseTraceRootPayloads(
   keys: Array<{ traceId: string; rootSpanId: string; startedAt: string; endedAt: string }>,
@@ -664,10 +657,14 @@ export function compileClickHouseTraceRootPayloads(
     key =>
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
+  // Keyset and delta rows already carry metadata/input; page-mode rows only carry narrow columns.
+  const columns = [
+    ...(plan && plan.paginationMode !== 'page' ? [] : ['metadataRaw AS metadata', 'input']),
+    ...(plan?.select?.includes('outputPreview') ? ['output'] : []),
+    ...(plan?.select?.includes('errorPreview') ? ['error AS selectedError'] : []),
+  ];
   return {
-    query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input${
-      plan?.select?.includes('outputPreview') ? ', output' : ''
-    }${plan?.select?.includes('errorPreview') ? ', error AS selectedError' : ''}
+    query: `SELECT traceId, spanId AS rootSpanId, ${columns.join(', ')}
 FROM ${TABLE_TRACE_ROOTS}
 WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
 LIMIT 1 BY traceId, spanId`,
@@ -1012,7 +1009,27 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(row => traceRowToResult(row, plan));
+  // Previews are read for the visible rows only, so the candidate sort never carries them.
+  const previews = new Map<string, Record<string, unknown>>();
+  if (plan.select?.length && visibleRows.length > 0) {
+    const previewRows = await runWithClickHouseTraceQueryTimeout(
+      client,
+      { timeoutMs: remaining() },
+      compileClickHouseTraceRootPayloads(
+        visibleRows.map(row => ({
+          traceId: String(row.traceId),
+          rootSpanId: String(row.rootSpanId),
+          startedAt: asIsoTimestamp(row.startedAt),
+          endedAt: asIsoTimestamp(row.endedAt),
+        })),
+        plan,
+      ),
+    );
+    for (const preview of previewRows) previews.set(`${preview.traceId}\u0000${preview.rootSpanId}`, preview);
+  }
+  const traces = visibleRows.map(row =>
+    traceRowToResult({ ...row, ...previews.get(`${row.traceId}\u0000${row.rootSpanId}`) }, plan),
+  );
   const last = traces.at(-1);
   if (plan.paginationMode === 'delta') {
     const lastRow = visibleRows.at(-1);

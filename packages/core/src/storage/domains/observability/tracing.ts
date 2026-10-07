@@ -597,7 +597,12 @@ export function buildOutputPreview(output: unknown, maxLength = OUTPUT_PREVIEW_M
     : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
       ? (value as { messages: unknown[] }).messages
       : null;
-  if (messages?.some(message => message !== null && typeof message === 'object' && 'role' in message)) {
+  // Empty lists and `{ role }` lists are messages; other arrays (a workflow's `[1, 2]`) use the JSON fallback.
+  if (
+    messages &&
+    (messages.length === 0 ||
+      messages.some(message => message !== null && typeof message === 'object' && 'role' in message))
+  ) {
     const text = (messages as PreviewMessage[])
       .filter(message => message?.role === 'assistant')
       .map(message => previewTextFromContent(message.content))
