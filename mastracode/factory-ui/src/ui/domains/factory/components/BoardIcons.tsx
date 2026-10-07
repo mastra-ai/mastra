@@ -65,7 +65,7 @@ const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
   orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-subtle' },
   cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-subtle' },
   info: { icon: 'text-info-indicator', tint: 'bg-info-subtle' },
-  purple: { icon: 'text-(--purple-500) dark:text-(--purple-400)', tint: 'bg-badge-purple-subtle' },
+  green: { icon: 'text-badge-green-indicator', tint: 'bg-badge-green-subtle' },
   success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-subtle' },
   destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle' },
 };
