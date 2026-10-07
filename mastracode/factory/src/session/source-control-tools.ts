@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
-import { pushRepositoryBranch, refreshMergeRequestCheckout } from '../integrations/github/sandbox.js';
+import { checkedOutBranch, pushRepositoryBranch, refreshMergeRequestCheckout } from '../integrations/github/sandbox.js';
 import { normalizedVerdictLine } from '../review-verdict.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { resolveSessionWorkdir } from '../sandbox/session-sandbox.js';
@@ -19,6 +19,8 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
+import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
+import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
 
 type RepositorySessionState = {
   factoryProjectId?: string;
@@ -39,6 +41,8 @@ interface SessionTarget {
   repository: SourceControlRepository;
   orgId: string;
   userId: string;
+  /** True when the target is the link the session is filed under, the default. */
+  ownRepository: boolean;
 }
 
 type ReviewEvent = 'approve' | 'request-changes' | 'comment';
@@ -79,21 +83,15 @@ function authIdentity(requestContext: RequestContext) {
   return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
 }
 
-async function resolveSessionTarget(
-  requestContext: RequestContext,
+async function resolveProviderSession(
+  resourceId: string,
   providers: readonly SourceControlToolProvider[],
-): Promise<SessionTarget> {
-  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const { orgId, userId } = authIdentity(requestContext);
-  if (!context?.resourceId || !orgId || !userId) {
-    throw new Error('Source-control tools require an authenticated repository session.');
-  }
-
+): Promise<{ provider: SourceControlToolProvider; session: SourceControlSession }> {
   const matches = (
     await Promise.all(
       providers.map(async provider => ({
         provider,
-        session: await provider.storage.sessions.getBySessionId(context.resourceId),
+        session: await provider.storage.sessions.getBySessionId(resourceId),
       })),
     )
   ).filter(
@@ -106,27 +104,97 @@ async function resolveSessionTarget(
         : 'The active session is ambiguous across source-control providers.',
     );
   }
+  return matches[0]!;
+}
 
-  const { provider, session } = matches[0]!;
+async function resolveSessionTarget(
+  requestContext: RequestContext,
+  providers: readonly SourceControlToolProvider[],
+  options: { repository?: string } = {},
+): Promise<SessionTarget> {
+  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
+  const { orgId, userId } = authIdentity(requestContext);
+  if (!context?.resourceId || !orgId || !userId) {
+    throw new Error('Source-control tools require an authenticated repository session.');
+  }
+
+  const { provider, session } = await resolveProviderSession(context.resourceId, providers);
   if (session.orgId !== orgId || (session.visibility === 'private' && session.userId !== userId)) {
     throw new Error('The active source-control session is not available to the authenticated user.');
   }
-  const projectRepository = session.projectRepositoryId
+  const ownRepository = session.projectRepositoryId
     ? await provider.storage.projectRepositories.get({ orgId, id: session.projectRepositoryId })
     : null;
-  if (!projectRepository) throw new Error('The active project repository was not found.');
+  if (!ownRepository) throw new Error('The active project repository was not found.');
   const state = context.getState();
-  if (state.projectRepositoryId && state.projectRepositoryId !== projectRepository.id) {
+  if (state.projectRepositoryId && state.projectRepositoryId !== ownRepository.id) {
     throw new Error('The active source-control session does not match its controller repository.');
   }
-  const connection = await provider.storage.connections.get({ orgId, id: projectRepository.connectionId });
-  if (!connection) throw new Error('The active source-control connection was not found.');
-  if (state.factoryProjectId && state.factoryProjectId !== connection.factoryProjectId) {
+  const ownConnection = await provider.storage.connections.get({ orgId, id: ownRepository.connectionId });
+  if (!ownConnection) throw new Error('The active source-control connection was not found.');
+  if (state.factoryProjectId && state.factoryProjectId !== ownConnection.factoryProjectId) {
     throw new Error('The active source-control session does not match its Factory project.');
   }
-  const repository = await provider.storage.repositories.get({ orgId, id: projectRepository.repositoryId });
+
+  if (options.repository !== undefined) {
+    const candidates = await resolveSessionRepositories({ sourceControl: provider.storage, session });
+    const match = findEnvironmentRepository(candidates, options.repository);
+    if (!match) {
+      throw new Error(
+        `Repository '${options.repository}' is not in this Factory's environment. Valid repositories: ${environmentSlugs(candidates).join(', ')}.`,
+      );
+    }
+    return {
+      context,
+      provider,
+      session,
+      projectRepository: match.link,
+      repository: match.repository,
+      orgId,
+      userId,
+      ownRepository: match.link.id === ownRepository.id,
+    };
+  }
+
+  const repository = await provider.storage.repositories.get({ orgId, id: ownRepository.repositoryId });
   if (!repository) throw new Error('The active source-control repository was not found.');
-  return { context, provider, session, projectRepository, repository, orgId, userId };
+  return {
+    context,
+    provider,
+    session,
+    projectRepository: ownRepository,
+    repository,
+    orgId,
+    userId,
+    ownRepository: true,
+  };
+}
+
+/**
+ * The slugs a session may target and the one it is filed under, for the tool
+ * descriptions. `undefined` when the session cannot be resolved; the tools
+ * then describe the default without naming it.
+ */
+async function describeSessionRepositories(
+  resourceId: string,
+  providers: readonly SourceControlToolProvider[],
+): Promise<{ slugs: string[]; own: string | undefined } | undefined> {
+  try {
+    const { provider, session } = await resolveProviderSession(resourceId, providers);
+    const repositories = await resolveSessionRepositories({ sourceControl: provider.storage, session });
+    const own = repositories.find(candidate => candidate.link.id === session.projectRepositoryId);
+    return { slugs: environmentSlugs(repositories), own: own?.repository.slug };
+  } catch {
+    return undefined;
+  }
+}
+
+function repositoryArgumentDescription(described: { slugs: string[]; own: string | undefined } | undefined): string {
+  if (!described || described.slugs.length === 0) {
+    return "Optional `repository` (owner/name) selects another repository of this Factory's environment; defaults to this session's repository.";
+  }
+  const fallback = described.own ? `${described.own}, this session's repository` : "this session's repository";
+  return `Optional \`repository\` (owner/name) selects one of this Factory's environment repositories: ${described.slugs.join(', ')}. Defaults to ${fallback}.`;
 }
 
 function changeRequestId(value: string | number): string {
@@ -158,7 +226,7 @@ const changeRequestSchema = z.object({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
 });
 
-export function createSourceControlTools({
+export async function createSourceControlTools({
   requestContext,
   providers,
   audit,
@@ -166,7 +234,7 @@ export function createSourceControlTools({
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
-}): IntegrationTools {
+}): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
     | AgentControllerRequestContext<RepositorySessionState>
@@ -174,7 +242,10 @@ export function createSourceControlTools({
   const identity = authIdentity(requestContext);
   if (!controller?.resourceId || !identity.orgId || !identity.userId || providers.length === 0) return {};
 
-  const withTarget = () => resolveSessionTarget(requestContext, providers);
+  const repositoryArgument = repositoryArgumentDescription(
+    await describeSessionRepositories(controller.resourceId, providers),
+  );
+  const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
@@ -220,24 +291,31 @@ export function createSourceControlTools({
     }),
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
-      description:
-        'Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, repository, remote, or branch arguments.',
-      inputSchema: z.object({}),
-      execute: async (_input, { workspace }) => {
-        const target = await withTarget();
+      description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. ${repositoryArgument}`,
+      inputSchema: z.object({ repository: z.string().trim().min(1).optional() }),
+      execute: async (input, { workspace }) => {
+        const target = await withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
         const sandbox = executableSandbox(workspace?.sandbox);
         const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
         const access = await target.provider.versionControl.getRepositoryAccess({
           orgId: target.orgId,
           repositoryId: target.repository.id,
         });
-        await pushRepositoryBranch(sandbox, workdir, target.session.branch, access, target.repository.slug);
+        const branch = target.session.branch;
+        const fromHead = (await checkedOutBranch(sandbox, workdir)) !== branch;
+        await pushRepositoryBranch(sandbox, workdir, branch, access, target.repository.slug, { fromHead });
+        await target.provider.storage.sessionRepositories.upsert({
+          sessionId: target.session.sessionId,
+          projectRepositoryId: target.projectRepository.id,
+          branch,
+        });
+        updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, { branch });
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.push',
           targets: [{ type: 'repository', id: target.repository.slug }],
-          metadata: { branch: target.session.branch, provider: target.provider.id },
+          metadata: { branch, provider: target.provider.id, repository: target.repository.slug },
         });
-        return { pushed: true, branch: target.session.branch, repository: target.repository.slug };
+        return { pushed: true, branch, repository: target.repository.slug };
       },
     }),
     source_control_get_change_request: createTool({
@@ -268,22 +346,35 @@ export function createSourceControlTools({
     }),
     source_control_create_change_request: createTool({
       id: 'source_control_create_change_request',
-      description:
-        'Open a pull request or merge request from the active Factory session branch into its persisted base branch. Push the branch with source_control_push_branch first.',
+      description: `Open a pull request or merge request from the active Factory session branch into the repository's base branch (the session's persisted base branch in its own repository, the linked or default branch elsewhere). Push the branch with source_control_push_branch first. ${repositoryArgument}`,
       inputSchema: z.object({
         title: z.string().trim().min(1),
         body: z.string().optional(),
         draft: z.boolean().optional(),
+        repository: z.string().trim().min(1).optional(),
       }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
+        const baseBranch = target.ownRepository
+          ? target.session.baseBranch
+          : (target.projectRepository.branch ?? target.repository.defaultBranch);
         const created = await target.provider.versionControl.createPullRequest({
           ...(await reference(target)),
           title: input.title,
           ...(input.body !== undefined ? { body: input.body } : {}),
-          baseBranch: target.session.baseBranch,
+          baseBranch,
           headBranch: target.session.branch,
           ...(input.draft !== undefined ? { draft: input.draft } : {}),
+        });
+        await target.provider.storage.sessionRepositories.upsert({
+          sessionId: target.session.sessionId,
+          projectRepositoryId: target.projectRepository.id,
+          branch: target.session.branch,
+          changeRequestId: changeRequestId(created.id),
+          changeRequestUrl: created.url,
+        });
+        updateSessionEnvironmentRepository(target.session.sessionId, target.repository.slug, {
+          changeRequestUrl: created.url,
         });
         await emitAgentAudit(audit, requestContext, {
           action: 'factory.agent.pr_opened',
@@ -291,7 +382,7 @@ export function createSourceControlTools({
             { type: 'pull_request', id: created.url },
             { type: 'repository', id: target.repository.slug },
           ],
-          metadata: { url: created.url, provider: target.provider.id },
+          metadata: { url: created.url, provider: target.provider.id, repository: target.repository.slug },
         });
         return created;
       },

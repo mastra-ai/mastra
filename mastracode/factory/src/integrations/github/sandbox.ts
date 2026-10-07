@@ -887,6 +887,15 @@ export async function configureGitIdentity(
   }
 }
 
+export interface PushBranchOptions {
+  /**
+   * Push the checkout's `HEAD` to `refs/heads/<branch>` instead of the local
+   * branch of that name: the checkout of another environment repository may
+   * sit on a different branch, or detached, when the session branch is pushed.
+   */
+  fromHead?: boolean;
+}
+
 async function pushAuthenticatedBranch(
   sandbox: ExecutableSandbox,
   workdir: string,
@@ -894,10 +903,22 @@ async function pushAuthenticatedBranch(
   cloneUrl: string,
   token: string,
   username: string,
+  options: PushBranchOptions = {},
 ): Promise<void> {
   const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
-  const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '-u', 'origin', branch], { env });
+  const args = options.fromHead
+    ? ['-C', workdir, 'push', 'origin', `HEAD:refs/heads/${branch}`]
+    : ['-C', workdir, 'push', '-u', 'origin', branch];
+  const push = await execute(sandbox, 'git', args, { env });
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
+}
+
+/** The branch the checkout is on, or `null` when `HEAD` is detached. */
+export async function checkedOutBranch(sandbox: ExecutableSandbox, workdir: string): Promise<string | null> {
+  const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--abbrev-ref', 'HEAD']);
+  if (head.exitCode !== 0) throw classifyGitFailure(head, 'push-failed');
+  const name = head.stdout.trim();
+  return name && name !== 'HEAD' ? name : null;
 }
 
 /**
@@ -930,6 +951,7 @@ export async function pushRepositoryBranch(
   branch: string,
   access: RepositoryAccess,
   repoFullName: string,
+  options: PushBranchOptions = {},
 ): Promise<void> {
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
@@ -948,6 +970,7 @@ export async function pushRepositoryBranch(
     access.cloneUrl,
     authorization.token,
     authorization.username ?? 'x-access-token',
+    options,
   );
 }
 

@@ -11,6 +11,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  checkedOutBranch,
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
@@ -1010,6 +1011,16 @@ describe('pushRepositoryBranch', () => {
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
   });
 
+  it('pushes HEAD to the named branch when asked, without setting upstream', async () => {
+    const sandbox = new FakeSandbox();
+    await pushRepositoryBranch(sandbox, '/workspace/hello', 'feat/gitlab', access, 'acme/hello', { fromHead: true });
+
+    const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
+    expect(push.args).toEqual(['-C', '/workspace/hello', 'push', 'origin', 'HEAD:refs/heads/feat/gitlab']);
+    expect(push.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+    expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
+  });
+
   it('keeps a failed push credential-free in argv and persistent config', async () => {
     const sandbox = new FakeSandbox(script =>
       script.includes('push -u origin') ? { exitCode: 1, stdout: '', stderr: 'rejected' } : OK,
@@ -1037,6 +1048,21 @@ describe('pushRepositoryBranch', () => {
     expect(error).toBeInstanceOf(MaterializeError);
     expect(error.code).toBe('push-failed');
     expect(sandbox.calls).toHaveLength(0);
+  });
+});
+
+describe('checkedOutBranch', () => {
+  it('returns the branch name, and null for a detached HEAD', async () => {
+    const onBranch = new FakeSandbox(script =>
+      script.includes('--abbrev-ref') ? { exitCode: 0, stdout: 'feat/x\n', stderr: '' } : OK,
+    );
+    await expect(checkedOutBranch(onBranch, '/workspace/hello')).resolves.toBe('feat/x');
+    expect(onBranch.executions[0]!.args).toEqual(['-C', '/workspace/hello', 'rev-parse', '--abbrev-ref', 'HEAD']);
+
+    const detached = new FakeSandbox(script =>
+      script.includes('--abbrev-ref') ? { exitCode: 0, stdout: 'HEAD\n', stderr: '' } : OK,
+    );
+    await expect(checkedOutBranch(detached, '/workspace/hello')).resolves.toBeNull();
   });
 });
 
