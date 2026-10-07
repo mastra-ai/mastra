@@ -176,9 +176,11 @@ Bedrock authenticates with the server's AWS credentials, not a key each account 
 ```dotenv
 FACTORY_DEPLOYMENT_MODEL_PROVIDERS=amazon-bedrock
 AWS_REGION=us-east-1
-# A Bedrock API key, or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY, AWS_PROFILE, or an attached IAM role
+# A Bedrock API key, or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY, AWS_PROFILE, an ECS task role, or EKS IRSA
 AWS_BEARER_TOKEN_BEDROCK=...
 ```
+
+On EC2, an instance profile alone isn't detected. Add a profile to `~/.aws/config` with `credential_source = Ec2InstanceMetadata` and set `AWS_PROFILE` to that profile.
 
 Every signed-in account can then run Bedrock models, billed to that AWS account. Settings show Bedrock as **From deployment** and offer no key field. Without `FACTORY_DEPLOYMENT_MODEL_PROVIDERS`, Bedrock stays hidden and runs fail with a message that tells the operator what to set. Local mode without sign-in uses any AWS credentials in the environment, as before.
 
