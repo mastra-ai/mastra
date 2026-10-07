@@ -1,21 +1,20 @@
 import { EntityType } from '@mastra/core/observability';
 import { useState } from 'react';
-import { useBucketTracesNav } from '../hooks/use-bucket-traces-nav';
-import { useDrilldown } from '../hooks/use-drilldown';
+import type { TimeRange } from '../drilldown';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import type { LatencyEntity } from '../hooks/use-metrics-latency';
 import { useMetricsLatency } from '../hooks/use-metrics-latency';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { formatAxisDuration, formatDuration } from '../lib/chart-format';
-import { bucketPlan, intervalHours } from '../lib/metrics-buckets';
+import { bucketPlan, bucketWindow, intervalHours } from '../lib/metrics-buckets';
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
-import { useLinkComponent } from '@/lib/framework';
 
 const ROOT_ENTITY: Record<LatencyEntity, EntityType> = {
   agents: EntityType.AGENT,
@@ -37,30 +36,27 @@ const EMPTY_NOUN: Record<LatencyEntity, string> = {
 };
 
 /** P50 and P95 durations of agent runs, workflow runs or tool calls; a point opens its traces. */
-export function LatencyCard() {
+export type LatencyCardProps = {
+  /** Called from the "View in Traces" button with the entity type of the open tab. */
+  onViewTraces?: (entityType: EntityType) => void;
+  /** Called with the time range of the clicked bar or point. */
+  onTimeRangeClick?: (range: TimeRange) => void;
+};
+
+export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps) {
   const [entity, setEntity] = useState<LatencyEntity>('agents');
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsLatency();
   const { timestamp } = useMetricsFilters();
-  const { getTracesHref } = useDrilldown();
-  const { Link } = useLinkComponent();
   // The latency chart keeps the API's 1h or 1d buckets, so a point opens that window.
   const step = intervalHours(bucketPlan(timestamp.start, timestamp.end).interval);
-  const openBucket = useBucketTracesNav(step)({ rootEntityType: ROOT_ENTITY[entity] });
   const series = seriesFor(entity);
   const peak = Math.max(0, ...data.map(b => b[`${entity}P95`] ?? 0));
 
-  return (
-    <ChartCard
-      title="Latency"
-      description="Duration percentiles."
-      summary={{ value: peak > 0 ? formatDuration(peak) : '—', label: 'peak P95' }}
-      actions={
-        <OpenInTracesButton href={getTracesHref({ rootEntityType: ROOT_ENTITY[entity] })} LinkComponent={Link} />
-      }
-      isLoading={isLoading}
-      isUpdating={isPlaceholderData}
-      isError={isError}
-    >
+  const layout = {
+    title: 'Latency',
+    description: 'Duration percentiles.',
+    actions: onViewTraces && <OpenInTracesButton onClick={() => onViewTraces(ROOT_ENTITY[entity])} />,
+    toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
         <MetricsCard.Tabs<LatencyEntity> value={entity} onValueChange={setEntity}>
@@ -69,11 +65,26 @@ export function LatencyCard() {
           <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
         </MetricsCard.Tabs>
       </MetricsCard.Toolbar>
-      <ChartArea
-        isError={isError}
-        isEmpty={!isLoading && peak === 0}
-        emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}
-      >
+    ),
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard
+      {...layout}
+      summary={
+        <MetricsCard.Summary value={peak > 0 ? formatDuration(peak) : '—'} label="peak P95" isLoading={isLoading} />
+      }
+      isUpdating={isPlaceholderData}
+    >
+      <ChartArea isEmpty={!isLoading && peak === 0} emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}>
         <MetricsLineChart
           data={data}
           series={series}
@@ -83,7 +94,7 @@ export function LatencyCard() {
           showYAxis={false}
           valueFormatter={formatDuration}
           axisFormatter={formatAxisDuration}
-          onBucketClick={openBucket}
+          onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), step)))}
           isLoading={isLoading}
           {...EDGE_BUCKET_AXIS}
         />

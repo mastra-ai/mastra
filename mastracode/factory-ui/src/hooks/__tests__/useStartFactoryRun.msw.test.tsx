@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { useStartFactoryRun } from '../useStartFactoryRun';
+import { useStartFactoryRun, type StartFactoryRunWorkItem } from '../useStartFactoryRun';
 
 const FACTORY_ID = 'fp-1';
 
@@ -20,7 +20,9 @@ function RouteInner({ children }: { children: ReactNode }) {
   );
 }
 
-function stubEndpoints(repositories: Array<{ id: string; externalId: string; slug: string }>) {
+function stubEndpoints(
+  repositories: Array<{ id: string; externalId: string; slug: string; provider?: 'github' | 'gitlab' }>,
+) {
   const sessionsCreatedFor: string[] = [];
   const patches: Array<Record<string, unknown>> = [];
   let started: Record<string, unknown> | undefined;
@@ -30,18 +32,19 @@ function stubEndpoints(repositories: Array<{ id: string; externalId: string; slu
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: repositories.map(repository => ({
+        connections: repositories.map(repository => ({
+          id: `conn-${repository.id}`,
+          installationId: `inst-${repository.id}`,
+          integrationId: repository.provider ?? 'github',
+          repositories: [
+            {
               id: repository.id,
               branch: 'main',
               sandboxWorkdir: '/repo',
               repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
-            })),
-          },
-        ],
+            },
+          ],
+        })),
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
@@ -78,7 +81,7 @@ function stubEndpoints(repositories: Array<{ id: string; externalId: string; slu
   return { sessionsCreatedFor, patches, started: () => started };
 }
 
-const workItem = {
+const workItem: StartFactoryRunWorkItem = {
   id: 'item-1',
   role: 'work',
   source: 'github-issue' as const,
@@ -88,7 +91,7 @@ const workItem = {
   metadata: { number: 7, repository: 'acme/old-name', githubRepositoryId: 101 },
 };
 
-describe('useStartFactoryRun', () => {
+describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provider => {
   it.each([
     ['a single linked repository', [{ id: 'repo-1', externalId: '101', slug: 'acme/renamed' }]],
     [
@@ -99,15 +102,182 @@ describe('useStartFactoryRun', () => {
       ],
     ],
   ])('starts a renamed repository card by its provider id with %s', async (_label, repositories) => {
-    const calls = stubEndpoints(repositories);
+    const providerWorkItem: StartFactoryRunWorkItem = {
+      ...workItem,
+      source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
+      sourceKey: `${provider}-issue:7`,
+      metadata: {
+        number: 7,
+        repository: 'acme/old-name',
+        ...(provider === 'github' ? { githubRepositoryId: 101 } : { gitlabProjectId: '101' }),
+      },
+    };
+    const calls = stubEndpoints(repositories.map(repository => ({ ...repository, provider })));
+    const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    await result.current.start.mutateAsync({
+      branch: 'factory/item-1',
+      threadTitle: 'Fix login bug',
+      workItem: providerWorkItem,
+    });
+
+    expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
+    expect(calls.patches).toEqual([{ metadata: { ...providerWorkItem.metadata, repository: 'acme/renamed' } }]);
+    const startedWorkItem = calls.started()?.workItem as { input: { metadata: Record<string, unknown> } };
+    expect(startedWorkItem.input.metadata.repository).toBe('acme/renamed');
+  });
+});
+
+describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'] as const)(
+  'useStartFactoryRun provider selection for %s',
+  source => {
+    const provider = source.startsWith('github-') ? 'github' : 'gitlab';
+    const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+
+    it.each(['sole repository fallback', 'stored slug', 'explicit slug'])(
+      'rejects the other provider via %s before any writes',
+      async selection => {
+        const calls = stubEndpoints([
+          { id: 'other-repo', provider: otherProvider, externalId: '101', slug: 'acme/other' },
+        ]);
+        const providerWorkItem: StartFactoryRunWorkItem = {
+          ...workItem,
+          source,
+          metadata: {
+            githubRepositoryId: 101,
+            gitlabProjectId: '101',
+            ...(selection === 'stored slug' ? { repository: 'acme/other' } : {}),
+          },
+        };
+        const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+        await waitFor(() => expect(result.current.enabled).toBe(true));
+
+        await expect(
+          result.current.start.mutateAsync({
+            branch: 'factory/item-1',
+            threadTitle: 'Fix login bug',
+            workItem: providerWorkItem,
+            ...(selection === 'explicit slug' ? { repositorySlug: 'acme/other' } : {}),
+          }),
+        ).rejects.toThrow('Choose a repository before starting this Factory run');
+
+        expect(calls.sessionsCreatedFor).toEqual([]);
+        expect(calls.patches).toEqual([]);
+        expect(calls.started()).toBeUndefined();
+      },
+    );
+
+    it('chooses the source provider when linked repositories share a slug', async () => {
+      const calls = stubEndpoints([
+        { id: 'other-repo', provider: otherProvider, externalId: '101', slug: 'acme/shared' },
+        { id: 'source-repo', provider, externalId: '101', slug: 'acme/shared' },
+      ]);
+      const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+      await waitFor(() => expect(result.current.enabled).toBe(true));
+
+      await result.current.start.mutateAsync({
+        branch: 'factory/item-1',
+        threadTitle: 'Fix login bug',
+        workItem: { ...workItem, source, metadata: { githubRepositoryId: 101, gitlabProjectId: '101' } },
+      });
+
+      expect(calls.sessionsCreatedFor).toEqual(['source-repo']);
+      expect(calls.started()).toMatchObject({ workItem: { input: { metadata: { repository: 'acme/shared' } } } });
+    });
+
+    it('keeps the sole-repository fallback for the same provider without metadata', async () => {
+      const calls = stubEndpoints([{ id: 'source-repo', provider, externalId: '101', slug: 'acme/source' }]);
+      const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+      await waitFor(() => expect(result.current.enabled).toBe(true));
+
+      await result.current.start.mutateAsync({
+        branch: 'factory/item-1',
+        threadTitle: 'Fix login bug',
+        workItem: { ...workItem, source, metadata: undefined },
+      });
+
+      expect(calls.sessionsCreatedFor).toEqual(['source-repo']);
+      expect(calls.started()).toMatchObject({ workItem: { input: { metadata: { repository: 'acme/source' } } } });
+    });
+  },
+);
+
+describe.each(['linear-issue', 'manual'] as const)('useStartFactoryRun fallback for %s', source => {
+  it.each(['github', 'gitlab'] as const)('keeps the sole %s repository fallback', async provider => {
+    const calls = stubEndpoints([{ id: 'repo-1', provider, externalId: '101', slug: 'acme/one' }]);
+    const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    await result.current.start.mutateAsync({
+      branch: 'factory/item-1',
+      threadTitle: 'Fix login bug',
+      workItem: { ...workItem, source, metadata: undefined },
+    });
+
+    expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
+    expect(calls.started()).toMatchObject({ workItem: { input: { metadata: { repository: 'acme/one' } } } });
+  });
+});
+
+describe('useStartFactoryRun in a mixed-provider factory', () => {
+  describe.each(['github', 'gitlab'] as const)('a %s card with both provider ids', provider => {
+    it.each(['both match', 'only the other provider matches'])(
+      'creates the session in the source provider when %s',
+      async matchCase => {
+        const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+        const targetSlug = `acme/${provider}-renamed`;
+        const providerWorkItem: StartFactoryRunWorkItem = {
+          ...workItem,
+          source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
+          sourceKey: `${provider}-issue:7`,
+          metadata: {
+            ...workItem.metadata,
+            repository: matchCase === 'both match' ? 'acme/old-name' : targetSlug,
+            githubRepositoryId: 101,
+            gitlabProjectId: '101',
+          },
+        };
+        const calls = stubEndpoints([
+          { id: 'other-repo', provider: otherProvider, externalId: '101', slug: `acme/${otherProvider}` },
+          {
+            id: 'source-repo',
+            provider,
+            externalId: matchCase === 'both match' ? '101' : '999',
+            slug: targetSlug,
+          },
+        ]);
+        const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
+        await waitFor(() => expect(result.current.enabled).toBe(true));
+
+        await result.current.start.mutateAsync({
+          branch: 'factory/item-1',
+          threadTitle: 'Fix login bug',
+          workItem: providerWorkItem,
+        });
+
+        expect(calls.sessionsCreatedFor).toEqual(['source-repo']);
+        expect(calls.patches).toEqual(
+          matchCase === 'both match' ? [{ metadata: { ...providerWorkItem.metadata, repository: targetSlug } }] : [],
+        );
+        expect(calls.started()).toMatchObject({
+          workItem: { input: { metadata: { ...providerWorkItem.metadata, repository: targetSlug } } },
+        });
+      },
+    );
+  });
+
+  it('starts in GitHub when GitLab has the same external id', async () => {
+    const calls = stubEndpoints([
+      { id: 'gitlab-repo', provider: 'gitlab', externalId: '101', slug: 'acme/gitlab' },
+      { id: 'github-repo', provider: 'github', externalId: '101', slug: 'acme/renamed' },
+    ]);
     const { result } = renderHookWithProviders(() => useStartFactoryRun(), { inner: RouteInner });
     await waitFor(() => expect(result.current.enabled).toBe(true));
 
     await result.current.start.mutateAsync({ branch: 'factory/item-1', threadTitle: 'Fix login bug', workItem });
 
-    expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
+    expect(calls.sessionsCreatedFor).toEqual(['github-repo']);
     expect(calls.patches).toEqual([{ metadata: { ...workItem.metadata, repository: 'acme/renamed' } }]);
-    const startedWorkItem = calls.started()?.workItem as { input: { metadata: Record<string, unknown> } };
-    expect(startedWorkItem.input.metadata.repository).toBe('acme/renamed');
   });
 });

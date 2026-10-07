@@ -2259,8 +2259,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               processorRetryCount < typedInput.options.maxProcessorRetries;
             const shouldRetry = retryRequested && canRetry;
 
-            // Remove the rejected response so the retry doesn't send it back to the model.
-            if (shouldRetry) {
+            // Remove the rejected response so the retry doesn't send it back to the model, and
+            // so a rejection that ends the run isn't persisted or returned (issue #26048).
+            if (processOutputStepTripwire) {
               messageList.rollbackToStepBoundary(materializationMessageId);
             }
 

@@ -373,8 +373,8 @@ export class MDocument {
       attributes: {
         action: 'chunk',
         strategy,
-        chunkSize: (chunkOptions as any)?.size,
-        chunkOverlap: (chunkOptions as any)?.overlap,
+        chunkSize: 'maxSize' in chunkOptions ? chunkOptions.maxSize : undefined,
+        chunkOverlap: 'overlap' in chunkOptions ? chunkOptions.overlap : undefined,
       },
     });
 

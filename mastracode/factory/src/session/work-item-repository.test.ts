@@ -125,4 +125,83 @@ describe('resolveWorkItemRepository', () => {
       resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'other/repo' } } }),
     ).resolves.toMatchObject({ status: 'unlinked' });
   });
+
+  it.each(['github', 'gitlab'] as const)(
+    'uses only the %s id when both provider ids are present',
+    async integrationId => {
+      const { sourceControl, project } = await seedRepositories(['acme/one', 'acme/two'], integrationId);
+
+      await expect(
+        resolveWorkItemRepository({
+          sourceControl,
+          orgId: 'org-1',
+          factoryProjectId: project.id,
+          item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 1, gitlabProjectId: '2' } },
+        }),
+      ).resolves.toMatchObject({ status: 'resolved', slug: integrationId === 'github' ? 'acme/one' : 'acme/two' });
+    },
+  );
+
+  it('falls back to a linked slug for unmatched ids and reports an empty factory', async () => {
+    const { sourceControl, project } = await seedRepositories(['acme/one']);
+    await expect(
+      resolveWorkItemRepository({
+        sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        item: { metadata: { repository: 'acme/one', githubRepositoryId: 99 } },
+      }),
+    ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/one' });
+
+    const empty = await seedRepositories([]);
+    await expect(
+      resolveWorkItemRepository({
+        sourceControl: empty.sourceControl,
+        orgId: 'org-1',
+        factoryProjectId: empty.project.id,
+        item: { metadata: null },
+      }),
+    ).resolves.toEqual({ status: 'unlinked', hint: 'This Factory has no linked source-control repositories.' });
+  });
+
+  it('does not pick a provider id shared by multiple linked installations', async () => {
+    const { sourceControl, project } = await seedRepositories(['acme/one']);
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'installation-2',
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '1', slug: 'acme/two', defaultBranch: 'main' },
+    });
+    await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/acme/two',
+    });
+    const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
+
+    await expect(
+      resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
+    ).resolves.toEqual({
+      status: 'unlinked',
+      hint: 'Source-control repository 1 is not linked to this Factory.',
+    });
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { githubRepositoryId: 1, repository: 'acme/two' } },
+      }),
+    ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/two' });
+  });
 });

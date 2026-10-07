@@ -7,6 +7,34 @@ export function cardLinearProjectId(source: string, metadata: Record<string, unk
   return metadata.linearProjectId;
 }
 
+export function repositoryMatchesCardSource(repository: LinkedRepositoryPayload, source: string) {
+  const provider = repository.provider ?? 'github';
+  if (source === 'github-issue' || source === 'github-pr') return provider === 'github';
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return provider === 'gitlab';
+  return true;
+}
+
+function matchesProviderRepositoryId(
+  repository: LinkedRepositoryPayload,
+  source: string,
+  metadata: Record<string, unknown> | undefined,
+) {
+  if (!repositoryMatchesCardSource(repository, source)) return false;
+  const provider = repository.provider ?? 'github';
+  const id = provider === 'github' ? metadata?.githubRepositoryId : metadata?.gitlabProjectId;
+  return id != null && repository.externalId === String(id);
+}
+
+function findUniqueRepositoryByProviderId(
+  repositories: LinkedRepositoryPayload[],
+  source: string,
+  metadata: Record<string, unknown> | undefined,
+) {
+  const matches = repositories.filter(repository => matchesProviderRepositoryId(repository, source, metadata));
+  const [match] = matches;
+  return matches.length === 1 ? match : undefined;
+}
+
 export function cardRepositorySlug(
   source: string,
   metadata: Record<string, unknown> | undefined,
@@ -14,17 +42,8 @@ export function cardRepositorySlug(
   repositories: LinkedRepositoryPayload[],
 ) {
   // The provider id survives repository renames, so it outranks a possibly stale slug.
-  const providerIds = [
-    ['github', metadata?.githubRepositoryId],
-    ['gitlab', metadata?.gitlabProjectId],
-  ] as const;
-  const matches = repositories.filter(repository =>
-    providerIds.some(
-      ([provider, id]) =>
-        id != null && (repository.provider ?? 'github') === provider && repository.externalId === String(id),
-    ),
-  );
-  if (matches.length === 1) return matches[0]!.slug;
+  const repository = findUniqueRepositoryByProviderId(repositories, source, metadata);
+  if (repository) return repository.slug;
   if (typeof metadata?.repository === 'string') return metadata.repository;
   const projectId = cardLinearProjectId(source, metadata);
   if (projectId === undefined) return undefined;

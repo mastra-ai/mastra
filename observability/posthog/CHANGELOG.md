@@ -1,5 +1,26 @@
 # @mastra/posthog
 
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Fixed `$ai_tools` in PostHog listing tools the model did not receive. Each call to the model provider is now exported as its own `$ai_generation` event with the model, token usage, output, the tools sent on that call, and the conversation that call received as `$ai_input` (including full tool arguments and results from earlier calls). ([#25919](https://github.com/mastra-ai/mastra/pull/25919))
+
+  **What changes in PostHog**
+
+  - A run that calls the model several times now sends one `$ai_generation` event per call, where it sent one per run before. The number of `$ai_generation` events goes up for multi-step runs.
+  - The span that wraps those calls is now sent as `$ai_span`. Tokens and cost are counted once, so total cost per trace does not change.
+  - Runs through the deprecated `generateLegacy()` and `streamLegacy()` methods no longer send `$ai_generation` events, so PostHog shows no tokens or cost for them. Use `generate()` and `stream()` instead.
+  - With `@mastra/core` or `@mastra/observability` versions that do not record a span per model call, events are exported as before.
+
+### Patch Changes
+
+- Fixed `$ai_input` in PostHog missing the results of provider-executed tools (for example a provider's web search). Each later call's `$ai_input` now includes those results, and failed ones are marked as errors. ([#26234](https://github.com/mastra-ai/mastra/pull/26234))
+
+- Updated dependencies [[`2233844`](https://github.com/mastra-ai/mastra/commit/223384452984718e16fc660d29f0d5d93a1ebaf2), [`6df693a`](https://github.com/mastra-ai/mastra/commit/6df693aa926482422ef447d8db058adef36a594b), [`a8f39b6`](https://github.com/mastra-ai/mastra/commit/a8f39b629d8bcd6659b61bf71bd5a5dd2f38ed12), [`04a2433`](https://github.com/mastra-ai/mastra/commit/04a2433d8e533010e23c3af84421d52bd0b3a908), [`c0540d2`](https://github.com/mastra-ai/mastra/commit/c0540d2dfccec3470eed3cab539221557abd1fc5), [`a7404f9`](https://github.com/mastra-ai/mastra/commit/a7404f965b811a0eef35d41a5e69c91187eb0cf6), [`956901a`](https://github.com/mastra-ai/mastra/commit/956901a36b84a85f3985d9e5956494749b7ea72c), [`838fd4b`](https://github.com/mastra-ai/mastra/commit/838fd4b1526c5385424d8e147d3d1d37137f6a13), [`71f003a`](https://github.com/mastra-ai/mastra/commit/71f003afd305a6e81b1649e6e857a6b72486089f), [`7c0cf99`](https://github.com/mastra-ai/mastra/commit/7c0cf997ab2306a176aa84fe6f611574721120c3), [`18afca3`](https://github.com/mastra-ai/mastra/commit/18afca34ba6ab013152da61b2017dc443c2aa08b), [`f2243ae`](https://github.com/mastra-ai/mastra/commit/f2243ae5e0d183fdbb8c8f3ff81fa86d32036a6c), [`b329f0d`](https://github.com/mastra-ai/mastra/commit/b329f0d45ce719acdd8926263269de6c91e31305), [`539d0e6`](https://github.com/mastra-ai/mastra/commit/539d0e638c9eaa3b71d99df067061af4ddbb2045), [`956901a`](https://github.com/mastra-ai/mastra/commit/956901a36b84a85f3985d9e5956494749b7ea72c), [`fe99f41`](https://github.com/mastra-ai/mastra/commit/fe99f41ea293a172da840c89a782d13a7c7a7709), [`1511a1d`](https://github.com/mastra-ai/mastra/commit/1511a1d65d9e2ccc08b4d6746f8e8053fc48549e)]:
+  - @mastra/core@1.76.0-alpha.0
+  - @mastra/observability@1.19.0-alpha.0
+
 ## 1.3.16
 
 ### Patch Changes
