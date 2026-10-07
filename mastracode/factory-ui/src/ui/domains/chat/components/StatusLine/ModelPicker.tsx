@@ -53,7 +53,6 @@ export function formatModelName(id: string): string {
   return slug.split(/[-_]+/).filter(Boolean).map(titleCase).join(' ');
 }
 
-/** Models grouped by provider, providers sorted alphabetically. */
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
   for (const model of models) {
