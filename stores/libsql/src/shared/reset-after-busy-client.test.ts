@@ -44,6 +44,9 @@ describe('resetConnectionsAfterBusy', () => {
 
   const insert = (client: Client, v: string) => client.execute({ sql: 'INSERT INTO t VALUES (?)', args: [v] });
 
+  /** Runs `call` in an async context of its own, as a concurrent request would. */
+  const elsewhere = <T>(call: () => Promise<T>) => Promise.resolve().then(call);
+
   it.each([
     ['an autocommit write', (client: Client) => insert(client, 'refused')],
     [
@@ -86,6 +89,74 @@ describe('resetConnectionsAfterBusy', () => {
 
     expect((await reading.execute('SELECT count(*) AS n FROM t')).rows[0]?.n).toBe(0);
     await reading.commit();
+
+    await insert(client, 'after');
+    expect(await visible()).toEqual(['after']);
+  });
+
+  it('resets while calls keep overlapping, by holding new calls until the running ones end', async () => {
+    const { client, holdWriteLock, visible, lockIsFree } = await setup();
+    const first = await elsewhere(() => client.transaction('read'));
+    const release = await holdWriteLock();
+    await expect(elsewhere(() => insert(client, 'refused'))).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+
+    // The next call arrives before the first ends and outlasts it, so the client is never idle.
+    const second = elsewhere(() => client.transaction('read'));
+    await first.commit();
+    const reading = await second;
+
+    await insert(client, 'after');
+    expect(await visible()).toEqual(['after']);
+    expect(await lockIsFree()).toBe(true);
+    await reading.commit();
+  });
+
+  it('lets a caller holding an open transaction use the client while a reset waits for that transaction', async () => {
+    const { client, holdWriteLock, visible } = await setup();
+    const reading = await client.transaction('read');
+    const release = await holdWriteLock();
+    await expect(insert(client, 'refused')).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      client.execute('SELECT count(*) AS n FROM t').then(() => 'ran'),
+      new Promise(resolve => (timer = setTimeout(resolve, 1_000, 'waited for its own transaction'))),
+    ]);
+    clearTimeout(timer);
+    expect(outcome).toBe('ran');
+    await reading.commit();
+
+    await insert(client, 'after');
+    expect(await visible()).toEqual(['after']);
+  });
+
+  it('lets a replaced method delegate to the previous one after a reset became pending', async () => {
+    const { client, holdWriteLock, visible } = await setup();
+    let delegate!: () => void;
+    const delegating = new Promise<void>(resolve => (delegate = resolve));
+    const execute = client.execute;
+    client.execute = (async statement => {
+      await delegating;
+      return execute(statement);
+    }) as Client['execute'];
+    const read = client.execute('SELECT count(*) AS n FROM t');
+
+    const release = await holdWriteLock();
+    await expect(
+      elsewhere(() => client.batch([{ sql: 'INSERT INTO t VALUES (?)', args: ['refused'] }], 'write')),
+    ).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+    delegate();
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      read.then(() => 'ran'),
+      new Promise(resolve => (timer = setTimeout(resolve, 1_000, 'waited for the call it delegates from'))),
+    ]);
+    clearTimeout(timer);
+    expect(outcome).toBe('ran');
 
     await insert(client, 'after');
     expect(await visible()).toEqual(['after']);
@@ -137,5 +208,17 @@ describe('resetConnectionsAfterBusy', () => {
     client.close();
     reading.close();
     expect(client.closed).toBe(true);
+  });
+
+  it('fails a call waiting for a reset once the client is closed', async () => {
+    const { client, holdWriteLock } = await setup();
+    await elsewhere(() => client.transaction('read'));
+    const release = await holdWriteLock();
+    await expect(elsewhere(() => insert(client, 'refused'))).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+
+    const waiting = insert(client, 'after');
+    client.close();
+    await expect(waiting).rejects.toMatchObject({ code: 'CLIENT_CLOSED' });
   });
 });
