@@ -1204,7 +1204,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             'GET',
             repositoryPath(`${owner}/${repo}`, `pulls/${pull_number}`),
           );
-          return { data: { base: { repo: { id: data.base.repo.id } } } };
+          return { data: { base: { repo: { id: data.base.repo.id } }, head: { ref: data.head.ref } } };
         },
       },
     } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;

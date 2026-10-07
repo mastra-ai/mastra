@@ -163,6 +163,8 @@ interface SessionSandboxEntry {
    * treat an unresolved workdir as "nothing materialized".
    */
   workdir?: string;
+  /** The repository `workdir` was derived for: the memo answers only that repository. */
+  workdirRepo?: string;
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
@@ -182,7 +184,7 @@ export function getSessionSandbox(
   if (existing) return existing;
   const sandbox = construct();
   const local = deriveLocalWorkdir(sandbox, repoFullName);
-  const entry: SessionSandboxEntry = { sandbox, ...(local ? { workdir: local } : {}) };
+  const entry: SessionSandboxEntry = { sandbox, ...(local ? { workdir: local, workdirRepo: repoFullName } : {}) };
   sessionSandboxes.set(sessionId, entry);
   return entry;
 }
@@ -194,7 +196,9 @@ export function getSessionSandbox(
  * so the first resolution probes it with one `pwd` — the VM tells us where
  * home is, we never invent a path. Calling this against a stopped sandbox
  * lazily starts it (the probe is a command), so passive readers must peek
- * `entry.workdir` instead.
+ * `entry.workdir` instead. The memo is the session's own checkout; another
+ * environment repository lives beside it under the same root, so it is
+ * answered from the memo's parent without a second probe.
  */
 export async function resolveSessionWorkdir(
   sessionId: string,
@@ -202,12 +206,18 @@ export async function resolveSessionWorkdir(
   repoFullName: string,
 ): Promise<string> {
   const entry = sessionSandboxes.get(sessionId);
-  if (entry?.workdir && entry.sandbox === sandbox) return entry.workdir;
+  if (entry?.workdir && entry.sandbox === sandbox) {
+    if (entry.workdirRepo === repoFullName) return entry.workdir;
+    return repoDirUnder(path.posix.dirname(entry.workdir), repoFullName);
+  }
   const workdir =
     deriveLocalWorkdir(sandbox, repoFullName) ??
     deriveRemoteRepoDir(sandbox, repoFullName) ??
     repoDirUnder(await probeHome(sandbox), repoFullName);
-  if (entry && entry.sandbox === sandbox) entry.workdir = workdir;
+  if (entry && entry.sandbox === sandbox) {
+    entry.workdir = workdir;
+    entry.workdirRepo = repoFullName;
+  }
   return workdir;
 }
 

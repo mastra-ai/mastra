@@ -61,6 +61,18 @@ describe('session sandbox memo', () => {
     expect(executeCommand).toHaveBeenCalledWith('pwd');
   });
 
+  it('answers another environment repository beside the memoized checkout, keeping the memo', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
+    const sandbox = { id: 'sb-1', provider: 'e2b', executeCommand } as unknown as WorkspaceSandbox;
+    getSessionSandbox('sess-1', 'acme/api', () => sandbox);
+    await resolveSessionWorkdir('sess-1', sandbox, 'acme/api');
+
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/docs')).resolves.toBe('/home/user/docs');
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(peekSessionSandbox('sess-1')?.workdir).toBe('/home/user/api');
+    await expect(resolveSessionWorkdir('sess-1', sandbox, 'acme/api')).resolves.toBe('/home/user/api');
+  });
+
   it('uses a remote sandbox declared workingDirectory without probing', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '/home/user\n', stderr: '' }));
     const sandbox = {
