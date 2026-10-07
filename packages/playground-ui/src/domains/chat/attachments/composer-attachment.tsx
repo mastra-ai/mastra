@@ -34,7 +34,8 @@ export function ComposerAttachment({
 }: ComposerAttachmentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const menuOpenerRef = useRef<HTMLElement | undefined>(undefined);
+  const focusTargetRef = useRef<HTMLElement | undefined>(undefined);
+  const menuContentRef = useRef<HTMLDivElement>(null);
   const actionSelected = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement>();
@@ -49,9 +50,9 @@ export function ComposerAttachment({
   function openMenu(anchor?: HTMLElement) {
     const focused = triggerRef.current?.ownerDocument.activeElement;
     // Pointer menus keep their cursor position while remembering keyboard focus.
-    menuOpenerRef.current = anchor;
+    focusTargetRef.current = anchor;
     if (!anchor && focused instanceof HTMLElement && triggerRef.current?.contains(focused)) {
-      menuOpenerRef.current = focused;
+      focusTargetRef.current = focused;
     }
     actionSelected.current = false;
     setMenuAnchor(anchor);
@@ -60,10 +61,12 @@ export function ComposerAttachment({
   }
 
   function runMenuAction(action: () => void) {
-    // Preview/edit may open a dialog; the closing menu must not steal its focus.
     actionSelected.current = true;
     setMenuOpen(false);
     action();
+    // The menu's focus trap may remain until its exit transition completes.
+    // Remember a synchronous application focus change across that teardown.
+    focusTargetRef.current = focusOutsideMenu() ?? focusTargetRef.current;
   }
 
   function openPreview() {
@@ -74,9 +77,23 @@ export function ComposerAttachment({
     previewControl()?.click();
   }
 
+  function focusOutsideMenu() {
+    const focused = triggerRef.current?.ownerDocument.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      focused !== focused.ownerDocument.body &&
+      !menuContentRef.current?.contains(focused)
+    ) {
+      return focused;
+    }
+  }
+
   function returnFocus() {
-    if (actionSelected.current) return false;
-    return menuOpenerRef.current ?? previewControl() ?? triggerRef.current;
+    // Preserve focus moved by the application (for example into an editor).
+    // Otherwise, an inline action still needs to return focus to its opener.
+    if (actionSelected.current && focusOutsideMenu()) return false;
+    if (focusTargetRef.current?.isConnected) return focusTargetRef.current;
+    return previewControl() ?? triggerRef.current;
   }
 
   return (
@@ -181,7 +198,7 @@ export function ComposerAttachment({
           <Ellipsis />
         </Button>
       </ContextMenu.Trigger>
-      <ContextMenu.Content anchor={menuAnchor} collisionPadding={8} finalFocus={returnFocus}>
+      <ContextMenu.Content ref={menuContentRef} anchor={menuAnchor} collisionPadding={8} finalFocus={returnFocus}>
         {hasPreview && (
           <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(openPreview)}>
             <Eye />
