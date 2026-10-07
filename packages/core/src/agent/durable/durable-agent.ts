@@ -3650,21 +3650,33 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+    const globalRegistryEntry = { ...registryEntry, messageList };
+    globalRunRegistry.set(runId, globalRegistryEntry);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Tears down the registry entries and pubsub topic this execution still
+    // owns, as stream() does: an execution that recovered the run in this
+    // process registers its own under the same runId, and one that took the
+    // run over, in any process, writes to the topic.
+    const releaseRunState = () => {
+      if (this.#runRegistry.get(runId) === registryEntry) {
+        this.#runRegistry.cleanup(runId);
+      }
+      if (globalRunRegistry.get(runId) === globalRegistryEntry) {
+        globalRunRegistry.delete(runId);
+        if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+      }
+    };
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
       autoCleanupTimer = setTimeout(() => {
         if (!cleanedUp) {
-          this.#runRegistry.cleanup(runId);
-          globalRunRegistry.delete(runId);
-          // An execution that took the run over writes to the topic.
-          if (!executionFence.isLost()) this.#clearPubsubTopic(runId);
+          releaseRunState();
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -3762,9 +3774,7 @@ export class DurableAgent<
       if (!cleanedUp) {
         agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
         streamCleanup();
-        this.#runRegistry.cleanup(runId);
-        globalRunRegistry.delete(runId);
-        if (!executionFence.isLost()) this.#clearPubsubTopic(runId);
+        releaseRunState();
         cleanedUp = true;
       }
     };

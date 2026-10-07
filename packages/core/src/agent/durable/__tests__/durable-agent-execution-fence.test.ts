@@ -1112,6 +1112,69 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
+    // generate() runs aren't registered with the thread runtime, so they take
+    // no follow-ups; what matters is that its own cleanup spares the recovery.
+    it.each(['before', 'after'] as const)(
+      'a generate() execution that lost its run leaves alone the state of the execution that recovers the run in this process, started %s the lost one ends',
+      async recoveryStarts => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const originalCall = gate();
+        const recoveryCall = gate();
+        const { model, prompts } = recordingModel([originalCall.opened, recoveryCall.opened]);
+        const durableAgent = buildAgent({ model, storage, memory });
+        const clearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+        const runId = crypto.randomUUID();
+        const generated = durableAgent.generate('What is the answer?', {
+          runId,
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        generated.catch(() => {}); // awaited below
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        await waitForCheckpoint(storage, runId);
+
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        await foreignOwnership(backend, storage, durableAgent.pubsub).vanish(fence);
+        await expect(fence.verify()).rejects.toBeInstanceOf(DurableExecutionFenceError);
+
+        const endLostExecution = async () => {
+          originalCall.open();
+          await fence.whenSettled;
+        };
+        if (recoveryStarts === 'after') {
+          // Before any recovery, the lost execution reports the lost lease,
+          // which ends generate() and runs its cleanup.
+          await endLostExecution();
+          await expect(generated).rejects.toThrow(`Durable run ${runId} lost its execution lease`);
+        }
+
+        const recovered = await durableAgent.recover(runId, { force: true });
+        const recoveredEntry = globalRunRegistry.get(runId);
+        const recoveredLocalEntry = durableAgent.runRegistry.get(runId);
+        expect(recoveredEntry).toBeDefined();
+        if (recoveryStarts === 'before') {
+          await vi.waitFor(() => expect(prompts).toHaveLength(2));
+          await endLostExecution();
+        }
+        recoveryCall.open();
+
+        const chunks = await drain(recovered.fullStream);
+        expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+        // After the recovery claimed the run, the lost execution is superseded
+        // and ends without a word; its generate() ends with the run, as the
+        // recovery finishes it, and then cleans up.
+        if (recoveryStarts === 'before') await generated;
+        expect(globalRunRegistry.get(runId)).toBe(recoveredEntry);
+        expect(durableAgent.runRegistry.get(runId)).toBe(recoveredLocalEntry);
+        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+
+        // The recovery's own cleanup still finds its state, and clears it.
+        recovered.cleanup();
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+        expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+      },
+    );
+
     it('a delegated sub-agent sharing the requestContext does not disturb the parent execution', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });
