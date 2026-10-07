@@ -8,6 +8,9 @@ import { Memory } from '@mastra/memory';
 import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
 import { webSearchTool } from '../tools/web-search';
+import { platformSetupSkill } from '../skills/platform-setup';
+import { createListConnectionsTool } from '../tools/list-connections';
+import { getConnectChannels } from '../connect';
 
 const workspacePath = 'workspace';
 
@@ -58,6 +61,7 @@ const workspace = new Workspace({
  * undefined when the platform env isn't configured so the harness still boots.
  */
 export const connectTools = hasConnectEnv ? tools() : undefined;
+export const listConnectionsTool = createListConnectionsTool(connectTools, () => getConnectChannels(hasConnectEnv));
 
 const localFilesNote = usePlatformFilesystem
   ? ''
@@ -81,7 +85,7 @@ export const agent = new Agent({
 
 Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`notion_search\`) come from the user's connected integrations via Mastra Connect. Which integrations are available depends on what is connected to their Mastra platform project, so inspect your tool list before promising anything.
 
-- If no integration tools are available, tell the user to attach integrations to their Mastra platform project and set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID. Don't guess or invent results.
+- Activate the platform-setup skill when the user needs help getting set up, finding project settings, or adding a missing integration. They use hosted Studio and the Mastra platform in their browser; do not assume they have code or a terminal.
 - Read freely, write carefully: list/get/search tools can be called whenever useful; tools that create, update, or delete things are side effects — state what you're about to do, and if the request is ambiguous, confirm first.
 - After a write, include identifiers and URLs returned by the tool so the user can jump straight to the result.
 
@@ -103,8 +107,10 @@ Ask concise questions when something is unclear or a good question could surface
     },
   }),
   workspace,
+  skills: [platformSetupSkill],
   tools: async ({ requestContext, mastra }) => ({
     ask_user: askUserTool,
+    list_connections: listConnectionsTool,
     start_schedule: startScheduleTool,
     stop_schedule: stopScheduleTool,
     web_fetch: webFetchTool,
