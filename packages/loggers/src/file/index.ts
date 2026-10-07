@@ -19,13 +19,15 @@ export class FileTransport extends LoggerTransport {
     this.fileStream = createWriteStream(this.path, { flags: 'a' });
   }
 
-  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk: any) => void) {
+  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk?: any) => void) {
     try {
-      this.fileStream.write(chunk);
+      this.fileStream.write(chunk, error => {
+        if (error) callback(error);
+        else callback(null, chunk);
+      });
     } catch (error) {
-      console.error('Error parsing log entry:', error);
+      callback(error as Error);
     }
-    callback(null, chunk);
   }
 
   _flush(callback: Function) {
