@@ -298,6 +298,19 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
 ];
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
+const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
+  in: 'includes',
+  notIn: 'notIncludes',
+  exists: 'exists',
+  notExists: 'notExists',
+};
+
+/** Structural subset of a discovery `canonicalFields` entry. */
+export type TraceQueryCanonicalFieldDescriptor = {
+  path: string;
+  operators: readonly string[];
+  valueSuggestions: boolean;
+};
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
 const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
 // The legacy list endpoint only matches by equality.
@@ -420,9 +433,12 @@ export function createTraceFilterBarFields({
   availableEnvironments,
   hiddenFieldIds = [],
   metadataFields = [],
+  canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
 }: {
+  /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
+  canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
   availableEnvironments: string[];
   hiddenFieldIds?: readonly string[];
@@ -508,12 +524,23 @@ export function createTraceFilterBarFields({
       suggestions,
     }));
 
-  const tagsResolver = valueSuggestions?.('trace', 'tags');
-  const tagsField: FilterBarField = {
-    ...traceFieldBase('tags'),
-    operators: TRACE_TAGS_OPERATORS,
-    ...(tagsResolver ? { suggestions: tagsResolver } : {}),
-  };
+  // Tags are only offered once the backend has described them: their operators
+  // can't be inferred safely from the static catalog.
+  const tagsDescriptor = canonicalTraceFields.find(field => field.path === 'tags');
+  const tagsOperators = tagsDescriptor
+    ? TRACE_TAGS_OPERATORS.filter(op => tagsDescriptor.operators.includes(TRACE_TAGS_OPERATOR_TO_QUERY_OP[op] ?? ''))
+    : [];
+  const tagsResolver = tagsDescriptor?.valueSuggestions ? valueSuggestions?.('trace', 'tags') : undefined;
+  const tagsFields: FilterBarField[] =
+    tagsOperators.length > 0
+      ? [
+          {
+            ...traceFieldBase('tags'),
+            operators: tagsOperators,
+            ...(tagsResolver ? { suggestions: tagsResolver } : {}),
+          },
+        ]
+      : [];
 
   const hidden = new Set(hiddenFieldIds);
   if (!withQueryTrace) {
@@ -524,7 +551,7 @@ export function createTraceFilterBarFields({
     }));
   }
   return [
-    ...[...pickFields, tagsField].sort(byLabel),
+    ...[...pickFields, ...tagsFields].sort(byLabel),
     ...textFields.sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),

@@ -5,7 +5,11 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import {
+  useFeedbackAvailable,
+  useTraceQueryAvailable,
+  useTraceQueryDiscoveryAvailable,
+} from '@mastra/playground-ui/domains/capabilities';
 import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
 import { ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
@@ -206,9 +210,14 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ),
     [url.selectedDateFrom, url.selectedDateTo, discoveryNow],
   );
-  const { fields: metadataFields, isLoading: isDiscoveryLoading } = useTraceMetadataFilterFields({
+  const { enabled: withDiscovery } = useTraceQueryDiscoveryAvailable();
+  const {
+    fields: metadataFields,
+    canonicalFields: canonicalTraceFields,
+    isLoading: isDiscoveryLoading,
+  } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange,
-    queryOptions: { enabled: withQueryTrace },
+    queryOptions: { enabled: withQueryTrace && withDiscovery },
   });
   const client = useMastraClient();
   const valueSuggestions = useCallback(
@@ -225,6 +234,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         availableEnvironments: discoveredEnvironments,
         hiddenFieldIds,
         metadataFields,
+        canonicalTraceFields,
         valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
         withQueryTrace,
       }),
@@ -234,6 +244,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       discoveredEnvironments,
       hiddenFieldIds,
       metadataFields,
+      canonicalTraceFields,
       valueSuggestions,
       withQueryTrace,
     ],

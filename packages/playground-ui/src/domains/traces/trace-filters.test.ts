@@ -93,9 +93,35 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('serviceName')).toBeUndefined();
   });
 
-  describe('when withQueryTrace is true', () => {
-    it('offers tags with list operators', () => {
-      expect(byId('tags')?.operators).toEqual(['in', 'notIn', 'exists', 'notExists']);
+  describe('when the backend has not described the tags field', () => {
+    it('does not offer tags', () => {
+      expect(byId('tags')).toBeUndefined();
+    });
+  });
+
+  describe('when the backend describes the tags field', () => {
+    const tagsDescriptor = {
+      path: 'tags',
+      operators: ['includes', 'notIncludes', 'exists', 'notExists'],
+      valueSuggestions: true,
+    };
+
+    it('offers tags with the operators the backend allows', () => {
+      const withTags = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [tagsDescriptor],
+      });
+      expect(withTags.find(f => f.id === 'tags')?.operators).toEqual(['in', 'notIn', 'exists', 'notExists']);
+    });
+
+    it('drops operators the backend does not allow', () => {
+      const withTags = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [{ ...tagsDescriptor, operators: ['includes', 'exists'] }],
+      });
+      expect(withTags.find(f => f.id === 'tags')?.operators).toEqual(['in', 'exists']);
     });
 
     it('suggests tag values from the trace scope', () => {
@@ -104,6 +130,7 @@ describe('createTraceFilterBarFields', () => {
       const withSuggestions = createTraceFilterBarFields({
         availableRootEntityNames: [],
         availableEnvironments: [],
+        canonicalTraceFields: [tagsDescriptor],
         valueSuggestions: (scope, path) => {
           calls.push([scope, path]);
           return resolver;
@@ -111,6 +138,26 @@ describe('createTraceFilterBarFields', () => {
       });
       expect(withSuggestions.find(f => f.id === 'tags')?.suggestions).toBe(resolver);
       expect(calls).toContainEqual(['trace', 'tags']);
+    });
+
+    it('does not suggest tag values when the backend has no value suggestions for it', () => {
+      const withTags = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [{ ...tagsDescriptor, valueSuggestions: false }],
+        valueSuggestions: () => async () => [],
+      });
+      expect(withTags.find(f => f.id === 'tags')?.suggestions).toBeUndefined();
+    });
+
+    it('still omits tags on the legacy path', () => {
+      const legacy = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        canonicalTraceFields: [tagsDescriptor],
+        withQueryTrace: false,
+      });
+      expect(legacy.find(f => f.id === 'tags')).toBeUndefined();
     });
   });
 
@@ -227,7 +274,6 @@ describe('createTraceFilterBarFields', () => {
       'entityName',
       'rootEntityType',
       'status',
-      'tags',
       'entityId',
       'resourceId',
       'threadId',
