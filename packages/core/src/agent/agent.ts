@@ -194,7 +194,7 @@ import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
-import type { SubAgent } from './subagent';
+import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
@@ -344,6 +344,18 @@ const createSubAgentOutputSchema = () =>
       )
       .describe("The results from the agent's tool calls")
       .optional(),
+    subAgentPendingToolCalls: z
+      .array(
+        z.object({
+          toolName: z.string().describe('The name of the tool'),
+          toolCallId: z.string().describe('The ID of the tool call'),
+          args: z.unknown().describe('The arguments of the tool call').optional(),
+        }),
+      )
+      .describe(
+        'Tool calls the agent made that were never resolved because the tool has no server-side execute (client tools)',
+      )
+      .optional(),
     ref: z.string().describe('Reference ID for this result when delegation.enableResultReferences is on').optional(),
   });
 
@@ -359,6 +371,48 @@ type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchem
   contextFromRefs?: DelegationRefInput[] | null;
 };
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
+
+type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
+
+/**
+ * Tool calls a sub-agent made that never got a result. A tool without a server-side
+ * `execute` (a client tool) ends the sub-agent's run at the tool-calls step, and
+ * nothing in a delegation can run it, so the call stays unresolved.
+ */
+function getPendingSubAgentToolCalls(
+  toolCalls: SubAgentToolCall[] | undefined,
+  toolResults: SubAgentToolResult[] | undefined,
+): SubAgentPendingToolCall[] {
+  const resolvedIds = new Set((toolResults ?? []).map(toolResult => toolResult.payload.toolCallId));
+  return (toolCalls ?? [])
+    .filter(toolCall => !toolCall.payload.providerExecuted && !resolvedIds.has(toolCall.payload.toolCallId))
+    .map(toolCall => ({
+      toolName: toolCall.payload.toolName,
+      toolCallId: toolCall.payload.toolCallId,
+      args: toolCall.payload.args,
+    }));
+}
+
+/**
+ * Note for the supervisor model when the sub-agent stopped on unresolved client tool
+ * calls, so an empty sub-agent reply is not read as a finished task.
+ */
+function formatPendingSubAgentToolCalls(pendingToolCalls: SubAgentPendingToolCall[] | undefined): string {
+  if (!pendingToolCalls?.length) return '';
+  const calls = pendingToolCalls.map(toolCall => `${toolCall.toolName}(${JSON.stringify(toolCall.args ?? {})})`);
+  return `\n\n[The sub-agent stopped before finishing: it called tools that have no server-side execute and were never run: ${calls.join(', ')}.]`;
+}
+
+function logPendingSubAgentToolCalls(
+  logger: { warn: (message: string, ...args: any[]) => void },
+  agentName: string,
+  pendingToolCalls: SubAgentPendingToolCall[],
+) {
+  logger.warn(
+    `Sub-agent "${agentName}" stopped on tool calls that have no server-side execute (client tools), which sub-agents cannot resolve. Let the supervisor own client tools, or use suspend() in the sub-agent's tool.`,
+    { tools: pendingToolCalls.map(toolCall => toolCall.toolName) },
+  );
+}
 
 type ModelFallbacks = {
   id: string;
@@ -5345,7 +5399,7 @@ export class Agent<
               value:
                 typeof output === 'string'
                   ? output
-                  : `${output.text ?? ''}${output.ref ? `\n\n[ref: ${output.ref}]` : ''}`,
+                  : `${output.text ?? ''}${formatPendingSubAgentToolCalls(output.subAgentPendingToolCalls)}${output.ref ? `\n\n[ref: ${output.ref}]` : ''}`,
             });
 
         const toolObj = createTool({
@@ -5923,12 +5977,21 @@ export class Agent<
                   });
                 }
 
+                const subAgentPendingToolCalls = getPendingSubAgentToolCalls(
+                  generateResult.toolCalls,
+                  generateResult.toolResults,
+                );
+                if (subAgentPendingToolCalls.length > 0) {
+                  logPendingSubAgentToolCalls(this.logger, agentName, subAgentPendingToolCalls);
+                }
+
                 result = {
                   text: generateResult.text,
                   finishReason: generateResult.finishReason,
                   subAgentThreadId: effectiveGenerateThreadId,
                   subAgentResourceId: effectiveGenerateResourceId,
                   subAgentToolResults,
+                  ...(subAgentPendingToolCalls.length > 0 ? { subAgentPendingToolCalls } : {}),
                   usage: generateResult.usage,
                 };
               } else if (
@@ -6017,7 +6080,8 @@ export class Agent<
                   }
                 }
 
-                const subAgentToolResults = (await streamResult.toolResults)?.map(toolResult => ({
+                const streamToolResults = await streamResult.toolResults;
+                const subAgentToolResults = streamToolResults?.map(toolResult => ({
                   toolName: toolResult.payload.toolName,
                   toolCallId: toolResult.payload.toolCallId,
                   result: toolResult.payload.result,
@@ -6065,12 +6129,23 @@ export class Agent<
                 const processedText = await streamResult.text;
                 const subAgentFinishReason = await streamResult.finishReason;
                 const subAgentUsage = await streamResult.usage;
+                // Calls that are waiting on approval or suspension also lack results, but
+                // those return through suspend() below and never reach the delegation result.
+                const isSuspending = !!(requireToolApproval || suspendedPayload || resumeSchema);
+                const subAgentPendingToolCalls = isSuspending
+                  ? []
+                  : getPendingSubAgentToolCalls(await streamResult.toolCalls, streamToolResults);
+                if (subAgentPendingToolCalls.length > 0) {
+                  logPendingSubAgentToolCalls(this.logger, agentName, subAgentPendingToolCalls);
+                }
+
                 result = {
                   text: processedText,
                   finishReason: subAgentFinishReason,
                   subAgentThreadId: effectiveStreamThreadId,
                   subAgentResourceId: effectiveStreamResourceId,
                   subAgentToolResults,
+                  ...(subAgentPendingToolCalls.length > 0 ? { subAgentPendingToolCalls } : {}),
                   usage: subAgentUsage,
                 };
 

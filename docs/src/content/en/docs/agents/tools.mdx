@@ -312,6 +312,31 @@ export const weatherTool = createTool({
 
 `toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result. The model receives the transformed content instead of the raw tool result.
 
+## Tools that run on the client
+
+A tool without an `execute` function is a client tool: the server can't run it, so the agent stops at the step where the model called it. The run ends with `finishReason: 'tool-calls'`, and the model doesn't produce more text until the tool has a result. Pick the pattern that matches what the model needs back:
+
+- **The client runs the tool and the model needs its result**: Leave out `execute`. The client runs the tool, adds the result to the conversation, and sends a new request so the agent continues. With AI SDK `useChat()`, see [client tools with `useChat()`](/integrations/agentic-ui/ai-sdk-ui#client-tools-with-usechat).
+- **The client only renders the call** (for example a product card): Give the tool an `execute` that returns a short acknowledgement. The agent continues in the same run, and the client renders the tool part from its input. Return a small value instead of echoing the input so the model context and stored messages stay small.
+- **The tool needs a structured answer from the user** (for example a confirmed cart write): Call `suspend()` in `execute`, and resume with the user's answer. See [runtime suspension with `suspend()`](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend).
+
+```typescript title="src/mastra/tools/show-product-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const showProductTool = createTool({
+  id: 'show-product',
+  description: 'Shows a product card to the user',
+  inputSchema: z.object({
+    productId: z.string(),
+  }),
+  // highlight-next-line
+  execute: async () => ({ rendered: true }),
+})
+```
+
+Subagents can't run client tools. When a subagent calls a tool without `execute`, its run stops and the supervisor receives the unresolved calls in `subAgentPendingToolCalls` on the delegation result. Give client tools to the supervisor, or use `suspend()` in the subagent's tool. Suspension propagates through the supervisor, see [use `suspend()` in supervisor agents](/docs/agents/human-in-the-loop#use-suspend-in-supervisor-agents).
+
 ## Transform tool payloads for UI and transcripts
 
 Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.
