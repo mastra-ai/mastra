@@ -155,16 +155,16 @@ function placeholders(values: readonly unknown[], offset: number): string {
 }
 
 /**
- * Unicode combining marks as PostgreSQL bracket ranges, so `[^[:alnum:]<ranges>]` splits words
- * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{M}`, and glibc files
+ * Unicode letters, marks, and digits as PostgreSQL bracket ranges, so `[^<ranges>]` splits words
+ * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{…}` classes, and
+ * `[[:alnum:]]` depends on the locale: it leaves out digits such as `² ½ ₂ ①`, and glibc files
  * some marks, such as the Devanagari virama, under punct. Derived once from the runtime's own
- * Unicode tables. A run may also absorb neighbouring letters, digits, and unassigned code
- * points, which are word characters already or never stored. Private-use code points are not
- * absorbed: the other stores treat them as separators.
+ * Unicode tables. A run may also absorb unassigned code points, which are never stored.
+ * Private-use code points are not absorbed: the other stores treat them as separators.
  */
-let pgCombiningMarkRanges: string | undefined;
-function getPgCombiningMarkRanges(): string {
-  if (pgCombiningMarkRanges !== undefined) return pgCombiningMarkRanges;
+let pgWordRanges: string | undefined;
+function getPgWordRanges(): string {
+  if (pgWordRanges !== undefined) return pgWordRanges;
   const escape = (cp: number) =>
     cp > 0xffff ? `\\U${cp.toString(16).padStart(8, '0')}` : `\\u${cp.toString(16).padStart(4, '0')}`;
   // Every code point except surrogates, built in chunks to keep the peak allocation small.
@@ -179,7 +179,6 @@ function getPgCombiningMarkRanges(): string {
   const text = chunks.join('');
   const ranges: string[] = [];
   for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}]+/gu)) {
-    if (!/\p{M}/u.test(match[0])) continue;
     const first = match[0].codePointAt(0)!;
     const lastUnit = match.index + match[0].length - 1;
     const last = text.codePointAt(
@@ -187,8 +186,8 @@ function getPgCombiningMarkRanges(): string {
     )!;
     ranges.push(first === last ? escape(first) : `${escape(first)}-${escape(last)}`);
   }
-  pgCombiningMarkRanges = ranges.join('');
-  return pgCombiningMarkRanges;
+  pgWordRanges = ranges.join('');
+  return pgWordRanges;
 }
 
 function compileScalarPredicate<TField extends string>(
@@ -244,11 +243,9 @@ function compileScalarPredicate<TField extends string>(
 
   if (predicate.type === 'text') {
     // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of letters,
-    // marks, and digits. PostgreSQL regexes lack `\p{L}` and `\p{M}`: `[[:alnum:]]` follows the
-    // database locale (a C-locale database treats non-ASCII letters as separators) and glibc files
-    // some marks such as the Devanagari virama under punct, so the mark ranges are listed explicitly.
-    // `lower()` already folds `İ` to `i`.
-    const words = `' ' || replace(lower(regexp_replace(normalize(${field}), '[^[:alnum:]${getPgCombiningMarkRanges()}]+', ' ', 'g')), 'ς', 'σ') || ' '`;
+    // marks, and digits, listed as explicit ranges (see `getPgWordRanges`). `lower()` already folds
+    // `İ` to `i`; it follows the database locale, so a C-locale database folds ASCII only.
+    const words = `' ' || replace(lower(regexp_replace(normalize(${field}), '[^${getPgWordRanges()}]+', ' ', 'g')), 'ς', 'σ') || ' '`;
     const found = `strpos(${words}, $${parameterOffset}) > 0`;
     return {
       sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,

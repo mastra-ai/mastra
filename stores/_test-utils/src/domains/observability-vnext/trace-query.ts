@@ -957,7 +957,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
     feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
-      comment: 'Reviewed: incorrect dosage, 20 mg was correct. I\u0307stanbul clinic, greeted with नमस्ते. ΟΔΟΣ 5.',
+      comment:
+        'Reviewed: incorrect dosage, 20 mg was correct. I\u0307stanbul clinic, greeted with नमस्ते. ΟΔΟΣ 5. CO₂ at ½ dose.',
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
@@ -2588,6 +2589,16 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     name: 'matches folds a Greek final sigma the same way in every store',
     request: { timeRange: fullRange, where: { feedback: { some: commentMatches('οδος 5') } } },
     expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches keeps superscripts, subscripts, and fractions inside a word',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('co₂ at ½ dose') } } },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'matches does not split a word at a subscript digit',
+    request: { timeRange: fullRange, where: { feedback: { some: commentMatches('co') } } },
+    expected: [],
   },
   {
     name: 'matches ignores superseded feedback comments',
