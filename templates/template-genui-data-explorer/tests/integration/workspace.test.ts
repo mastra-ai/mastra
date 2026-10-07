@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it, expect } from "vitest";
+import { compact } from "../fixtures/compact.ts";
 import { MastraAgent } from "@ag-ui/mastra";
 import type { BaseEvent } from "@ag-ui/core";
 import { createWorkspace } from "../../src/workspace/create.ts";
@@ -783,7 +784,7 @@ it("enabled catalog validates bindings and custom display schemas", async () => 
   const dir = await mkdtemp(join(tmpdir(), "workspace-catalog-"));
   const salesPath = join(dir, "sales.sqlite");
   referenceFixture(salesPath).db.close();
-  const catalog = components.map((entry) => ({
+  const catalog = [...components, compact].map((entry) => ({
     ...entry,
     enabled: entry.id === "compact" || entry.id === "table",
   }));

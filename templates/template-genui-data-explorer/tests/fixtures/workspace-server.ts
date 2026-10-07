@@ -8,6 +8,7 @@ const { workspaceServer } = await import("./server.ts");
 import { SalesSource } from "../../data-sources/sales/source.ts";
 import { groupingColumn } from "../../data-sources/source.ts";
 import { components } from "../../src/components/catalog.ts";
+import { compact } from "./compact.ts";
 
 const directory = process.env.TEST_DIRECTORY;
 if (!directory) throw new Error("A test directory is required.");
@@ -74,7 +75,7 @@ const provider = workspaceModel({
     writeFileSync(join(directory, "calls.json"), String(++calls));
   },
 });
-const catalog = components.map((entry) => ({
+const catalog = [...components, compact].map((entry) => ({
   ...entry,
   enabled:
     entry.id === "compact"

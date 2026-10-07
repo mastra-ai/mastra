@@ -54,8 +54,8 @@ Keep display options under `properties.options`. The shared binding accepts stri
 booleans, and null there. Use the existing `title`, `x`, `y`, `value`, and `scenario` fields where
 applicable; titles are plain labels without numbers or dates. Numeric facts come from the result.
 
-The template also includes a disabled `compact` component with a custom option and comparison action
-if you prefer to adapt an existing example.
+The production catalog contains the default views only. Custom components used to verify
+extensibility live under `tests/fixtures/` and are registered only by the test application.
 
 ## Add the React renderer
 
@@ -74,16 +74,19 @@ function SummaryMetric({ binding, result }: RendererProps) {
 ```
 
 The `renderers` array automatically maps standard catalog entries to built-in views. Exclude your
-custom ID from that mapping, alongside `compact`:
+custom ID from that mapping:
 
 ```ts
-.filter((entry) => entry.id !== "compact" && entry.id !== "summary")
+.filter((entry) => entry.id !== "summary")
 ```
 
-Then append this entry to the same `renderers` array, keeping the existing entries:
+Then append the custom renderer after constructing the array:
 
 ```ts
-{ declaration: components.find((entry) => entry.id === "summary")!, render: SummaryMetric },
+renderers.push({
+  declaration: components.find((entry) => entry.id === "summary")!,
+  render: SummaryMetric,
+});
 ```
 
 Each component ID should have one renderer registration. Read values from `result.data` and display

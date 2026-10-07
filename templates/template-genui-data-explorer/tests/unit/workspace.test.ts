@@ -1,4 +1,5 @@
 import { it, expect } from "vitest";
+import { compact } from "../fixtures/compact.ts";
 import { verifiedResultSchema } from "../../src/analysis/contracts.ts";
 import { components, validateCatalog, componentSchema } from "../../src/components/catalog.ts";
 import { validateComposition, acceptedWorkspace } from "../../src/analysis/composition.ts";
@@ -247,11 +248,7 @@ it("catalog schemas reject misleading axes, units, forecasts and undeclared disp
   expect(() => validateComposition({ components: [binding] }, [result], disabled)).toThrow(
     "disabled",
   );
-  const compact = components.find((entry) => entry.id === "compact")!;
-  const catalog = [
-    ...components.filter((entry) => entry.id !== "compact"),
-    { ...compact, enabled: true },
-  ];
+  const catalog = [...components, compact];
   expect(() =>
     validateComposition(
       {

@@ -89,21 +89,6 @@ export const components: readonly ComponentDeclaration[] = [
     defaults: { pageSize: 12 },
   },
   {
-    id: "compact",
-    kind: "metric",
-    version: "1",
-    description:
-      "Compact verified KPI; options.emphasis chooses a validated verification label. Supports comparison.",
-    enabled: false,
-    roles: ["scalar", "series", "ranked", "records"],
-    units: ["USD cents", "percent"],
-    actions: ["compare"],
-    properties: componentProperties.extend({
-      options: z.strictObject({ emphasis: z.enum(["verified", "audited"]) }),
-    }),
-    defaults: { pageSize: 5 },
-  },
-  {
     id: "metric",
     kind: "metric",
     version: "1",

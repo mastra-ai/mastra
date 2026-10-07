@@ -12,29 +12,15 @@ const Chart = dynamic(() => import("./charts/chart.tsx"), {
   ssr: false,
   loading: () => <p role="status">Preparing interactive chart…</p>,
 });
-/** An extension renderer with its own validated display option and declared comparison action. */
-function CompactMetric({ binding, result }: RendererProps) {
-  return (
-    <p className="metric-value">
-      <strong>{formatValue(result.data.value, result.data.unit)}</strong> ·{" "}
-      {String(binding.properties.options?.emphasis ?? "verified")}
-    </p>
-  );
-}
-export const renderers = [
-  ...components
-    .filter((entry) => entry.id !== "compact")
-    .map((declaration) => ({
-      declaration,
-      render:
-        declaration.kind === "line" || declaration.kind === "bar" || declaration.kind === "heatmap"
-          ? Chart
-          : declaration.kind === "table"
-            ? DataTable
-            : Metric,
-    })),
-  { declaration: components.find((entry) => entry.id === "compact")!, render: CompactMetric },
-];
+export const renderers = components.map((declaration) => ({
+  declaration,
+  render:
+    declaration.kind === "line" || declaration.kind === "bar" || declaration.kind === "heatmap"
+      ? Chart
+      : declaration.kind === "table"
+        ? DataTable
+        : Metric,
+}));
 export function RegisteredView(props: RendererProps) {
   const renderer = renderers.find((entry) => entry.declaration.id === props.binding.component);
   if (!renderer) return <p role="alert">Renderer unavailable. Restore the registered component.</p>;

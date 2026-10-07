@@ -11,14 +11,12 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:3100", headless: true },
   webServer: {
     cwd: fileURLToPath(new URL("..", import.meta.url)),
-    command: "npm exec -- next dev --hostname 127.0.0.1 --port 3100",
+    command: "npm exec -- next dev tests/browser-app --hostname 127.0.0.1 --port 3100",
     url: "http://127.0.0.1:3100",
     timeout: 120000,
     reuseExistingServer: false,
     env: {
       NEXT_TELEMETRY_DISABLED: "1",
-      NEXT_DIST_DIRECTORY: ".next/browser",
-      NEXT_TSCONFIG_PATH: "tests/tsconfig.app.json",
       COPILOTKIT_TELEMETRY_DISABLED: "true",
       AGENT_PORT: "4112",
       WEB_PORT: "3100",

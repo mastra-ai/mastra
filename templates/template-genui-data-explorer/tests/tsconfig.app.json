@@ -5,8 +5,11 @@
     "../app/**/*.ts",
     "../app/**/*.tsx",
     "../src/ui/**/*.tsx",
-    "../.next/browser/types/**/*.ts",
-    "../.next/browser/dev/types/**/*.ts"
+    "./browser-app/**/*.ts",
+    "./browser-app/**/*.tsx",
+    "./fixtures/**/*.tsx",
+    "./browser-app/.next/types/**/*.ts",
+    "./browser-app/.next/dev/types/**/*.ts"
   ],
   "exclude": ["../node_modules"]
 }
