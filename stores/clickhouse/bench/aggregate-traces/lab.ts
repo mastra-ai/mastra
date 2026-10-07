@@ -6,10 +6,16 @@
  *   tsx bench/aggregate-traces/lab.ts calibrate     # prod: DDL + aggregate shape stats -> results/lab-calibration.json
  *   tsx bench/aggregate-traces/lab.ts up            # local: start container, create schema
  *   tsx bench/aggregate-traces/lab.ts load          # local: generate synthetic data
+ *   tsx bench/aggregate-traces/lab.ts pull          # prod -> local: replace the calibrated projects with real rows
+ *
+ * `pull` copies only the columns the compiled queries filter, group or join on. Identifiers and free-text values are
+ * replaced on the replica by a salted hash (the salt lives in memory for one run); payload columns are never read and
+ * are regenerated locally at the replica's average widths. Timestamps, numeric values and enum-like columns are kept.
  *   tsx bench/aggregate-traces/lab.ts down          # local: remove container
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { ClickHouseLogLevel, createClient } from '@clickhouse/client';
@@ -21,7 +27,13 @@ import { installOutputRedaction, loadCredentials } from './env';
 import { BUCKETS, loadSelection } from './profile';
 import type { Bucket, Selection } from './profile';
 import { PREFLIGHT_FILE, RESULTS_DIR } from './run';
-import { RewriteError } from './scope';
+import {
+  RewriteError,
+  SPAN_NAME_INDEX_TABLE,
+  USAGE_COST_NAMES,
+  USAGE_ROLLUP_COLUMNS,
+  USAGE_ROLLUP_TABLE,
+} from './scope';
 import type { Variant } from './scope';
 
 export const CALIBRATION_FILE = `${RESULTS_DIR}/lab-calibration.json`;
@@ -249,7 +261,7 @@ async function up(): Promise<void> {
     [
       '<clickhouse>',
       // Server-wide cap below the container limit, so a large query fails with MEMORY_LIMIT_EXCEEDED, not OOM-kill.
-      '<max_server_memory_usage>2200000000</max_server_memory_usage>',
+      '<max_server_memory_usage>4000000000</max_server_memory_usage>',
       '<mark_cache_size>268435456</mark_cache_size>',
       // Count allocations, not RSS (RSS includes ~1.3 GiB of code, shared pages and allocator slack at idle).
       '<memory_worker_correct_memory_tracker>0</memory_worker_correct_memory_tracker>',
@@ -541,6 +553,7 @@ async function load(scale: number, batches: number): Promise<void> {
     });
     await admin.insert({ table: `${db}.lab_chunks`, values: chunks, format: 'JSONEachRow' });
 
+    rmSync(LAB_PULLED_FILE, { force: true });
     for (const table of ['mastra_trace_roots', 'mastra_span_events', 'mastra_metric_events']) {
       await admin.command({ query: `TRUNCATE TABLE ${db}.${table}` });
       await admin.command({ query: `SYSTEM STOP MERGES ${db}.${table}` });
@@ -617,6 +630,426 @@ async function load(scale: number, batches: number): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// pull (prod -> local, pseudonymized)
+// ---------------------------------------------------------------------------
+
+/** Salted hash computed on the replica; NULL stays NULL. Must match `pseudo()` below. */
+const H = (expr: string) =>
+  `if(isNull(${expr}), NULL, concat('h', substring(lower(hex(SHA256(concat({salt:String}, toString(${expr}))))), 1, 16)))`;
+const HN = (expr: string) =>
+  `concat('h', substring(lower(hex(SHA256(concat({salt:String}, toString(${expr}))))), 1, 16))`;
+const HMAP = (expr: string) => `mapApply((k, v) -> (${HN('k')}, ${HN('v')}), ${expr})`;
+const pseudo = (salt: string, value: string) =>
+  `h${createHash('sha256')
+    .update(salt + value)
+    .digest('hex')
+    .slice(0, 16)}`;
+
+// Source columns are qualified with `src.`: the output aliases reuse the column names and would shadow them.
+const ERROR_FLAG = `if(isNull(src.error), NULL, '{"message":"x"}')`;
+const META_RAW = `toJSONString(${HMAP(`CAST(JSONExtractKeysAndValues(ifNull(src.metadataRaw, '{}'), 'String'), 'Map(String, String)')`)})`;
+
+/** Kept as-is (timestamps, numbers, enums); everything else in the list is hashed. */
+const PULL = {
+  mastra_trace_roots: {
+    time: 'startedAt',
+    keep: [
+      'entityType',
+      'parentEntityType',
+      'rootEntityType',
+      'executionSource',
+      'spanType',
+      'isEvent',
+      'startedAt',
+      'endedAt',
+    ],
+    hash: [
+      'dedupeKey',
+      'traceId',
+      'spanId',
+      'parentSpanId',
+      'experimentId',
+      'entityId',
+      'entityName',
+      'entityVersionId',
+      'parentEntityId',
+      'parentEntityName',
+      'rootEntityId',
+      'rootEntityName',
+      'userId',
+      'resourceId',
+      'runId',
+      'sessionId',
+      'threadId',
+      'requestId',
+      'environment',
+      'serviceName',
+      'name',
+    ],
+    custom: {
+      tags: `arrayMap(t -> ${H('t')}, src.tags)`,
+      metadataSearch: HMAP('src.metadataSearch'),
+      error: ERROR_FLAG,
+      metadataRaw: META_RAW,
+    },
+    fill: { attributes: 2800, input: 6200, output: 840, requestContext: 800, scope: 50, links: 0 },
+    extra: '',
+  },
+  mastra_span_events: {
+    time: 'endedAt',
+    keep: [
+      'entityType',
+      'parentEntityType',
+      'rootEntityType',
+      'executionSource',
+      'spanType',
+      'isEvent',
+      'startedAt',
+      'endedAt',
+    ],
+    hash: [
+      'dedupeKey',
+      'traceId',
+      'spanId',
+      'parentSpanId',
+      'entityId',
+      'entityName',
+      'parentEntityName',
+      'rootEntityName',
+      'userId',
+      'resourceId',
+      'runId',
+      'sessionId',
+      'threadId',
+      'environment',
+      'serviceName',
+      'name',
+    ],
+    custom: { error: ERROR_FLAG },
+    // Span input/output (~43 KB/row on the replica) are never read by these queries; keep them small.
+    fill: { attributes: 1935, input: -300, output: -100, requestContext: 0, metadataRaw: 0, scope: 0, links: 0 },
+    extra: '',
+  },
+  mastra_metric_events: {
+    time: 'timestamp',
+    keep: ['timestamp', 'entityType', 'name', 'value', 'estimatedCost', 'costUnit'],
+    hash: ['metricId', 'traceId', 'spanId', 'entityName', 'resourceId', 'threadId', 'environment', 'provider', 'model'],
+    custom: {
+      costMetadata: `if(JSONHas(ifNull(src.costMetadata, '{}'), 'error') AND JSONType(ifNull(src.costMetadata, '{}'), 'error') != 'Null', '{"error":"x"}', NULL)`,
+      labels: HMAP('src.labels'),
+    },
+    fill: {},
+    extra: 'AND src.name IN {names:Array(String)}',
+  },
+} as const;
+type PullTable = keyof typeof PULL;
+
+function pullSelect(table: PullTable): string {
+  const t = PULL[table];
+  const cols = [
+    ...t.keep.map(c => `src.${c} AS ${c}`),
+    ...t.hash.map(c => `${H(`src.${c}`)} AS ${c}`),
+    ...Object.entries(t.custom).map(([c, e]) => `${e} AS ${c}`),
+    `{lo:String} AS organizationId`,
+    `{lp:String} AS projectId`,
+  ];
+  return `SELECT ${cols.join(', ')} FROM ${table} AS src
+    WHERE src.organizationId = {o:String} AND src.projectId = {p:String}
+      AND src.${t.time} >= {from:DateTime64(3, 'UTC')} AND src.${t.time} < {to:DateTime64(3, 'UTC')} ${t.extra}`;
+}
+
+/**
+ * Moves staged rows into the lab table, regenerating payload columns at the replica's widths. A fill value is the
+ * fallback width when the replica reports none; negative means "this fixed width, ignore the replica"; 0 means NULL.
+ */
+function pullFinish(c: Calibration, table: PullTable, scale: number): string {
+  const w = widths(c, table);
+  const names = c.columns.filter(x => x.table === table).map(x => x.name);
+  const fill = PULL[table].fill as Record<string, number>;
+  const exprs = names.map(n => {
+    if (!(n in fill)) return n;
+    const f = fill[n]!;
+    if (f <= 0) return `${FILL(-f, 5)} AS ${n}`;
+    const { len, ratio } = w(n, f, scale);
+    return `${FILL(len, ratio)} AS ${n}`;
+  });
+  return `INSERT INTO ${LAB.database}.${table} (${names.join(', ')})
+    SELECT ${exprs.join(', ')} FROM (SELECT *, traceId AS tid FROM ${LAB.database}.pull_${table}
+      WHERE organizationId = {lo:String} AND toDate(${PARTITION_COLUMN[table]}) = {d:Date})
+    SETTINGS ${INSERT_SETTINGS.replace('max_block_size = 1', 'max_block_size = 512')}`;
+}
+
+const PULL_PAUSE_MS = 500;
+/** Lab tables are partitioned by day on this column; finishing one partition at a time keeps write buffers small. */
+const PARTITION_COLUMN: Record<PullTable, string> = {
+  mastra_trace_roots: 'endedAt',
+  mastra_span_events: 'endedAt',
+  mastra_metric_events: 'timestamp',
+};
+const PULL_INSERT_ROWS = 20_000;
+const LAB_PULL_PROGRESS_FILE = `${RESULTS_DIR}/lab-pull-progress.json`;
+const PULL_SETTINGS = { max_threads: 2, max_result_rows: '2000000' };
+
+async function pull(scale: number, only?: string[]): Promise<void> {
+  const selection = loadSelection();
+  if (!selection) throw new Error('No selection; run profile first');
+  const c = readCalibration();
+  const preflight = JSON.parse(readFileSync(PREFLIGHT_FILE, 'utf8')) as { database: string };
+  const projects = labProjects(c);
+  const byHash = new Map(projects.filter(p => p.hash).map(p => [p.hash!, p]));
+  const targets = selection.projects.filter(p => !only || only.includes(p.hash));
+  const salt = randomBytes(16).toString('hex');
+  const replica = new BenchClient({ ...loadCredentials(), database: preflight.database });
+  const admin = labAdmin();
+  const db = LAB.database;
+  const to = new Date(c.anchorTo);
+  const tables = Object.keys(PULL) as PullTable[];
+  const literals: Record<string, Literals> = existsSync(LAB_PULLED_FILE)
+    ? (JSON.parse(readFileSync(LAB_PULLED_FILE, 'utf8')) as Record<string, Literals>)
+    : {};
+  try {
+    // Staging survives a failed run; projects already staged (with their literals saved) are skipped.
+    const progress: { done: string[] } = existsSync(LAB_PULL_PROGRESS_FILE)
+      ? (JSON.parse(readFileSync(LAB_PULL_PROGRESS_FILE, 'utf8')) as { done: string[] })
+      : { done: [] };
+    if (progress.done.length === 0) {
+      for (const table of tables) {
+        await admin.command({ query: `DROP TABLE IF EXISTS ${db}.pull_${table}` });
+        await admin.command({ query: `CREATE TABLE ${db}.pull_${table} AS ${db}.${table}` });
+      }
+    }
+    for (const sp of targets) {
+      const lp = byHash.get(sp.hash);
+      if (!lp) throw new Error(`Project ${sp.bucket}:${sp.hash} is not in the calibration`);
+      const ids = { lo: `lab-org-${lp.k}`, lp: `lab-proj-${lp.k}` };
+      if (progress.done.includes(sp.hash)) {
+        process.stdout.write(`already staged ${sp.bucket}:${sp.hash}\n`);
+        continue;
+      }
+      for (const table of tables) {
+        await admin.command({
+          query: `DELETE FROM ${db}.pull_${table} WHERE organizationId = {lo:String}`,
+          query_params: ids,
+          clickhouse_settings: { mutations_sync: '2' },
+        });
+      }
+      let rows = 0;
+      const started = performance.now();
+      for (let d = HISTORY_DAYS; d > 0; d--) {
+        const from = new Date(to.getTime() - d * DAY);
+        const until = new Date(from.getTime() + DAY);
+        for (const table of tables) {
+          const out = await replica.rows<Record<string, unknown>>(
+            pullSelect(table),
+            {
+              ...ids,
+              salt,
+              o: sp.organizationId,
+              p: sp.projectId,
+              from: chTime(from),
+              to: chTime(until),
+              names: TOKEN_NAMES,
+            },
+            { tier: TIERS[1], logComment: `aqa-bench:lab-pull:${table}:${sp.hash}:${d}`, settings: PULL_SETTINGS },
+          );
+          if (!out.ok)
+            throw new Error(`pull ${table} ${sp.bucket}:${sp.hash} day -${d} failed (code ${out.errorCode})`);
+          if (out.rows?.length) {
+            try {
+              for (let i = 0; i < out.rows.length; i += PULL_INSERT_ROWS) {
+                await admin.insert({
+                  table: `${db}.pull_${table}`,
+                  values: out.rows.slice(i, i + PULL_INSERT_ROWS),
+                  format: 'JSONEachRow',
+                  clickhouse_settings: { date_time_input_format: 'best_effort', async_insert: 0 },
+                });
+              }
+            } catch (error) {
+              // The message would quote row values; report the code only.
+              throw new Error(`lab insert ${table} failed (code ${(error as { code?: string }).code ?? '?'})`);
+            }
+            rows += out.rows.length;
+          }
+          await new Promise(r => setTimeout(r, PULL_PAUSE_MS));
+        }
+      }
+      const real = sp.literals;
+      literals[sp.hash] = {
+        ...real,
+        environment: pseudo(salt, real.environment),
+        tool: pseudo(salt, real.tool),
+        metadataKey: pseudo(salt, real.metadataKey),
+      };
+      progress.done.push(sp.hash);
+      writeFileSync(LAB_PULL_PROGRESS_FILE, JSON.stringify({ done: progress.done }));
+      writeFileSync(LAB_PULLED_FILE, JSON.stringify(literals, null, 2));
+      process.stdout.write(
+        `pulled ${sp.bucket}:${sp.hash}: ${rows.toLocaleString()} rows in ${Math.round((performance.now() - started) / 1000)} s\n`,
+      );
+    }
+
+    const orgs = targets.map(sp => `lab-org-${byHash.get(sp.hash)!.k}`);
+    for (const table of tables) {
+      await admin.command({
+        query: `DELETE FROM ${db}.${table} WHERE organizationId IN {orgs:Array(String)}`,
+        query_params: { orgs },
+        clickhouse_settings: { mutations_sync: '2' },
+      });
+      // One project and partition at a time: an insert spanning many partitions holds write buffers for each.
+      for (const lo of orgs) {
+        const days = await (
+          await admin.query({
+            query: `SELECT DISTINCT toDate(${PARTITION_COLUMN[table]}) AS d FROM ${db}.pull_${table} WHERE organizationId = {lo:String}`,
+            query_params: { lo },
+            format: 'JSONEachRow',
+          })
+        ).json<{ d: string }>();
+        for (const { d } of days) {
+          await admin.command({ query: pullFinish(c, table, scale), query_params: { lo, d } });
+        }
+      }
+      await admin.command({ query: `DROP TABLE ${db}.pull_${table}` });
+      process.stdout.write(`replaced ${table}\n`);
+    }
+    await compact(admin);
+    rmSync(LAB_PULL_PROGRESS_FILE, { force: true });
+    writeLabSelection(c, projects);
+  } finally {
+    await replica.close();
+    await admin.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// derive / bloom (local schema experiments, memory track 3)
+// ---------------------------------------------------------------------------
+
+const q = (v: string) => `'${v.replace(/'/g, "\\'")}'`;
+const COST_IN = `name IN (${USAGE_COST_NAMES.map(q).join(', ')})`;
+
+/**
+ * Write-path candidates. In production these would be materialized views on the signal tables (the SELECTs below
+ * are their bodies); here they are backfilled day by day, so a trace whose rows span days has several partial rows,
+ * as an MV would leave before merges.
+ */
+export const ROLLUP_DDL = {
+  [USAGE_ROLLUP_TABLE]: `CREATE TABLE ${LAB.database}.${USAGE_ROLLUP_TABLE} (
+    organizationId String, projectId String, traceId String,
+    firstAt SimpleAggregateFunction(min, DateTime64(3, 'UTC')),
+    ${USAGE_ROLLUP_COLUMNS.map(c => `${c.column} SimpleAggregateFunction(sum, Float64)`).join(', ')},
+    cost SimpleAggregateFunction(sum, Float64),
+    pricedRows SimpleAggregateFunction(sum, UInt64),
+    failedRows SimpleAggregateFunction(sum, UInt64),
+    unitMin SimpleAggregateFunction(min, Nullable(String)),
+    unitMax SimpleAggregateFunction(max, Nullable(String))
+  ) ENGINE = AggregatingMergeTree ORDER BY (organizationId, projectId, traceId)`,
+  [SPAN_NAME_INDEX_TABLE]: `CREATE TABLE ${LAB.database}.${SPAN_NAME_INDEX_TABLE} (
+    organizationId String, projectId String, name String, traceId String, endedAt DateTime64(3, 'UTC')
+  ) ENGINE = ReplacingMergeTree PARTITION BY toDate(endedAt) ORDER BY (organizationId, projectId, name, traceId)`,
+};
+
+export const ROLLUP_SELECT = {
+  [USAGE_ROLLUP_TABLE]: `SELECT ifNull(organizationId, '') AS organizationId, ifNull(projectId, '') AS projectId,
+      assumeNotNull(traceId) AS traceId, min(timestamp) AS firstAt,
+      ${USAGE_ROLLUP_COLUMNS.map(c => `sumIf(value, name = ${q(c.name)}) AS ${c.column}`).join(', ')},
+      sumIf(assumeNotNull(estimatedCost), priced) AS cost, countIf(priced) AS pricedRows, countIf(failed) AS failedRows,
+      minIf(costUnit, priced) AS unitMin, maxIf(costUnit, priced) AS unitMax
+    FROM (
+      SELECT *, ${COST_IN} AND ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0) AS hasErr,
+        ${COST_IN} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasErr AS priced,
+        ${COST_IN} AND (hasErr OR (isNotNull(estimatedCost) AND isNull(costUnit))) AS failed
+      FROM ${LAB.database}.mastra_metric_events
+      WHERE isNotNull(traceId) AND name IN (${USAGE_ROLLUP_COLUMNS.map(c => q(c.name)).join(', ')})
+        AND toDate(timestamp) = {d:Date})
+    GROUP BY organizationId, projectId, traceId`,
+  [SPAN_NAME_INDEX_TABLE]: `SELECT ifNull(organizationId, '') AS organizationId, ifNull(projectId, '') AS projectId,
+      name, assumeNotNull(traceId) AS traceId, max(endedAt) AS lastEndedAt
+    FROM ${LAB.database}.mastra_span_events
+    WHERE isNotNull(traceId) AND toDate(endedAt) = {d:Date}
+    GROUP BY organizationId, projectId, name, traceId`,
+};
+
+const DERIVED_SOURCE = { [USAGE_ROLLUP_TABLE]: 'mastra_metric_events', [SPAN_NAME_INDEX_TABLE]: 'mastra_span_events' };
+
+async function tableSizes(admin: ReturnType<typeof labAdmin>, tables: string[]) {
+  return (
+    await admin.query({
+      query: `SELECT table, sum(rows) AS rows, sum(data_compressed_bytes) AS bytes FROM system.parts
+        WHERE database = '${LAB.database}' AND active AND table IN {t:Array(String)} GROUP BY table`,
+      query_params: { t: tables },
+      format: 'JSONEachRow',
+    })
+  ).json<{ table: string; rows: string; bytes: string }>();
+}
+
+async function derive(): Promise<void> {
+  const admin = labAdmin();
+  const db = LAB.database;
+  try {
+    for (const [table, ddl] of Object.entries(ROLLUP_DDL)) {
+      const source = DERIVED_SOURCE[table as keyof typeof DERIVED_SOURCE];
+      const time = source === 'mastra_metric_events' ? 'timestamp' : 'endedAt';
+      await admin.command({ query: `DROP TABLE IF EXISTS ${db}.${table}` });
+      await admin.command({ query: ddl });
+      const days = await (
+        await admin.query({
+          query: `SELECT DISTINCT toDate(${time}) AS d FROM ${db}.${source} ORDER BY d`,
+          format: 'JSONEachRow',
+        })
+      ).json<{ d: string }>();
+      const started = performance.now();
+      for (const { d } of days) {
+        await admin.command({
+          query: `INSERT INTO ${db}.${table} ${ROLLUP_SELECT[table as keyof typeof ROLLUP_SELECT]} SETTINGS max_threads = 2`,
+          query_params: { d },
+        });
+      }
+      const [src, out] = [source, table].map(async t => (await tableSizes(admin, [t]))[0]);
+      const [a, b] = await Promise.all([src, out]);
+      process.stdout.write(
+        `${table}: ${Number(b?.rows).toLocaleString()} rows, ${(Number(b?.bytes) / 2 ** 20).toFixed(1)} MiB ` +
+          `(source ${source}: ${Number(a?.rows).toLocaleString()} rows, ${(Number(a?.bytes) / 2 ** 20).toFixed(1)} MiB) ` +
+          `in ${Math.round((performance.now() - started) / 1000)} s\n`,
+      );
+    }
+  } finally {
+    await admin.close();
+  }
+}
+
+/** traceId bloom filters on the three signal tables (toggle per query with `use_skip_indexes`). */
+async function bloom(): Promise<void> {
+  const admin = labAdmin();
+  const db = LAB.database;
+  try {
+    for (const table of ['mastra_trace_roots', 'mastra_span_events', 'mastra_metric_events']) {
+      const before = (await tableSizes(admin, [table]))[0];
+      const started = performance.now();
+      await admin.command({
+        query: `ALTER TABLE ${db}.${table} ADD INDEX IF NOT EXISTS idx_trace_id traceId TYPE bloom_filter(0.01) GRANULARITY 1`,
+      });
+      await admin.command({
+        query: `ALTER TABLE ${db}.${table} MATERIALIZE INDEX idx_trace_id`,
+        clickhouse_settings: { mutations_sync: '2' },
+      });
+      const size = await (
+        await admin.query({
+          query: `SELECT sum(secondary_indices_compressed_bytes) AS b FROM system.parts
+            WHERE database = '${db}' AND table = '${table}' AND active`,
+          format: 'JSONEachRow',
+        })
+      ).json<{ b: string }>();
+      process.stdout.write(
+        `${table}: bloom index ${(Number(size[0]?.b) / 2 ** 20).toFixed(1)} MiB on ${(Number(before?.bytes) / 2 ** 20).toFixed(0)} MiB of data, ` +
+          `${Math.round((performance.now() - started) / 1000)} s\n`,
+      );
+    }
+  } finally {
+    await admin.close();
+  }
+}
+
 /**
  * One merge at a time, partition by partition: background merges over thousands of fresh parts exhaust a laptop's
  * docker VM. Leaves one part per partition (the replica has ~5-10), which slightly understates read amplification.
@@ -641,7 +1074,15 @@ async function compact(admin: ReturnType<typeof labAdmin>): Promise<void> {
   }
 }
 
+type Literals = Selection['projects'][number]['literals'];
+
+/** Hashed literals of projects replaced by `pull`; `load` regenerates them, so a reload must drop this file. */
+const LAB_PULLED_FILE = `${RESULTS_DIR}/lab-pulled.json`;
+
 function writeLabSelection(c: Calibration, projects: LabProject[]): void {
+  const pulled: Record<string, Literals> = existsSync(LAB_PULLED_FILE)
+    ? (JSON.parse(readFileSync(LAB_PULLED_FILE, 'utf8')) as Record<string, Literals>)
+    : {};
   const selection: Selection = {
     version: 1,
     salt: 'lab',
@@ -664,7 +1105,7 @@ function writeLabSelection(c: Calibration, projects: LabProject[]): void {
           users30d: 0,
           tokenRows30d: p.tokenRows,
         },
-        literals: LAB_LITERALS,
+        literals: pulled[p.hash!] ?? LAB_LITERALS,
         literalSource: {},
       })),
   };
@@ -772,6 +1213,7 @@ async function main(): Promise<void> {
       scale: { type: 'string', default: '1' },
       batches: { type: 'string', default: '8' },
       variants: { type: 'string' },
+      projects: { type: 'string' },
     },
   });
   const command = positionals[0];
@@ -788,7 +1230,10 @@ async function main(): Promise<void> {
     }
   }
   if (command === 'load') return load(Number(values.scale), Number(values.batches));
-  throw new Error('usage: lab.ts calibrate|up|load|down');
+  if (command === 'derive') return derive();
+  if (command === 'bloom') return bloom();
+  if (command === 'pull') return pull(Number(values.scale), (values.projects as string | undefined)?.split(','));
+  throw new Error('usage: lab.ts calibrate|up|load|pull|derive|bloom|compact|equiv|down');
 }
 
 if (process.argv[1]?.endsWith('lab.ts')) {

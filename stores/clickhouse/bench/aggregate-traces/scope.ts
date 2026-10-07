@@ -4,6 +4,8 @@
  * Every rewrite asserts how many times its pattern matched and fails closed otherwise, so a
  * compiler change cannot silently produce an unscoped or unmodified benchmark query.
  */
+import { TRACE_AGGREGATE_COST_METRIC_NAMES, TRACE_AGGREGATE_USAGE_METRIC_NAMES } from '@mastra/core/storage';
+
 import type { CompiledClickHouseTraceQuery } from '../../src/storage/domains/observability/v-next/trace-query';
 
 export const PROJECT_PARAM = 'bench_project_id';
@@ -98,7 +100,18 @@ export type Variant =
   | 'rs'
   | 'r1'
   | 'sp'
-  | 'shape';
+  | 'shape'
+  | 'rio'
+  | 'urollup'
+  | 'snidx'
+  | 'arch';
+
+/** Lab-only tables created by `lab.ts derive` (memory track 3); see `ROLLUP_DDL`. */
+export const USAGE_ROLLUP_TABLE = 'mastra_trace_usage';
+export const SPAN_NAME_INDEX_TABLE = 'mastra_trace_span_names';
+/** Rollup column holding the per-trace sum of each usage metric, by name. */
+export const USAGE_ROLLUP_COLUMNS = TRACE_AGGREGATE_USAGE_METRIC_NAMES.map((name, i) => ({ name, column: `u${i}` }));
+export const USAGE_COST_NAMES: readonly string[] = TRACE_AGGREGATE_COST_METRIC_NAMES;
 
 /** Variants that only change per-query settings. They may only tighten the tier's limits. */
 export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | number>>> = {
@@ -128,6 +141,15 @@ export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | n
  * - `sp`: span relation as a plain semi-join: no `LIMIT 1 BY dedupeKey` (it only feeds `traceId IN`), plus
  *   `endedAt >= from` for partition pruning
  * - `shape`: all of the above, plus `nodedupe` when the query has token/cost usage
+ *
+ * Schema candidates (memory track 3, lab only; need the tables from `lab.ts derive`):
+ * - `urollup`: read token/cost usage from a per-trace rollup (`mastra_trace_usage`) instead of raw metric rows
+ * - `snidx`: answer `spans.some(name = ?)` from a `(org, project, name, traceId)` index (`mastra_trace_span_names`)
+ *   instead of scanning spans; only when the span predicate uses `name` alone
+ * - `rio` (compiler): `r1`, ordered `startedAt, traceId, dedupeKey` so the root dedupe follows the sort key
+ *   (rows of one trace are adjacent) instead of sorting every root row by traceId. Picks the lowest dedupeKey among
+ *   duplicates that share startedAt, which is every duplicate of a retried root write
+ * - `arch`: `shape` + `rio`, plus whichever of `urollup` / `snidx` apply
  */
 export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Variant): CompiledClickHouseTraceQuery {
   switch (variant) {
@@ -189,6 +211,18 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
       return singleRootDedupe(compiled);
     case 'sp':
       return spanSemiJoin(compiled);
+    case 'urollup':
+      return usageRollup(compiled);
+    case 'snidx':
+      return spanNameIndex(compiled);
+    case 'rio':
+      return readInOrderDedupe(singleRootDedupe(compiled));
+    case 'arch': {
+      let out = readInOrderDedupe(applyVariant(compiled, 'shape'));
+      if (out.query.includes('usage AS (')) out = usageRollup(out);
+      if (out.query.includes('FROM current_spans s\n')) out = spanNameIndex(out);
+      return out;
+    }
     case 'shape': {
       let out = singleRootDedupe(scopedReread(compiled));
       if (out.query.includes('current_spans AS (')) out = spanSemiJoin(out);
@@ -274,5 +308,90 @@ function spanSemiJoin(compiled: CompiledClickHouseTraceQuery): CompiledClickHous
   return rewriteEach(compiled, 'sp', [
     [/(FROM mastra_span_events\n[\s\S]*?)\n\s*ORDER BY dedupeKey\n\s*LIMIT 1 BY dedupeKey\n(\s*\),)/g, '$1\n$2'],
     [/(AND traceId IN \(SELECT traceId FROM root_scope\))/g, `$1\n      AND endedAt >= ${from}`],
+  ]);
+}
+
+function tenantParam(query: string): string {
+  const param = new RegExp(
+    `AND organizationId = (\\{trace_query_\\d+:String\\}) AND projectId = \\{${PROJECT_PARAM}:String\\}`,
+  ).exec(query)?.[1];
+  if (!param) throw new RewriteError('query is not project-scoped');
+  return param;
+}
+
+function paramValue(compiled: CompiledClickHouseTraceQuery, placeholder: string): unknown {
+  const key = /^\{([^:]+):/.exec(placeholder)?.[1];
+  return key ? compiled.query_params[key] : undefined;
+}
+
+function usageRollup(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const q = compiled.query;
+  const start = q.indexOf('usage AS (');
+  const endMarker = '\n    GROUP BY traceId\n  ),';
+  const end = q.indexOf(endMarker, start);
+  if (start < 0 || end < 0 || q.indexOf('usage AS (', start + 1) >= 0) {
+    throw new RewriteError('Variant urollup: expected one usage CTE');
+  }
+  const block = q.slice(start, end + endMarker.length);
+  const sums = [...block.matchAll(/sumIf\(value, name = (\{trace_query_\d+:String\})\) AS (t\d+)/g)].map(
+    ([, p, alias]) => {
+      const name = paramValue(compiled, p!);
+      const col = USAGE_ROLLUP_COLUMNS.find(c => c.name === name);
+      if (!col) throw new RewriteError(`Variant urollup: usage metric ${String(name)} is not in the rollup`);
+      return `sum(${col.column}) AS ${alias}`;
+    },
+  );
+  if (sums.length === 0) throw new RewriteError('Variant urollup: no usage sums');
+  const costParams =
+    /name IN \((\{trace_query_\d+:String\}), (\{trace_query_\d+:String\})\) AND isNotNull\(estimatedCost\)/.exec(block);
+  const costNames = costParams ? [paramValue(compiled, costParams[1]!), paramValue(compiled, costParams[2]!)] : [];
+  if (costNames.length !== USAGE_COST_NAMES.length || costNames.some(n => !USAGE_COST_NAMES.includes(String(n)))) {
+    throw new RewriteError('Variant urollup: cost metric names differ from the rollup');
+  }
+  const ts = /timestamp >= (\{trace_query_\d+:DateTime64\(3, 'UTC'\)\})/.exec(block)?.[1];
+  if (!ts) throw new RewriteError('Variant urollup: no usage timestamp bound');
+  const replacement = `usage AS (
+    SELECT traceId,
+      toUInt8(1) AS hasUsage,
+      ${sums.join(',\n      ')},
+      sum(cost) AS cost,
+      toUInt8(sum(pricedRows) > 0) AS priced,
+      toUInt8(sum(failedRows) > 0) AS pricingFailure,
+      ifNull(min(unitMin), '') AS unitMin,
+      ifNull(max(unitMax), '') AS unitMax
+    FROM ${USAGE_ROLLUP_TABLE}
+    WHERE traceId IN (SELECT traceId FROM candidates)
+      AND organizationId = ${tenantParam(block)} AND projectId = {${PROJECT_PARAM}:String}
+      AND firstAt >= ${ts}
+    GROUP BY traceId
+  ),`;
+  return { ...compiled, query: q.slice(0, start) + replacement + q.slice(end + endMarker.length) };
+}
+
+function spanNameIndex(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const tenant = tenantParam(compiled.query);
+  const { from } = windowParams(compiled.query);
+  let count = 0;
+  const query = compiled.query.replace(
+    /FROM current_spans s\n(\s+)WHERE isNotNull\(s\.traceId\)\n(\s+)AND (\(.*\))\n/g,
+    (_m, i1: string, i2: string, predicate: string) => {
+      if (/\bs\.(?!name\b)/.test(predicate)) {
+        throw new RewriteError('Variant snidx: span predicate uses more than the span name');
+      }
+      count++;
+      return (
+        `FROM ${SPAN_NAME_INDEX_TABLE} s\n${i1}WHERE isNotNull(s.traceId)\n` +
+        `${i2}AND s.organizationId = ${tenant} AND s.projectId = {${PROJECT_PARAM}:String} AND s.endedAt >= ${from}\n` +
+        `${i2}AND ${predicate}\n`
+      );
+    },
+  );
+  if (count === 0) throw new RewriteError('Variant snidx: no span relation');
+  return { ...compiled, query };
+}
+
+function readInOrderDedupe(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  return rewriteEach(compiled, 'rio', [
+    [/ORDER BY traceId, dedupeKey(\n\s+LIMIT 1 BY traceId)/g, 'ORDER BY startedAt, traceId, dedupeKey$1'],
   ]);
 }

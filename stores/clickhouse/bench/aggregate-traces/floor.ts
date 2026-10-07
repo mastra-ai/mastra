@@ -301,6 +301,46 @@ export const PROBES: Probe[] = [
       settings: { filesystem_prefetches_limit: 8 },
     }),
   ),
+  // Root dedupe in sort-key order (compiler-only, so it can run on prod), alone and with the prefetch limit.
+  ...['F0', 'F3', 'E1', 'E3', 'E4'].flatMap((caseId): Probe[] => [
+    { id: `${caseId}-rio`, note: `${caseId} 30d, variant rio`, sql: compiled(caseId, 30, 'rio') },
+    {
+      id: `${caseId}-shape-rio-pf8`,
+      note: `${caseId} 30d, shape + rio + prefetch limit 8`,
+      sql: (p, to) => {
+        const c = compiled(caseId, 30, 'shape')(p, to);
+        const query = c.query.replace(
+          /ORDER BY traceId, dedupeKey(\n\s+LIMIT 1 BY traceId)/,
+          'ORDER BY startedAt, traceId, dedupeKey$1',
+        );
+        if (query === c.query) throw new Error('rio anchor missing');
+        return { ...c, query };
+      },
+      settings: { filesystem_prefetches_limit: 8 },
+    },
+  ]),
+  // Schema variants (lab only, need `lab.ts derive`), and skip indexes off for the bloom-filter comparison.
+  ...['F0', 'F3', 'E1', 'E3', 'E4', 'T1', 'T3', 'T4'].flatMap(caseId =>
+    (['base', 'shape', 'urollup', 'snidx', 'arch'] as const).flatMap(v => {
+      const relations = { F3: 'spans', E3: 'spans', T4: 'both', E4: 'usage', T1: 'usage', T3: 'usage' } as const;
+      const r = relations[caseId as keyof typeof relations];
+      if (v === 'urollup' && r !== 'usage' && r !== 'both') return [];
+      if (v === 'snidx' && r !== 'spans' && r !== 'both') return [];
+      const sql = compiled(caseId, 30, v);
+      // F0/F3/E4 `-shape` probes are defined above.
+      const defined = (v === 'shape' || v === 'base') && ['F0', 'F3', 'E4'].includes(caseId);
+      const probes: Probe[] = defined ? [] : [{ id: `${caseId}-${v}`, note: `${caseId} 30d, variant ${v}`, sql }];
+      if (v === 'base' || v === 'shape' || v === 'arch') {
+        probes.push({
+          id: `${caseId}-${v}-noskip`,
+          note: `${caseId} 30d, variant ${v}, skip indexes off`,
+          sql,
+          settings: { use_skip_indexes: 0 },
+        });
+      }
+      return probes;
+    }),
+  ),
   ...SETTINGS.filter(([sid]) => sid === 'lean' || sid === 't1').map(
     ([sid, settings, note]): Probe => ({
       id: `read-all-${sid}`,

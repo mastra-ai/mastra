@@ -51,8 +51,7 @@ export function needlesFrom(env: Record<string, string> | undefined, selection: 
     add('credential', env.BENCH_CLICKHOUSE_USER);
     const url = env.BENCH_CLICKHOUSE_URL;
     // The approved host is public (it is in the host guard); a URL is only secret beyond that.
-    if (url && !new RegExp(`^https://${ALLOWED_HOST.replace(/\./g, '\\.')}(:8443)?/?$`).test(url))
-      add('credential', url);
+    if (url && !isBareApprovedUrl(url)) add('credential', url);
   }
   if (selection) {
     add('salt', selection.salt);
@@ -136,3 +135,22 @@ function main(): number {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) process.exit(main());
+
+function isBareApprovedUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === 'https:' &&
+    url.hostname === ALLOWED_HOST &&
+    (url.port === '' || url.port === '8443') &&
+    url.pathname === '/' &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash
+  );
+}

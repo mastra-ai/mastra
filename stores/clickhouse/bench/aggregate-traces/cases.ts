@@ -561,7 +561,16 @@ export const CASES: CaseDef[] = [
 ];
 
 /** Query-shape candidates apply to any case; their rewrites fail closed when the query lacks the anchor. */
-export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>(['rs', 'r1', 'sp', 'shape']);
+export const SHAPE_VARIANTS: ReadonlySet<Variant> = new Set<Variant>([
+  'rs',
+  'rio',
+  'r1',
+  'sp',
+  'shape',
+  'urollup',
+  'snidx',
+  'arch',
+]);
 
 export interface ProjectScope {
   organizationId: string;

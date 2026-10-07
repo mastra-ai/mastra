@@ -49,15 +49,25 @@ npx tsx bench/aggregate-traces/leak-check.ts [pr-body.md]
 # Probes on the replica (floor, prefetch settings, CTE stages, query-shape variants), results/floor.jsonl
 npx tsx bench/aggregate-traces/floor.ts --buckets small,p99 --probes F0,F0-shape,F0-shape-pf8 [--cold] [--reps 3]
 
-# Local lab: ClickHouse 26.4 in docker with synthetic data shaped like the replica (aggregate stats only)
+# Local lab: ClickHouse 26.4 in docker, synthetic tenants shaped like the replica (aggregate stats only)
 npx tsx bench/aggregate-traces/lab.ts calibrate   # read-only, aggregate-only queries on the replica
 npx tsx bench/aggregate-traces/lab.ts up && npx tsx bench/aggregate-traces/lab.ts load
-npx tsx bench/aggregate-traces/lab.ts equiv       # shape variants return the same rows as compiled
-npx tsx bench/aggregate-traces/floor.ts --lab --buckets small,p99 --probes F3,F3-shape
+npx tsx bench/aggregate-traces/lab.ts pull        # replace the 15 projects with pseudonymized replica rows (see below)
+npx tsx bench/aggregate-traces/lab.ts derive      # usage rollup + span-name index tables (Track 3)
+npx tsx bench/aggregate-traces/lab.ts bloom       # traceId bloom-filter skip indexes
+npx tsx bench/aggregate-traces/lab.ts equiv       # variants return the same rows as compiled
+npx tsx bench/aggregate-traces/floor.ts --lab --buckets small,p99 --probes F3,F3-shape,F3-arch
+npx tsx bench/aggregate-traces/retries.ts         # retried token writes vs write-time rollups
 npx tsx bench/aggregate-traces/lab.ts down
 ```
 
-Query-shape variants (`rs`, `r1`, `sp`, `shape`, plus the diagnostic `nodedupe`/`nocm`/`final`) are string rewrites in [scope.ts](./scope.ts) that fail closed when their anchor is missing; see EXPERIMENTS.md X17 for what each does.
+`pull` hashes identifiers, names and free text **on the replica** with a salted SHA-256 (the salt lives only in
+memory), never reads payload columns (they are regenerated locally at calibrated widths), and keeps timestamps,
+numbers and enum-like columns. Pulled rows stay in the docker volume; only hashed literals reach the gitignored `results/`.
+
+Query-shape variants (`rs`, `r1`, `rio`, `sp`, `shape`, plus the diagnostic `nodedupe`/`nocm`/`final`) and schema
+variants (`urollup`, `snidx`, `arch`; lab tables only) are string rewrites in [scope.ts](./scope.ts) that fail closed
+when their anchor is missing; see EXPERIMENTS.md X17–X21.
 
 ## Safety model
 

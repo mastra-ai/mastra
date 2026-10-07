@@ -214,3 +214,49 @@ describe('query-shape variants', () => {
     expect(() => stageQuery(q, 'nope')).toThrow(/no CTE/);
   });
 });
+
+describe('schema variants (lab)', () => {
+  const tr = timeRangeFor({ id: '30d', ms: 30 * 86_400_000 }, TO);
+  const compile = (id: string, variant: Parameters<typeof compileCase>[1]) =>
+    compileCase(
+      CASES.find(c => c.id === id)!,
+      variant,
+      LITERALS,
+      tr,
+      SCOPE,
+    );
+
+  it('urollup reads usage from the per-trace rollup with every usage sum mapped', () => {
+    const q = compile('E4', 'urollup').query;
+    const usage = /usage AS \(([\s\S]*?)\n {2}\),/.exec(q)?.[1] ?? '';
+    expect(usage).toContain('FROM mastra_trace_usage');
+    expect(usage).not.toContain('mastra_metric_events');
+    expect(usage.match(/sum\(u\d\) AS t\d/g)).toHaveLength(4);
+    expect(usage).toMatch(/organizationId = \{trace_query_\d+:String\} AND projectId = \{bench_project_id:String\}/);
+    expect(() => compile('F0', 'urollup')).toThrow(RewriteError);
+  });
+
+  it('snidx answers spans.some(name) from the span-name index, scoped and time-bounded', () => {
+    const q = compile('F3', 'snidx').query;
+    expect(q).toMatch(
+      /FROM mastra_trace_span_names s\n\s+WHERE isNotNull\(s\.traceId\)\n\s+AND s\.organizationId = \{trace_query_\d+:String\} AND s\.projectId = \{bench_project_id:String\} AND s\.endedAt >= /,
+    );
+    expect(q).not.toContain('FROM current_spans s');
+    expect(() => compile('F0', 'snidx')).toThrow(RewriteError);
+  });
+
+  it('snidx refuses span predicates beyond the name', () => {
+    const c = compile('F3', 'base');
+    const tampered = { ...c, query: c.query.replace(/ifNull\(s\.name = /, 'ifNull(s.spanType = ') };
+    expect(() => applyVariant(tampered, 'snidx')).toThrow(/more than the span name/);
+  });
+
+  it('arch combines shape, rollup and index where they apply', () => {
+    const q = compile('T4', 'arch').query;
+    expect(q).toContain('FROM mastra_trace_usage');
+    expect(q).toContain('FROM mastra_trace_span_names s');
+    expect(q).not.toContain('LIMIT 1 BY dedupeKey');
+    expect(compile('F0', 'arch').query).toContain('ORDER BY startedAt, traceId, dedupeKey');
+    expect(compile('F0', 'rio').query).not.toContain('LIMIT 1 BY dedupeKey');
+  });
+});
