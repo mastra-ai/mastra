@@ -17,10 +17,12 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
 import { SUSPENDED_RUN_AGENT_KEY, type Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerRequestContext } from '../types';
 
 function createController() {
   const agent = new Agent({
@@ -84,7 +86,12 @@ const finishChunk = () => ({
  * the form `{ __effect }` is not yielded — it runs between chunks, which is how
  * these tests simulate the session rebinding to another thread mid-run.
  */
-async function processSubscribedChunks(session: Session<any>, chunks: any[], activeRunId = 'run-a') {
+async function processSubscribedChunks(
+  session: Session<any>,
+  chunks: any[],
+  activeRunId = 'run-a',
+  requestContext?: RequestContext,
+) {
   const subscription = {
     stream: (async function* () {
       for (const chunk of chunks) {
@@ -96,7 +103,7 @@ async function processSubscribedChunks(session: Session<any>, chunks: any[], act
       }
     })(),
     activeRunId: () => activeRunId,
-    __getCurrentRunRequestContext: () => undefined,
+    __getCurrentRunRequestContext: () => requestContext,
     abort: () => {},
     unsubscribe: () => {},
   };
@@ -128,6 +135,43 @@ describe('tool approvals resolve against the run that raised them', () => {
     expect(sendToolApproval).toHaveBeenCalledTimes(1);
     expect(sendToolApproval.mock.calls[0]?.[0].threadId).toBe('thread-a');
     expect(sendToolApproval.mock.calls[0]?.[0].approved).toBe(true);
+  });
+
+  it('preserves the run owner snapshot when approval resumes after an ownership transfer', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'owner-a' });
+    const threadId = session.thread.getId()!;
+    const streamOptions = await session.machinery.buildStreamOptions({});
+    const runRequestContext = streamOptions.requestContext as RequestContext;
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    await processSubscribedChunks(
+      session,
+      [
+        { type: 'start', runId: 'run-a' },
+        {
+          __effect: () =>
+            session.thread.transferOwnership({
+              threadId,
+              toOwnerId: 'owner-b',
+              expectedOwnerId: 'owner-a',
+            }),
+        },
+        toolCallApprovalChunk(),
+        finishChunk(),
+      ],
+      'run-a',
+      runRequestContext,
+    );
+
+    const approvalContext = sendToolApproval.mock.calls[0]?.[0].requestContext?.get('controller') as
+      | AgentControllerRequestContext
+      | undefined;
+    expect(approvalContext?.threadOwnerId).toBe('owner-a');
+    await expect(session.thread.getOwner()).resolves.toBe('owner-b');
   });
 
   it('resolves a parked gate on the run thread after the session switched thread', async () => {
