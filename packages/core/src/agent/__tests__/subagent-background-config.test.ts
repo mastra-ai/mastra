@@ -98,6 +98,37 @@ describe('sub-agent background config derivation', () => {
     expect(tools['agent-child']).toMatchObject({ backgroundConfig: { enabled: true } });
   });
 
+  it('ignores assigned background tools overridden by a same-named default toolset tool', async () => {
+    const model = new MockLanguageModelV2();
+    const makeWork = (enabled: boolean) =>
+      createTool({
+        id: 'work',
+        description: 'Do work.',
+        inputSchema: z.object({}),
+        execute: async () => ({}),
+        background: { enabled },
+      });
+    const child = new Agent({
+      id: 'child',
+      name: 'child',
+      instructions: 'Help the parent.',
+      model,
+      tools: { work: makeWork(true) },
+      defaultOptions: { toolsets: { extra: { work: makeWork(false) } } },
+    });
+    const parent = new Agent({
+      id: 'parent',
+      name: 'parent',
+      instructions: 'Delegate to the child.',
+      model,
+      agents: { child },
+    });
+
+    const tools = await parent.getToolsForExecution({ backgroundTaskEnabled: true });
+
+    expect((tools['agent-child'] as any).backgroundConfig).toBeUndefined();
+  });
+
   it('propagates background eligibility from nested sub-agents without converting their tools', async () => {
     const model = new MockLanguageModelV2();
     const grandchild = new Agent({

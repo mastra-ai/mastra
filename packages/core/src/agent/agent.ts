@@ -1385,12 +1385,13 @@ export class Agent<
       if (subAgent instanceof Agent) {
         const subAgentTools = await subAgent.listTools({ requestContext, resolveWebSearch: false });
         const defaultOptions = await subAgent.getDefaultOptions({ requestContext });
-        const candidateTools = [
-          ...Object.values(subAgentTools ?? {}),
-          ...Object.values(defaultOptions?.toolsets ?? {}).flatMap(toolset => Object.values(toolset ?? {})),
-          ...Object.values(defaultOptions?.clientTools ?? {}),
-        ];
-        for (const tool of candidateTools) {
+        // Same-name precedence matches convertTools: assigned < toolsets < client tools.
+        const effectiveTools: Record<string, unknown> = { ...subAgentTools };
+        for (const toolset of Object.values(defaultOptions?.toolsets ?? {})) {
+          Object.assign(effectiveTools, toolset);
+        }
+        Object.assign(effectiveTools, defaultOptions?.clientTools);
+        for (const tool of Object.values(effectiveTools)) {
           const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
           if (bg?.enabled === true) {
             return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
