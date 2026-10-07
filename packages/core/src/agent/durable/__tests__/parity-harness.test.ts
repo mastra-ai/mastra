@@ -687,10 +687,11 @@ describe('expectEngineParity', () => {
     // a recording artifact: `stream()` rejects before the model is called, and
     // plain surfaces the plain `Error` the argument validation raises while the
     // wrapped engines surface a `TypeError` for the same input and the same
-    // message. The declaration is narrowed to `error` alone — the assertions
-    // below still compare both classes and the message.
+    // message. That split is tracked as COR-1419. The declaration is narrowed to
+    // `error` alone — the assertions below still compare both classes and the
+    // message.
     const preStreamClassReason =
-      'pre-stream rejection: same message, but plain reports `Error` where the wrapped engines report `TypeError`';
+      'COR-1419: pre-stream rejection, same message, but plain reports `Error` where the wrapped engines report `TypeError`';
     const results = await expectEngineParity({
       ...scenario,
       differences: {
