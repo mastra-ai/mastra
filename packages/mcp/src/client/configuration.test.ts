@@ -628,3 +628,23 @@ describe('MCPClient clientInfo', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('MCPClient clientInfo identity', () => {
+  it('treats clients with different top-level clientInfo as distinct instances', async () => {
+    const servers = { weather: { url: new URL('http://localhost:4321/mcp') } };
+    const a = new MCPClient({ servers, clientInfo: { name: 'app-a' } });
+    const b = new MCPClient({ servers, clientInfo: { name: 'app-b' } });
+    expect((a as any).id).not.toBe((b as any).id);
+    await Promise.all([a.disconnect(), b.disconnect()]);
+  });
+
+  it('replaces a cached explicit-id client when clientInfo changes', async () => {
+    const servers = { weather: { url: new URL('http://localhost:4322/mcp') } };
+    const id = `client-info-identity-${++clientId}`;
+    const a = new MCPClient({ id, servers, clientInfo: { name: 'app-a' } });
+    const b = new MCPClient({ id, servers, clientInfo: { name: 'app-b' } });
+    const internal = await (b as any).getOrCreateClient('weather', servers.weather);
+    expect((internal as any).client._clientInfo.name).toBe('app-b');
+    await Promise.all([a.disconnect(), b.disconnect()]);
+  });
+});

@@ -148,7 +148,10 @@ export class MCPClient extends MastraBase {
       this.id = args.id;
       const cached = mcpClientInstances.get(this.id);
 
-      if (cached && !equal(cached.serverConfigs, args.servers)) {
+      if (
+        cached &&
+        (!equal(cached.serverConfigs, args.servers) || !equal(cached.defaultClientInfo, args.clientInfo))
+      ) {
         const existingInstance = mcpClientInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect();
@@ -630,7 +633,7 @@ To fix this you have three different options:
   }
 
   private makeId() {
-    const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
+    const text = JSON.stringify({ servers: this.serverConfigs, clientInfo: this.defaultClientInfo }).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
 
