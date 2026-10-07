@@ -12,7 +12,7 @@ import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown, MastraError } from '../error';
 import { isLeaseProvider } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
-import type { GoalEvaluationPayload } from '../stream/types';
+import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
 import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY, SUSPENDED_RUN_MEMORY_KEY } from './session';
@@ -57,7 +57,6 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'step-output'>
   | StreamPayloadChunk<'watch'>
   | StreamPayloadChunk<'tripwire'>
-  | StreamPayloadChunk<'is-task-complete'>
   | StreamPayloadChunk<'background-task-started'>
   | StreamPayloadChunk<'background-task-completed'>
   | StreamPayloadChunk<'background-task-failed'>
@@ -85,6 +84,7 @@ type StreamChunk =
   | StreamPayloadChunk<'step-finish'>
   | StreamPayloadChunk<'finish'>
   | StreamPayloadChunk<'goal'>
+  | StreamPayloadChunk<'is-task-complete'>
   | StreamDataChunk<'data-om-status'>
   | StreamDataChunk<'data-om-observation-start'>
   | StreamDataChunk<'data-om-observation-end'>
@@ -143,6 +143,11 @@ function getNestedRecord(
   key: string,
 ): Record<string, unknown> | undefined {
   return record ? getRecord(record[key]) : undefined;
+}
+
+function isTaskCompletePayload(value: unknown): value is IsTaskCompletePayload {
+  const record = getRecord(value);
+  return Boolean(record && typeof record.passed === 'boolean' && Array.isArray(record.results));
 }
 
 function isGoalEvaluationPayload(value: unknown): value is GoalEvaluationPayload {
@@ -1204,6 +1209,17 @@ export class SessionRunEngine {
         const goalPayload = getPayload(chunk);
         if (isGoalEvaluationPayload(goalPayload)) {
           this.#session.emit({ type: 'goal_evaluation', payload: goalPayload });
+        }
+        break;
+      }
+
+      case 'is-task-complete': {
+        // The completion check marks a boundary between attempts, like `goal`:
+        // close the current message and forward the verdict to subscribers.
+        this.finishCurrentMessageAndRotate(state);
+        const taskCompletePayload = getPayload(chunk);
+        if (isTaskCompletePayload(taskCompletePayload)) {
+          this.#session.emit({ type: 'task_complete_evaluation', payload: taskCompletePayload });
         }
         break;
       }

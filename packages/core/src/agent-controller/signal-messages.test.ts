@@ -1643,6 +1643,60 @@ describe('AgentController signal messages', () => {
     expect(messageUpdateEvents.at(-1)?.id).not.toBe(messageEndEvents[0]?.id);
   });
 
+  it('forwards is-task-complete chunks as task_complete_evaluation and closes the current message', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+    const payload = {
+      iteration: 1,
+      passed: false,
+      results: [],
+      duration: 5,
+      timedOut: false,
+      reason: 'tests still failing',
+      maxIterationReached: false,
+      suppressFeedback: false,
+    };
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'Attempt 1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(state, { type: 'is-task-complete', payload } as any, requestContext);
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-2' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-2', text: 'Attempt 2' } },
+      requestContext,
+    );
+
+    expect(events.filter(event => event.type === 'task_complete_evaluation')).toEqual([
+      { type: 'task_complete_evaluation', payload },
+    ]);
+    const messageEnds = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> => event.type === 'message_end',
+    );
+    const messageUpdates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(messageEnds).toHaveLength(1);
+    expect(messageUpdates.at(-1)?.id).not.toBe(messageEnds[0]?.id);
+  });
+
   it('opens a new reasoning part when a later step reuses a block id after reasoning-end', async () => {
     const { session } = await createController(new InMemoryStore());
     const events: AgentControllerEvent[] = [];

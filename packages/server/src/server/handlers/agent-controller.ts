@@ -600,6 +600,16 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
             }
           });
 
+          // Live events are not replayed, so seed a late subscriber with the
+          // current display state (including the message in flight).
+          try {
+            controller.enqueue(
+              toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+            );
+          } catch {
+            cleanup();
+          }
+
           const abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
           scheduleHeartbeat();

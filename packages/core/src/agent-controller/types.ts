@@ -13,7 +13,7 @@ import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
-import type { GoalEvaluationPayload } from '../stream/types';
+import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { Session } from './session';
@@ -1029,6 +1029,10 @@ export type AgentControllerEvent =
   | {
       type: 'goal_evaluation';
       payload: GoalEvaluationPayload;
+    }
+  | {
+      type: 'task_complete_evaluation';
+      payload: IsTaskCompletePayload;
     }
   | { type: 'display_state_changed'; displayState: AgentControllerDisplayState };
 
