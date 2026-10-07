@@ -371,10 +371,18 @@ export interface SourceControlSessionRepository {
   updatedAt: Date;
 }
 
+/**
+ * Every optional field keeps the stored value when omitted, so a push after a
+ * change request keeps the change request and a change request recorded after
+ * a push keeps the pushed branch. `fallbackBranch` only matters on insert: the
+ * column is not nullable, so a caller that records a change request for a
+ * session with no row yet (raw `git push` + `gh pr create`) passes the head ref.
+ */
 export interface UpsertSessionRepositoryInput {
   sessionId: string;
   projectRepositoryId: string;
-  branch: string;
+  branch?: string;
+  fallbackBranch?: string;
   changeRequestId?: string | null;
   changeRequestUrl?: string | null;
   pushedAt?: Date;
@@ -1450,13 +1458,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
         upsert: async input => {
           const key = { session_id: input.sessionId, project_repository_id: input.projectRepositoryId };
           const now = new Date();
-          const changes = {
-            branch: input.branch,
-            change_request_id: input.changeRequestId ?? null,
-            change_request_url: input.changeRequestUrl ?? null,
-            pushed_at: input.pushedAt ?? now,
-            updated_at: now,
-          };
+          const changes: Partial<SessionRepositoryDbRow> = { updated_at: now };
+          if (input.branch !== undefined) {
+            changes.branch = input.branch;
+            changes.pushed_at = input.pushedAt ?? now;
+          } else if (input.pushedAt) {
+            changes.pushed_at = input.pushedAt;
+          }
+          if (input.changeRequestId !== undefined) changes.change_request_id = input.changeRequestId;
+          if (input.changeRequestUrl !== undefined) changes.change_request_url = input.changeRequestUrl;
           const update = async () => {
             await db().updateMany(SESSION_REPOSITORIES, key, changes);
             const row = await db().findOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, key);
@@ -1464,11 +1474,17 @@ export class SourceControlStorage extends FactoryStorageDomain {
             return toSessionRepository(row);
           };
           if (await db().findOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, key)) return update();
+          const branch = input.branch ?? input.fallbackBranch;
+          if (!branch) throw new Error('A session repository row needs a branch when it is first recorded.');
           try {
             return toSessionRepository(
               await db().insertOne<SessionRepositoryDbRow>(SESSION_REPOSITORIES, {
                 ...key,
-                ...changes,
+                branch,
+                change_request_id: input.changeRequestId ?? null,
+                change_request_url: input.changeRequestUrl ?? null,
+                pushed_at: input.pushedAt ?? now,
+                updated_at: now,
                 created_at: now,
               }),
             );
