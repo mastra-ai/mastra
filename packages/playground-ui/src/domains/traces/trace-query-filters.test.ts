@@ -106,18 +106,24 @@ describe('buildTraceQueryRequest', () => {
   });
 
   describe('when a presence-only field carries a value operator (hand-edited URL)', () => {
-    it.each([
-      ['feedback.comment', 'is'],
-      ['feedback.comment', undefined],
-      ['feedback.comment', 'notIn'],
-      ['spans.error', 'is'],
-    ] as const)('drops the %s token with operator %s instead of sending it', (fieldId, operatorId) => {
+    it('drops the token instead of sending it', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'spans.error', value: 'boom', operatorId: 'is' }], now }).where,
+      ).toBeUndefined();
+    });
+  });
+
+  describe('when the feedback comment carries an exact-match operator', () => {
+    it('sends the comment predicate', () => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId, value: 'wrong answer', ...(operatorId ? { operatorId } : {}) }],
+          tokens: [{ fieldId: 'feedback.comment', value: 'wrong answer', operatorId: 'is' }],
           now,
         }).where,
-      ).toBeUndefined();
+      ).toEqual({
+        op: 'and',
+        args: [{ feedback: { some: { op: 'eq', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } }],
+      });
     });
   });
 

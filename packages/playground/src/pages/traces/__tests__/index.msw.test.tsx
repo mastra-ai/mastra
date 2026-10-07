@@ -923,8 +923,8 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL pairs the presence-only feedback comment with a text value', () => {
-    it('loads the traces without sending the invalid comment predicate', async () => {
+  describe('when the URL gives the feedback comment a text value', () => {
+    it('sends the comment predicate and shows its chip', async () => {
       const bodies: unknown[] = [];
       setTracePageHandlers(metricsCapableCapabilities);
       server.use(
@@ -940,10 +940,63 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      expect(bodies.length).toBeGreaterThan(0);
-      expect(JSON.stringify(bodies)).not.toContain('"comment"');
+      expect(JSON.stringify(bodies)).toContain('{"path":"comment"},"right":{"literal":"wrong answer"}');
       expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        'Feedback commentiswrong answer',
+      ]);
+    });
+  });
+
+  describe('when the URL specifies matches for the feedback comment', () => {
+    it('sends the matches comment predicate to the trace query API', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      renderPage('/traces?filterFeedbackComment=wrong%20answer&filterFeedbackComment.op=matches');
+
+      await waitFor(() =>
+        expect(bodies).toContainEqual(
+          expect.objectContaining({
+            where: {
+              op: 'and',
+              args: [
+                {
+                  feedback: {
+                    some: {
+                      op: 'matches',
+                      left: { path: 'comment' },
+                      right: { literal: 'wrong answer' },
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        ),
+      );
+    });
+
+    it('shows the matches operator in the feedback comment chip', async () => {
+      setTracePageHandlers(metricsCapableCapabilities);
+
+      const { queryClient } = renderPage(
+        '/traces?filterFeedbackComment=wrong%20answer&filterFeedbackComment.op=matches',
+      );
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        'Feedback commentmatcheswrong answer',
+      ]);
     });
   });
 

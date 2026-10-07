@@ -527,26 +527,25 @@ describe('filter group URL params', () => {
 });
 
 describe('presence-only filter URL params', () => {
-  describe('when a hand-edited URL gives the feedback comment a text value', () => {
-    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
-      'drops the token for %s',
-      query => {
-        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
-          { fieldId: 'traceId', value: 'abc' },
-        ]);
-      },
-    );
+  describe('when the URL gives the feedback comment a text value', () => {
+    it.each([
+      ['filterFeedbackComment=wrong%20answer', { fieldId: 'feedback.comment', value: 'wrong answer' }],
+      [
+        'filterFeedbackComment=wrong&filterFeedbackComment.op=is',
+        { fieldId: 'feedback.comment', value: 'wrong', operatorId: 'is' },
+      ],
+    ])('keeps the token for %s', (query, token) => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams(query))).toEqual([token]);
+    });
   });
 
-  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
-    it.each([
-      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
-      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
-      'filterSpanError=boom&filterSpanError.op=in',
-    ])('drops the token for %s', query => {
-      expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
-        { fieldId: 'traceId', value: 'abc' },
-      ]);
+  describe('when a hand-edited URL gives a presence-only field a value operator', () => {
+    it('drops the token', () => {
+      expect(
+        getTracePropertyFilterTokens(
+          new URLSearchParams('filterSpanError=boom&filterSpanError.op=in&filterTraceId=abc'),
+        ),
+      ).toEqual([{ fieldId: 'traceId', value: 'abc' }]);
     });
   });
 
