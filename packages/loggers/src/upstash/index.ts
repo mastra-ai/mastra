@@ -130,7 +130,7 @@ export class UpstashTransport extends LoggerTransport {
 
     // Final flush
     if (this.logBuffer.length > 0) {
-      this._flush()
+      this.drainBuffer()
         .then(() => cb(err))
         .catch(flushErr => {
           console.error('Error in final flush:', flushErr);
@@ -138,6 +138,12 @@ export class UpstashTransport extends LoggerTransport {
         });
     } else {
       cb(err);
+    }
+  }
+
+  private async drainBuffer(): Promise<void> {
+    while (this.logBuffer.length > 0) {
+      await this._flush();
     }
   }
 
