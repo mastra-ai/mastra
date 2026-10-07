@@ -149,8 +149,8 @@ import {
 } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
-import type { AnyWorkspace } from '../workspace';
-import { createWorkspaceTools } from '../workspace';
+import type { AnyWorkspace, WorkspaceToolName } from '../workspace';
+import { WORKSPACE_TOOLS, createWorkspaceTools, resolveToolConfig } from '../workspace';
 import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
@@ -1391,6 +1391,19 @@ export class Agent<
           Object.assign(effectiveTools, toolset);
         }
         Object.assign(effectiveTools, defaultOptions?.clientTools);
+        // Workspace tools are layered on top; read their per-tool config instead of building them.
+        const workspace = subAgent._agentNetworkAppend ? undefined : await subAgent.getWorkspace({ requestContext });
+        const workspaceToolsConfig = workspace?.getToolsConfig();
+        if (workspace && workspaceToolsConfig) {
+          const configContext = { requestContext: Object.fromEntries(requestContext.entries()), workspace };
+          for (const group of Object.values(WORKSPACE_TOOLS)) {
+            for (const name of Object.values(group) as WorkspaceToolName[]) {
+              if (!workspaceToolsConfig[name]) continue;
+              const config = await resolveToolConfig(workspaceToolsConfig, name, configContext);
+              if (config.enabled) effectiveTools[config.name ?? name] = { background: config.background };
+            }
+          }
+        }
         for (const tool of Object.values(effectiveTools)) {
           const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
           if (bg?.enabled === true) {

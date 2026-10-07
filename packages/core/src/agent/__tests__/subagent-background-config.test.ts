@@ -1,7 +1,11 @@
+import { tmpdir } from 'node:os';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../tools';
+import { WORKSPACE_TOOLS } from '../../workspace/constants';
+import { LocalFilesystem } from '../../workspace/filesystem';
+import { Workspace } from '../../workspace/workspace';
 import { Agent } from '../agent';
 
 describe('sub-agent background config derivation', () => {
@@ -168,5 +172,36 @@ describe('sub-agent background config derivation', () => {
     expect(getChildTools).not.toHaveBeenCalled();
     expect(getGrandchildTools).not.toHaveBeenCalled();
     expect(tools['agent-child']).toMatchObject({ backgroundConfig: { enabled: true } });
+  });
+
+  it.each([
+    { label: 'derives', enabled: true, expected: { enabled: true } },
+    { label: 'ignores disabled', enabled: false, expected: undefined },
+  ])('$label background-enabled sub-agent workspace tools without building them', async ({ enabled, expected }) => {
+    const model = new MockLanguageModelV2();
+    const child = new Agent({
+      id: 'child',
+      name: 'child',
+      instructions: 'Help the parent.',
+      model,
+      workspace: new Workspace({
+        id: 'child-workspace',
+        filesystem: new LocalFilesystem({ basePath: tmpdir() }),
+        tools: { [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { enabled, background: { enabled: true } } },
+      }),
+    });
+    const getChildTools = vi.spyOn(child, 'getToolsForExecution');
+    const parent = new Agent({
+      id: 'parent',
+      name: 'parent',
+      instructions: 'Delegate to the child.',
+      model,
+      agents: { child },
+    });
+
+    const tools = await parent.getToolsForExecution({ backgroundTaskEnabled: true });
+
+    expect(getChildTools).not.toHaveBeenCalled();
+    expect((tools['agent-child'] as any).backgroundConfig).toEqual(expected);
   });
 });
