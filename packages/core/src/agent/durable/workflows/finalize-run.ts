@@ -2,6 +2,7 @@ import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import type { StorageThreadType } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
@@ -116,6 +117,23 @@ export async function runDurableFinishSideEffects({
   }
 
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  const memory = registryEntry?.memory ?? rebuiltMemory;
+  // The request-context snapshot never carries MastraMemory, so a cross-process
+  // worker has none here. Rebuild it the way preparation sets it so memory
+  // output processors (e.g. MessageHistory) still honor memoryConfig.readOnly.
+  if (memory && durableState?.threadId && durableState.resourceId && !effectiveRequestContext.get('MastraMemory')) {
+    let thread: StorageThreadType | null = null;
+    try {
+      thread = await memory.getThreadById({ threadId: durableState.threadId });
+    } catch (error) {
+      effectiveLogger.warn('[DurableAgent] Failed to load thread for finish-time memory context', { runId, error });
+    }
+    effectiveRequestContext.set('MastraMemory', {
+      thread: thread ?? undefined,
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
   // would leave the stream reporting pre-processor messages.
@@ -170,7 +188,6 @@ export async function runDurableFinishSideEffects({
   const outputText = resolveOutputText(messageList);
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
-  const memory = registryEntry?.memory ?? rebuiltMemory;
 
   if (
     saveQueueManager &&
