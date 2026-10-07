@@ -474,6 +474,13 @@ Sends a signal to an active run or memory thread.
             ],
           },
           {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            description:
+              "The caller's request context. It applies whether the target thread is idle or active, and takes precedence over `ifIdle.streamOptions.requestContext`. If its `MASTRA_RESOURCE_ID_KEY` doesn't match the target resource, Mastra rejects the signal before it's queued, stored, or delivered.",
+          },
+          {
             name: 'ifIdle',
             type: 'object',
             isOptional: true,
