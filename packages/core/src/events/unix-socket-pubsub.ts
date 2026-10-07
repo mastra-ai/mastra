@@ -74,6 +74,8 @@ const DEFAULT_BROKER_PATH_CHECK_INTERVAL_MS = 2_000;
 // A live broker on a loaded host can refuse connects for a moment (full
 // accept backlog). Retry before treating its socket file as dead.
 const CONNECT_RETRY_DELAYS_MS = [50, 100, 200];
+/** Longest bindable socket path in bytes (sun_path size). */
+const MAX_SOCKET_PATH_BYTES = process.platform === 'linux' ? 108 : 104;
 const NEWLINE_BYTE = 0x0a;
 const LEASE_LOCK_RETRY_MS = 10;
 // How long close() keeps waiting for a release that started before it. Mutation
@@ -1180,14 +1182,17 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * The private name is never longer than the shared basename: the platform's
-   * socket path limit applies to the whole path, so a longer name could fail
-   * to bind where the shared path fits. Short names can collide with another
-   * candidate or a leftover file, so a taken name is retried.
+   * The socket path limit applies to the whole path, so the private name is
+   * shortened when the directory leaves less than 13 bytes, but never below
+   * the shared basename: wherever the shared path binds, the private path
+   * does too. Short names can collide with another candidate or a leftover
+   * file, so a taken name is retried.
    */
   async #listenAtPrivatePath(): Promise<{ server: net.Server; privatePath: string }> {
     const sharedName = basename(this.socketPath);
-    const nameLength = Math.min(13, Buffer.byteLength(sharedName));
+    const sharedNameLength = Buffer.byteLength(sharedName);
+    const room = MAX_SOCKET_PATH_BYTES - (Buffer.byteLength(this.socketPath) - sharedNameLength);
+    const nameLength = Math.min(13, Math.max(sharedNameLength, room));
     for (let attempt = 1; ; attempt++) {
       const hex = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex');
       const name = nameLength > 1 ? `.${hex.slice(0, nameLength - 1)}` : hex.slice(0, 1);
