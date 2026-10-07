@@ -160,7 +160,7 @@ export const traceThreadsPage: QueryTraceThreadsResult = {
   page: { next: null },
 };
 
-/** The two turns of `thread-chef`, oldest first, as the summary query returns them. */
+/** The two turns of `thread-chef`, oldest first, as the thread panel loads them. */
 export const chefThreadTraces: TraceQueryKeysetTraceResponse = {
   traces: [
     {

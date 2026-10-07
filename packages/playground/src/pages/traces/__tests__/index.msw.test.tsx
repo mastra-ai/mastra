@@ -1538,6 +1538,7 @@ describe('Traces side panel span search', () => {
 
 describe('Traces page threads view', () => {
   const onThreadsRequest = vi.fn<(body: unknown) => void>();
+  const onThreadTracesRequest = vi.fn<() => void>();
 
   const setThreadsHandlers = (capabilities: GetObservabilityCapabilitiesResponse = metricsCapableCapabilities) => {
     setTracePageHandlers(capabilities);
@@ -1546,10 +1547,12 @@ describe('Traces page threads view', () => {
         onThreadsRequest(await request.json());
         return HttpResponse.json(traceThreadsPage);
       }),
-      // Thread-scoped trace queries build each row's summary and the thread panel.
+      // Thread-scoped trace queries load the thread panel.
       http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
         const body = await request.json();
-        return HttpResponse.json(JSON.stringify(body).includes('thread-chef') ? chefThreadTraces : traceQueryPage);
+        const threadScoped = JSON.stringify(body).includes('thread-chef');
+        if (threadScoped) onThreadTracesRequest();
+        return HttpResponse.json(threadScoped ? chefThreadTraces : traceQueryPage);
       }),
       http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
     );
@@ -1557,7 +1560,10 @@ describe('Traces page threads view', () => {
 
   const getThreadRow = async () => (await screen.findByText('thread-chef')).closest<HTMLElement>('button')!;
 
-  beforeEach(() => onThreadsRequest.mockClear());
+  beforeEach(() => {
+    onThreadsRequest.mockClear();
+    onThreadTracesRequest.mockClear();
+  });
 
   describe('when the store cannot run thread queries', () => {
     it('offers no Threads tab', async () => {
@@ -1613,16 +1619,21 @@ describe('Traces page threads view', () => {
   });
 
   describe('when a thread is listed', () => {
-    it('shows one row with the thread id, agent, first and last message, and turn count', async () => {
+    it('shows one row with the thread id', async () => {
       setThreadsHandlers();
 
       renderPage('/traces?view=threads');
-      const row = within(await getThreadRow());
 
-      expect(await row.findByText('Chef Agent')).not.toBeNull();
-      expect(row.getByText('I have eggs and spinach')).not.toBeNull();
-      expect(row.getByText('Make it vegetarian')).not.toBeNull();
-      expect(row.getByText('2')).not.toBeNull();
+      expect(await getThreadRow()).not.toBeNull();
+    });
+
+    it("never loads the thread's traces until the row is opened", async () => {
+      setThreadsHandlers();
+
+      renderPage('/traces?view=threads');
+      await getThreadRow();
+
+      expect(onThreadTracesRequest).not.toHaveBeenCalled();
     });
   });
 
@@ -1639,25 +1650,6 @@ describe('Traces page threads view', () => {
 
       expect(await screen.findByText('Failed to load threads')).not.toBeNull();
       expect(screen.queryByText('No threads found yet')).toBeNull();
-    });
-  });
-
-  describe("when a thread's summary fails to load", () => {
-    it('marks the row as failed instead of showing it empty', async () => {
-      setThreadsHandlers();
-      server.use(
-        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-          const body = await request.json();
-          return JSON.stringify(body).includes('thread-chef')
-            ? HttpResponse.json({ error: 'boom' }, { status: 500 })
-            : HttpResponse.json(traceQueryPage);
-        }),
-      );
-
-      renderPage('/traces?view=threads');
-      const row = within(await getThreadRow());
-
-      expect(await row.findByText('Failed to load thread summary')).not.toBeNull();
     });
   });
 

@@ -579,7 +579,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         <>
           <ThreadsListView
             threadIds={threads.threadIds}
-            timeRange={threadSelection.timeRange}
             isLoading={threads.isLoading}
             isFetchingNextPage={threads.isFetchingNextPage}
             hasNextPage={threads.hasNextPage}

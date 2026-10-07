@@ -1,14 +1,10 @@
-import { useTraceThreadSummary } from '@mastra/react/hooks/traces';
 import { useRef } from 'react';
 import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
-import { formatDuration } from '@/utils/duration';
 
-const THREAD_LIST_COLUMNS = '10rem 9rem 11rem minmax(8rem,1fr) minmax(8rem,1fr) 8rem 4rem 6rem 5rem';
+const THREAD_LIST_COLUMNS = 'minmax(0,1fr)';
 
 export type ThreadsListViewProps = {
   threadIds: string[];
-  /** Time range the summaries are built over; matches the list's filter range. */
-  timeRange: { from: string; to: string };
   isLoading?: boolean;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
@@ -18,10 +14,9 @@ export type ThreadsListViewProps = {
   onThreadClick: (threadId: string) => void;
 };
 
-/** One row per conversation (`threadId`). Each row loads its own summary from the thread's traces. */
+/** One row per conversation (`threadId`). */
 export function ThreadsListView({
   threadIds,
-  timeRange,
   isLoading,
   isFetchingNextPage,
   hasNextPage,
@@ -36,19 +31,11 @@ export function ThreadsListView({
   return (
     <TracesDataList columns={THREAD_LIST_COLUMNS} fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>Last activity</TracesDataList.TopCell>
         <TracesDataList.TopCell>Thread ID</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
-        <TracesDataList.TopCell>First message</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Last message</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Resource ID</TracesDataList.TopCell>
-        <TracesDataList.TopCell className="justify-end text-right">Turns</TracesDataList.TopCell>
-        <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Status</TracesDataList.TopCell>
       </TracesDataList.Top>
 
       {isLoading ? (
-        <DataListSkeletonRows columnCount={9} />
+        <DataListSkeletonRows columnCount={1} />
       ) : threadIds.length === 0 ? (
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No threads found for applied filters' : 'No threads found yet'}
@@ -56,14 +43,14 @@ export function ThreadsListView({
       ) : (
         <>
           {threadIds.map((threadId, index) => (
-            <ThreadRow
+            <TracesDataList.RowButton
               key={threadId}
-              threadId={threadId}
-              timeRange={timeRange}
-              featured={threadId === featuredThreadId}
-              rowProps={getRowProps(index)}
+              {...getRowProps(index)}
               onClick={() => onThreadClick(threadId)}
-            />
+              featured={threadId === featuredThreadId}
+            >
+              <DataList.TextCell font="mono">{threadId}</DataList.TextCell>
+            </TracesDataList.RowButton>
           ))}
           <TracesDataList.NextPageLoading
             isLoading={isFetchingNextPage}
@@ -73,50 +60,5 @@ export function ThreadsListView({
         </>
       )}
     </TracesDataList>
-  );
-}
-
-function ThreadRow({
-  threadId,
-  timeRange,
-  featured,
-  rowProps,
-  onClick,
-}: {
-  threadId: string;
-  timeRange: { from: string; to: string };
-  featured: boolean;
-  rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
-  onClick: () => void;
-}) {
-  const { data: summary, isLoading, isError } = useTraceThreadSummary({ threadId, timeRange });
-  const placeholder = isLoading ? '…' : '—';
-  const durationMs =
-    summary?.startedAt && summary.lastActivityAt
-      ? new Date(summary.lastActivityAt).getTime() - new Date(summary.startedAt).getTime()
-      : undefined;
-
-  return (
-    <TracesDataList.RowButton {...rowProps} onClick={onClick} featured={featured}>
-      {summary?.lastActivityAt ? (
-        <TracesDataList.CreatedCell timestamp={summary.lastActivityAt} preset="day-time-seconds" />
-      ) : (
-        <DataList.TextCell>{placeholder}</DataList.TextCell>
-      )}
-      <DataList.TextCell font="mono">{threadId}</DataList.TextCell>
-      <TracesDataList.NameCell name={summary?.entityName ?? placeholder} parentSpanId={null} />
-      <TracesDataList.InputCell
-        input={isError ? 'Failed to load thread summary' : (summary?.firstInput ?? placeholder)}
-      />
-      <TracesDataList.InputCell input={summary?.lastInput ?? placeholder} />
-      <DataList.TextCell font="mono">{summary ? (summary.resourceId ?? '—') : placeholder}</DataList.TextCell>
-      <DataList.NumberCell font="mono">
-        {summary ? `${summary.turnCount}${summary.hasMoreTurns ? '+' : ''}` : placeholder}
-      </DataList.NumberCell>
-      <DataList.NumberCell font="mono">
-        {durationMs === undefined ? placeholder : formatDuration(durationMs)}
-      </DataList.NumberCell>
-      <TracesDataList.StatusCell status={summary ? (summary.errorCount > 0 ? 'error' : 'success') : undefined} />
-    </TracesDataList.RowButton>
   );
 }
