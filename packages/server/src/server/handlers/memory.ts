@@ -1411,19 +1411,21 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const effectiveThreadId = threadId ?? mastra.generateId();
       validateBody({ resourceId: effectiveResourceId });
 
-      await enforceThreadAccess({
-        mastra,
-        requestContext,
-        threadId: effectiveThreadId,
-        effectiveResourceId,
-        permission: MastraFGAPermissions.MEMORY_WRITE,
-      });
-
       // Gateway proxy: create thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
+          const existing = threadId ? await gwClient.getThread(effectiveThreadId) : null;
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            thread: existing ? toLocalThread(existing.thread) : null,
+            effectiveResourceId,
+            permission: MastraFGAPermissions.MEMORY_WRITE,
+          });
           const result = await gwClient.createThread({
             id: effectiveThreadId,
             resourceId: effectiveResourceId!,
@@ -1439,6 +1441,17 @@ export const CREATE_THREAD_ROUTE = createRoute({
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
+
+      // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
+      const existing = threadId ? await memory.getThreadById({ threadId: effectiveThreadId }) : null;
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId,
+        thread: existing,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,

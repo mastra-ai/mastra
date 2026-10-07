@@ -9,6 +9,7 @@ import { SpanType, resolveObservabilityContext } from '../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
+import { sendsNativeResponseFormat } from '../../stream/aisdk/v5/execute';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -176,7 +177,12 @@ export class MastraLLMVNext extends MastraBase {
     // Serialized once per generation so exporters can surface the tool schemas
     // the model received; skipped entirely when tracing is off.
     const toolDefinitions = parentSpan
-      ? getToolDefinitionsForTracing({ tools, toolChoice, activeTools: activeTools as string[] | undefined })
+      ? getToolDefinitionsForTracing({
+          tools,
+          toolChoice,
+          activeTools: activeTools as string[] | undefined,
+          stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, firstModel),
+        })
       : undefined;
 
     const modelSpan = parentSpan?.createChildSpan({

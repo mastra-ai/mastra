@@ -444,10 +444,9 @@ describe('prepareToolsAndToolChoice', () => {
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toEqual({ type: 'none' });
     });
-    it('should strip tools when toolChoice is "none" even when tools are non-empty (#14459)', () => {
-      // Regression test: workflow tools injected via listWorkflowTools() were still
-      // being serialized in the HTTP request even when toolChoice was set to none.
-      // Gemini rejects requests combining tools + structured output (response_format: json_schema).
+    it('should strip tools when toolChoice is "none" and stripToolsWhenNone is set (#14459)', () => {
+      // Regression test: Gemini rejects requests combining tools + structured output
+      // (response_format: json_schema), so callers sending a schema strip tools.
       const workflowTool = createTool({
         id: 'workflow-tool',
         description: 'A workflow tool injected by listWorkflowTools()',
@@ -458,8 +457,48 @@ describe('prepareToolsAndToolChoice', () => {
         tools: { workflowTool },
         toolChoice: 'none',
         activeTools: undefined,
+        stripToolsWhenNone: true,
       });
       expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+  });
+
+  describe("toolChoice 'none' keeps tools (#25908)", () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look something up',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async () => 'ok',
+    });
+    const other = createTool({
+      id: 'other',
+      description: 'Another tool',
+      inputSchema: z.object({}),
+      execute: async () => 'ok',
+    });
+
+    it.each(['v2', 'v3'] as const)('sends tools with toolChoice none for %s models', targetVersion => {
+      const result = prepareToolsAndToolChoice({
+        tools: { lookup },
+        toolChoice: 'none',
+        activeTools: undefined,
+        targetVersion,
+      });
+
+      expect(result.tools).toHaveLength(1);
+      expect(result.tools![0]).toMatchObject({ type: 'function', name: 'lookup' });
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+
+    it('still applies activeTools filtering', () => {
+      const result = prepareToolsAndToolChoice({
+        tools: { lookup, other },
+        toolChoice: 'none',
+        activeTools: ['other'],
+      });
+
+      expect(result.tools?.map(tool => tool.name)).toEqual(['other']);
       expect(result.toolChoice).toEqual({ type: 'none' });
     });
   });
@@ -666,7 +705,7 @@ describe('getToolDefinitionsForTracing', () => {
     expect(getToolDefinitionsForTracing({ tools: {}, toolChoice: undefined, activeTools: undefined })).toBeUndefined();
   });
 
-  it("returns undefined when toolChoice is 'none' (tools are stripped from the request)", () => {
+  it("reports tools when toolChoice is 'none' (tools are still sent to the model)", () => {
     const weatherTool = createTool({
       id: 'get_weather',
       description: 'Get the weather for a city',
@@ -678,6 +717,24 @@ describe('getToolDefinitionsForTracing', () => {
       tools: { get_weather: weatherTool as any },
       toolChoice: 'none',
       activeTools: undefined,
+    });
+
+    expect(result?.map(tool => tool.name)).toEqual(['get_weather']);
+  });
+
+  it("returns undefined when toolChoice is 'none' and tools are stripped for structured output", () => {
+    const weatherTool = createTool({
+      id: 'get_weather',
+      description: 'Get the weather for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => 'sunny',
+    });
+
+    const result = getToolDefinitionsForTracing({
+      tools: { get_weather: weatherTool as any },
+      toolChoice: 'none',
+      activeTools: undefined,
+      stripToolsWhenNone: true,
     });
 
     expect(result).toBeUndefined();
