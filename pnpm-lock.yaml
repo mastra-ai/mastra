@@ -109,12 +109,12 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.16: 3.4.16
-  hono@<4.13.8: 4.13.8
+  hono@<4.13.11: 4.13.11
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.2
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
-  sharp@<0.35.4: 0.35.4
+  sharp@<0.35.5: 0.35.5
   proxy-addr@<2.0.8: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   image-size@<=2.0.2: 2.0.4
@@ -132,6 +132,10 @@ overrides:
   postcss-selector-parser@>=6.1.0 <6.1.3: 6.1.3
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.31.0': 1.31.0
+  '@modelcontextprotocol/client@>=2.0.0 <2.2.0': 2.2.0
+  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
+  '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.40
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
@@ -424,7 +428,7 @@ importers:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.220
-        version: 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)
+        version: 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -586,8 +590,8 @@ importers:
         specifier: ^1.6.26
         version: 1.7.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.18.0(bufferutil@4.1.0))(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(@upstash/redis@1.38.0)(kysely@0.28.17)(mysql2@3.24.4(@types/node@22.19.15))(pg@8.22.0)(sql.js@1.14.1)(sqlite3@5.1.7(bluebird@3.7.2)(supports-color@10.2.2)))(mongodb@7.5.0(@aws-sdk/credential-providers@3.1104.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9))(mysql2@3.24.4(@types/node@22.19.15))(pg@8.22.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vitest@4.1.11)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -666,8 +670,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -817,8 +821,8 @@ importers:
   auth/okta:
     dependencies:
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       jose:
         specifier: 6.2.12
         version: 6.2.12
@@ -939,8 +943,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       lru-cache:
         specifier: ^11.2.7
         version: 11.5.2
@@ -2056,8 +2060,8 @@ importers:
   e2e-tests/client-js/_test-utils:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.0.8
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../../packages/_vendored/ai_v5
@@ -2083,8 +2087,8 @@ importers:
         specifier: ^7.2.0
         version: 7.2.0
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
@@ -2497,8 +2501,8 @@ importers:
         specifier: ^4.37.0
         version: 4.40.0(ai@7.0.112(zod@4.6.5))(supports-color@10.2.2)(zod@4.6.5)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       posthog-node:
         specifier: ^5.46.1
         version: 5.48.0(rxjs@7.8.2)
@@ -3203,7 +3207,7 @@ importers:
         version: link:../mastra
       deepeval:
         specifier: ^0.1.32
-        version: 0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.112(zod@4.6.5))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0))
+        version: 0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.112(zod@4.6.5))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3871,8 +3875,8 @@ importers:
         specifier: workspace:*
         version: link:../../_internal-core
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4669,8 +4673,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       prettier:
         specifier: 3.9.5
         version: 3.9.5
@@ -4697,10 +4701,10 @@ importers:
     dependencies:
       '@a2a-js/sdk-v0_3':
         specifier: npm:@a2a-js/sdk@~0.3.14
-        version: '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.12.1)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))'
+        version: '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))'
       '@a2a-js/sdk-v1':
         specifier: npm:@a2a-js/sdk@~1.0.1
-        version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.12.1)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))'
+        version: '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))'
       '@ai-sdk/provider-utils-v6':
         specifier: npm:@ai-sdk/provider-utils@4.0.40
         version: '@ai-sdk/provider-utils@4.0.40(zod@4.6.5)'
@@ -4747,11 +4751,11 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       hono-openapi:
         specifier: ^1.3.1
-        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.8))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.8)(openapi-types@12.1.3)
+        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.11))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.11)(openapi-types@12.1.3)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -4904,8 +4908,8 @@ importers:
         specifier: workspace:*
         version: link:../_internals/voice
       '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.2.0
+        version: 2.2.0
       '@openrouter/ai-sdk-provider':
         specifier: ^0.7.5
         version: 0.7.5(zod@4.6.5)
@@ -5028,7 +5032,7 @@ importers:
         version: 8.0.4
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.1(@hono/node-server@2.0.10(hono@4.13.8))(bufferutil@4.1.0)(hono@4.13.8)
+        version: 1.3.1(@hono/node-server@2.1.3(hono@4.13.11))(bufferutil@4.1.0)(hono@4.13.11)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -5075,8 +5079,8 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -5106,14 +5110,14 @@ importers:
         version: 2.9.1
     devDependencies:
       '@hono/node-server':
-        specifier: ^2.0.0
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@hono/standard-validator':
         specifier: ^0.3.0
-        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.8)
+        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.11)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.13.8)
+        version: 0.5.3(hono@4.13.11)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5152,7 +5156,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^1.3.1
-        version: 1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.8))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.8)(openapi-types@12.1.3)
+        version: 1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.11))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.11)(openapi-types@12.1.3)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -5194,8 +5198,8 @@ importers:
         version: link:../schema-compat
     devDependencies:
       '@hono/node-server':
-        specifier: ^2.0.0
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -5221,8 +5225,8 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
@@ -5410,20 +5414,20 @@ importers:
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/client':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.2.0
+        version: 2.2.0
       '@modelcontextprotocol/core':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.2.0
+        version: 2.2.0
       '@modelcontextprotocol/ext-apps':
         specifier: ^2.0.0
-        version: 2.0.0(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/core@2.0.0)(@modelcontextprotocol/server@2.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)
+        version: 2.0.0(@modelcontextprotocol/client@2.2.0)(@modelcontextprotocol/core@2.2.0)(@modelcontextprotocol/server@2.2.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)
       '@modelcontextprotocol/node':
         specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.8)
+        version: 2.0.0(@modelcontextprotocol/server@2.2.0)(hono@4.13.11)
       '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.2.0
+        version: 2.2.0
       exit-hook:
         specifier: ^5.1.0
         version: 5.1.0
@@ -5508,7 +5512,7 @@ importers:
         version: link:../mcp
       '@mastra/mcp-legacy':
         specifier: npm:@mastra/mcp@^1.18.0
-        version: '@mastra/mcp@1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)'
+        version: '@mastra/mcp@1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.11)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)'
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -5517,8 +5521,8 @@ importers:
         version: 4.6.5
     devDependencies:
       '@hono/node-server':
-        specifier: ^2.0.0
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5526,8 +5530,8 @@ importers:
         specifier: workspace:*
         version: link:../_types-builder
       '@modelcontextprotocol/client':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.2.0
+        version: 2.2.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5547,8 +5551,8 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
@@ -5565,15 +5569,15 @@ importers:
   packages/mcp-registry-registry:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.27.1
-        version: 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+        specifier: ^1.31.0
+        version: 1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       zod:
         specifier: 'catalog:'
         version: 4.6.5
     devDependencies:
       '@hono/node-server':
-        specifier: ^2.0.0
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5605,8 +5609,8 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
@@ -6094,8 +6098,8 @@ importers:
         specifier: workspace:*
         version: link:../schema-compat
       '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
+        specifier: ^1.31.0
+        version: 1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
       '@storybook/addon-a11y':
         specifier: ^10.6.0
         version: 10.6.0(storybook@10.6.0(@types/react@19.2.17)(bufferutil@4.1.0)(prettier@3.9.5)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
@@ -6384,8 +6388,8 @@ importers:
   packages/server:
     dependencies:
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -6470,13 +6474,13 @@ importers:
         version: 5.3.1(supports-color@10.2.2)
       '@inngest/realtime':
         specifier: ^0.4.6
-        version: 0.4.6(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.8)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
+        version: 0.4.6(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.11)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
       inngest:
         specifier: ^4.2.2
-        version: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.8)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
+        version: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.11)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
       zod:
         specifier: 'catalog:'
         version: 4.6.5
@@ -6869,7 +6873,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.1(@hono/node-server@2.0.10(hono@4.13.8))(bufferutil@4.1.0)(hono@4.13.8)
+        version: 1.3.1(@hono/node-server@2.1.3(hono@4.13.11))(bufferutil@4.1.0)(hono@4.13.11)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -6884,11 +6888,11 @@ importers:
         specifier: ^2.0.115
         version: 2.0.117(zod@4.6.5)
       '@hono/node-server':
-        specifier: ^2.0.0
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.13.8)
+        version: 0.5.3(hono@4.13.11)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6923,8 +6927,8 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
@@ -7017,8 +7021,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.115
@@ -7130,8 +7134,8 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
@@ -7203,8 +7207,8 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)(supports-color@10.2.2)
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
@@ -9008,7 +9012,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: ^1.52.0
-        version: 1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)
+        version: 1.52.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../../packages/schema-compat
@@ -9524,14 +9528,14 @@ importers:
         version: 1.9.1
       inngest:
         specifier: ^4.2.2
-        version: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.8)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
+        version: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.11)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.6.5)
       '@hono/node-server':
-        specifier: ^2.0.0
-        version: 2.0.10(hono@4.13.8)
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.11)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -9596,8 +9600,8 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       hono:
-        specifier: 4.13.8
-        version: 4.13.8
+        specifier: 4.13.11
+        version: 4.13.11
       inngest-cli:
         specifier: ^1.26.0
         version: 1.27.0(encoding@0.1.13)(supports-color@10.2.2)
@@ -10216,7 +10220,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(101b025dd06f1a4410516826f0608940)
+        version: 1.9.0(e25ddb4692003eb7baac9333bd1b1e82)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10581,7 +10585,7 @@ packages:
     resolution: {integrity: sha512-F6Ew1AtPzCLhTn8h9yiqTe7DiDf6XVrSnq9V1YqSl9eWqPm6anMveTiKdCSb/76cW0YiJc24rNaUrVezFFHbqQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@bufbuild/protobuf': ^2.10.2
+      '@bufbuild/protobuf': 2.13.0
       '@grpc/grpc-js': 1.14.5
       express: ^4.21.2 || ^5.1.0
     peerDependenciesMeta:
@@ -10596,7 +10600,7 @@ packages:
     resolution: {integrity: sha512-CJQdh3Wzwo8qIx5UUkSJ7+7BEI16PB+MXMHHNSmx8JQsQed2HlQgvx1ENOiKUfYA3PlcEvxIwv14dBblhDuPmw==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@bufbuild/protobuf': ^2.10.2
+      '@bufbuild/protobuf': 2.13.0
       '@grpc/grpc-js': 1.14.5
       express: ^4.21.2 || ^5.1.0
     peerDependenciesMeta:
@@ -11256,7 +11260,7 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
-      '@modelcontextprotocol/sdk': ^1.29.0
+      '@modelcontextprotocol/sdk': 1.31.0
       zod: 4.6.5
 
   '@anthropic-ai/sdk@0.112.3':
@@ -12894,11 +12898,8 @@ packages:
   '@bufbuild/protobuf@1.10.1':
     resolution: {integrity: sha512-wJ8ReQbHxsAfXhrf9ixl0aYbZorRuOWpBNzm8pL8ftmSxQx/wnJD5Eg861NwJU/czy2VXFIebCeZnZrI9rktIQ==}
 
-  '@bufbuild/protobuf@2.10.0':
-    resolution: {integrity: sha512-fdRs9PSrBF7QUntpZpq6BTw58fhgGJojgg39m9oFOJGZT+nip9b0so5cYY1oWl5pvemDLr0cPPsH46vwThEbpQ==}
-
-  '@bufbuild/protobuf@2.12.1':
-    resolution: {integrity: sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==}
+  '@bufbuild/protobuf@2.13.0':
+    resolution: {integrity: sha512-acq7c49vxfm1ggJ95P70TX7ABDM0vxr1SYD3BB0o0jnBLB4OAqeHyKuN+cD3w80gXEDQ2zxHpR6CUeA+O/aU9g==}
 
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     resolution: {integrity: sha512-ZKZ/F8US7JR92J4DMct6cLW/Y66o2K576+zjlEN/MevH70bFIsB10wkZEQPLzl2oNh2SMGy55xpJ9JoBRl5DOA==}
@@ -13214,7 +13215,7 @@ packages:
   '@connectrpc/connect-web@2.1.2':
     resolution: {integrity: sha512-1tfaK85MU+gJjwwmL31d2rzdf0XCYX99chZf63uG89SGBUd4XuZ4ZzhGo2u79TPXOE6nLIZQ2okrpyey42PYdg==}
     peerDependencies:
-      '@bufbuild/protobuf': ^2.7.0
+      '@bufbuild/protobuf': 2.13.0
       '@connectrpc/connect': 2.1.2
 
   '@connectrpc/connect@1.7.0':
@@ -13225,7 +13226,7 @@ packages:
   '@connectrpc/connect@2.1.2':
     resolution: {integrity: sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA==}
     peerDependencies:
-      '@bufbuild/protobuf': ^2.7.0
+      '@bufbuild/protobuf': 2.13.0
 
   '@copilotkit/aimock@1.29.0':
     resolution: {integrity: sha512-xNMHMUDX7zPSc56dm2ZXbttoLk6x72oEBHwWCAakVWNO85zZepLkB8Poc/x1cJrY69FI9frN0gavI/zVuZq/9A==}
@@ -14990,7 +14991,7 @@ packages:
     resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.25.2
+      '@modelcontextprotocol/sdk': 1.31.0
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -15079,37 +15080,37 @@ packages:
     resolution: {integrity: sha512-Za2ai6TLdKjUvnur+eenO6nuYYipVAEhyCAdaV8IRvmU9kK8crOZUSYvIXn72E4f8fJqyAbpcJuTsYYmZp9Deg==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/node-server@2.0.10':
-    resolution: {integrity: sha512-ZcnNVhKTmyDJeg0UlnZjvM73JBsTAuhrH/J4fjwGOw59PwOW51r4J+p6CsKZWXdKSme4MFqU62CZMOsdDrU4CA==}
+  '@hono/node-server@2.1.3':
+    resolution: {integrity: sha512-TA//nWMqPhbfdfneACk6t5a9eqbS9lABEPyKn0/xZTah3H3U2XaVg85rJFl0/Fyit0I552YDHgXGVSf3GwqbUw==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/node-ws@1.3.1':
     resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       '@hono/node-server': 1.19.15
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/standard-validator@0.2.2':
     resolution: {integrity: sha512-mJ7W84Bt/rSvoIl63Ynew+UZOHAzzRAoAXb3JaWuxAkM/Lzg+ZHTCUiz77KOtn2e623WNN8LkD57Dk0szqUrIw==}
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/standard-validator@0.3.0':
     resolution: {integrity: sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ==}
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/swagger-ui@0.5.3':
     resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hookform/resolvers@3.10.0':
     resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
@@ -15199,160 +15200,160 @@ packages:
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
     engines: {node: '>=18'}
 
-  '@img/sharp-darwin-arm64@0.35.4':
-    resolution: {integrity: sha512-Uhfl4V4lhP2nbUVF9+hyH1+luj86f1gUFeo8ALYxFoULoU+G87D43BfeMP8XHsk9boxAnCY/bf2EHwhA7MuGsA==}
+  '@img/sharp-darwin-arm64@0.35.5':
+    resolution: {integrity: sha512-QRUlFQ0WxvdWyqqG/WtI3iupfD5rBzmCHXSdPsY91sAtVtTo7Q4cb6zOccZ3gqEqkr0f1As1ehLqmEpDsRf+lg==}
     engines: {node: '>=20.9.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@img/sharp-darwin-x64@0.35.4':
-    resolution: {integrity: sha512-hWniXY3bG5qKpkKrAwPe4y+VTPmf086YQAnkxWh7uA1YrlRouWGa0M0Mxj3ZjnXFkv7/TD1bTy9lGUK26vRvWw==}
+  '@img/sharp-darwin-x64@0.35.5':
+    resolution: {integrity: sha512-+BR255RhDlpygUpOc/Jdt1nT6DQ3XG/ERo5wbcdOf5Q320dKtPCKPLR1LJs9VGXRaMa8l1uUa0tkCNOXiAxZUw==}
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@img/sharp-freebsd-wasm32@0.35.4':
-    resolution: {integrity: sha512-lIsKw/BU+kjB4eZjxrYrZmwOJYi3Ajrv66iAlBmUPyKc3HpnloevB1g3wxGD9P/5BbQ1brBGl65VRRrCvQDEqA==}
+  '@img/sharp-freebsd-wasm32@0.35.5':
+    resolution: {integrity: sha512-Y/z91nEZ4uIBX5X3nfTovjU9lHNKFYbL2lpHCLVNmXQK03VIZvXBBt0KxbPGp2SdGSF+2mQU4e+hQaWOt86iAw==}
     engines: {node: '>=20.9.0'}
     os: [freebsd]
 
-  '@img/sharp-libvips-darwin-arm64@1.3.3':
-    resolution: {integrity: sha512-suTBPTDGrI9WodccaDdwZItTSaBYASlBk1NSfElSHrUfzu3szG6lvIF58+WiFvnfzuK8ZBFS5zE00PxqxnRiPg==}
+  '@img/sharp-libvips-darwin-arm64@1.3.4':
+    resolution: {integrity: sha512-5R89nBYiRdUlSWJxPhO+GVtaXzXSxKnRu/xqMn3KTA3L9EB9Oy/P+Nn2f2vlhPuUdy/Zusb2DarbyTpGCfEDuw==}
     cpu: [arm64]
     os: [darwin]
 
-  '@img/sharp-libvips-darwin-x64@1.3.3':
-    resolution: {integrity: sha512-FVJZ5mITMobmXIz/hPDTw0EintTW5H3WfrxwLqEqjiIihlu+hVRyGrFQ60xl0Lxn7Bt3zdpevPaQi0HEzqz9fw==}
+  '@img/sharp-libvips-darwin-x64@1.3.4':
+    resolution: {integrity: sha512-iR2OKH80yi0U+dUplyh3/xdpFvps6YkCwsXenIJxqxR1v9o+xtKTGbS9H7cps+2Vxjc8B1j96p75NmTGjIhtpQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@img/sharp-libvips-linux-arm64@1.3.3':
-    resolution: {integrity: sha512-0DaL0A6Xu6sQSQFwe4iVCrKWU2cCTItnRsYsCdxAMm9NF6twAA9BKnoqy4hqz4+azQ0JHuA26qiUKsf1XJ/v5A==}
+  '@img/sharp-libvips-linux-arm64@1.3.4':
+    resolution: {integrity: sha512-Y3dgX/6lE2QhQb+Gxy0WZxfg9MEm/JBjamZpS2IklP7xIQoKN4hzAm7KcMVGtaVDt3neE9OKBC7vAfonA/Lr1A==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-libvips-linux-arm@1.3.3':
-    resolution: {integrity: sha512-3rbU4vqXXc3hY/OiXdl52xZvT0F1yEngWfvqudtPJg/KkyiaQw2DRsFrNzpmLvfavbwOq3qXn36GP8obHRULQA==}
+  '@img/sharp-libvips-linux-arm@1.3.4':
+    resolution: {integrity: sha512-LmRtTsOHuvM2+wlO2Db37dx5MiZhB0FvSunciw48YjdOkZz9KAiRbm8ujeMOA1INqmei5NapFxYEK1D1ZSidmw==}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-libvips-linux-ppc64@1.3.3':
-    resolution: {integrity: sha512-cdn1OvUBwsXhbC0zSzJnNzf5MZ/mTrobawDvNXBTxe8VtqKAm0sRuEY2Evzovb/w9JMk4TvRxqt1mekSuJz64w==}
+  '@img/sharp-libvips-linux-ppc64@1.3.4':
+    resolution: {integrity: sha512-Le6boB8Tai0Nis+gIxIpKx68UDVVIqdR8Tin5Yf1z2LJJQLDJvCDRqRu+jC2qCoD+eIomonmOwB4smBRxfVpYQ==}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-libvips-linux-riscv64@1.3.3':
-    resolution: {integrity: sha512-HjPVx7yKz+0lqdhDlTw1tt90wamBoxhiXpvl1XZpJLiHH4RCJ5yDTqH+VlYPv2fwFs89JFw4c1IexYOcQUi4IQ==}
+  '@img/sharp-libvips-linux-riscv64@1.3.4':
+    resolution: {integrity: sha512-aHkkIEHPRdQEegJN20MLmGtxYD9R2wQr3Cwpddnu5+YKMt6Uzax7S9h5gpZTo8wyrGuZSlfQ63OevL5mTyOC7Q==}
     cpu: [riscv64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-libvips-linux-s390x@1.3.3':
-    resolution: {integrity: sha512-neWLh+3yCNThxnfy3c4BbVBeGgt9aftno+XbT56iK28RgeDs3UOFWviLWlUu0bArYVYJaFDK+RRohbicUNCm8Q==}
+  '@img/sharp-libvips-linux-s390x@1.3.4':
+    resolution: {integrity: sha512-ra/mB6MikESDUO7Yg+Mi95bFBb9GsObURuhnOv3OqknjGe9sZrG8tCe9q0xSIGrtLgvgw0gKnFWcK4blSgQOuQ==}
     cpu: [s390x]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-libvips-linux-x64@1.3.3':
-    resolution: {integrity: sha512-4vKmvAst9nrowcqquKFAyZJUDolUaIp8uRiN0mWFguJ1IplC9/pitXtlnnlU4aa/eJw3J7i67V+pwUL+wZGdsA==}
+  '@img/sharp-libvips-linux-x64@1.3.4':
+    resolution: {integrity: sha512-GJ//SSXbnwSDes02umB3nDJLFcQzw8a18V8fyhqr6tV515tOEMdImjjxj1AoafMRz56F3PHgftnj1QEKSU1zkw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-libvips-linuxmusl-arm64@1.3.3':
-    resolution: {integrity: sha512-Y9kQaLMuNoB0bPYOOdcZMaseNrFpPodIWWMrx+CZyydf2xn68j9WYc6sWWRrDwNkzCQjKYfc68L7jKjGlHMibw==}
+  '@img/sharp-libvips-linuxmusl-arm64@1.3.4':
+    resolution: {integrity: sha512-hvulFwtjUcagsis6BBxHwGFwWoNZjgYmULGVrZcyfNbjA8hKILbRxGg15/7w5HDyXHXUos/j6baAWqnCyQ2DWA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@img/sharp-libvips-linuxmusl-x64@1.3.3':
-    resolution: {integrity: sha512-fj8Mv0HHfD1Rr+4I68+3agJynxDWtBFgicTbSOb9Bke6pIwzGcJ+RX/yHjmiEGFMCavY/dxvem7MyNaJF+wDiw==}
+  '@img/sharp-libvips-linuxmusl-x64@1.3.4':
+    resolution: {integrity: sha512-6zXKeE/p39I1AmA3cJG35eyBGNqNddLnUXjhwBnsGjFPWqf5VKkDBEqaEkPDoTEtkxwi2vv8Tcr2mDyP4So7Fg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@img/sharp-linux-arm64@0.35.4':
-    resolution: {integrity: sha512-De4jpEnAU8Hd5oT0j1G3uL4ZvTuipVMn7YC6vPaJhy6/7EwEae0SVAoBrUMYQbkLGDm85taVWwuPc1a44LTzCQ==}
+  '@img/sharp-linux-arm64@0.35.5':
+    resolution: {integrity: sha512-LYVx5JTsOM2CBzmxreh+nl64/3H6Xb09iSLknqH47z2T2DFFxDeFLP5y4dJwe6H7uGQlHPyEEtIqyo3DYsRwdQ==}
     engines: {node: '>=20.9.0'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-linux-arm@0.35.4':
-    resolution: {integrity: sha512-7OAS8gI0EReKGVN2HssHlM6umJgxF5VI3xN0p9FA91p/YO+ou5hiNghLdZ5BEHztwaaK5+bLKRf8x/o2L2nk9A==}
+  '@img/sharp-linux-arm@0.35.5':
+    resolution: {integrity: sha512-LEaXK2WdXVK5ykcw0buWyPMsmLLL2vpHLD6yrNSW+JGEL3BZPA4tpKN6iaMc4AxTTAoaX/sU1rOL51lcIz48ZQ==}
     engines: {node: '>=20.9.0'}
     cpu: [arm]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-linux-ppc64@0.35.4':
-    resolution: {integrity: sha512-2oYZJeIl4kCcMGk4ouZVjnkCtFrpQFlNEtJ6GbxzhHQchwH0NH/qEb9ykmOl29dqwMq+JhFdZn+1ak2FKhI9fQ==}
+  '@img/sharp-linux-ppc64@0.35.5':
+    resolution: {integrity: sha512-QVxAAq8evVRI9ia2vqgwrmWucn5Dfv+JdWzj75pD8omHLPSP7f8p20O8jxzjCcuCEQEOtYOZUmX1hkiZ0kdevA==}
     engines: {node: '>=20.9.0'}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-linux-riscv64@0.35.4':
-    resolution: {integrity: sha512-cPbNChoRURAWdebDIHSenxRpgEdy7JkPydSnUxRm9VvKD7m0/xVaR/8Fzlu81pk5nHEvHH87UZUA7cTtwnbJSA==}
+  '@img/sharp-linux-riscv64@0.35.5':
+    resolution: {integrity: sha512-LtdreXguaavKODPIfzJ4kffx7UNt1omwtK0rch4EBbbSTXPnxWmYSayXdLJw0fJzQ97kHt1gL/yh4tvU+nCyRQ==}
     engines: {node: '>=20.9.0'}
     cpu: [riscv64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-linux-s390x@0.35.4':
-    resolution: {integrity: sha512-RY0JFY8Fd6RonCBtHz+DvadaPkXDSI1AUn6yWL9TipqkZ1vY8w8evqdgyDFnkm4/K1ve1TvZiaePP5oSd4+WVQ==}
+  '@img/sharp-linux-s390x@0.35.5':
+    resolution: {integrity: sha512-UZasTOFiYzotTsGOCu42BfUzP6Tu6Do/947iRm1RsLKvlllxwGcn4RN27LibGWceix4Y+Pmw3jsnTcCQIgWjqA==}
     engines: {node: '>=20.9.0'}
     cpu: [s390x]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-linux-x64@0.35.4':
-    resolution: {integrity: sha512-9qvvEAuk8k89TfWUoX2htWjbAMX8p+NxCppjpcg5k6xMsjhBQPTsoIh36h9Qde4WRuGpJeYnOjdosDn/cnv+OA==}
+  '@img/sharp-linux-x64@0.35.5':
+    resolution: {integrity: sha512-SxFtLTeJInhAA9Q836kux2vZNeOBQEx658qvbboZScr0wIARym3IcGmW7KpVD5sbVg0Ojy+udFQdayYIZyoNog==}
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@img/sharp-linuxmusl-arm64@0.35.4':
-    resolution: {integrity: sha512-KB5jxpfWQTr0nc3xdHtWChdbifHrBGsd2SM62Eyxrl8afikm+f5qGBU75SJIZBT/S1MC8XyacdlXBMSWq6OURA==}
+  '@img/sharp-linuxmusl-arm64@0.35.5':
+    resolution: {integrity: sha512-9HbMclmI1zlNkFRs3z9/eBtDjfD0sGlrX1z6b1qwmiFY5ElDLh4BC0LPBdVp7z1DXFiKlIcznf+ZlsuZzLxQqg==}
     engines: {node: '>=20.9.0'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@img/sharp-linuxmusl-x64@0.35.4':
-    resolution: {integrity: sha512-f+eZJZIQNEEd26RPSW+76chwOf1XtA2Y/O+5ocVyLliHkeih3e+jhLVBdNTd2rS3IbNXK8+ug93Vf5ZXtF5Lxg==}
+  '@img/sharp-linuxmusl-x64@0.35.5':
+    resolution: {integrity: sha512-4KOphqB035HrVdqLZfCgMzzERrQkkzOwRhl4OAkRO1YCldbaFjySXMaK534Mo0V+LndnlJk+sbUyLeU0ULyD1A==}
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@img/sharp-wasm32@0.35.4':
-    resolution: {integrity: sha512-zQnl4Kwp7Q6NHsENtU2T/00Zi+w3AQNwz3+UaTyVBy2FpXrzXzGjndpK61onhZjRtRpQXxCTeqw19bVyXOh7jA==}
+  '@img/sharp-wasm32@0.35.5':
+    resolution: {integrity: sha512-Ptsga1su4tQx+LLF1ECS9U6nz5kmrXKo6XVbtR48Ke3ZRxxgaWBu7IDtEe1quo8hiupwm6WFqxVlXaSf7IINGQ==}
     engines: {node: '>=20.9.0'}
 
-  '@img/sharp-webcontainers-wasm32@0.35.4':
-    resolution: {integrity: sha512-ESfNkywmCfPNyaZjxooddJQiQ+l/nTpGEOGthxiLnIHXC/CmcBixnfwUleX9mCz9ovrUUvKMap/pm8RYbzfwaA==}
+  '@img/sharp-webcontainers-wasm32@0.35.5':
+    resolution: {integrity: sha512-hfhF/FmoQyTUkA0bIKFOtw536BQSeBMe6BF6QyWlrPxT754+TFLaZ7sKKTfvvM0yJgKgaYTwnFCIZ/GuDw5SUA==}
     engines: {node: '>=20.9.0'}
     cpu: [wasm32]
 
-  '@img/sharp-win32-arm64@0.35.4':
-    resolution: {integrity: sha512-iNdlBX9gLVvqe2I3uIJSIKTq6wckP/DYxZtcqxm09x5Gi24DnFBmPAWZmr60ZyYMG0xlzo6goG3670ar+RXvRw==}
+  '@img/sharp-win32-arm64@0.35.5':
+    resolution: {integrity: sha512-X4t7g+7ZA5DKblCBEXGjUqqemj4vczING/5viFwAL8h4N3qYeyjwdCvRLHi4EdOUI+2Z7UFlp1VM+p/AuEtm6Q==}
     engines: {node: '>=20.9.0'}
     cpu: [arm64]
     os: [win32]
 
-  '@img/sharp-win32-ia32@0.35.4':
-    resolution: {integrity: sha512-kqRsbaa5CS6KHlpxnN7WhE6vAAugXyZButpRdvDWetlv6Qv4N9WTcrWzF7tXfB9T7MsoadqdI8hmwLq6UlLvtw==}
+  '@img/sharp-win32-ia32@0.35.5':
+    resolution: {integrity: sha512-5Zm82LoBc43nhwNybZlG7Y1KO//Zhsn306fQl29ZOuStHLGTo3BWL83q3cznX0poxSAMuYL1On/BHBxkBeKr6A==}
     engines: {node: ^20.9.0}
     cpu: [ia32]
     os: [win32]
 
-  '@img/sharp-win32-x64@0.35.4':
-    resolution: {integrity: sha512-XtmnYhBcrORsJ4XJngyzr/EWP0hRZLAZRFaApdKuviyqF78+ylxh2y06ZmtULAMOnObJ3ucpN0AcwSWnMowTRg==}
+  '@img/sharp-win32-x64@0.35.5':
+    resolution: {integrity: sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg==}
     engines: {node: '>=20.9.0'}
     cpu: [x64]
     os: [win32]
@@ -16342,8 +16343,8 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
-  '@modelcontextprotocol/client@2.0.0':
-    resolution: {integrity: sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==}
+  '@modelcontextprotocol/client@2.2.0':
+    resolution: {integrity: sha512-LxCou/CSYQ6dwEnjhLZY0KnEuc8V4UJ3IEQCl/uR2yHobSQIEdJKUlKLRYRF5i5FqRGHy1eK7une3aAWDHLtig==}
     engines: {node: '>=20'}
 
   '@modelcontextprotocol/conformance@0.2.0-alpha.11':
@@ -16354,11 +16355,15 @@ packages:
     resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
     engines: {node: '>=20'}
 
+  '@modelcontextprotocol/core@2.2.0':
+    resolution: {integrity: sha512-iLhmprRmWI8EcosOA3wVvww22z02NkgqhV4fBH6f/odQBsi7xnJc0HGmi21yWO+/iKw2yzqVE127Zhna5/+JXw==}
+    engines: {node: '>=20'}
+
   '@modelcontextprotocol/ext-apps@1.7.1':
     resolution: {integrity: sha512-J3WdG1A4JSSKnSWKyU+895dBVYBV2Utgtf7fUsUK45mlkETm53a/1DR6Pm3hUGKqLLQthZLmpxOg8VPzJi/lyg==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.29.0
+      '@modelcontextprotocol/sdk': 1.31.0
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
       zod: 4.6.5
@@ -16372,7 +16377,7 @@ packages:
     resolution: {integrity: sha512-a6tXzFcIbIIdnqumQ7W8Oxd8W/KAPkAKYpoxpD9nDgxZ24ywgxG5pK/8G9W5pOFUygS7gWHQhPv8cwRB44/8yg==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/client': ^2.0.0
+      '@modelcontextprotocol/client': 2.2.0
       '@modelcontextprotocol/core': ^2.0.0
       '@modelcontextprotocol/server': ^2.0.0
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -16391,13 +16396,13 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       '@modelcontextprotocol/server': ^2.0.0
-      hono: 4.13.8
+      hono: 4.13.11
     peerDependenciesMeta:
       hono:
         optional: true
 
-  '@modelcontextprotocol/sdk@1.29.0':
-    resolution: {integrity: sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==}
+  '@modelcontextprotocol/sdk@1.31.0':
+    resolution: {integrity: sha512-UvTMgnNlnIBO/22ob2RcVGDlcvOslQs8T59+FTGdA0L27a39fdGF/EDETNtDVK4DZGpwomlsYpRdA8UXcVL/pw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -16406,8 +16411,8 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@modelcontextprotocol/sdk@1.30.0':
-    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+  '@modelcontextprotocol/sdk@1.32.1':
+    resolution: {integrity: sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -16428,6 +16433,10 @@ packages:
 
   '@modelcontextprotocol/server@2.0.0':
     resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/server@2.2.0':
+    resolution: {integrity: sha512-qFnltjus6Gk8Lx6J1w2RXmr3YPN22MNT6qD6zjAkaiWIlFIFxWClz0rXHNuJF/KSUyn5YGhkSvXkWDbQHVLFEQ==}
     engines: {node: '>=20'}
 
   '@module-federation/error-codes@0.22.0':
@@ -26805,7 +26814,7 @@ packages:
       '@standard-community/standard-json': ^0.3.5
       '@standard-community/standard-openapi': ^0.2.9
       '@types/json-schema': ^7.0.15
-      hono: 4.13.8
+      hono: 4.13.11
       openapi-types: ^12.1.3
     peerDependenciesMeta:
       '@hono/standard-validator':
@@ -26813,8 +26822,8 @@ packages:
       hono:
         optional: true
 
-  hono@4.13.8:
-    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
+  hono@4.13.11:
+    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
     engines: {node: '>=16.9.0'}
 
   hookable@6.1.1:
@@ -27114,7 +27123,7 @@ packages:
       express: '>=4.19.2'
       fastify: '>=4.21.0'
       h3: '>=1.8.1'
-      hono: 4.13.8
+      hono: 4.13.11
       koa: '>=2.14.2'
       next: '>=12.0.0'
       react: '>=18.0.0'
@@ -31365,8 +31374,8 @@ packages:
   shallowequal@1.1.0:
     resolution: {integrity: sha512-y0m1JoUZSlPAjXVtPPW70aZWfIL/dSP7AFkRnniLCrK/8MDKog3TySTBmckD+RObVxH0v4Tox67+F14PdED2oQ==}
 
-  sharp@0.35.4:
-    resolution: {integrity: sha512-n++8XWcj+jCOr2IOl7h8LbKnGBDY4aPbmprMONBNFdn0ImXqpGVv5zliDs0V9HbmbCQLpbuo2ej9rAoOQTvMDA==}
+  sharp@0.35.5:
+    resolution: {integrity: sha512-Ywn4OnzGukp7CDMrp08RQ50YKmuwG47brZgIVPTvBaaAfQlRlygrRqSrxdCiL9M+LlzLBiJ68IR1QqvzHyjC7g==}
     engines: {node: '>=20.9.0'}
     peerDependencies:
       '@types/node': '*'
@@ -33480,20 +33489,20 @@ snapshots:
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
 
-  '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.12.1)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))':
+  '@a2a-js/sdk@0.3.14(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))':
     dependencies:
       uuid: 11.1.1
     optionalDependencies:
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/protobuf': 2.13.0
       '@grpc/grpc-js': 1.14.5
       express: 5.2.1(supports-color@10.2.2)
 
-  '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.12.1)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))':
+  '@a2a-js/sdk@1.0.1(@bufbuild/protobuf@2.13.0)(@grpc/grpc-js@1.14.5)(express@5.2.1(supports-color@10.2.2))':
     dependencies:
       jose: 6.2.12
       uuid: 11.1.1
     optionalDependencies:
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/protobuf': 2.13.0
       '@grpc/grpc-js': 1.14.5
       express: 5.2.1(supports-color@10.2.2)
 
@@ -34285,10 +34294,10 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.220':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)':
+  '@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)':
     dependencies:
       '@anthropic-ai/sdk': 0.112.3(zod@4.6.5)
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       zod: 4.6.5
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.220
@@ -36456,7 +36465,7 @@ snapshots:
   '@blaxel/core@0.3.20(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@7.0.2))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@7.0.2))
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       archiver: 7.0.1
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       dockerfile-ast: 0.7.1
@@ -36525,9 +36534,9 @@ snapshots:
       '@ai-sdk/provider': 2.0.3
       '@anthropic-ai/sdk': 0.39.0(encoding@0.1.13)
       '@browserbasehq/sdk': 2.10.0(encoding@0.1.13)
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@langchain/openai': 0.4.9(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.5))(ws@8.21.3(bufferutil@4.1.0)))(encoding@0.1.13)(ws@8.21.3(bufferutil@4.1.0))
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       ai: 5.0.216(zod@4.6.5)
       deepmerge: 4.3.1
       devtools-protocol: 0.0.1464554
@@ -36577,9 +36586,7 @@ snapshots:
 
   '@bufbuild/protobuf@1.10.1': {}
 
-  '@bufbuild/protobuf@2.10.0': {}
-
-  '@bufbuild/protobuf@2.12.1': {}
+  '@bufbuild/protobuf@2.13.0': {}
 
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     optional: true
@@ -37057,18 +37064,18 @@ snapshots:
       '@bufbuild/protobuf': 1.10.0
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.0)
 
-  '@connectrpc/connect-web@2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))':
+  '@connectrpc/connect-web@2.1.2(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0))':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@bufbuild/protobuf': 2.13.0
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.13.0)
 
   '@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0)':
     dependencies:
       '@bufbuild/protobuf': 1.10.0
 
-  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1)':
+  '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0)':
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
+      '@bufbuild/protobuf': 2.13.0
 
   '@copilotkit/aimock@1.29.0(vitest@4.1.11)':
     optionalDependencies:
@@ -39587,27 +39594,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)':
+  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)':
     dependencies:
       google-auth-library: 10.9.1(supports-color@10.2.2)
       p-retry: 4.6.2
       protobufjs: 8.8.0
       ws: 8.21.3(bufferutil@4.1.0)
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
-  '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)':
-    dependencies:
-      google-auth-library: 10.9.1(supports-color@10.2.2)
-      p-retry: 4.6.2
-      protobufjs: 8.8.0
-      ws: 8.21.3(bufferutil@4.1.0)
-    optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -39729,37 +39723,37 @@ snapshots:
 
   '@hey-api/types@0.1.4': {}
 
-  '@hono/node-server@1.19.15(hono@4.13.8)':
+  '@hono/node-server@1.19.15(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/node-server@2.0.10(hono@4.13.8)':
+  '@hono/node-server@2.1.3(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/node-ws@1.3.1(@hono/node-server@2.0.10(hono@4.13.8))(bufferutil@4.1.0)(hono@4.13.8)':
+  '@hono/node-ws@1.3.1(@hono/node-server@2.1.3(hono@4.13.11))(bufferutil@4.1.0)(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 2.0.10(hono@4.13.8)
-      hono: 4.13.8
+      '@hono/node-server': 2.1.3(hono@4.13.11)
+      hono: 4.13.11
       ws: 8.21.3(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.8)':
+  '@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.11)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.13.8
+      hono: 4.13.11
     optional: true
 
-  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.8)':
+  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.11)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/swagger-ui@0.5.3(hono@4.13.8)':
+  '@hono/swagger-ui@0.5.3(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.87.0(react@19.2.7))':
     dependencies:
@@ -39806,7 +39800,7 @@ snapshots:
       onnxruntime-common: 1.26.0
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.21.0-dev.20241024-d9ca84ef96
-      sharp: 0.35.4(@types/node@22.19.15)
+      sharp: 0.35.5(@types/node@22.19.15)
     transitivePeerDependencies:
       - '@types/node'
     optional: true
@@ -39818,7 +39812,7 @@ snapshots:
       onnxruntime-common: 1.26.0
       onnxruntime-node: 1.24.3
       onnxruntime-web: 1.26.0-dev.20260416-b7804b056c
-      sharp: 0.35.4(@types/node@22.19.15)
+      sharp: 0.35.5(@types/node@22.19.15)
     transitivePeerDependencies:
       - '@types/node'
 
@@ -39855,108 +39849,108 @@ snapshots:
 
   '@img/colour@1.1.0': {}
 
-  '@img/sharp-darwin-arm64@0.35.4':
+  '@img/sharp-darwin-arm64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-darwin-arm64': 1.3.3
+      '@img/sharp-libvips-darwin-arm64': 1.3.4
     optional: true
 
-  '@img/sharp-darwin-x64@0.35.4':
+  '@img/sharp-darwin-x64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-darwin-x64': 1.3.3
+      '@img/sharp-libvips-darwin-x64': 1.3.4
     optional: true
 
-  '@img/sharp-freebsd-wasm32@0.35.4':
+  '@img/sharp-freebsd-wasm32@0.35.5':
     dependencies:
-      '@img/sharp-wasm32': 0.35.4
+      '@img/sharp-wasm32': 0.35.5
     optional: true
 
-  '@img/sharp-libvips-darwin-arm64@1.3.3':
+  '@img/sharp-libvips-darwin-arm64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-darwin-x64@1.3.3':
+  '@img/sharp-libvips-darwin-x64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linux-arm64@1.3.3':
+  '@img/sharp-libvips-linux-arm64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linux-arm@1.3.3':
+  '@img/sharp-libvips-linux-arm@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linux-ppc64@1.3.3':
+  '@img/sharp-libvips-linux-ppc64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linux-riscv64@1.3.3':
+  '@img/sharp-libvips-linux-riscv64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linux-s390x@1.3.3':
+  '@img/sharp-libvips-linux-s390x@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linux-x64@1.3.3':
+  '@img/sharp-libvips-linux-x64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linuxmusl-arm64@1.3.3':
+  '@img/sharp-libvips-linuxmusl-arm64@1.3.4':
     optional: true
 
-  '@img/sharp-libvips-linuxmusl-x64@1.3.3':
+  '@img/sharp-libvips-linuxmusl-x64@1.3.4':
     optional: true
 
-  '@img/sharp-linux-arm64@0.35.4':
+  '@img/sharp-linux-arm64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linux-arm64': 1.3.3
+      '@img/sharp-libvips-linux-arm64': 1.3.4
     optional: true
 
-  '@img/sharp-linux-arm@0.35.4':
+  '@img/sharp-linux-arm@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linux-arm': 1.3.3
+      '@img/sharp-libvips-linux-arm': 1.3.4
     optional: true
 
-  '@img/sharp-linux-ppc64@0.35.4':
+  '@img/sharp-linux-ppc64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linux-ppc64': 1.3.3
+      '@img/sharp-libvips-linux-ppc64': 1.3.4
     optional: true
 
-  '@img/sharp-linux-riscv64@0.35.4':
+  '@img/sharp-linux-riscv64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linux-riscv64': 1.3.3
+      '@img/sharp-libvips-linux-riscv64': 1.3.4
     optional: true
 
-  '@img/sharp-linux-s390x@0.35.4':
+  '@img/sharp-linux-s390x@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linux-s390x': 1.3.3
+      '@img/sharp-libvips-linux-s390x': 1.3.4
     optional: true
 
-  '@img/sharp-linux-x64@0.35.4':
+  '@img/sharp-linux-x64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linux-x64': 1.3.3
+      '@img/sharp-libvips-linux-x64': 1.3.4
     optional: true
 
-  '@img/sharp-linuxmusl-arm64@0.35.4':
+  '@img/sharp-linuxmusl-arm64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linuxmusl-arm64': 1.3.3
+      '@img/sharp-libvips-linuxmusl-arm64': 1.3.4
     optional: true
 
-  '@img/sharp-linuxmusl-x64@0.35.4':
+  '@img/sharp-linuxmusl-x64@0.35.5':
     optionalDependencies:
-      '@img/sharp-libvips-linuxmusl-x64': 1.3.3
+      '@img/sharp-libvips-linuxmusl-x64': 1.3.4
     optional: true
 
-  '@img/sharp-wasm32@0.35.4':
+  '@img/sharp-wasm32@0.35.5':
     dependencies:
       '@emnapi/runtime': 1.11.3
     optional: true
 
-  '@img/sharp-webcontainers-wasm32@0.35.4':
+  '@img/sharp-webcontainers-wasm32@0.35.5':
     dependencies:
-      '@img/sharp-wasm32': 0.35.4
+      '@img/sharp-wasm32': 0.35.5
     optional: true
 
-  '@img/sharp-win32-arm64@0.35.4':
+  '@img/sharp-win32-arm64@0.35.5':
     optional: true
 
-  '@img/sharp-win32-ia32@0.35.4':
+  '@img/sharp-win32-ia32@0.35.5':
     optional: true
 
-  '@img/sharp-win32-x64@0.35.4':
+  '@img/sharp-win32-x64@0.35.5':
     optional: true
 
   '@inngest/ai@0.1.7':
@@ -39964,11 +39958,11 @@ snapshots:
       '@types/node': 22.19.15
       typescript: 5.9.3
 
-  '@inngest/realtime@0.4.6(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.8)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)':
+  '@inngest/realtime@0.4.6(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.11)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3(supports-color@10.2.2)
-      inngest: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.8)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
+      inngest: 4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.11)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5)
       react: 19.2.7
       zod: 4.6.5
     transitivePeerDependencies:
@@ -40717,7 +40711,7 @@ snapshots:
       pidusage: 4.0.1
       pino: 8.21.0
       pino-pretty: 11.3.0
-      sharp: 0.35.4(@types/node@22.19.15)
+      sharp: 0.35.5(@types/node@22.19.15)
       ws: 8.21.3(bufferutil@4.1.0)
       zod: 4.6.5
       zod-to-json-schema: 3.25.2(zod@4.6.5)
@@ -40928,14 +40922,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/mcp@1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)':
+  '@mastra/mcp@1.18.0(@cfworker/json-schema@4.1.1)(@mastra/core@packages+core)(express@5.2.1(supports-color@10.2.2))(hono@4.13.11)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)(zod@4.6.5)':
     dependencies:
       '@mastra/core': link:packages/core
-      '@modelcontextprotocol/client': 2.0.0
+      '@modelcontextprotocol/client': 2.2.0
       '@modelcontextprotocol/core': 2.0.0
-      '@modelcontextprotocol/ext-apps': 1.7.1(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)
-      '@modelcontextprotocol/node': 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.8)
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/ext-apps': 1.7.1(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)
+      '@modelcontextprotocol/node': 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.11)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       '@modelcontextprotocol/server': 2.0.0
       '@modelcontextprotocol/server-legacy': 2.0.0(express@5.2.1(supports-color@10.2.2))
       exit-hook: 5.1.0
@@ -40959,8 +40953,8 @@ snapshots:
 
   '@mcp-ui/client@7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)':
     dependencies:
-      '@modelcontextprotocol/ext-apps': 1.7.1(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
+      '@modelcontextprotocol/ext-apps': 1.7.1(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       zod: 3.25.76
@@ -41154,9 +41148,9 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/client@2.0.0':
+  '@modelcontextprotocol/client@2.2.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.0.0
+      '@modelcontextprotocol/core': 2.2.0
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.0.8
@@ -41166,7 +41160,7 @@ snapshots:
 
   '@modelcontextprotocol/conformance@0.2.0-alpha.11(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       '@octokit/rest': 22.0.1
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
@@ -41185,45 +41179,56 @@ snapshots:
     dependencies:
       zod: 4.6.5
 
-  '@modelcontextprotocol/ext-apps@1.7.1(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
+  '@modelcontextprotocol/core@2.2.0':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
+      zod: 4.6.5
+
+  '@modelcontextprotocol/ext-apps@1.7.1(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)
       '@standard-schema/spec': 1.1.0
       zod: 3.25.76
     optionalDependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@modelcontextprotocol/ext-apps@1.7.1(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)':
+  '@modelcontextprotocol/ext-apps@1.7.1(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       '@standard-schema/spec': 1.1.0
       zod: 4.6.5
     optionalDependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@modelcontextprotocol/ext-apps@2.0.0(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/core@2.0.0)(@modelcontextprotocol/server@2.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)':
+  '@modelcontextprotocol/ext-apps@2.0.0(@modelcontextprotocol/client@2.2.0)(@modelcontextprotocol/core@2.2.0)(@modelcontextprotocol/server@2.2.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.6.5)':
     dependencies:
-      '@modelcontextprotocol/client': 2.0.0
-      '@modelcontextprotocol/core': 2.0.0
+      '@modelcontextprotocol/client': 2.2.0
+      '@modelcontextprotocol/core': 2.2.0
       '@standard-schema/spec': 1.1.0
       zod: 4.6.5
     optionalDependencies:
-      '@modelcontextprotocol/server': 2.0.0
+      '@modelcontextprotocol/server': 2.2.0
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.8)':
+  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.8)
+      '@hono/node-server': 1.19.15(hono@4.13.11)
       '@modelcontextprotocol/server': 2.0.0
     optionalDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)':
+  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.2.0)(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.8)
+      '@hono/node-server': 1.19.15(hono@4.13.11)
+      '@modelcontextprotocol/server': 2.2.0
+    optionalDependencies:
+      hono: 4.13.11
+
+  '@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.13.11)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -41233,31 +41238,7 @@ snapshots:
       eventsource-parser: 3.0.8
       express: 5.2.1(supports-color@10.2.2)
       express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
-      hono: 4.13.8
-      jose: 6.2.12
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.0
-      raw-body: 4.0.0
-      zod: 4.6.5
-      zod-to-json-schema: 3.25.2(zod@4.6.5)
-    optionalDependencies:
-      '@cfworker/json-schema': 4.1.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
-    dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.8)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1(ajv@8.20.0)
-      content-type: 1.0.5
-      cors: 2.8.6
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.8
-      express: 5.2.1(supports-color@10.2.2)
-      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
-      hono: 4.13.8
+      hono: 4.13.11
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
@@ -41269,9 +41250,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)':
+  '@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)':
     dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.8)
+      '@hono/node-server': 1.19.15(hono@4.13.11)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -41281,7 +41262,55 @@ snapshots:
       eventsource-parser: 3.0.8
       express: 5.2.1(supports-color@10.2.2)
       express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
-      hono: 4.13.8
+      hono: 4.13.11
+      jose: 6.2.12
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 4.0.0
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.2(zod@4.6.5)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.13.11)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
+      hono: 4.13.11
+      jose: 6.2.12
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.0
+      raw-body: 4.0.0
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.2(zod@3.25.76)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.13.11)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1(supports-color@10.2.2)
+      express-rate-limit: 8.5.1(express@5.2.1(supports-color@10.2.2))
+      hono: 4.13.11
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
@@ -41308,6 +41337,11 @@ snapshots:
   '@modelcontextprotocol/server@2.0.0':
     dependencies:
       '@modelcontextprotocol/core': 2.0.0
+      zod: 4.6.5
+
+  '@modelcontextprotocol/server@2.2.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.2.0
       zod: 4.6.5
 
   '@module-federation/error-codes@0.22.0': {}
@@ -41809,7 +41843,7 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
       openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.5)
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       zod: 4.6.5
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -48115,7 +48149,7 @@ snapshots:
   '@wong2/mcp-cli@2.0.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)':
     dependencies:
       '@json-schema-tools/traverse': 1.11.0
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       conf: 15.1.0
       eventsource: 4.1.0
       express: 5.2.1(supports-color@10.2.2)
@@ -50339,7 +50373,7 @@ snapshots:
 
   deep-is@0.1.4: {}
 
-  deepeval@0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.112(zod@4.6.5))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0)):
+  deepeval@0.1.32(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@aws-sdk/client-bedrock-runtime@3.1104.0)(@aws-sdk/credential-provider-node@3.972.78)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2))(@mastra/core@packages+core)(@mastra/observability@observability+mastra)(@opentelemetry/exporter-trace-otlp-http@0.222.0(@opentelemetry/api@1.9.1))(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ai@7.0.112(zod@4.6.5))(chokidar@3.6.0)(debug@4.4.3(supports-color@10.2.2))(rxjs@7.8.2)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0)):
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/exporter-trace-otlp-grpc': 0.207.0(@opentelemetry/api@1.9.1)
@@ -50364,7 +50398,7 @@ snapshots:
     optionalDependencies:
       '@anthropic-ai/sdk': 0.112.3(zod@4.6.5)
       '@aws-sdk/client-bedrock-runtime': 3.1104.0
-      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)
+      '@google/genai': 1.52.0(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(bufferutil@4.1.0)(supports-color@10.2.2)
       '@mastra/core': link:packages/core
       '@mastra/observability': link:observability/mastra
       ai: 7.0.112(zod@4.6.5)
@@ -50737,9 +50771,9 @@ snapshots:
 
   e2b@2.38.0:
     dependencies:
-      '@bufbuild/protobuf': 2.12.1
-      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.12.1)
-      '@connectrpc/connect-web': 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@bufbuild/protobuf': 2.13.0
+      '@connectrpc/connect': 2.1.2(@bufbuild/protobuf@2.13.0)
+      '@connectrpc/connect-web': 2.1.2(@bufbuild/protobuf@2.13.0)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.13.0))
       chalk: 5.6.2
       compare-versions: 6.1.1
       dockerfile-ast: 0.7.1
@@ -51733,19 +51767,19 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.9.0(101b025dd06f1a4410516826f0608940):
+  files-sdk@1.9.0(e25ddb4692003eb7baac9333bd1b1e82):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.5
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)
+      '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.5))(@modelcontextprotocol/sdk@1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5))(zod@4.6.5)
       '@aws-sdk/client-s3': 3.1104.0
       '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1104.0)
       '@azure/core-auth': 1.10.1(supports-color@10.2.2)
       '@azure/identity': 4.13.1(supports-color@10.2.2)
       '@azure/storage-blob': 12.31.0(supports-color@10.2.2)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)(supports-color@10.2.2)
-      '@modelcontextprotocol/sdk': 1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
+      '@modelcontextprotocol/sdk': 1.31.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.5)
       '@openai/agents': 0.11.6(@aws-sdk/credential-provider-node@3.972.78)(@cfworker/json-schema@4.1.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.5)
       '@opentelemetry/api': 1.9.1
       '@supabase/storage-js': 2.111.0
@@ -52665,27 +52699,27 @@ snapshots:
     dependencies:
       parse-passwd: 1.0.0
 
-  hono-openapi@1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.8))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.8)(openapi-types@12.1.3):
+  hono-openapi@1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.11))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.11)(openapi-types@12.1.3):
     dependencies:
       '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@7.0.2)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.5)
       '@types/json-schema': 7.0.15
       openapi-types: 12.1.3
     optionalDependencies:
-      '@hono/standard-validator': 0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.8)
-      hono: 4.13.8
+      '@hono/standard-validator': 0.2.2(@standard-schema/spec@1.1.0)(hono@4.13.11)
+      hono: 4.13.11
 
-  hono-openapi@1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.8))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.8)(openapi-types@12.1.3):
+  hono-openapi@1.3.1(@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.11))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.5))(@types/json-schema@7.0.15)(hono@4.13.11)(openapi-types@12.1.3):
     dependencies:
       '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5)
       '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.2(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.2(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.5))(zod@4.6.5))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.2(typescript@6.0.3))(zod@4.6.5)
       '@types/json-schema': 7.0.15
       openapi-types: 12.1.3
     optionalDependencies:
-      '@hono/standard-validator': 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.8)
-      hono: 4.13.8
+      '@hono/standard-validator': 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.11)
+      hono: 4.13.11
 
-  hono@4.13.8: {}
+  hono@4.13.11: {}
 
   hookable@6.1.1: {}
 
@@ -53002,9 +53036,9 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.8)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5):
+  inngest@4.3.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(encoding@0.1.13)(express@5.2.1(supports-color@10.2.2))(fastify@5.12.5)(hono@4.13.11)(koa@3.2.0)(react@19.2.7)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.5):
     dependencies:
-      '@bufbuild/protobuf': 2.10.0
+      '@bufbuild/protobuf': 2.13.0
       '@inngest/ai': 0.1.7
       '@jpwilliams/waitgroup': 2.1.1
       '@opentelemetry/api': 1.9.1
@@ -53031,7 +53065,7 @@ snapshots:
     optionalDependencies:
       express: 5.2.1(supports-color@10.2.2)
       fastify: 5.12.5
-      hono: 4.13.8
+      hono: 4.13.11
       koa: 3.2.0
       react: 19.2.7
       typescript: 7.0.2
@@ -54735,7 +54769,7 @@ snapshots:
   miniflare@4.20260714.0(@types/node@22.19.15)(bufferutil@4.1.0):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
-      sharp: 0.35.4(@types/node@22.19.15)
+      sharp: 0.35.5(@types/node@22.19.15)
       undici: 8.11.2
       workerd: 1.20260714.1
       ws: 8.21.3(bufferutil@4.1.0)
@@ -54748,7 +54782,7 @@ snapshots:
   miniflare@5.20261001.0-alpha(@types/node@22.19.15)(bufferutil@4.1.0):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
-      sharp: 0.35.4(@types/node@22.19.15)
+      sharp: 0.35.5(@types/node@22.19.15)
       undici: 8.11.2
       workerd: 1.20261001.1
       ws: 8.21.3(bufferutil@4.1.0)
@@ -58576,37 +58610,37 @@ snapshots:
 
   shallowequal@1.1.0: {}
 
-  sharp@0.35.4(@types/node@22.19.15):
+  sharp@0.35.5(@types/node@22.19.15):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
       semver: 7.8.5
     optionalDependencies:
-      '@img/sharp-darwin-arm64': 0.35.4
-      '@img/sharp-darwin-x64': 0.35.4
-      '@img/sharp-freebsd-wasm32': 0.35.4
-      '@img/sharp-libvips-darwin-arm64': 1.3.3
-      '@img/sharp-libvips-darwin-x64': 1.3.3
-      '@img/sharp-libvips-linux-arm': 1.3.3
-      '@img/sharp-libvips-linux-arm64': 1.3.3
-      '@img/sharp-libvips-linux-ppc64': 1.3.3
-      '@img/sharp-libvips-linux-riscv64': 1.3.3
-      '@img/sharp-libvips-linux-s390x': 1.3.3
-      '@img/sharp-libvips-linux-x64': 1.3.3
-      '@img/sharp-libvips-linuxmusl-arm64': 1.3.3
-      '@img/sharp-libvips-linuxmusl-x64': 1.3.3
-      '@img/sharp-linux-arm': 0.35.4
-      '@img/sharp-linux-arm64': 0.35.4
-      '@img/sharp-linux-ppc64': 0.35.4
-      '@img/sharp-linux-riscv64': 0.35.4
-      '@img/sharp-linux-s390x': 0.35.4
-      '@img/sharp-linux-x64': 0.35.4
-      '@img/sharp-linuxmusl-arm64': 0.35.4
-      '@img/sharp-linuxmusl-x64': 0.35.4
-      '@img/sharp-webcontainers-wasm32': 0.35.4
-      '@img/sharp-win32-arm64': 0.35.4
-      '@img/sharp-win32-ia32': 0.35.4
-      '@img/sharp-win32-x64': 0.35.4
+      '@img/sharp-darwin-arm64': 0.35.5
+      '@img/sharp-darwin-x64': 0.35.5
+      '@img/sharp-freebsd-wasm32': 0.35.5
+      '@img/sharp-libvips-darwin-arm64': 1.3.4
+      '@img/sharp-libvips-darwin-x64': 1.3.4
+      '@img/sharp-libvips-linux-arm': 1.3.4
+      '@img/sharp-libvips-linux-arm64': 1.3.4
+      '@img/sharp-libvips-linux-ppc64': 1.3.4
+      '@img/sharp-libvips-linux-riscv64': 1.3.4
+      '@img/sharp-libvips-linux-s390x': 1.3.4
+      '@img/sharp-libvips-linux-x64': 1.3.4
+      '@img/sharp-libvips-linuxmusl-arm64': 1.3.4
+      '@img/sharp-libvips-linuxmusl-x64': 1.3.4
+      '@img/sharp-linux-arm': 0.35.5
+      '@img/sharp-linux-arm64': 0.35.5
+      '@img/sharp-linux-ppc64': 0.35.5
+      '@img/sharp-linux-riscv64': 0.35.5
+      '@img/sharp-linux-s390x': 0.35.5
+      '@img/sharp-linux-x64': 0.35.5
+      '@img/sharp-linuxmusl-arm64': 0.35.5
+      '@img/sharp-linuxmusl-x64': 0.35.5
+      '@img/sharp-webcontainers-wasm32': 0.35.5
+      '@img/sharp-win32-arm64': 0.35.5
+      '@img/sharp-win32-ia32': 0.35.5
+      '@img/sharp-win32-x64': 0.35.5
       '@types/node': 22.19.15
 
   shebang-command@2.0.0:
