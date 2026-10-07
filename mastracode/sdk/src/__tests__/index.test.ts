@@ -865,6 +865,21 @@ describe('createMastraCode', () => {
     );
   });
 
+  it('starts with an unavailable reason when Knowledge storage cannot be opened', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const { createMastraCode } = await import('../index.js');
+    createKnowledgeInspectorMock.mockRejectedValueOnce(
+      new Error('Knowledge schema reset required: the existing Knowledge schema has no completion marker.'),
+    );
+
+    const code = await createMastraCode({ knowledge: new Knowledge({ id: 'mastra' }) });
+
+    expect(code.knowledgeInspector).toBeUndefined();
+    expect(code.knowledgeInspectorUnavailableReason).toBe(
+      'Knowledge is unavailable: Knowledge schema reset required: the existing Knowledge schema has no completion marker.',
+    );
+  });
+
   it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
     vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '');
     try {
