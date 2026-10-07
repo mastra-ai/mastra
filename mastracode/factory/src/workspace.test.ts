@@ -3421,6 +3421,39 @@ describe('factory environment sandbox context', () => {
       const refresh = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
       expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
       expect(lastGhToken()).toBe('env-token-rotated');
+
+      // A refresh the provider can no longer widen narrows GH_TOKEN and says so.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mocks.getRepositoriesAccess.mockResolvedValueOnce(undefined);
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
+    });
+
+    it('boots on the session repository token when the environment-wide mint fails', async () => {
+      mocks.getRepositoriesAccess.mockRejectedValueOnce(new Error('installation cannot grant octocat/docs'));
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        expect.objectContaining({
+          reason: 'provider failed to mint one token for this repository set: installation cannot grant octocat/docs',
+        }),
+      );
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
     });
 
     it('falls back to the session repository token, warns once and tells the agent when one token cannot cover the environment', async () => {

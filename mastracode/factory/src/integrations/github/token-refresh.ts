@@ -14,8 +14,13 @@ type GithubTokenInjectorResolver = () => GithubTokenInjector;
 export interface GithubRefreshTarget {
   orgId: string;
   repositoryId: string;
-  /** Every environment repository `GH_TOKEN` should reach, the session's own first; absent for a single-repository session. */
-  repositoryIds?: string[];
+  /**
+   * Mints the token `GH_TOKEN` carries the same way the sandbox boot did (one
+   * credential for every environment repository when the provider can, else
+   * the session repository's, with the agent told through the environment
+   * signal). Absent for a single-repository session, which re-mints its own.
+   */
+  mint?: () => Promise<string>;
 }
 
 /** Recorded by the workspace resolver once it has authorized a GitHub-backed

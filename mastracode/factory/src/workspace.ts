@@ -17,7 +17,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
-import type { VersionControl } from './capabilities/version-control.js';
+import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -595,7 +595,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       registerGithubRefreshTarget(requestContext, {
         orgId: session.orgId,
         repositoryId: repository.id,
-        ...(tokenRepositoryIds.length > 1 ? { repositoryIds: tokenRepositoryIds } : {}),
+        // Bound below once the minter exists; a refresh re-mints the same set.
+        ...(tokenRepositoryIds.length > 1 ? { mint: () => getRepositoryToken() } : {}),
       });
     }
 
@@ -871,12 +872,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     let tokenScopeWarned = false;
     const getRepositoryToken = async (): Promise<string> => {
       if (tokenRepositoryIds.length > 1) {
-        const wide = sourceControl.versionControl.getRepositoriesAccess
-          ? await sourceControl.versionControl.getRepositoriesAccess({
+        let reason = 'provider mints per-repository tokens only';
+        let wide: RepositoryAccess | undefined;
+        if (sourceControl.versionControl.getRepositoriesAccess) {
+          try {
+            wide = await sourceControl.versionControl.getRepositoriesAccess({
               orgId: session.orgId,
               repositoryIds: tokenRepositoryIds,
-            })
-          : undefined;
+            });
+            reason = 'provider cannot mint one token for this repository set';
+          } catch (error) {
+            // A sibling repository the provider cannot grant must not stop the
+            // session: its own token still boots it.
+            reason = `provider failed to mint one token for this repository set: ${error instanceof Error ? error.message : String(error)}`;
+          }
+        }
         if (wide?.authorization?.token) {
           setSessionEnvironmentNote(session.sessionId, null);
           return wide.authorization.token;
@@ -886,9 +896,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           console.warn('[Mastra Factory] GH_TOKEN covers the session repository only', {
             sessionId: session.sessionId,
             repositories: environment?.repos.map(repo => repo.slug) ?? [repoFullName],
-            reason: sourceControl.versionControl.getRepositoriesAccess
-              ? 'provider cannot mint one token for this repository set'
-              : 'provider mints per-repository tokens only',
+            reason,
           });
         }
         setSessionEnvironmentNote(
