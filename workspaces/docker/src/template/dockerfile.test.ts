@@ -19,7 +19,7 @@ describe('synthesizeDockerfile', () => {
     expect(withOwner('1000:1000')).toContain('COPY --chown=1000:1000 --from=mastra-secret-0 /out /out');
     expect(withOwner('node')).toContain('COPY --chown=node --from=mastra-secret-0 /out /out');
     expect(withOwner(undefined)).toContain('COPY --from=mastra-secret-0 /out /out');
-    for (const bad of ['', 'node --chmod=0777', 'a:b:c', 'node\nRUN x']) {
+    for (const bad of ['', 'node --chmod=0777', 'a:b:c', 'node\nRUN x', 'node\n']) {
       expect(() => withOwner(bad)).toThrow(TypeError);
     }
   });
