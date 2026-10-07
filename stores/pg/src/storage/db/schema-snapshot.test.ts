@@ -145,7 +145,7 @@ describe('init catalog snapshot', () => {
     // pinned init window, so there is no catalog snapshot to read); what the
     // contract guarantees is detection without repair.
     const statements = await captureStatements(async () => {
-      await expect(warm.initKnowledge()).rejects.toThrow(/mastra_knowledge_nodes is incomplete: metadata/);
+      await expect(warm.initKnowledge()).rejects.toThrow(/mastra_knowledge_nodes is missing metadata/);
     });
     expect(count(statements, NO_OP_ALTER)).toBe(0);
     expect(await columnsIn(schema, 'mastra_knowledge_nodes')).not.toContain('metadata');
