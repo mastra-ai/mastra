@@ -28,6 +28,7 @@ import {
   textOnlyTape,
   toolCallTape,
   normalizeRequest,
+  normalizePayload,
 } from './parity-harness';
 
 function systemText(request: CapturedRequest): string {
@@ -633,7 +634,9 @@ describe('expectEngineParity', () => {
         'AGENT:finish',
       ]);
       expect(turn.streamedText).toBe('before the failure');
-      expect(turn.error).toEqual({ name: 'Error', message: 'scripted model failure' });
+      // `toStrictEqual` so a `stack` recorded as `undefined` would still fail: the
+      // contract is exactly name and message.
+      expect(turn.error).toStrictEqual({ name: 'Error', message: 'scripted model failure' });
 
       // The wrapped engines re-emit the error as a plain object; plain keeps the
       // raw `Error`, whose name and message are not enumerable properties. Either
@@ -861,41 +864,83 @@ describe('expectEngineParity', () => {
   });
 
   it('records a generate() call that rejects', async () => {
-    const results = await expectEngineParity(
-      generateScenario({
-        model: {
-          respond: () => {
-            throw new Error('scripted generate failure');
+    // Without `maxRetries: 0` the model call is retried, which is a retry-policy
+    // difference the failed-run case is not about.
+    const stopRetrying = async (handle: { generate: (m: string, o?: ParityStreamOptions) => Promise<unknown> }) => {
+      await handle.generate('generate this', { modelSettings: { maxRetries: 0 } } as ParityStreamOptions);
+    };
+    const cases = [
+      {
+        name: 'Error',
+        message: 'scripted generate failure',
+        scenario: generateScenario({
+          model: {
+            respond: () => {
+              throw new Error('scripted generate failure');
+            },
           },
-        },
-        // Without this the model call is retried, which is a retry-policy
-        // difference the failed-run case is not about.
-        run: async handle => {
-          await handle.generate('generate this', { modelSettings: { maxRetries: 0 } } as ParityStreamOptions);
-        },
-      }),
-    );
+          run: stopRetrying,
+        }),
+      },
+      {
+        // A tape that ends in an error part fails a streaming run, so it fails a
+        // generate call too rather than reporting a success the run never had.
+        name: 'Error',
+        message: 'scripted tape failure',
+        scenario: generateScenario({
+          model: { tapes: [failingTape('scripted tape failure')] },
+          run: stopRetrying,
+        }),
+      },
+      {
+        // The same tape with the failure in the serialised shape the wrapped
+        // engines hand back: it keeps its name and message instead of collapsing
+        // to `'[object Object]'` on the way out.
+        name: 'TypeError',
+        message: 'scripted serialised failure',
+        scenario: generateScenario({
+          model: {
+            tapes: [
+              [
+                { type: 'stream-start', warnings: [] },
+                { type: 'error', error: { name: 'TypeError', message: 'scripted serialised failure' } },
+              ] as ModelTape,
+            ],
+          },
+          run: stopRetrying,
+        }),
+      },
+    ];
 
-    for (const engine of ENGINES) {
-      const turn = results[engine]!.turns[0]!;
-      // A rejected generate() is an observation, not a reason to abort: the
-      // same failure on every engine is parity.
-      expect(turn.generate).toBe(true);
-      expect(turn.error).toEqual({ name: 'Error', message: 'scripted generate failure' });
-      // The request is still recorded, so a failure does not hide what was sent.
-      expect(results[engine]!.requests).toHaveLength(1);
+    for (const { name, message, scenario } of cases) {
+      const results = await expectEngineParity(scenario);
+
+      for (const engine of ENGINES) {
+        const turn = results[engine]!.turns[0]!;
+        // A rejected generate() is an observation, not a reason to abort: the
+        // same failure on every engine is parity.
+        expect(turn.generate).toBe(true);
+        expect(turn.error).toStrictEqual({ name, message });
+        // The request is still recorded, so a failure does not hide what was sent.
+        expect(results[engine]!.requests).toHaveLength(1);
+      }
     }
   });
 
   /**
    * One deferred tool call, then text. The tool is eligible and the agent
    * defers it, so it only runs in the background when the host manages tasks
-   * and its workers are up — which is what `host` turns on.
+   * and its workers are up — which is what `host` turns on. `executions` counts
+   * how many times the tool really ran on each engine, which the assertions use
+   * because plain's loop does not wait for the background run here.
    */
-  function backgroundScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+  function backgroundScenario(
+    overrides: Partial<EngineParityScenario> = {},
+    executions?: Partial<Record<ParityEngine, number>>,
+  ): EngineParityScenario {
     return {
       model: { tapes: [toolCallTape('research', { topic: 'AI' }), textOnlyTape('Done.')] },
-      buildAgent: ({ model }) =>
+      buildAgent: ({ engine, model }) =>
         new Agent({
           id: 'parity-background',
           name: 'Parity Background',
@@ -906,7 +951,10 @@ describe('expectEngineParity', () => {
               id: 'research',
               description: 'Research a topic',
               inputSchema: z.object({ topic: z.string() }),
-              execute: async ({ topic }) => ({ summary: `Research on ${topic}` }),
+              execute: async ({ topic }) => {
+                if (executions) executions[engine] = (executions[engine] ?? 0) + 1;
+                return { summary: `Research on ${topic}` };
+              },
               background: { enabled: true },
             }),
           },
@@ -929,11 +977,15 @@ describe('expectEngineParity', () => {
         'where plain keeps the placeholder; taskId is a per-engine stubbed UUID.',
       ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'toolResults', 'requests', 'finishChunk'],
     };
+    const withHostExecutions: Partial<Record<ParityEngine, number>> = {};
     const withHost = await expectEngineParity(
-      backgroundScenario({
-        host: { backgroundTasks: { enabled: true } },
-        differences: { durable: difference, evented: difference },
-      }),
+      backgroundScenario(
+        {
+          host: { backgroundTasks: { enabled: true } },
+          differences: { durable: difference, evented: difference },
+        },
+        withHostExecutions,
+      ),
     );
 
     for (const engine of ENGINES) {
@@ -952,17 +1004,22 @@ describe('expectEngineParity', () => {
           { toolCallId: 'parity-call-1', toolName: 'research', result: { summary: 'Research on AI' } },
         ]);
       }
+      // The tool itself ran on every engine, so the dispatch above really
+      // executed — including plain, whose loop moves on without waiting for it.
+      expect(withHostExecutions[engine]).toBe(1);
     }
 
     // Without the host the same script degrades to a foreground call, so the
     // scenario above would pass vacuously. This pins that.
-    const withoutHost = await expectEngineParity(backgroundScenario());
+    const withoutHostExecutions: Partial<Record<ParityEngine, number>> = {};
+    const withoutHost = await expectEngineParity(backgroundScenario({}, withoutHostExecutions));
 
     for (const engine of ENGINES) {
       const turn = withoutHost[engine]!.turns[0]!;
       expect(turn.chunkTypes.filter(t => t.startsWith('background-task'))).toEqual([]);
       expect(turn.chunks).toContain('AGENT:tool-result:research');
       expect(turn.text).toBe('Done.');
+      expect(withoutHostExecutions[engine]).toBe(1);
     }
   });
 
@@ -996,6 +1053,21 @@ describe('expectEngineParity', () => {
     // createdAt inside content the model sees is real data, not a Mastra stamp.
     const nested = (createdAt: number) => ({ providerOptions: { mastra: { createdAt } } });
     expect(normalizeRequest(request(1, false, nested(1)))).not.toEqual(normalizeRequest(request(1, false, nested(2))));
+  });
+
+  it('drops an error stack but keeps a stack an application owns', () => {
+    // An `error` chunk's payload is the failure itself, and the stack it carries
+    // embeds the absolute checkout path: dropped where the payload is known to
+    // be a failure.
+    expect(
+      normalizePayload({ error: { name: 'Error', message: 'boom', stack: 'at /checkout/src/x.ts:1' } }, [], true),
+    ).toEqual({ error: { name: 'Error', message: 'boom' } });
+
+    // Everywhere else a `stack` is the application's data. Dropping it by key
+    // name would have made the two cases below compare equal.
+    const result = { name: 'deployment', message: 'ready', stack: ['a', 'b'] };
+    expect(normalizePayload(result)).toEqual(result);
+    expect(normalizePayload({ stack: 'a' })).not.toEqual(normalizePayload({ stack: 'b' }));
   });
 
   it('runs a suspension and a resume on all three engines', async () => {

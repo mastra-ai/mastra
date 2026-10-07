@@ -129,9 +129,19 @@ export interface ParityRunError {
   message: string;
 }
 
-/** Reduces a thrown value to the shape `ParitySnapshot.error` compares. */
+/**
+ * Reduces a thrown value to the shape `ParitySnapshot.error` compares. Engines
+ * do not all throw `Error` instances — the wrapped ones re-emit a failure as a
+ * serialised `{ name, message }` — so an object carrying both is read the same
+ * way instead of collapsing to `'[object Object]'` and comparing equal to a
+ * different failure.
+ */
 function describeRunError(thrown: unknown): ParityRunError {
   if (thrown instanceof Error) return { name: thrown.name, message: thrown.message };
+  if (thrown && typeof thrown === 'object') {
+    const { name, message } = thrown as { name?: unknown; message?: unknown };
+    if (typeof name === 'string' && typeof message === 'string') return { name, message };
+  }
   return { name: 'Error', message: String(thrown) };
 }
 
@@ -219,18 +229,22 @@ export const VOLATILE_PAYLOAD_KEYS = new Set([
   'endedAt',
   'request',
   'abortSignal',
-  // A failed run's payload carries the error's stack, which embeds the absolute
-  // checkout path and so differs on every machine.
-  'stack',
 ]);
 
 /**
- * Recursively strips volatile keys in `VOLATILE_PAYLOAD_KEYS` and values no
- * transport can carry, so two engines' chunk payloads compare on what a
- * consumer actually receives. Only true cycles (an object containing itself)
- * become `'[circular]'`; an object shared twice is serialised twice.
+ * Recursively strips volatile keys in `VOLATILE_PAYLOAD_KEYS`, an error's
+ * `stack`, and values no transport can carry, so two engines' chunk payloads
+ * compare on what a consumer actually receives. Only true cycles (an object
+ * containing itself) become `'[circular]'`; an object shared twice is
+ * serialised twice.
+ *
+ * `dropStack` is set only where the payload is known to be a failure — the
+ * `error` chunk, where the engines hand the error on as data. There the error's
+ * `stack` embeds the absolute checkout path and so differs on every machine.
+ * Anywhere else a key called `stack` is the application's, and dropping it by
+ * name would hide a real difference between two engines.
  */
-export function normalizePayload(value: unknown, ancestors: readonly object[] = []): unknown {
+export function normalizePayload(value: unknown, ancestors: readonly object[] = [], dropStack = false): unknown {
   if (value === null) return null;
   if (typeof value === 'function' || typeof value === 'symbol') return undefined;
   if (typeof value !== 'object') return value;
@@ -239,14 +253,15 @@ export function normalizePayload(value: unknown, ancestors: readonly object[] = 
   if (ancestors.includes(value)) return '[circular]';
   const nested = [...ancestors, value];
 
-  if (Array.isArray(value)) return value.map(entry => normalizePayload(entry, nested) ?? null);
-  if (value instanceof Map) return normalizePayload(Object.fromEntries(value), nested);
-  if (value instanceof Set) return normalizePayload([...value], nested);
+  if (Array.isArray(value)) return value.map(entry => normalizePayload(entry, nested, dropStack) ?? null);
+  if (value instanceof Map) return normalizePayload(Object.fromEntries(value), nested, dropStack);
+  if (value instanceof Set) return normalizePayload([...value], nested, dropStack);
 
   const out: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
     if (VOLATILE_PAYLOAD_KEYS.has(key)) continue;
-    const normalized = normalizePayload(entry, nested);
+    if (key === 'stack' && dropStack) continue;
+    const normalized = normalizePayload(entry, nested, dropStack);
     // An absent key and a `undefined` value are the same thing to a consumer.
     if (normalized !== undefined) out[key] = normalized;
   }
@@ -310,15 +325,20 @@ async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promi
       acc.chunkTypes.push(chunk.type);
       // `object` and `object-result` chunks carry the parsed value at the top
       // level rather than in `payload`, so it is folded into the recorded payload
-      // — otherwise the value a consumer receives is never compared.
+      // — otherwise the value a consumer receives is never compared. It is
+      // recorded as parsed: the value is the schema's output, not engine
+      // metadata, so a field named `id` or `timestamp` is the application's and
+      // is compared like any other.
       if (chunk.type === 'object' || chunk.type === 'object-result') {
         const payload = normalizePayload(chunk.payload);
         acc.chunkPayloads.push({
           ...(typeof payload === 'object' && payload !== null ? payload : {}),
-          object: normalizePayload(chunk.object),
+          object: chunk.object,
         });
       } else {
-        acc.chunkPayloads.push(normalizePayload(chunk.payload));
+        // An `error` chunk's payload is the failure itself, so its `stack` goes:
+        // see `normalizePayload`.
+        acc.chunkPayloads.push(normalizePayload(chunk.payload, [], chunk.type === 'error'));
       }
       if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
       if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
@@ -522,9 +542,25 @@ export interface RecordingModel {
 /**
  * Folds a stream tape into the result a `doGenerate` call returns. The tape
  * describes what a streaming consumer sees; this is the same call as a
- * non-streaming consumer sees it, which is what `generate()` reads.
+ * non-streaming consumer sees it, which is what `generate()` reads. A tape that
+ * ends in an `error` part fails the streaming run, so it rejects this call too,
+ * rather than reporting a success the stream never produced.
  */
 function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModelV2['doGenerate']>> {
+  const failed = tape.find(part => part.type === 'error');
+  if (failed) {
+    const error = failed.error;
+    if (error instanceof Error) throw error;
+    // A tape may script the failure in the serialised shape the wrapped engines
+    // hand back. The provider layer replaces a thrown non-`Error` with its own
+    // message, so the scripted name and message are rebuilt into an `Error` and
+    // the same failure survives on either path.
+    const { name, message } = (error ?? {}) as { name?: unknown; message?: unknown };
+    const rebuilt = new Error(typeof message === 'string' ? message : String(error));
+    if (typeof name === 'string') rebuilt.name = name;
+    throw rebuilt;
+  }
+
   const text = tape
     .filter(part => part.type === 'text-delta')
     .map(part => String(part.delta ?? ''))
@@ -873,6 +909,11 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
             throw parityMisuse('turn() was given a `resume`, but the turn did not suspend');
           }
           const resumeOptions = { ...streamOptions, runId, toolCallId: suspendedToolCallId };
+          // The stream that suspended is still open, so reading its output would
+          // hang until the test times out. Drop it before the call: if the call
+          // rejects, the turn is recorded as a failure with the chunks drained
+          // so far rather than left holding an unreadable stream.
+          streamed = undefined;
           if ('resumeData' in continuation) {
             streamed = await target.resumeStream(continuation.resumeData, resumeOptions);
           } else if ('approve' in continuation) {
