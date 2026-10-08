@@ -52,18 +52,13 @@ describe('AppShell', () => {
     });
 
     it('drops the left inset at lg so the sidebar padding provides the gap', () => {
-      expect(bodyClassName(markup)).toContain('max-lg:p-1.5 lg:pr-2 lg:pb-2 lg:pl-0');
+      expect(bodyClassName(markup)).toContain('max-lg:p-1.5 lg:py-2 lg:pr-2 lg:pl-0');
     });
 
     it('never mixes padding shorthands with longhands, so consumer CSS order cannot override the lg inset', () => {
       const classes = bodyClassName(markup).split(/\s+/);
       expect(classes).not.toContain('p-1.5');
       expect(classes).not.toContain('lg:p-2');
-    });
-
-    it('insets the whole grid from the top, so the sidebar starts level with the content', () => {
-      expect(markup).toMatch(/data-slot="app-shell" class="[^"]*\blg:pt-2\b/);
-      expect(bodyClassName(markup)).not.toMatch(/\blg:(py|pt)-/);
     });
 
     it('keeps the mobile header outside the inset body', () => {
@@ -79,8 +74,7 @@ describe('AppShell', () => {
     });
 
     it('insets the body on all sides', () => {
-      expect(markup).toMatch(/data-slot="app-shell" class="[^"]*\blg:pt-2\b/);
-      expect(bodyClassName(markup)).toContain('max-lg:p-1.5 lg:pr-2 lg:pb-2 lg:pl-2');
+      expect(bodyClassName(markup)).toContain('max-lg:p-1.5 lg:py-2 lg:pr-2 lg:pl-2');
       expect(bodyClassName(markup)).not.toContain('lg:pl-0');
     });
   });
