@@ -22,9 +22,10 @@
  *    request without `providerExecuted`, where the streaming path (plain's own
  *    `stream()`, and durable/evented, which always stream) sends
  *    `providerExecuted: false`. That difference is real, unrelated to the
- *    tickets this port may cite, and reported on COR-1406 for a ticket
- *    decision; until it is covered, driving this leg through the helper would
- *    mean declaring a difference no ticket owns.
+ *    tickets this port may cite, and reported on COR-1406 (comment
+ *    `83663ee6-626c-4b1e-b835-9c650709bf9b`) for a ticket decision; no ticket
+ *    owns it yet, so it is deliberately not declared, and driving this leg
+ *    through the helper would mean declaring a difference no ticket owns.
  *
  * Both direct legs still assert every harness `evaluate()` check on every
  * engine, compare the harness's `done(contract)` object across engines, and pin
