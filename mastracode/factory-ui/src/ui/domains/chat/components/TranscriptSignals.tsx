@@ -1,5 +1,5 @@
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
-import { Link, useParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
 
 import type { MessageEntry, TimelineEntry } from '../services/transcript';
 import { isRecord } from './transcript-shared';
@@ -65,17 +65,19 @@ function signalSources(value: unknown): SignalSource[] | undefined {
 }
 
 export function SignalSources({ sources }: { sources: SignalSource[] }) {
-  const { factoryId } = useParams();
-  if (!factoryId) return null;
+  const location = useLocation();
   return (
     <nav aria-label="Signal sources" data-testid="signal-sources" className="flex flex-wrap gap-1.5 pt-1 pl-7">
       {sources.map(source => {
-        const params = new URLSearchParams({ node: source.nodeId });
+        const params = new URLSearchParams(location.search);
+        params.set('node', source.nodeId);
         if (source.recordId) params.set('record', source.recordId);
+        else params.delete('record');
         return (
           <Link
             key={`${source.nodeId}:${source.recordId ?? ''}`}
-            to={`/factories/${encodeURIComponent(factoryId)}/knowledge?${params}`}
+            to={{ search: `?${params}` }}
+            preventScrollReset
             className="border-border text-muted-foreground hover:bg-fill hover:text-foreground focus-visible:text-foreground rounded-full border px-2 py-0.5 text-xs focus-visible:outline-2"
           >
             {source.name}

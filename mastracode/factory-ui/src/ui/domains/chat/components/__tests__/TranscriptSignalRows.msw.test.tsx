@@ -2,10 +2,13 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { TimelineEntry } from '../../services/transcript';
+import { SessionKnowledgeFlyout } from '../SessionKnowledgeFlyout';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
@@ -129,7 +132,36 @@ describe('TranscriptEntries signal rows', () => {
     expect(screen.queryByText(/current-objective/)).not.toBeInTheDocument();
   });
 
-  it('links reminder sources to the knowledge flyout', async () => {
+  it('opens reminder sources in the knowledge flyout on the session page', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/f-1/knowledge/nodes/:nodeId`, ({ params }) =>
+        HttpResponse.json({
+          node: {
+            id: params.nodeId,
+            name: 'Project Atlas',
+            kind: 'project',
+            content: 'Flagship migration.',
+            scope: ['org:o-1', 'resource:f-1'],
+            rung: 'resource',
+            createdAt: '2026-08-13T00:00:00.000Z',
+            updatedAt: '2026-08-13T01:00:00.000Z',
+          },
+          records: [
+            {
+              id: 'rec-1',
+              node: params.nodeId,
+              relation: 'owned',
+              text: 'Atlas launches in March.',
+              scope: ['org:o-1', 'resource:f-1'],
+              rung: 'resource',
+              sourceThreadId: 't-0',
+              capturedAt: '2026-08-13T02:00:00.000Z',
+              pinned: false,
+            },
+          ],
+        }),
+      ),
+    );
     const entry: TimelineEntry = {
       kind: 'message',
       id: 'sig-rem',
@@ -148,9 +180,13 @@ describe('TranscriptEntries signal rows', () => {
       [
         {
           path: '/factories/:factoryId/user/threads/:threadId',
-          element: <TranscriptEntries entries={[entry]} onApprove={() => {}} onRespond={() => {}} />,
+          element: (
+            <div className="relative">
+              <TranscriptEntries entries={[entry]} onApprove={() => {}} onRespond={() => {}} />
+              <SessionKnowledgeFlyout />
+            </div>
+          ),
         },
-        { path: '/factories/:factoryId/knowledge', element: <p>knowledge page</p> },
       ],
       { initialEntries: ['/factories/f-1/user/threads/t-1'] },
     );
@@ -159,10 +195,19 @@ describe('TranscriptEntries signal rows', () => {
     const chip = within(screen.getByRole('navigation', { name: 'Signal sources' })).getByRole('link', {
       name: 'Project Atlas',
     });
-    expect(chip).toHaveAttribute('href', '/factories/f-1/knowledge?node=node-1&record=rec-1');
+    expect(chip).toHaveAttribute('href', '/factories/f-1/user/threads/t-1?node=node-1&record=rec-1');
     chip.focus();
     await userEvent.keyboard('{Enter}');
-    expect(await screen.findByText('knowledge page')).toBeInTheDocument();
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByText('Flagship migration.')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/f-1/user/threads/t-1');
+    expect(screen.getByRole('group', { name: 'Signal: remembered' })).toBeInTheDocument();
+
+    await userEvent.click(within(flyout).getByRole('button', { name: /close/i }));
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+    expect(router.state.location.search).toBe('');
+    expect(screen.getByRole('group', { name: 'Signal: remembered' })).toBeInTheDocument();
   });
 
   it.each([undefined, 'not json', '[{"name":"no id"}]'])(

@@ -5,6 +5,7 @@ import type { ReactNode, RefObject } from 'react';
 import { composerColumnClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
 import { ComposerPanel } from './ComposerPanel';
+import { SessionKnowledgeFlyout } from './SessionKnowledgeFlyout';
 import { SessionPreparationOverlay } from './SessionPreparationOverlay';
 import { TaskPanel } from './TaskPanel';
 import { Transcript } from './Transcript';
@@ -76,6 +77,7 @@ export function SessionChatSurface({
           </div>
         </ChatShell.Viewport>
         {stageSurface}
+        <SessionKnowledgeFlyout />
       </ChatShell.Stage>
     </ChatShell>
   );
