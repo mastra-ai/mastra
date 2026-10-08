@@ -3,15 +3,34 @@ import { ThinkingLevelPicker, ThinkingLevelUnavailable } from '@mastra/playgroun
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
+import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatModes } from '../../context/useChatModes';
 import { useChatThinking } from '../../context/useChatThinking';
 import { thinkingLevelOptionsForModel, thinkingSourceLabel } from '../../services/thinkingLevels';
-import type { ThinkingLevelOrigin } from '../../services/thinkingLevels';
+import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
 
 interface SessionThinkingControlProps {
   modelId: string;
   switchingModel: boolean;
+}
+
+type ThinkingControlState = { unavailableReason: string } | { effective: EffectiveThinkingLevel };
+
+function thinkingControlState({
+  catalog,
+  thinking,
+  switchingModel,
+}: {
+  catalog: { isPending: boolean };
+  thinking: ChatThinkingApi;
+  switchingModel: boolean;
+}): ThinkingControlState {
+  if (catalog.isPending) return { unavailableReason: "This model's thinking levels aren't loaded yet." };
+  if (thinking.loadError) return { unavailableReason: "The thinking level couldn't be loaded." };
+  if (!thinking.level) return { unavailableReason: "The thinking level isn't loaded yet." };
+  if (switchingModel) return { unavailableReason: 'Switching model…' };
+  return { effective: thinking.level };
 }
 
 function showFailure(fallback: string) {
@@ -25,20 +44,16 @@ function originLabel(origin: ThinkingLevelOrigin, modeId: string | undefined) {
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const thinking = useChatThinking();
   const { activeModeId } = useChatModes();
+  const catalog = useAvailableModelsQuery();
   const reasoningOptions = useModelReasoningOptions(modelId);
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
+  const state = thinkingControlState({ catalog, thinking, switchingModel });
 
-  if (!thinking.level) {
-    const reason = thinking.loadError
-      ? "The thinking level couldn't be loaded."
-      : "The thinking level isn't loaded yet.";
-    return <ThinkingLevelUnavailable options={options} label="Thinking" reason={reason} />;
-  }
-  if (switchingModel) {
-    return <ThinkingLevelUnavailable options={options} label="Thinking" reason="Switching model…" />;
+  if ('unavailableReason' in state) {
+    return <ThinkingLevelUnavailable options={options} label="Thinking" reason={state.unavailableReason} />;
   }
 
-  const { level, origin } = thinking.level;
+  const { level, origin } = state.effective;
   const source = originLabel(origin, activeModeId);
 
   return (

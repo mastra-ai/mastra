@@ -290,18 +290,21 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
   });
 
-  it('offers the thinking level while the model list is still loading', async () => {
+  it("holds the thinking control until the model's levels load, then shows the level it runs", async () => {
     let loadCatalog = () => {};
     const catalogLoaded = new Promise<void>(resolve => {
       loadCatalog = resolve;
     });
-    renderPicker({ thinkingLevel: 'high', catalogLoaded });
+    renderPicker({ modelId: 'openai/gpt-5', thinkingLevel: 'max', catalogLoaded });
 
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Session model' })).toBeDisabled();
+    expect(
+      await screen.findByRole('button', {
+        name: "Thinking: unavailable. This model's thinking levels aren't loaded yet.",
+      }),
+    ).toHaveAttribute('aria-disabled', 'true');
 
     loadCatalog();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
+    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
   });
 
   it('locks the thinking level while a model switch is in flight', async () => {
