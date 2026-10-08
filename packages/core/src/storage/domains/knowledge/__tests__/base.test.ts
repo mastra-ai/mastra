@@ -367,6 +367,16 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(siblingOnly.scope).toEqual(sibling);
   });
 
+  it('resolves a name through a sibling-scoped node merged into a visible node', async () => {
+    const store = createStore();
+    const alias = await store.createNode({ name: 'Janey', kind: 'person', scope: sibling });
+    const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    await store.mergeNodes({ sourceId: alias.id, targetId: jane.id, sourceVersion: alias.version });
+
+    // The alias itself is outside the caller's scope, but its merge terminal is visible.
+    expect((await store.resolveNode({ name: 'Janey', scope: thread }))?.id).toBe(jane.id);
+  });
+
   it('stamps provenance, derives mentions, and separates knowledge about from touching', async () => {
     const store = createStore();
     const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
