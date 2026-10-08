@@ -498,12 +498,12 @@ export class MastraCodeGateway extends MastraModelGateway {
       const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
       if (!middleware) {
-        return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+        return provider.chatModel(args.modelId);
       }
       return wrapLanguageModel({
         model: provider.chatModel(args.modelId),
         middleware: [middleware],
-      }) as unknown as GatewayLanguageModel;
+      });
     }
 
     if (args.providerId === 'github-copilot') {
@@ -527,7 +527,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         baseURL: 'https://api.moonshot.ai/anthropic/v1',
         name: 'moonshotai.anthropicv1',
         headers: args.headers,
-      })(args.modelId) as unknown as GatewayLanguageModel;
+      })(args.modelId);
     }
 
     if (args.providerId === 'anthropic') {
@@ -603,7 +603,7 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }) as any,
+          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }),
         });
 
         return wrapLanguageModel({
@@ -613,18 +613,18 @@ export class MastraCodeGateway extends MastraModelGateway {
             createPromptCacheMiddleware(this.#anthropicPromptCacheScope),
             ...(thinkingMiddleware ? [thinkingMiddleware] : []),
           ],
-        }) as unknown as GatewayLanguageModel;
+        });
       }
 
       const gatewayModel = this.#mastraGateway.resolveLanguageModel({
         ...args,
         modelId: bareModelId,
-      }) as GatewayLanguageModel;
+      });
       if (!thinkingMiddleware) return gatewayModel;
       return wrapLanguageModel({
         model: gatewayModel as any,
         middleware: [thinkingMiddleware],
-      }) as unknown as GatewayLanguageModel;
+      });
     }
 
     if (storedCred?.type === 'oauth') {
@@ -643,7 +643,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         args.headers,
         this.#thinkingLevel,
         this.#anthropicPromptCacheScope,
-      ) as unknown as GatewayLanguageModel;
+      );
     }
 
     const apiKey = getAnthropicApiKey(this.#credentials);
@@ -654,7 +654,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         args.headers,
         this.#thinkingLevel,
         this.#anthropicPromptCacheScope,
-      ) as unknown as GatewayLanguageModel;
+      );
     }
 
     // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
@@ -690,16 +690,16 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }) as any,
+          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }),
         });
 
         return wrapLanguageModel({
           model: openai.responses(resolvedBareModelId),
           middleware: [middleware],
-        }) as unknown as GatewayLanguageModel;
+        });
       }
 
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+      return this.#mastraGateway.resolveLanguageModel(args);
     }
 
     if (storedCred?.type === 'oauth') {
@@ -713,12 +713,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     const apiKey = getOpenAIApiKey(this.#credentials);
     if (apiKey) {
-      return openaiApiKeyProvider(
-        args.modelId,
-        apiKey,
-        args.headers,
-        this.#thinkingLevel,
-      ) as unknown as GatewayLanguageModel;
+      return openaiApiKeyProvider(args.modelId, apiKey, args.headers, this.#thinkingLevel);
     }
 
     return undefined;
@@ -733,9 +728,9 @@ export class MastraCodeGateway extends MastraModelGateway {
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
     const baseModel = this.#routeThroughMastraGateway
-      ? (this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel)
+      ? this.#mastraGateway.resolveLanguageModel(args)
       : (new ModelRouterLanguageModel({
-          id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+          id: `${args.providerId}/${args.modelId}`,
           apiKey: args.apiKey,
           headers: args.headers,
         }) as unknown as GatewayLanguageModel);
@@ -746,6 +741,6 @@ export class MastraCodeGateway extends MastraModelGateway {
     return wrapLanguageModel({
       model: baseModel as any,
       middleware: [thinkingMiddleware],
-    }) as unknown as GatewayLanguageModel;
+    });
   }
 }
