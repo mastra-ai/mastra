@@ -20,11 +20,11 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
       await page.setViewportSize({ width: 1280, height: 400 });
       await page.goto('/agents');
 
-      // Wait for sidebar scope to be visible and expanded
-      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
+      // Wait for the persistent icon rail
+      await expect(page.getByRole('complementary', { name: 'Studio navigation' })).toBeAttached({ timeout: 10000 });
 
       // Locate nav links by role — these span from top (Agents) to bottom (Settings)
-      const sidebar = page.locator('[data-sidebar-state="default"]');
+      const sidebar = page.getByRole('complementary', { name: 'Studio navigation' });
       const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
       const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
 
@@ -45,10 +45,10 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
       // ARRANGE: Constrained viewport
       await page.setViewportSize({ width: 1280, height: 400 });
       await page.goto('/agents');
-      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
+      await expect(page.getByRole('complementary', { name: 'Studio navigation' })).toBeAttached({ timeout: 10000 });
 
       // ACT: Scroll to and click Settings link
-      const sidebar = page.locator('[data-sidebar-state="default"]');
+      const sidebar = page.getByRole('complementary', { name: 'Studio navigation' });
       const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
       await settingsLink.scrollIntoViewIfNeeded();
       await settingsLink.click();
@@ -61,10 +61,10 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
       // ARRANGE: Constrained viewport, start at settings
       await page.setViewportSize({ width: 1280, height: 400 });
       await page.goto('/settings');
-      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
+      await expect(page.getByRole('complementary', { name: 'Studio navigation' })).toBeAttached({ timeout: 10000 });
 
       // ACT: Scroll to Agents link (top of nav) and click
-      const sidebar = page.locator('[data-sidebar-state="default"]');
+      const sidebar = page.getByRole('complementary', { name: 'Studio navigation' });
       const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
       await agentsLink.scrollIntoViewIfNeeded();
       await agentsLink.click();

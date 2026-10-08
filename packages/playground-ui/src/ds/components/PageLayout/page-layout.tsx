@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Header } from '../Header';
+import { PageLayoutBody } from './page-layout-body';
+import { PageLayoutHeader } from './page-layout-header';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
@@ -8,6 +9,8 @@ export interface PageLayoutProps {
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
+  /** Essential controls that remain directly accessible on compact headers. */
+  primaryActions?: ReactNode;
   /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
   actionRow?: ReactNode;
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
@@ -23,6 +26,7 @@ export function PageLayout({
   children,
   breadcrumbs,
   headerActions,
+  primaryActions,
   actionRow,
   header,
   variant = 'container',
@@ -35,13 +39,8 @@ export function PageLayout({
 
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
-      {(breadcrumbs || headerActions) && (
-        <Header className="h-10 min-h-10 shrink-0 gap-2 overflow-hidden px-2">
-          {breadcrumbs}
-          {headerActions && (
-            <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{headerActions}</div>
-          )}
-        </Header>
+      {(breadcrumbs || headerActions || primaryActions) && (
+        <PageLayoutHeader breadcrumbs={breadcrumbs} headerActions={headerActions} primaryActions={primaryActions} />
       )}
       {actionRow && (
         <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
@@ -50,32 +49,16 @@ export function PageLayout({
       )}
       <main
         className={cn(
-          'min-h-0 flex-1 overflow-y-auto',
+          'min-h-0 min-w-0 flex-1 overflow-hidden',
           variant === 'container' && 'p-4',
           // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
           variant === 'fit' &&
             (header ? 'grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-cols-1 grid-rows-1'),
         )}
       >
-        {variant === 'narrow' ? (
-          // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
-          // eslint-disable-next-line tailwindcss/enforces-shorthand
-          <div
-            data-slot="page-layout-container"
-            className={cn(
-              'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
-              header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
-            )}
-          >
-            {headerSlot}
-            {children}
-          </div>
-        ) : (
-          <>
-            {headerSlot}
-            {children}
-          </>
-        )}
+        <PageLayoutBody variant={variant} header={headerSlot}>
+          {children}
+        </PageLayoutBody>
       </main>
     </div>
   );

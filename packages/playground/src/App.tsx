@@ -9,7 +9,8 @@ import type { LoaderFunctionArgs, RouteObject } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
-import { WorkflowLayout } from './domains/workflows/workflow-layout';
+import { WorkflowShell } from './domains/workflows/workflow-shell';
+import { WorkspaceShell } from './domains/workspace/workspace-shell';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page';
 import { PostHogProvider } from './lib/analytics';
@@ -89,20 +90,34 @@ import WorkflowSchedules from './pages/workflows/workflow-schedules';
 import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
 import { AuthLayout } from '@/components/auth-layout';
+import { FeatureWorkspaceLayout } from '@/components/feature-workspace-layout';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
+import { StudioShell } from '@/components/studio-shell';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
-import { AgentLayout } from '@/domains/agents/agent-layout';
+import { AgentDetailShell } from '@/domains/agents/agent-detail-shell';
+import { AgentShell } from '@/domains/agents/agent-shell';
+import { AgentMetrics } from '@/domains/agents/components/agent-metrics';
+import { AgentOverview } from '@/domains/agents/components/agent-overview';
+import { AgentResourcePage } from '@/domains/agents/components/agent-resource-page';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
+import { ChatAgentPicker } from '@/domains/chat/components/chat-agent-picker';
+import { ChatLanding } from '@/domains/chat/components/chat-landing';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { McpShell } from '@/domains/mcps/mcp-shell';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
+import { StudioAreaShell } from '@/domains/navigation/components/studio-area-shell';
+import { ProcessorsShell } from '@/domains/processors/processors-shell';
+import { PromptBlocksShell } from '@/domains/prompt-blocks/prompt-blocks-shell';
+import { ToolsShell } from '@/domains/tools/tools-shell';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
 import Tools from '@/pages/tools';
+import Tool from '@/pages/tools/tool';
 
 // Extend window type for Mastra config
 declare global {
@@ -139,7 +154,9 @@ const RootLayout = () => {
         <GlobalShortcuts />
         <Layout>
           <RoutePermissionGuard>
-            <Outlet />
+            <FeatureWorkspaceLayout>
+              <Outlet />
+            </FeatureWorkspaceLayout>
           </RoutePermissionGuard>
         </Layout>
       </KeyboardShortcutsProvider>
@@ -282,85 +299,13 @@ export const routes: RouteObject[] = [
   {
     element: <RootLayout />,
     children: [
-      // Conditional routes (non-platform only)
-      ...(isMastraPlatform
-        ? []
-        : [
-            { path: '/settings', element: <StudioSettingsPage /> },
-            {
-              path: '/templates',
-              element: <Templates />,
-            },
-            {
-              path: '/templates/:templateSlug',
-              element: <Template />,
-            },
-          ]),
-
-      { path: '/logs', element: <Logs /> },
-      { path: '/scorers', element: <Scorers /> },
-      {
-        path: '/scorers/:scorerId',
-        element: <Scorer />,
-      },
-      { path: '/metrics', element: <Metrics /> },
-      {
-        path: '/intelligence',
-        element: <SignalsOverviewPage />,
-      },
-      {
-        path: '/intelligence/entities/:entityType/:entityId',
-        element: <SignalsEntityDetailPage />,
-      },
-      { path: '/traces', element: <Traces /> },
-      {
-        path: '/traces/:traceId',
-        loader: ({ params, request }: LoaderFunctionArgs) => {
-          const search = new URL(request.url).searchParams;
-          search.set('traceId', params.traceId ?? '');
-          return redirect(`/traces?${search.toString()}`);
-        },
-      },
-      {
-        path: '/observability',
-        loader: ({ request }: LoaderFunctionArgs) => redirect(`/traces${new URL(request.url).search}`),
-      },
-      { path: '/resources', element: <Resources /> },
-      { path: '/agents', element: <Agents /> },
-      {
-        path: '/cms/agents/create',
-        element: <CreateLayoutWrapper />,
-        children: agentCmsChildRoutes,
-      },
-      {
-        path: '/cms/agents/:agentId/edit',
-        element: <EditLayoutWrapper />,
-        children: agentCmsChildRoutes,
-      },
-      {
-        path: '/cms/scorers/create',
-        element: <CmsScorersCreatePage />,
-      },
-      {
-        path: '/cms/scorers/:scorerId/edit',
-        element: <CmsScorersEditPage />,
-      },
-      { path: '/prompts', element: <PromptBlocks /> },
-      {
-        path: '/cms/prompts/create',
-        element: <CmsPromptBlocksCreatePage />,
-      },
-      {
-        path: '/cms/prompts/:promptBlockId/edit',
-        element: <CmsPromptBlocksEditPage />,
-      },
+      { path: '/chat', handle: { navigationLabel: 'Agent navigation' }, element: <ChatLanding /> },
+      { path: '/chat/agents', element: <ChatAgentPicker /> },
+      { path: '/chat/:agentId', handle: { navigationLabel: 'Agent navigation' }, element: <ChatLanding /> },
       {
         path: '/agents/:agentId',
-        element: (
-          <AgentLayout>
-            <Outlet />
-          </AgentLayout>
-        ),
+        handle: { navigationLabel: 'Agent navigation' },
+        element: <AgentShell />,
         children: [
           {
             index: true,
@@ -369,63 +314,30 @@ export const routes: RouteObject[] = [
           { path: 'chat', loader: legacyAgentChatLoader },
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
-          { path: 'threads/:threadId', element: <AgentThread /> },
-          { path: 'overview', loader: legacyAgentSettingsLoader },
           { path: 'settings', loader: legacyAgentSettingsLoader },
-          ...(isExperimentalFeatures ? [{ path: 'editor', element: <AgentPlayground /> }] : []),
-          { path: 'traces', element: <AgentTraces /> },
           {
-            // Channels is configuration, not a tool tab: it now lives in the
-            // agent overview side panel. Keep old links working.
-            path: 'channels',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
+            element: <AgentDetailShell />,
+            children: [
+              { path: 'threads/:threadId', element: <AgentThread /> },
+              { path: 'overview', element: <AgentOverview /> },
+              { path: 'resources/:resource', element: <AgentResourcePage /> },
+              { path: 'metrics', element: <AgentMetrics /> },
+              ...(isExperimentalFeatures ? [{ path: 'editor', element: <AgentPlayground /> }] : []),
+              { path: 'traces', element: <AgentTraces /> },
+              {
+                // Channels is configuration, not a tool tab: it now lives in the
+                // agent overview side panel. Keep old links working.
+                path: 'channels',
+                loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/resources/channels`),
+              },
+            ],
           },
         ],
       },
-
-      { path: '/tools', element: <Tools /> },
-
-      {
-        path: '/integrations',
-        element: <IntegrationsPage />,
-      },
-
-      { path: '/processors', element: <Processors /> },
-      {
-        path: '/processors/:processorId',
-        element: <Processor />,
-      },
-
-      { path: '/mcps', element: <MCPs /> },
-      {
-        path: '/mcps/:serverId',
-        element: <McpServerPage />,
-      },
-
-      { path: '/workspaces', element: <Workspace /> },
-      { path: '/workspaces/:workspaceId', element: <Workspace /> },
-      {
-        path: '/workspaces/:workspaceId/skills/:skillName',
-        loader: ({ params, request }: LoaderFunctionArgs) =>
-          redirect(workspaceSkillFileLink(params.workspaceId, new URL(request.url).searchParams.get('path'))),
-      },
-
-      { path: '/workflows', element: <Workflows /> },
-      {
-        path: '/workflows/schedules',
-        element: <SchedulesPage />,
-      },
-      {
-        path: '/workflows/schedules/:scheduleId',
-        element: <SchedulePage />,
-      },
       {
         path: '/workflows/:workflowId',
-        element: (
-          <WorkflowLayout>
-            <Outlet />
-          </WorkflowLayout>
-        ),
+        handle: { navigationLabel: 'Workflow navigation' },
+        element: <WorkflowShell />,
         children: [
           {
             index: true,
@@ -440,63 +352,215 @@ export const routes: RouteObject[] = [
           { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
-
-      ...(isExperimentalFeatures
-        ? [
-            { path: '/datasets', element: <Datasets /> },
-            {
-              path: '/datasets/new',
-              element: <CreateDatasetPage />,
-            },
-            {
-              path: '/datasets/:datasetId',
-              element: <DatasetPage />,
-              children: [
-                {
-                  path: 'items/:itemId',
-                  // Drawer is rendered by the dataset page; this route only carries params.
-                  element: null,
-                },
-              ],
-            },
-            {
-              path: '/datasets/:datasetId/edit',
-              element: <EditDatasetPage />,
-            },
-            {
-              path: '/datasets/:datasetId/items/:itemId/versions',
-              element: <DatasetItemVersionsComparePage />,
-            },
-            { path: '/experiments', element: <Experiments /> },
-            {
-              path: '/experiments/compare',
-              element: <CompareExperimentsPage />,
-            },
-            {
-              path: '/experiments/review-queue',
-              element: <ReviewQueuePage />,
-            },
-            {
-              path: '/experiments/:experimentId',
-              element: <ExperimentPage />,
-              children: [
-                {
-                  path: 'items/:itemId',
-                  // Drawer is rendered by the experiment page; this route only carries params.
-                  element: null,
-                },
-              ],
-            },
-            {
-              path: '/datasets/:datasetId/versions',
-              element: <DatasetCompareDatasetVersions />,
-            },
-          ]
-        : []),
-
       {
-        index: true,
-        element: <StudioIndexRedirect />,
+        path: '/cms/agents/create',
+        element: <CreateLayoutWrapper />,
+        children: agentCmsChildRoutes,
+      },
+      {
+        path: '/cms/agents/:agentId/edit',
+        element: <EditLayoutWrapper />,
+        children: agentCmsChildRoutes,
+      },
+      {
+        handle: { navigationLabel: 'Prompt navigation' },
+        element: <PromptBlocksShell />,
+        children: [
+          { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
+          { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },
+        ],
+      },
+      {
+        element: <StudioShell />,
+        children: [
+          // Conditional routes (non-platform only)
+          ...(isMastraPlatform
+            ? []
+            : [
+                { path: '/settings', element: <StudioSettingsPage /> },
+                {
+                  path: '/templates',
+                  element: <Templates />,
+                },
+                {
+                  path: '/templates/:templateSlug',
+                  element: <Template />,
+                },
+              ]),
+
+          {
+            handle: { navigationLabel: 'Observe navigation' },
+            element: <StudioAreaShell areaId="observe" />,
+            children: [
+              { path: '/logs', element: <Logs /> },
+              { path: '/metrics', element: <Metrics /> },
+              {
+                path: '/intelligence',
+                element: <SignalsOverviewPage />,
+              },
+              {
+                path: '/intelligence/entities/:entityType/:entityId',
+                element: <SignalsEntityDetailPage />,
+              },
+              { path: '/traces', element: <Traces /> },
+              {
+                path: '/traces/:traceId',
+                loader: ({ params, request }: LoaderFunctionArgs) => {
+                  const search = new URL(request.url).searchParams;
+                  search.set('traceId', params.traceId ?? '');
+                  return redirect(`/traces?${search.toString()}`);
+                },
+              },
+              {
+                path: '/observability',
+                loader: ({ request }: LoaderFunctionArgs) => redirect(`/traces${new URL(request.url).search}`),
+              },
+            ],
+          },
+          { path: '/resources', element: <Resources /> },
+          {
+            handle: { navigationLabel: 'Agents navigation' },
+            element: <StudioAreaShell areaId="build" />,
+            children: [
+              { path: '/agents', element: <Agents /> },
+              { path: '/tools', element: <Tools /> },
+              { path: '/processors', element: <Processors /> },
+              { path: '/prompts', element: <PromptBlocks /> },
+              { path: '/workflows', element: <Workflows /> },
+              { path: '/workflows/schedules', element: <SchedulesPage /> },
+              { path: '/workflows/schedules/:scheduleId', element: <SchedulePage /> },
+            ],
+          },
+
+          {
+            handle: { navigationLabel: 'Tools navigation' },
+            element: <ToolsShell />,
+            children: [
+              { path: '/tools/:toolId', element: <Tool /> },
+              {
+                path: '/agents/:agentId/tools/:toolId',
+                loader: ({ params, request }: LoaderFunctionArgs) => {
+                  const search = new URL(request.url).searchParams;
+                  search.set('tool', params.toolId ?? '');
+                  return redirect(`/agents/${params.agentId}/threads/new?${search}`);
+                },
+              },
+            ],
+          },
+
+          {
+            handle: { navigationLabel: 'Connections navigation' },
+            element: <StudioAreaShell areaId="connections" />,
+            children: [
+              { path: '/mcps', element: <MCPs /> },
+              { path: '/integrations', element: <IntegrationsPage /> },
+            ],
+          },
+
+          {
+            handle: { navigationLabel: 'Processors navigation' },
+            element: <ProcessorsShell />,
+            children: [{ path: '/processors/:processorId', element: <Processor /> }],
+          },
+
+          {
+            handle: { navigationLabel: 'MCP navigation' },
+            element: <McpShell />,
+            children: [
+              { path: '/mcps/:serverId', element: <McpServerPage /> },
+              {
+                path: '/mcps/:serverId/tools/:toolId',
+                loader: ({ params, request }: LoaderFunctionArgs) => {
+                  const search = new URL(request.url).searchParams;
+                  search.set('tool', params.toolId ?? '');
+                  return redirect(`/mcps/${params.serverId}?${search}`);
+                },
+              },
+            ],
+          },
+
+          {
+            handle: { navigationLabel: 'Workspace navigation' },
+            element: <WorkspaceShell />,
+            children: [
+              { path: '/workspaces', element: <Workspace /> },
+              { path: '/workspaces/:workspaceId', element: <Workspace /> },
+            ],
+          },
+          {
+            path: '/workspaces/:workspaceId/skills/:skillName',
+            loader: ({ params, request }: LoaderFunctionArgs) =>
+              redirect(workspaceSkillFileLink(params.workspaceId, new URL(request.url).searchParams.get('path'))),
+          },
+
+          {
+            handle: { navigationLabel: 'Evaluate navigation' },
+            element: <StudioAreaShell areaId="evaluate" />,
+            children: [
+              { path: '/scorers', element: <Scorers /> },
+              { path: '/scorers/:scorerId', element: <Scorer /> },
+              { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
+              { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
+              ...(isExperimentalFeatures
+                ? [
+                    { path: '/datasets', element: <Datasets /> },
+                    {
+                      path: '/datasets/new',
+                      element: <CreateDatasetPage />,
+                    },
+                    {
+                      path: '/datasets/:datasetId',
+                      element: <DatasetPage />,
+                      children: [
+                        {
+                          path: 'items/:itemId',
+                          // Drawer is rendered by the dataset page; this route only carries params.
+                          element: null,
+                        },
+                      ],
+                    },
+                    {
+                      path: '/datasets/:datasetId/edit',
+                      element: <EditDatasetPage />,
+                    },
+                    {
+                      path: '/datasets/:datasetId/items/:itemId/versions',
+                      element: <DatasetItemVersionsComparePage />,
+                    },
+                    { path: '/experiments', element: <Experiments /> },
+                    {
+                      path: '/experiments/compare',
+                      element: <CompareExperimentsPage />,
+                    },
+                    {
+                      path: '/experiments/review-queue',
+                      element: <ReviewQueuePage />,
+                    },
+                    {
+                      path: '/experiments/:experimentId',
+                      element: <ExperimentPage />,
+                      children: [
+                        {
+                          path: 'items/:itemId',
+                          // Drawer is rendered by the experiment page; this route only carries params.
+                          element: null,
+                        },
+                      ],
+                    },
+                    {
+                      path: '/datasets/:datasetId/versions',
+                      element: <DatasetCompareDatasetVersions />,
+                    },
+                  ]
+                : []),
+            ],
+          },
+
+          {
+            index: true,
+            element: <StudioIndexRedirect />,
+          },
+        ],
       },
     ],
   },

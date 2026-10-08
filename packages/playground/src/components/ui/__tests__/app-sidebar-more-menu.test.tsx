@@ -50,27 +50,22 @@ afterEach(() => {
 });
 
 describe('AppSidebar More menu', () => {
-  describe('when optional primitives are unused', () => {
-    it('keeps them reachable in a menu without inserting navigation rows', async () => {
+  describe('when a task area has no resources yet', () => {
+    it('keeps the area discoverable without an extra menu', async () => {
       renderSidebar();
-      const more = await screen.findByRole('button', { name: 'More' });
-      const list = more.closest('ul');
-      const rows = list?.textContent;
-      fireEvent.click(more);
-      for (const name of ['Processors', 'MCP Servers', 'Tools', 'Workspaces']) {
-        expect(await screen.findByRole('menuitem', { name })).toBeTruthy();
-        expect(screen.queryByRole('link', { name })).toBeNull();
-      }
-      expect(list?.textContent).toBe(rows);
-      expect(screen.getByRole('button', { name: 'More' })).toBe(more);
+      expect(await screen.findByRole('link', { name: 'Connections' })).toBeTruthy();
+      expect(await screen.findByRole('link', { name: 'Workspaces' })).toBeTruthy();
+      fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+      expect(screen.getByRole('menuitem', { name: 'Customize sidebar' })).toBeTruthy();
+      expect(screen.queryByRole('menuitem', { name: 'Connections' })).toBeNull();
     });
   });
 
   describe('when server resources are in use', () => {
-    it('shows MCP Servers and Workspaces by default', async () => {
+    it('shows Connections and Workspaces by default', async () => {
       server.use(mcpServersHandler(oneMcpServer), workspacesHandler(oneWorkspace));
       renderSidebar();
-      expect((await screen.findByRole('link', { name: 'MCP Servers' })).getAttribute('href')).toBe('/mcps');
+      expect((await screen.findByRole('link', { name: 'Connections' })).getAttribute('href')).toBe('/mcps');
       expect((await screen.findByRole('link', { name: 'Workspaces' })).getAttribute('href')).toBe('/workspaces');
       expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
     });
@@ -78,34 +73,34 @@ describe('AppSidebar More menu', () => {
     it('lets a saved hide choice override the server default', async () => {
       server.use(mcpServersHandler(oneMcpServer));
       const first = renderSidebar();
-      await screen.findByRole('link', { name: 'MCP Servers' });
-      await choosePlacement('MCP Servers', 'Hide in More menu');
-      expect(screen.queryByRole('link', { name: 'MCP Servers' })).toBeNull();
+      await screen.findByRole('link', { name: 'Connections' });
+      await choosePlacement('Connections', 'Hide in More menu');
+      expect(screen.queryByRole('link', { name: 'Connections' })).toBeNull();
       first.unmount();
       renderSidebar();
       fireEvent.click(await screen.findByRole('button', { name: 'More' }));
-      expect(await screen.findByRole('menuitem', { name: 'MCP Servers' })).toBeTruthy();
-      expect(screen.queryByRole('link', { name: 'MCP Servers' })).toBeNull();
+      expect(await screen.findByRole('menuitem', { name: 'Connections' })).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'Connections' })).toBeNull();
     });
   });
 
-  describe('when Tools is made visible', () => {
+  describe('when Workspaces is made visible', () => {
     it('remains visible after a remount', async () => {
       const first = renderSidebar();
-      await choosePlacement('Tools', 'Always show');
-      await screen.findByRole('link', { name: 'Tools' });
+      await choosePlacement('Workspaces', 'Always show');
+      await screen.findByRole('link', { name: 'Workspaces' });
       first.unmount();
       renderSidebar();
-      expect((await screen.findByRole('link', { name: 'Tools' })).getAttribute('href')).toBe('/tools');
+      expect((await screen.findByRole('link', { name: 'Workspaces' })).getAttribute('href')).toBe('/workspaces');
     });
   });
 
   describe('when landing on an optional route', () => {
     it('shows the current route without persisting an implicit preference', async () => {
-      renderSidebar('/processors');
-      expect((await screen.findByRole('link', { name: 'Processors' })).getAttribute('aria-current')).toBe('page');
-      expect(localStorage.getItem('mastra:nav-recent:/processors')).toBeNull();
-      expect(localStorage.getItem('mastra:studio:sidebar-visibility')).toBe('{}');
+      renderSidebar('/mcps');
+      expect((await screen.findByRole('link', { name: 'Connections' })).getAttribute('aria-current')).toBe('page');
+      expect(localStorage.getItem('mastra:nav-recent:/mcps')).toBeNull();
+      expect(localStorage.getItem('mastra:studio:area-visibility:v1')).toBe('{}');
     });
   });
 });

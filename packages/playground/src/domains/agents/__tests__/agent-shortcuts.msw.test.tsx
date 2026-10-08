@@ -9,7 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { AgentLayout } from '@/domains/agents/agent-layout';
+import { AgentShell } from '@/domains/agents/agent-shell';
 import { emptyPlatforms } from '@/domains/agents/components/__tests__/fixtures/channels';
 import { v2Agent } from '@/domains/agents/components/__tests__/fixtures/composer-model-settings';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
@@ -41,11 +41,7 @@ const buildRouter = (initialEntry: string) =>
           { path: '/traces', element: <div data-testid="global-traces" /> },
           {
             path: '/agents/:agentId',
-            element: (
-              <AgentLayout>
-                <Outlet />
-              </AgentLayout>
-            ),
+            element: <AgentShell />,
             children: [
               { path: 'threads/new', element: <div data-testid="agent-chat" /> },
               { path: 'traces', element: <div data-testid="agent-traces" /> },

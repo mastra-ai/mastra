@@ -6,5 +6,10 @@ import type { ComponentProps } from 'react';
  * and the gap to their content stay put when switching tabs or when a run adds its status.
  */
 export function ToolSectionHeader(props: ComponentProps<typeof SettingsHeader>) {
-  return <SettingsHeader className="min-h-control-md" {...props} />;
+  return (
+    <SettingsHeader
+      className="min-h-control-md flex-row flex-wrap items-center justify-between gap-2 sm:flex-wrap sm:gap-2"
+      {...props}
+    />
+  );
 }

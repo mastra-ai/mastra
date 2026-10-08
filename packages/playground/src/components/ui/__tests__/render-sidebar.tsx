@@ -7,6 +7,7 @@ import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 
 // jsdom doesn't provide ResizeObserver — stub it for ScrollArea
@@ -68,7 +69,7 @@ const noopPaths = {
   experimentLink: () => '',
 } as never;
 
-export function renderSidebar(initialPath = '/agents') {
+export function renderSidebar(initialPath = '/agents', content: ReactNode = <AppSidebar />) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -80,9 +81,7 @@ export function renderSidebar(initialPath = '/agents') {
           <LinkComponentProvider Link={'a' as never} navigate={() => {}} paths={noopPaths}>
             <MemoryRouter initialEntries={[initialPath]}>
               <TooltipProvider>
-                <Sidebar.Provider LinkComponent={'a' as never}>
-                  <AppSidebar />
-                </Sidebar.Provider>
+                <Sidebar.Provider LinkComponent={'a' as never}>{content}</Sidebar.Provider>
               </TooltipProvider>
             </MemoryRouter>
           </LinkComponentProvider>

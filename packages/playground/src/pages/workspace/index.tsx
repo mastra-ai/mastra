@@ -1,12 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
 import type { WorkspaceSkillInstallParams } from '@mastra/playground-ui/domains/workspace';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -24,11 +22,12 @@ import {
 import type { WorkspaceItem } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
-import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { useSearchParams, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
+import { WorkspaceBrowser } from '@/domains/workspace/components/workspace-browser';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
 import { WorkspaceNotices } from '@/domains/workspace/components/workspace-notices';
@@ -45,7 +44,6 @@ const errorMessage = (error: unknown) =>
 export default function Workspace() {
   const { workspaceId: workspaceIdFromPath } = useParams<{ workspaceId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   // Get state from URL query params (path, file, tab are still query params)
@@ -91,11 +89,6 @@ export default function Workspace() {
       }
     }
     setSearchParams(newParams);
-  };
-
-  // Navigate to a different workspace (changes path, resets query params)
-  const setSelectedWorkspaceId = (id: string) => {
-    void navigate(`/workspaces/${id}`);
   };
 
   const setSelectedFile = (file: string | undefined) => {
@@ -294,41 +287,12 @@ export default function Workspace() {
     );
   }
 
-  const workspaceOptions = workspaces.map(workspace => ({
-    value: workspace.id,
-    label: workspace.name,
-    description: workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace',
-    end: (
-      <span className="flex shrink-0 gap-1">
-        {workspace.safety?.readOnly && (
-          <Badge size="xs" variant="warning">
-            Read-only
-          </Badge>
-        )}
-        {workspace.capabilities.hasFilesystem && <Badge size="xs">FS</Badge>}
-        {workspace.capabilities.hasSandbox && <Badge size="xs">Sandbox</Badge>}
-        {workspace.capabilities.hasSkills && <Badge size="xs">Skills</Badge>}
-      </span>
-    ),
-  }));
-
   return (
     <PageLayout
       variant="fit"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
         <div className="flex items-center gap-2">
-          <Combobox
-            aria-label="Workspace"
-            variant="ghost"
-            className="w-auto"
-            options={workspaceOptions}
-            value={selectedWorkspace?.id}
-            onValueChange={setSelectedWorkspaceId}
-            placeholder="Select workspace"
-            searchPlaceholder="Search workspaces..."
-            emptyText="No workspaces found."
-          />
           {isReadOnly && (
             <Badge size="xs" variant="warning">
               Read-only
@@ -348,7 +312,7 @@ export default function Workspace() {
         )}
         {hasFilesystem && effectiveWorkspaceId && (
           <div className="min-h-0 flex-1">
-            <WorkspaceTreeView
+            <WorkspaceBrowser
               key={effectiveWorkspaceId}
               workspaceId={effectiveWorkspaceId}
               activeFilePath={selectedFile}

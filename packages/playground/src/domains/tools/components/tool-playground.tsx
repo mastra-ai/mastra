@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ZodType } from 'zod';
 import type { ToolExecution } from '../utils/tool-run';
 import { toToolRun } from '../utils/tool-run';
+import { ToolPlaygroundLayout } from './tool-playground-layout';
 import { ToolRequest } from './tool-request';
 import { ToolResponse } from './tool-response';
 
@@ -13,6 +14,7 @@ export interface ToolPlaygroundProps {
   execution: ToolExecution;
   requestContextEntityType: RequestContextEntityType;
   requestContextEntityId: string;
+  variant?: 'inline' | 'workspace';
 }
 
 /** The Playground tab: the request form, then the last response. */
@@ -21,6 +23,7 @@ export function ToolPlayground({
   execution,
   requestContextEntityType,
   requestContextEntityId,
+  variant = 'inline',
 }: ToolPlaygroundProps) {
   const [requestContext] = useEntityRequestContext(requestContextEntityType, requestContextEntityId);
   // The mutation holds the outcome; only how long the last run took isn't part of its state.
@@ -36,15 +39,18 @@ export function ToolPlayground({
   const isRunning = execution.status === 'pending';
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr] gap-6">
-      <ToolRequest
-        zodInputSchema={zodInputSchema}
-        isRunning={isRunning}
-        onRun={runTool}
-        requestContextEntityType={requestContextEntityType}
-        requestContextEntityId={requestContextEntityId}
-      />
-      <ToolResponse isRunning={isRunning} lastRun={toToolRun(execution, durationMs)} />
-    </div>
+    <ToolPlaygroundLayout
+      variant={variant}
+      request={
+        <ToolRequest
+          zodInputSchema={zodInputSchema}
+          isRunning={isRunning}
+          onRun={runTool}
+          requestContextEntityType={requestContextEntityType}
+          requestContextEntityId={requestContextEntityId}
+        />
+      }
+      response={<ToolResponse isRunning={isRunning} lastRun={toToolRun(execution, durationMs)} />}
+    />
   );
 }

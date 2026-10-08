@@ -36,7 +36,7 @@ export function AgentRow({ agent, rowProps }: AgentRowProps) {
       <DataList.RowLink
         ref={linkRef}
         colEnd={3}
-        to={paths.agentNewThreadLink(agent.id)}
+        to={paths.agentLink(agent.id)}
         LinkComponent={Link}
         tabIndex={-1}
         onClick={stopPropagation}

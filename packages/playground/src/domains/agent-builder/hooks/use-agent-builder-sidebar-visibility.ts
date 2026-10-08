@@ -6,7 +6,7 @@ export interface UseAgentBuilderSidebarVisibilityResult {
 }
 
 /**
- * Visibility rule for the top-left "Agent Builder" sidebar shortcut.
+ * Visibility rule for the Agent Builder entry in Build navigation.
  *
  * The entry is shown when:
  * - Auth capabilities have resolved.

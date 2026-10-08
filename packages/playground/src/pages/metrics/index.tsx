@@ -1,7 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
@@ -31,19 +30,20 @@ import { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
 import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { MetricsLayout } from '@/domains/metrics/components/metrics-layout';
 import { MetricsPageLayout } from '@/domains/metrics/components/metrics-page-layout';
 import { MetricsStorageGate } from '@/domains/metrics/components/metrics-storage-gate';
+import type { MetricsAgentScope } from '@/domains/metrics/context/metrics-agent-scope';
+import { MetricsAgentScopeContext } from '@/domains/metrics/context/metrics-agent-scope';
 import { useMetricsDrilldownNavigation } from '@/domains/metrics/hooks/use-metrics-drilldown-navigation';
-import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
 const DATE_FROM_PARAM = 'dateFrom';
 const DATE_TO_PARAM = 'dateTo';
 
 /** Keeps date and filter state in the URL and gates dashboard access on storage capabilities. */
-export default function Metrics() {
+export default function Metrics({ agentScope }: { agentScope?: MetricsAgentScope } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
@@ -69,11 +69,19 @@ export default function Metrics() {
   // array identity only changes when the URL actually changes — this prevents
   // a feedback loop where `searchParams` is mutated and immediately parsed
   // back into a new tokens reference.
-  const filterTokens = useMemo(
+  const urlFilterTokens = useMemo(
     () => getMetricsPropertyFilterTokens(searchParams),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [searchParams.toString()],
   );
+
+  const filterTokens: PropertyFilterToken[] = agentScope
+    ? [
+        ...urlFilterTokens.filter(token => token.fieldId !== 'entityName' && token.fieldId !== 'rootEntityType'),
+        { fieldId: 'entityName', value: agentScope.name },
+        { fieldId: 'rootEntityType', value: EntityType.AGENT },
+      ]
+    : urlFilterTokens;
 
   const handlePresetChange = useCallback(
     (next: DatePreset) => {
@@ -137,7 +145,7 @@ export default function Metrics() {
   // Hydrate saved filters on first mount if URL is filter-clean.
   const hydratedRef = useRef(false);
   useEffect(() => {
-    if (hydratedRef.current) return;
+    if (agentScope || hydratedRef.current) return;
     hydratedRef.current = true;
     if (hasAnyMetricsFilterParams(searchParams)) return;
     const saved = loadMetricsFiltersFromStorage();
@@ -156,18 +164,20 @@ export default function Metrics() {
   }, []);
 
   return (
-    <MetricsProvider
-      preset={preset}
-      filterTokens={filterTokens}
-      onPresetChange={handlePresetChange}
-      onFilterTokensChange={handleFilterTokensChange}
-      customRange={customRange}
-      onCustomRangeChange={handleCustomRangeChange}
-    >
-      <MetricsStorageGate>
-        <MetricsContent />
-      </MetricsStorageGate>
-    </MetricsProvider>
+    <MetricsAgentScopeContext.Provider value={agentScope}>
+      <MetricsProvider
+        preset={preset}
+        filterTokens={filterTokens}
+        onPresetChange={handlePresetChange}
+        onFilterTokensChange={handleFilterTokensChange}
+        customRange={customRange}
+        onCustomRangeChange={handleCustomRangeChange}
+      >
+        <MetricsStorageGate>
+          <MetricsContent />
+        </MetricsStorageGate>
+      </MetricsProvider>
+    </MetricsAgentScopeContext.Provider>
   );
 }
 
@@ -210,28 +220,28 @@ function MetricsContent() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <MetricsLayout>
         <h1 className="sr-only">Metrics</h1>
         <SessionExpired variant="fill" />
-      </PageLayout>
+      </MetricsLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <MetricsLayout>
         <h1 className="sr-only">Metrics</h1>
         <PermissionDenied variant="fill" resource="metrics" />
-      </PageLayout>
+      </MetricsLayout>
     );
   }
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <MetricsLayout>
         <h1 className="sr-only">Metrics</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
-      </PageLayout>
+      </MetricsLayout>
     );
   }
 

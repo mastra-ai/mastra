@@ -248,3 +248,14 @@ export const Empty: Story = {
     </StoryFrame>
   ),
 };
+
+/** Compact application headers can keep primaryActions visible and tuck secondary headerActions into a menu. */
+export const EssentialHeaderAction: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} primaryActions={<Button>Config</Button>}>
+        <Txt>Essential actions stay available when the application switches to its compact header.</Txt>
+      </PageLayout>
+    </StoryFrame>
+  ),
+};

@@ -5,7 +5,8 @@ import { useActivatedSkills } from '@mastra/playground-ui/domains/agents/context
 import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/loading-badge';
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
+import { AgentResourceCard } from '../agent-resource-cards';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
@@ -46,6 +47,7 @@ export const AgentMetadataToolList = ({ agentId, tools }: AgentMetadataToolListP
   const { Link, paths } = useLinkComponent();
   // A tool opens in a drawer over the conversation you're in, so reading it doesn't leave the thread.
   const { threadId } = useParams();
+  const location = useLocation();
 
   if (tools.length === 0) {
     return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
@@ -57,7 +59,11 @@ export const AgentMetadataToolList = ({ agentId, tools }: AgentMetadataToolListP
       getKey={tool => tool.id}
       renderItem={tool => (
         <Link
-          href={paths.agentToolLink(agentId, tool.id, threadId)}
+          href={
+            threadId
+              ? paths.agentToolLink(agentId, tool.id, threadId)
+              : `${location.pathname}?tool=${encodeURIComponent(tool.id)}`
+          }
           data-testid="tool-badge"
           className={metadataLinkClassName}
         >
@@ -95,9 +101,10 @@ export const AgentMetadataWorkflowList = ({ workflows }: AgentMetadataWorkflowLi
 interface AgentMetadataScorerListProps {
   entityId: string;
   entityType: string;
+  detailed?: boolean;
 }
 
-export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataScorerListProps) => {
+export const AgentMetadataScorerList = ({ entityId, entityType, detailed = false }: AgentMetadataScorerListProps) => {
   const { Link, paths } = useLinkComponent();
   const { data: scorers = {}, isLoading } = useScorers();
 
@@ -119,6 +126,20 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
   if (scorerList.length === 0) {
     return <AgentMetadataListEmpty>No Scorers</AgentMetadataListEmpty>;
   }
+
+  if (detailed)
+    return (
+      <div className="grid gap-3 @3xl:grid-cols-2">
+        {scorerList.map(scorer => (
+          <AgentResourceCard
+            key={scorer.id}
+            name={scorer.scorer.config.name || scorer.id}
+            description={scorer.scorer.config.description}
+            href={paths.scorerLink(scorer.id)}
+          />
+        ))}
+      </div>
+    );
 
   return (
     <AgentMetadataExpandableList

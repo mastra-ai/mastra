@@ -9,6 +9,7 @@ import { useAgents } from '@mastra/react/hooks/agents';
 import { useTools } from '@mastra/react/hooks/tools';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
 import { ToolsPageDrawerBody } from '@/domains/tools/components/tool-drawer/tools-page-tool-drawer-body';
@@ -20,14 +21,25 @@ import { useToolDrawerParam } from '@/domains/tools/hooks/use-tool-drawer-param'
 const crumbs = [navCrumb('/tools')];
 
 export default function Tools() {
-  const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { hasPermission, isLoading: isLoadingPermissions } = usePermissions();
+  const canReadAgents = !isLoadingPermissions && hasPermission('agents:read');
+  const {
+    data: availableAgents = {},
+    isLoading: isLoadingAgents,
+    error: agentsError,
+  } = useAgents({
+    queryOptions: { enabled: canReadAgents },
+  });
   const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ToolsSort>();
   const { toolId: openToolId } = useToolDrawerParam();
 
-  const isLoading = isLoadingAgents || isLoadingTools;
-  const error = toolsError || agentsError;
+  const agentsRecord = canReadAgents ? availableAgents : {};
+  const isLoading = (canReadAgents && isLoadingAgents) || isLoadingTools;
+  const error = toolsError || (canReadAgents ? agentsError : undefined);
+  const hasTools =
+    Object.keys(tools).length > 0 || Object.values(agentsRecord).some(agent => Object.keys(agent.tools).length > 0);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -56,7 +68,7 @@ export default function Tools() {
     );
   }
 
-  if (Object.keys(tools).length === 0 && !isLoading) {
+  if (!hasTools && !isLoading) {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Tools</h1>

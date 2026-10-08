@@ -21,6 +21,8 @@ import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
 
 export interface WorkflowInformationProps {
+  /** Render flush in a route-owned sidebar instead of floating over the canvas. */
+  embedded?: boolean;
   workflowId: string;
   initialRunId?: string;
   requestContext: Record<string, any>;
@@ -55,11 +57,19 @@ type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
 
 const FLOATING_PANEL_SURFACE = cn(panelSurfaceStyle, 'pointer-events-auto');
 
-function FloatingPanel({ className, children }: { className: string; children: ReactNode }) {
+function FloatingPanel({
+  className,
+  children,
+  embedded = false,
+}: {
+  className: string;
+  children: ReactNode;
+  embedded?: boolean;
+}) {
   return (
     <div className={cn('relative flex min-h-0 min-w-0 flex-col', className)}>
       {children}
-      <WorkflowPanelResizeHandle />
+      {!embedded && <WorkflowPanelResizeHandle />}
     </div>
   );
 }
@@ -86,22 +96,27 @@ function WorkflowInformationTopSection({
   workflowId,
   showNewRunButton,
   onNewRun,
+  embedded,
 }: {
   children: ReactNode;
   workflowId: string;
   showNewRunButton: boolean;
   onNewRun: () => void;
+  embedded: boolean;
 }) {
   const { result } = useContext(WorkflowRunContext);
   const [isOpen, setIsOpen] = useState(true);
   return (
-    <FloatingPanel className="max-h-[75%] flex-initial">
+    <FloatingPanel embedded={embedded} className={embedded ? 'min-h-0 flex-1' : 'max-h-[75%] flex-initial'}>
       <Collapsible
         render={<section />}
         open={isOpen}
         onOpenChange={setIsOpen}
         data-testid="workflow-information-top-section"
-        className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}
+        className={cn(
+          embedded ? 'pointer-events-auto border-b border-border bg-card' : FLOATING_PANEL_SURFACE,
+          'flex min-h-0 min-w-0 flex-col overflow-hidden',
+        )}
       >
         <div className="flex shrink-0 items-center gap-1 pr-2">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-column text-muted-foreground">
@@ -145,14 +160,21 @@ function RecentWorkflowRunsSection({
   workflowId,
   activeRunId,
   canDelete,
+  embedded,
 }: {
   workflowId: string;
   activeRunId?: string;
   canDelete: boolean;
+  embedded: boolean;
 }) {
   return (
-    <FloatingPanel className="mt-auto max-h-[min(35%,280px)] shrink-0">
-      <section className={cn(FLOATING_PANEL_SURFACE, 'flex min-h-0 min-w-0 flex-col overflow-hidden')}>
+    <FloatingPanel embedded={embedded} className="mt-auto max-h-[min(35%,280px)] shrink-0">
+      <section
+        className={cn(
+          embedded ? 'pointer-events-auto bg-card' : FLOATING_PANEL_SURFACE,
+          'flex min-h-0 min-w-0 flex-col overflow-hidden',
+        )}
+      >
         <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} canDelete={canDelete} />
       </section>
     </FloatingPanel>
@@ -166,6 +188,7 @@ export function WorkflowInformation({
   runActionsSlot,
   canExecute,
   canDelete,
+  embedded = false,
 }: WorkflowInformationProps) {
   const {
     data: workflow,
@@ -236,9 +259,13 @@ export function WorkflowInformation({
   return (
     <div
       data-testid="workflow-information-panel"
-      className="workflow-information-panel pointer-events-none flex size-full min-h-0 flex-col gap-2 p-2"
+      className={cn(
+        'workflow-information-panel flex size-full min-h-0 flex-col',
+        !embedded && 'pointer-events-none gap-2 p-2',
+      )}
     >
       <WorkflowInformationTopSection
+        embedded={embedded}
         workflowId={workflowId}
         showNewRunButton={Boolean(activeRunId)}
         onNewRun={resetToNewRun}
@@ -250,7 +277,12 @@ export function WorkflowInformation({
         )}
       </WorkflowInformationTopSection>
 
-      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={activeRunId} canDelete={canDelete} />
+      <RecentWorkflowRunsSection
+        workflowId={workflowId}
+        activeRunId={activeRunId}
+        canDelete={canDelete}
+        embedded={embedded}
+      />
     </div>
   );
 }

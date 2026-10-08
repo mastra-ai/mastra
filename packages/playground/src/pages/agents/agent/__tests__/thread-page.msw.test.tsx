@@ -8,7 +8,7 @@ import { deleteDB, openDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
-import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
+import { createMemoryRouter, Outlet, RouterProvider, useLocation, useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentSession from '../session';
@@ -31,11 +31,21 @@ import {
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { emptyThreadTracesList } from './fixtures/thread-traces';
-import { AgentLayout } from '@/domains/agents/agent-layout';
+import { AgentDetailShell } from '@/domains/agents/agent-detail-shell';
+import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
 import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
+import { agentsList } from '@/pages/agents/__tests__/fixtures/agents';
 import { server } from '@/test/msw-server';
+
+const originalMatchMedia = window.matchMedia;
+beforeEach(() => {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    ...originalMatchMedia(query),
+    matches: query === '(min-width: 1024px)',
+  }));
+});
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
@@ -73,18 +83,23 @@ vi.mock('react-resizable-panels', async () => {
     className,
     children,
     onLayoutChange,
+    onLayoutChanged,
   }: {
     className?: string;
     children: ReactNode;
     onLayoutChange?: (layout: Record<string, number>) => void;
+    onLayoutChanged?: (layout: Record<string, number>) => void;
   }) => {
     const [layout, setLayout] = useState<Record<string, number>>({});
     const report = (id: string, size: number) =>
       setLayout(prev => (prev[id] === size ? prev : { ...prev, [id]: size }));
 
     useEffect(() => {
-      if (Object.keys(layout).length > 0) onLayoutChange?.(layout);
-    }, [layout, onLayoutChange]);
+      if (Object.keys(layout).length > 0) {
+        onLayoutChange?.(layout);
+        onLayoutChanged?.(layout);
+      }
+    }, [layout, onLayoutChange, onLayoutChanged]);
 
     return (
       <LayoutContext.Provider value={{ report }}>
@@ -153,23 +168,31 @@ const LocationProbe = () => {
   return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
 };
 
+function ThreadRouteShell() {
+  const { agentId } = useParams();
+  return (
+    <ThreadsPanelProvider key={agentId}>
+      <AgentDetailShell />
+    </ThreadsPanelProvider>
+  );
+}
+
 const buildRouter = (initialEntry: string) =>
   createMemoryRouter(
     [
       { path: '/agents', element: <LocationProbe /> },
       {
-        // Mirrors App.tsx: the thread page is a child of the agent tabs layout.
+        // Mirrors the route-owned header and shared navigation-panel scope in App.tsx.
         path: '/agents/:agentId',
         element: (
           <>
             <LocationProbe />
-            <AgentLayout>
-              <Outlet />
-            </AgentLayout>
+            <ThreadRouteShell />
           </>
         ),
         children: [
           { index: true, loader: agentIndexLoader },
+          { path: 'overview', element: <p>Agent overview</p> },
           { path: 'chat', loader: legacyAgentChatLoader },
           { path: 'chat/:threadId', loader: legacyAgentChatLoader },
           { path: 'threads', loader: agentThreadsIndexLoader },
@@ -239,9 +262,8 @@ const onTracesRequest = vi.fn<(threadId: string | null) => void>();
 
 /** Without observability the tab bar renders a single disabled "Traces" placeholder, never an aside toggle. */
 function expectOnlyDisabledTracesButton() {
-  const tracesButtons = screen.getAllByRole('button', { name: /traces/i });
-  expect(tracesButtons).toHaveLength(1);
-  expect(tracesButtons[0]?.getAttribute('aria-disabled')).toBe('true');
+  expect(screen.queryByRole('link', { name: 'Traces', exact: true })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Traces', exact: true })).toBeNull();
 }
 
 function installHandlers(baseUrl = BASE_URL) {
@@ -250,6 +272,7 @@ function installHandlers(baseUrl = BASE_URL) {
     return HttpResponse.json(emptyThreadTracesList);
   };
   server.use(
+    http.get(`${baseUrl}/api/agents`, () => HttpResponse.json(agentsList)),
     http.get(`${baseUrl}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
     http.get(`${baseUrl}/api/mcp/v0/servers`, () => HttpResponse.json(draftMcpServers)),
     http.get(`${baseUrl}/api/observability/feedback`, () => HttpResponse.json(draftFeedback)),
@@ -295,6 +318,7 @@ function installHandlers(baseUrl = BASE_URL) {
 }
 
 afterEach(async () => {
+  vi.mocked(window.matchMedia).mockRestore();
   cleanup();
   await readThreadDraft('__drain__');
   await deleteDB('mastra-composer-drafts');
@@ -943,13 +967,15 @@ describe('Standalone thread page', () => {
 
     // And the collapsed state is remembered for this agent
     await waitFor(() => {
-      const layout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${AGENT_ID}`);
+      const layout = window.localStorage.getItem(
+        `react-resizable-panels:mastra:studio:feature-navigation:v1:agent:${AGENT_ID}`,
+      );
       expect(layout).not.toBeNull();
-      expect(JSON.parse(layout!)['left-slot']).toBe(0);
+      expect(JSON.parse(layout!)['feature-navigation']).toBe(0);
     });
 
     // When I expand it again from the page edge
-    fireEvent.click(await screen.findByRole('button', { name: 'Expand panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle agent navigation' }));
 
     // Then the thread list is back
     await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(false));
@@ -987,7 +1013,7 @@ describe('Standalone thread page', () => {
     // Given I hid the threads panel for the first agent
     await screen.findByText('Sushi ideas');
     fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
-    await screen.findByRole('button', { name: 'Expand panel' });
+    await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(true));
 
     // When I switch to another agent without leaving the page
     await act(() => router.navigate(`/agents/${OTHER_AGENT_ID}/threads/new`));
@@ -997,8 +1023,10 @@ describe('Standalone thread page', () => {
     await waitFor(() => expect(isHiddenFromUser(otherThread)).toBe(false));
     expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
-    const otherLayout = window.localStorage.getItem(`react-resizable-panels:agent-layout-v6-${OTHER_AGENT_ID}`);
-    expect(otherLayout === null || JSON.parse(otherLayout)['left-slot'] !== 0).toBe(true);
+    const otherLayout = window.localStorage.getItem(
+      `react-resizable-panels:mastra:studio:feature-navigation:v1:agent:${OTHER_AGENT_ID}`,
+    );
+    expect(otherLayout === null || JSON.parse(otherLayout)['feature-navigation'] !== 0).toBe(true);
   });
 
   describe('when the thread list is still loading', () => {
@@ -1056,8 +1084,8 @@ describe('Standalone thread page', () => {
         ),
       );
       window.localStorage.setItem(
-        `react-resizable-panels:agent-layout-v6-${AGENT_ID}`,
-        JSON.stringify({ 'left-slot': 300 }),
+        `react-resizable-panels:mastra:studio:feature-navigation:v1:agent:${AGENT_ID}`,
+        JSON.stringify({ 'feature-navigation': 300 }),
       );
 
       renderAt(`/agents/${AGENT_ID}/threads/new`);
@@ -1068,21 +1096,23 @@ describe('Standalone thread page', () => {
     });
   });
 
-  it('highlights the Chat tab in the agent tab bar', async () => {
+  it('uses the Chat breadcrumb without configuration navigation', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Chat', exact: true }).getAttribute('href')).toBe('/chat');
+    expect(screen.queryByRole('link', { name: 'Editor', exact: true })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
   });
 
-  it('highlights the Chat tab on /threads/new', async () => {
+  it('keeps a new chat focused on conversations', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Chat', exact: true }).getAttribute('href')).toBe('/chat');
+    expect(screen.queryByRole('link', { name: 'Editor', exact: true })).toBeNull();
   });
 
   it('navigates to another thread when clicked in the list', async () => {
@@ -1106,13 +1136,11 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
+  it('redirects bare /agents/:agentId to its overview', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}`);
 
-    await waitFor(() =>
-      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
-    );
+    await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/overview`));
   });
 
   it('redirects the legacy chat URL to /threads/:threadId preserving ?messageId=', async () => {
@@ -1141,7 +1169,7 @@ describe('Standalone thread page', () => {
 
     await screen.findByText('Tonight we cook carbonara.');
     expectOnlyDisabledTracesButton();
-    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(screen.queryByRole('complementary', { name: /traces/i })).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
@@ -1461,7 +1489,7 @@ describe('Standalone thread page', () => {
 
 describe('thread link builders', () => {
   it('point to the standalone thread routes', () => {
-    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
+    expect(paths.agentLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/overview`);
     expect(paths.agentNewThreadLink(AGENT_ID)).toBe(`/agents/${AGENT_ID}/threads/new`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID)).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
     expect(paths.agentThreadLink(AGENT_ID, THREAD_ID, 'msg-1')).toBe(

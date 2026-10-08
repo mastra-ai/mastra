@@ -1,11 +1,9 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { PageLayoutHeaderContext } from '@mastra/playground-ui/components/PageLayout';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
@@ -14,54 +12,21 @@ import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
-import { AppSidebar } from './ui/app-sidebar';
+import { MobileHeaderProvider } from './mobile-header-provider';
+import { MobileNavbar } from './mobile-navbar';
+import { MobilePageHeader } from './mobile-page-header';
+import { StudioSidebar } from './ui/studio-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
+import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
-import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
-import { NavigationCommand, useNavigationCommand } from '@/lib/command';
+import { NavigationCommand } from '@/lib/command';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
-
-function MobileNavbar() {
-  const { setOpenMobile } = useSidebar();
-  const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
-
-  const openNavigationCommand = () => {
-    setOpenMobile(false);
-    setNavigationCommandOpen(true);
-  };
-
-  return (
-    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-sidebar px-3 lg:hidden">
-      <div className="flex min-w-0 items-center gap-3">
-        <Sidebar.MobileTrigger />
-        <span className="flex min-w-0 items-center gap-2">
-          <LogoWithoutText className="size-[1.5rem] shrink-0" />
-          <Txt variant="body-sm" font="display" as="span" className="whitespace-nowrap">
-            Mastra Studio
-          </Txt>
-        </span>
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-md"
-        tooltip="Search"
-        aria-label="Search and navigate"
-        onClick={openNavigationCommand}
-        className="shrink-0"
-      >
-        <Search />
-      </Button>
-    </header>
-  );
-}
 
 // First visit: the panel starts collapsed; `useDefaultLayout` persists later widths.
 const SIDE_PANEL_COLLAPSED_LAYOUT = { 'studio-frame': 100, 'route-side-panel': 0 };
@@ -82,15 +47,18 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
     id: 'studio-frame-layout-v1',
     storage: localStorage,
   });
+  // A page without a side panel must not overwrite the saved two-panel layout.
+  const sidePanelLayout =
+    defaultLayout?.['route-side-panel'] === undefined ? SIDE_PANEL_COLLAPSED_LAYOUT : defaultLayout;
 
   return (
     <div className="relative flex min-h-0 flex-1">
       <PanelGroup
-        className="min-h-0 flex-1"
+        className="relative z-0 min-h-0 flex-1"
         style={UNCLIPPED}
         orientation="horizontal"
-        defaultLayout={defaultLayout ?? SIDE_PANEL_COLLAPSED_LAYOUT}
-        onLayoutChange={onLayoutChange}
+        defaultLayout={sidePanelLayout}
+        onLayoutChange={hasPanel ? onLayoutChange : undefined}
       >
         <Panel id="studio-frame" className={cn('min-w-0', className)} style={UNCLIPPED}>
           {children}
@@ -111,7 +79,7 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               className="min-w-0"
               onResize={size => onPanelResize(size.inPixels)}
             >
-              <RouteSidePanelSlot className="h-full min-h-0" />
+              <RouteSidePanelSlot className="h-full min-h-0 pl-2" />
             </CollapsiblePanel>
           </>
         )}
@@ -126,6 +94,7 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
 }
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
+  const isMobile = useIsMobile();
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
   // Optimistic: render chrome by default so cold loads don't jump.
@@ -133,21 +102,28 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const shouldShowSidebar = !shouldHideSidebar;
 
   return (
-    <>
+    <PageLayoutHeaderContext.Provider value={isMobile && shouldShowSidebar ? MobilePageHeader : undefined}>
       <NavigationCommand />
       <AppShell
-        sidebar={shouldShowSidebar ? <AppSidebar /> : undefined}
+        className="[--border:var(--surface-rim)] [--studio-frame-radius:1rem] max-lg:[&_[data-slot=app-shell-body]]:p-0 lg:[&_[data-slot=app-shell-body]]:py-1 lg:[&_[data-slot=app-shell-body]]:pr-1"
+        sidebar={shouldShowSidebar ? <StudioSidebar /> : undefined}
         mobileHeader={shouldShowSidebar ? <MobileNavbar /> : undefined}
       >
         <StudioFrame className="flex min-h-0 flex-1 flex-col">
-          <MainCard>
-            <AuthRequired>
-              <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
-            </AuthRequired>
+          <MainCard className="flex min-h-0 flex-col max-lg:rounded-none max-lg:p-0 max-lg:shadow-none">
+            <div
+              data-slot="studio-frame-content"
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-studio-panel [--studio-frame-inset:1px] max-lg:rounded-none"
+            >
+              <ImpersonationBanner />
+              <AuthRequired>
+                <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+              </AuthRequired>
+            </div>
           </MainCard>
         </StudioFrame>
       </AppShell>
-    </>
+    </PageLayoutHeaderContext.Provider>
   );
 }
 
@@ -161,10 +137,18 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <Sidebar.Provider LinkComponent={Link}>
-              <SidebarShortcuts />
+            <Sidebar.Provider
+              LinkComponent={Link}
+              defaultState="collapsed"
+              storageKey="mastra:studio:rail"
+              defaultWidth={48}
+              minWidth={48}
+              maxWidth={48}
+            >
               <RouteSidePanelProvider>
-                <LayoutContent>{children}</LayoutContent>
+                <MobileHeaderProvider>
+                  <LayoutContent>{children}</LayoutContent>
+                </MobileHeaderProvider>
               </RouteSidePanelProvider>
             </Sidebar.Provider>
           </ExperimentalUIProvider>

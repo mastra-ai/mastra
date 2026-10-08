@@ -1,7 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { AgentLayout } from '../agent-layout';
-import { SidebarPanel } from '../sidebar-panel';
+import { AgentWorkspaceView } from '../agent-workspace-view';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
@@ -95,7 +94,7 @@ function LeftPanel({
   });
 
   return (
-    <SidebarPanel>
+    <>
       {versionSelector}
 
       <div className="px-4 pt-3">
@@ -113,7 +112,7 @@ function LeftPanel({
       </div>
 
       {actionBar}
-    </SidebarPanel>
+    </>
   );
 }
 
@@ -143,10 +142,8 @@ export function AgentPlaygroundView({
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   return (
-    <AgentLayout
-      agentId={agentId}
-      leftDrawerLabel="Open configuration"
-      leftSlot={
+    <AgentWorkspaceView
+      navigation={
         <LeftPanel
           agentId={agentId}
           activeVersionId={activeVersionId}
@@ -177,6 +174,6 @@ export function AgentPlaygroundView({
         agentVersionId={agentVersionId}
         hasMemory={hasMemory}
       />
-    </AgentLayout>
+    </AgentWorkspaceView>
   );
 }

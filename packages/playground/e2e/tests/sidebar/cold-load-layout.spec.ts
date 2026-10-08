@@ -81,7 +81,7 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
       const releaseAuth = await gateAuth(page, { enabled: false });
       await page.goto('/agents');
 
-      const sidebar = page.locator('.sidebar-layout').first();
+      const sidebar = page.getByRole('complementary', { name: 'Studio navigation' });
 
       // ASSERT 1 (pre-resolution): The gate is showing its spinner and the sidebar
       // has NOT been mounted yet. This is the boundary that prevents a half-resolved
@@ -96,12 +96,11 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
       await responsePromise;
 
       // ASSERT 2 (post-resolution): The sidebar now mounts at a real width.
-      // SidebarProvider hydrates width synchronously from localStorage (default
-      // 240px); anything smaller would mean the sidebar collapsed or was unmounted.
+      // The desktop rail mounts at its fixed 64px width.
       await expect(sidebar).toBeVisible({ timeout: 5000 });
       const boxBefore = await sidebar.boundingBox();
       expect(boxBefore).not.toBeNull();
-      expect(boxBefore!.width).toBeGreaterThan(100);
+      expect(boxBefore!.width).toBe(64);
 
       // Flush one frame so any subsequent React commit has been painted before we
       // re-measure, then prove the sidebar position/width is unchanged within

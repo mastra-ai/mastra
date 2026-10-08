@@ -2,7 +2,8 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDeleteThread, useMemory, useThreads } from '@mastra/react/hooks/memory';
-import { MemorySidebar } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
+import { ChatThreads } from '@/domains/agents/components/chat-threads';
+import { MemorySidebarBody } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
 
 export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId: string }) {
   const requestContext = useEntityRequestContext('agent', agentId)[0];
@@ -37,12 +38,25 @@ export function AgentSidebar({ agentId, threadId }: { agentId: string; threadId:
   };
 
   return (
-    <MemorySidebar
+    <MemorySidebarBody
       agentId={agentId}
       threadId={threadId}
-      threads={threads}
-      onDelete={handleDelete}
-      isThreadsLoading={isLoading}
+      threadsSlot={
+        hasMemory ? (
+          <section aria-label="Agent threads" className="h-full min-h-0">
+            <ChatThreads
+              resourceId={agentId}
+              resourceType="agent"
+              threads={threads}
+              threadId={threadId}
+              onDelete={handleDelete}
+              embedded
+              isLoading={isLoading}
+              autoCollapseWhenEmpty={false}
+            />
+          </section>
+        ) : undefined
+      }
     />
   );
 }

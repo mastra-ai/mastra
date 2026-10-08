@@ -469,14 +469,16 @@ export const NavigationCommand = () => {
   const sidebar = useMaybeSidebarState();
   const [activeScope, setActiveScope] = React.useState<CommandScope>('all');
 
-  const { data: agents = {} } = useAgents();
+  const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  const { data: agents = {} } = useAgents({
+    queryOptions: { enabled: !isPermissionsLoading && hasPermission('agents:read') },
+  });
   const { data: workflows = {} } = useWorkflows();
   const { data: tools = {} } = useTools();
   const { data: processors = {} } = useProcessors();
   const { data: mcpServers = [] } = useMCPServers();
   const { data: scorers = {} } = useScorers();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
-  const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
 
   const updateOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -493,7 +495,7 @@ export const NavigationCommand = () => {
   const filterNavItem = React.useCallback(
     (item: NavItem) => {
       if (item.hidden) return false;
-      if (item.url === '/prompts' && !isCmsAvailable && !isCmsLoading) return false;
+      if ((item.url === '/prompts' || item.url === '/integrations') && !isCmsAvailable && !isCmsLoading) return false;
       if (isMastraPlatform && !item.isOnMastraPlatform) return false;
 
       const requiredPermission = getPermissionForRoute(item.url);

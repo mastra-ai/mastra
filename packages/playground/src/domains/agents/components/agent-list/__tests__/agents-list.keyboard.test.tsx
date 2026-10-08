@@ -71,9 +71,9 @@ describe('AgentsList keyboard navigation', () => {
     renderList();
 
     expect(interactiveRows().map(row => rowLink(row).getAttribute('href'))).toEqual([
-      '/agents/agent-a/threads/new',
-      '/agents/agent-b/threads/new',
-      '/agents/agent-c/threads/new',
+      '/agents/agent-a',
+      '/agents/agent-b',
+      '/agents/agent-c',
     ]);
   });
 });

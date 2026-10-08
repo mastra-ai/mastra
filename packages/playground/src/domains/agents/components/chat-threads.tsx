@@ -1,5 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
@@ -7,7 +8,6 @@ import {
   ThreadListEmpty,
   ThreadListItem,
   ThreadListItems,
-  ThreadListNewItem,
   ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -38,6 +38,8 @@ export interface ChatThreadsProps {
   embedded?: boolean;
   /** While true, only the header is rendered so it stays in place until the list arrives. */
   isLoading?: boolean;
+  /** Keep contextual navigation visible when the thread list is empty. */
+  autoCollapseWhenEmpty?: boolean;
 }
 
 export const ChatThreads = ({
@@ -48,6 +50,7 @@ export const ChatThreads = ({
   resourceType,
   embedded = false,
   isLoading = false,
+  autoCollapseWhenEmpty = true,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [dialog, setDialog] = useState<{ type: 'rename' | 'delete'; thread: StorageThreadType } | null>(null);
@@ -99,14 +102,17 @@ export const ChatThreads = ({
   return (
     <>
       <ThreadList embedded={embedded}>
-        {/* pt-[3px] lines the hide button up with the collapsed panel's expand button (top-2 vs border+p-1) */}
-        <div className="flex items-center gap-1 pt-[3px]">
-          <ThreadListNewItem render={<Link href={newThreadLink} />}>
+        <div className="flex items-center gap-1 py-1">
+          <Button
+            variant="ghost"
+            render={<Link href={newThreadLink} />}
+            className="min-w-0 flex-1 justify-start rounded-xl px-3"
+          >
             <Icon>
               <Plus />
             </Icon>
             New Thread
-          </ThreadListNewItem>
+          </Button>
           {canHidePanel && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -168,7 +174,7 @@ export const ChatThreads = ({
               // A first visit has nothing to list: fold the panel away once so the landing gets the width.
               <div
                 ref={node => {
-                  if (node) threadsPanel?.collapseOnce();
+                  if (node && autoCollapseWhenEmpty) threadsPanel?.collapseOnce();
                 }}
               >
                 <ThreadListEmpty>Your conversations will appear here once you start chatting!</ThreadListEmpty>

@@ -4,7 +4,6 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { WorkflowInformation } from '@mastra/playground-ui/domains/workflows/components/workflow-information';
-import { WorkflowLayout as WorkflowLayoutUI } from '@mastra/playground-ui/domains/workflows/components/workflow-layout';
 import { PlaygroundWorkflowRunProvider } from '@mastra/playground-ui/domains/workflows/context/playground-workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
@@ -12,9 +11,11 @@ import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { useMatch, useNavigate, useParams } from 'react-router';
+import { WorkflowWorkspaceView } from './components/workflow-workspace-view';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { useSidebarSlot } from '@/components/ui/sidebar-slot-context';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
@@ -104,11 +105,11 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
           <PlaygroundWorkflowRunProvider workflowId={workflowId} initialRunId={runId}>
             <WorkflowSelectedStepProvider>
               {page(
-                <WorkflowLayoutUI
-                  leftSlot={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+                <WorkflowWorkspaceView
+                  navigation={<PlaygroundWorkflowInformation workflowId={workflowId} initialRunId={runId} />}
                 >
                   {children}
-                </WorkflowLayoutUI>,
+                </WorkflowWorkspaceView>,
               )}
             </WorkflowSelectedStepProvider>
           </PlaygroundWorkflowRunProvider>
@@ -121,11 +122,13 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PlaygroundWorkflowInformation({ workflowId, initialRunId }: { workflowId: string; initialRunId?: string }) {
+  const slot = useSidebarSlot();
   const [requestContext] = useEntityRequestContext('workflow', workflowId);
   const { canExecute, canDelete } = usePermissions();
 
   return (
     <WorkflowInformation
+      embedded={Boolean(slot)}
       workflowId={workflowId}
       initialRunId={initialRunId}
       requestContext={requestContext}

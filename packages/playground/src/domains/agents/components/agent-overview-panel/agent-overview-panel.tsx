@@ -1,242 +1,59 @@
-import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
-import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  useAgent,
-  useReorderModelList,
-  useUpdateModelInModelList,
-  useChannelPlatforms,
-} from '@mastra/react/hooks/agents';
-import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
-import { extractPrompt } from '../../utils/extractPrompt';
-import { AgentChannels } from '../agent-channels/agent-channels';
-import {
-  AgentMetadataBrowserToolsList,
-  AgentMetadataCombinedProcessorList,
-  AgentMetadataNetworkList,
-  AgentMetadataScorerList,
-  AgentMetadataSkillList,
-  AgentMetadataToolList,
-  AgentMetadataWorkflowList,
-  AgentMetadataWorkspaceToolsList,
-} from '../agent-metadata/agent-metadata-lists';
-import { AgentMetadataModelList } from '../agent-metadata/agent-metadata-model-list';
-import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
-import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
-import { AgentSystemPrompt } from './agent-system-prompt';
-import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useRouteSidePanel } from '@/lib/route-side-panel';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { ArrowUpRight, X } from 'lucide-react';
+import { useId, useRef } from 'react';
+import { AgentOverviewSections } from './agent-overview-sections';
 
 export interface AgentOverviewPanelProps {
   agentId: string;
+  container: HTMLElement;
+  onClose: () => void;
 }
 
-export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
-  const { isCollapsed } = useRouteSidePanel();
+export function AgentOverviewPanel({ agentId, container, onClose }: AgentOverviewPanelProps) {
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const { Link, paths } = useLinkComponent();
 
   return (
-    <div
+    <PopoverContent
       data-testid="agent-overview-panel"
-      className={cn(
-        'ml-2 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame',
-        frameSurfaceStyle,
-      )}
+      aria-labelledby={titleId}
+      container={container}
+      anchor={container}
+      align="end"
+      alignOffset={8}
+      side="bottom"
+      sideOffset={({ anchor }) => -anchor.height + 8}
+      collisionBoundary={container}
+      collisionPadding={8}
+      collisionAvoidance={{ side: 'none', align: 'shift', fallbackAxisSide: 'none' }}
+      initialFocus={closeRef}
+      className="grid h-[min(48rem,var(--available-height))] max-h-[calc(100dvh-5rem)] w-[min(25rem,var(--available-width))] min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-px"
     >
-      {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
-      <div className="flex h-10 min-h-10 items-center border-b border-border px-4">
-        <Txt as="h2" variant="subheading" tone="ink">
+      <div className="flex h-10 min-h-10 items-center justify-between gap-2 border-b border-border pr-2 pl-4">
+        <Txt id={titleId} as="h2" variant="subheading" tone="ink">
           Config
         </Txt>
+        <Button ref={closeRef} variant="ghost" size="icon-sm" aria-label="Close Config" onClick={onClose}>
+          <X />
+        </Button>
       </div>
 
       <ScrollArea className="min-h-0" mask={{ top: false }}>
         <ScrollAreaViewport className="h-full">
-          {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
-          {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
+          <AgentOverviewSections agentId={agentId} />
         </ScrollAreaViewport>
       </ScrollArea>
-    </div>
-  );
-}
-
-function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
-  const { data: agent, isLoading } = useAgent({
-    agentId: agentId,
-    requestContext: useEntityRequestContext('agent', agentId)[0],
-    queryOptions: { enabled: Boolean(agentId) },
-  });
-  const { mutate: reorderModelList } = useReorderModelList({ agentId: agentId });
-  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList({ agentId: agentId });
-  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
-  const { data: channelPlatforms } = useChannelPlatforms();
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3 p-4" data-testid="agent-overview-panel-skeleton">
-        <Skeleton className="h-6 w-1/2" />
-        <Skeleton className="h-16" />
-        <Skeleton className="h-6 w-1/3" />
-        <Skeleton className="h-24" />
+      <div className="border-t border-border p-3">
+        <Button className="w-full" render={<Link href={paths.agentLink(agentId)} />} onClick={onClose}>
+          Advanced config
+          <ArrowUpRight />
+        </Button>
       </div>
-    );
-  }
-
-  if (!agent) {
-    return (
-      <Txt variant="body" tone="muted" className="p-4">
-        Agent not found
-      </Txt>
-    );
-  }
-
-  const networkAgentsMap = agent.agents ?? {};
-  const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
-  const agentTools = agent.tools ?? {};
-  const tools = Object.keys(agentTools).map(key => agentTools[key]);
-  const agentWorkflows = agent.workflows ?? {};
-  const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
-  const skills = agent.skills ?? [];
-  const workspaceTools = agent.workspaceTools ?? [];
-  const browserTools = agent.browserTools ?? [];
-  const inputProcessors = agent.inputProcessors ?? [];
-  const outputProcessors = agent.outputProcessors ?? [];
-  const hasChannels = Boolean(channelPlatforms?.length);
-
-  return (
-    <>
-      {agent.modelList && (
-        <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
-          <AgentMetadataModelList
-            modelList={agent.modelList}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
-          />
-        </AgentMetadataSection>
-      )}
-
-      {networkAgents.length > 0 && (
-        <AgentMetadataSection
-          title="Agents"
-          count={networkAgents.length}
-          accent="green"
-          icon={<AgentIcon />}
-          hint={{ link: 'https://mastra.ai/en/docs/agents/overview', title: 'Agents documentation' }}
-        >
-          <AgentMetadataNetworkList agents={networkAgents} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentMetadataSection
-        title="Tools"
-        count={tools.length}
-        accent="amber"
-        icon={<Wrench />}
-        hint={{
-          link: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp',
-          title: 'Using Tools and MCP documentation',
-        }}
-      >
-        <AgentMetadataToolList agentId={agentId} tools={tools} />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection
-        title="Workflows"
-        count={workflows.length}
-        accent="blue"
-        icon={<Workflow />}
-        hint={{ link: 'https://mastra.ai/en/docs/workflows/overview', title: 'Workflows documentation' }}
-      >
-        <AgentMetadataWorkflowList workflows={workflows} />
-      </AgentMetadataSection>
-
-      {workspaceTools.length > 0 && (
-        <AgentMetadataSection
-          title="Workspace Tools"
-          count={workspaceTools.length}
-          accent="green"
-          icon={<Folder />}
-          hint={{
-            link: 'https://mastra.ai/en/reference/workspace/workspace-class#agent-tools',
-            title: 'Workspace tools documentation',
-          }}
-        >
-          <AgentMetadataWorkspaceToolsList tools={workspaceTools} />
-        </AgentMetadataSection>
-      )}
-
-      {browserTools.length > 0 && (
-        <AgentMetadataSection
-          title="Browser Tools"
-          count={browserTools.length}
-          accent="cyan"
-          icon={<Globe />}
-          hint={{
-            link: 'https://mastra.ai/en/docs/agents/adding-browser-control',
-            title: 'Browser tools documentation',
-          }}
-        >
-          <AgentMetadataBrowserToolsList tools={browserTools} />
-        </AgentMetadataSection>
-      )}
-
-      {(inputProcessors.length > 0 || outputProcessors.length > 0) && (
-        <AgentMetadataSection
-          title="Processors"
-          accent="orange"
-          icon={<Cpu />}
-          hint={{ link: 'https://mastra.ai/docs/agents/processors', title: 'Processors documentation' }}
-        >
-          <AgentMetadataCombinedProcessorList inputProcessors={inputProcessors} outputProcessors={outputProcessors} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentMetadataSection
-        title="Skills"
-        count={skills.length}
-        accent="purple"
-        icon={<Sparkles />}
-        hint={{ link: 'https://mastra.ai/en/docs/workspace/skills', title: 'Skills documentation' }}
-      >
-        <AgentMetadataSkillList skills={skills} agentId={agentId} workspaceId={agent.workspaceId} />
-      </AgentMetadataSection>
-
-      <AgentMetadataSection title="Scorers" accent="pink" icon={<Gauge />}>
-        <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
-      </AgentMetadataSection>
-      <AgentMetadataSection title="Memory" accent="purple" icon={<Brain />}>
-        <AgentMemoryConfig agentId={agentId} />
-      </AgentMetadataSection>
-
-      {hasChannels && (
-        <AgentMetadataSection title="Channels" accent="cyan" icon={<Radio />}>
-          <AgentChannels agentId={agentId} />
-        </AgentMetadataSection>
-      )}
-
-      <AgentSystemPrompt instructions={extractPrompt(agent.instructions)}>
-        {!isCmsLoading && !isCmsAvailable && (
-          <Notice variant="warning" title="Read-only">
-            <Notice.Message>
-              To edit the system prompt in Studio, add <InlineCode>@mastra/editor</InlineCode> to your project. See the{' '}
-              <a
-                href="https://mastra.ai/docs/editor/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                documentation
-              </a>
-              .
-            </Notice.Message>
-          </Notice>
-        )}
-      </AgentSystemPrompt>
-    </>
+    </PopoverContent>
   );
 }

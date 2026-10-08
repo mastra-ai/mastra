@@ -6,7 +6,7 @@ import { useStoredPromptBlockMutations } from '@mastra/react/hooks/prompt-blocks
 import { PromptBlockEditMain } from './prompt-block-edit-page/prompt-block-edit-main';
 import { PromptBlockEditSidebar } from './prompt-block-edit-page/prompt-block-edit-sidebar';
 import { usePromptBlockEditForm } from './prompt-block-edit-page/use-prompt-block-edit-form';
-import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { PromptBlockWorkspace } from './prompt-block-workspace';
 
 interface PromptBlockCreateContentProps {
   onSuccess?: (block: { id: string }) => void;
@@ -43,8 +43,8 @@ export function PromptBlockCreateContent({ onSuccess }: PromptBlockCreateContent
   };
 
   return (
-    <AgentEditLayout
-      leftSlot={
+    <PromptBlockWorkspace
+      configuration={
         <PromptBlockEditSidebar
           form={form}
           onPublish={handlePublish}
@@ -55,6 +55,6 @@ export function PromptBlockCreateContent({ onSuccess }: PromptBlockCreateContent
       <Form className="h-full">
         <PromptBlockEditMain form={form} />
       </Form>
-    </AgentEditLayout>
+    </PromptBlockWorkspace>
   );
 }

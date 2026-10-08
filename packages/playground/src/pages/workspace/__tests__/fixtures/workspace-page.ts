@@ -4,6 +4,8 @@ import type {
   ListWorkspacesResponse,
   WorkspaceFsListResponse,
   WorkspaceInfoResponse,
+  WorkspaceSearchResponse,
+  WorkspaceFsReadResponse,
 } from '@mastra/client-js';
 
 export const workspaceId = 'ws-1';
@@ -59,4 +61,20 @@ export const popularSkills: GetWorkspacesWorkspaceIdSkillsShPopular_Response = {
   count: 0,
   limit: 10,
   offset: 0,
+};
+
+export const installedSkills: ListSkillsResponse = {
+  isSkillsConfigured: true,
+  skills: [{ name: 'review', description: 'Review code changes', path: 'review' }],
+};
+export const searchResults: WorkspaceSearchResponse = {
+  query: 'guide',
+  mode: 'bm25',
+  results: [{ id: 'guide.md#chunk-0', content: '# Workspace guide', score: 1 }],
+};
+export const searchedFile: WorkspaceFsReadResponse = {
+  path: 'guide.md',
+  type: 'file',
+  content: '# Workspace guide',
+  mimeType: 'text/markdown',
 };

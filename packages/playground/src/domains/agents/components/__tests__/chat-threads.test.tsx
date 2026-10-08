@@ -51,6 +51,28 @@ const renderThreads = (panel?: CollapsiblePanelHandle) =>
   );
 
 describe('ChatThreads — first visit', () => {
+  describe('when the panel also contains contextual agent navigation', () => {
+    it('keeps the panel open even when there are no threads', () => {
+      const panel = fakePanel();
+      renderWithProviders(
+        <TestLinkProvider>
+          <ThreadsPanelProvider>
+            <RegisterPanel panel={panel} />
+            <ChatThreads
+              threads={[]}
+              threadId="new"
+              onDelete={() => {}}
+              resourceId="agent-1"
+              resourceType="agent"
+              autoCollapseWhenEmpty={false}
+            />
+          </ThreadsPanelProvider>
+        </TestLinkProvider>,
+      );
+      expect(panel.collapse).not.toHaveBeenCalled();
+      expect(screen.getByRole('link', { name: 'New Thread' })).toBeTruthy();
+    });
+  });
   describe('when the agent has no threads yet', () => {
     it('folds the threads panel away once so the landing fills the page', () => {
       const panel = fakePanel();

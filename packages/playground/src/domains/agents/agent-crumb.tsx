@@ -1,7 +1,8 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
 import { useAgents } from '@mastra/react/hooks/agents';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
+import { useIsAgentChat } from '@/domains/chat/hooks/use-is-agent-chat';
 
 export function AgentCrumb() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -13,8 +14,17 @@ export function AgentCrumb() {
 }
 
 export function AgentSwitcher() {
+  const isChat = useIsAgentChat();
+  const navigate = useNavigate();
   const { agentId } = useParams<{ agentId: string }>();
   if (!agentId) return null;
 
-  return <AgentCombobox value={agentId} {...crumbSwitcherTriggerProps} aria-label="Switch agent" />;
+  return (
+    <AgentCombobox
+      onValueChange={isChat ? id => void navigate(`/chat/${encodeURIComponent(id)}`) : undefined}
+      value={agentId}
+      {...crumbSwitcherTriggerProps}
+      aria-label="Switch agent"
+    />
+  );
 }

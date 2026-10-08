@@ -1,25 +1,27 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
+import { Popover } from '@mastra/playground-ui/components/Popover';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
-import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useEffect, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { emptyPlatforms, slackPlatform } from '../../__tests__/fixtures/channels';
 import { memoryDisabled, v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { semanticRecallConfig } from '../../memory-sidebar/__tests__/fixtures/memory';
 import { AgentOverviewPanel } from '../agent-overview-panel';
-import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const AGENT_ID = 'agent-1';
 
-const makeTool = (index: number) =>
-  ({ id: `tool-${index}`, description: `Tool ${index}` }) as unknown as GetToolResponse;
+const makeTool = (index: number): GetToolResponse => ({
+  id: `tool-${index}`,
+  description: `Tool ${index}`,
+  inputSchema: '{}',
+  outputSchema: '{}',
+});
 
 const agentWithManyTools: GetAgentResponse = {
   ...v2Agent,
@@ -40,29 +42,15 @@ function installHandlers({ agent = v2Agent, platforms = emptyPlatforms } = {}) {
   );
 }
 
-const panelHandle: CollapsiblePanelHandle = { collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() };
-
-/** Stands in for the layout's CollapsiblePanel by binding the shared handle. */
-function FakeLayoutPanel() {
-  const { panelHandle: ref, onPanelResize } = useRouteSidePanel();
-  useImperativeHandle(ref, () => panelHandle);
-  useEffect(() => onPanelResize(380), [onPanelResize]);
-  return null;
-}
-
 function renderPanel() {
   return renderWithProviders(
     <TestLinkProvider>
       <TooltipProvider>
-        <RouteSidePanelProvider>
-          <FakeLayoutPanel />
-          <RouteSidePanelSlot />
-          <RouteSidePanel owner="agent-detail">
-            <ActivatedSkillsProvider>
-              <AgentOverviewPanel agentId={AGENT_ID} />
-            </ActivatedSkillsProvider>
-          </RouteSidePanel>
-        </RouteSidePanelProvider>
+        <Popover defaultOpen>
+          <ActivatedSkillsProvider>
+            <AgentOverviewPanel agentId={AGENT_ID} container={document.body} onClose={() => {}} />
+          </ActivatedSkillsProvider>
+        </Popover>
       </TooltipProvider>
     </TestLinkProvider>,
     { router: true },

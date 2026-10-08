@@ -66,7 +66,7 @@ export default function IntegrationsPage() {
       <h1 className="sr-only">Integrations</h1>
       <div className="max-w-3xl space-y-6">
         <Txt as="p" variant="body" tone="muted">
-          Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
+          Connect external services so your agents can use their tools. Choose a provider and toolkit to get started.
         </Txt>
 
         <ProviderToolkitSelector

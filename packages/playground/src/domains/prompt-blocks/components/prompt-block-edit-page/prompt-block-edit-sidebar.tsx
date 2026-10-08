@@ -11,7 +11,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
-import { Check, Plus, PlusIcon, Save } from 'lucide-react';
+import { Check, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
@@ -32,10 +32,11 @@ function RecursiveFieldRenderer({
     <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
-          <div className="flex flex-row items-center gap-4">
-            <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full" />
-
+          <div className="grid grid-cols-2 items-center gap-2">
+            <JSONSchemaForm.FieldName labelIsHidden placeholder="Variable name" size="md" className="w-full min-w-0" />
             <JSONSchemaForm.FieldType placeholder="Type" />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
             <JSONSchemaForm.FieldRemove />
@@ -54,7 +55,6 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-2" size="sm">
-            <PlusIcon />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -162,10 +162,7 @@ export function PromptBlockEditSidebar({
             </JSONSchemaForm.FieldList>
 
             <div className="p-2">
-              <JSONSchemaForm.AddField>
-                <Plus />
-                Add variable
-              </JSONSchemaForm.AddField>
+              <JSONSchemaForm.AddField>Add variable</JSONSchemaForm.AddField>
             </div>
           </JSONSchemaForm.Root>
         </div>

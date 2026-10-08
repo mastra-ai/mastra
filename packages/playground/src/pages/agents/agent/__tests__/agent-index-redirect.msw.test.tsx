@@ -28,7 +28,7 @@ const buildRouter = (initialEntry: string) =>
             path: '/agents/:agentId',
             children: [
               { index: true, loader: agentIndexLoader },
-              { path: 'overview', loader: legacyAgentSettingsLoader },
+              { path: 'overview', element: <div data-testid="overview-route" /> },
               { path: 'settings', loader: legacyAgentSettingsLoader },
             ],
           },
@@ -45,19 +45,19 @@ const locationIs = (expected: string) =>
   waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe(expected));
 
 describe('agent landing redirects', () => {
-  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
+  it('redirects bare /agents/:agentId to its overview', async () => {
     renderAt(`/agents/${AGENT_ID}`);
-    await locationIs(`/agents/${AGENT_ID}/threads/new`);
-    expect(screen.getByTestId('thread-route')).not.toBeNull();
+    await locationIs(`/agents/${AGENT_ID}/overview`);
+    expect(screen.getByTestId('overview-route')).not.toBeNull();
   });
 
-  it('redirects the removed /overview route to the chat, keeping the query string', async () => {
+  it('keeps the overview route, keeping the query string', async () => {
     renderAt(`/agents/${AGENT_ID}/overview?tab=channels`);
-    await locationIs(`/agents/${AGENT_ID}/threads/new?tab=channels`);
+    await locationIs(`/agents/${AGENT_ID}/overview?tab=channels`);
   });
 
-  it('redirects the legacy /settings route to the chat', async () => {
+  it('redirects the legacy /settings route to its overview', async () => {
     renderAt(`/agents/${AGENT_ID}/settings`);
-    await locationIs(`/agents/${AGENT_ID}/threads/new`);
+    await locationIs(`/agents/${AGENT_ID}/overview`);
   });
 });

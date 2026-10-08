@@ -6,6 +6,16 @@ import { PageLayout } from './index';
 afterEach(cleanup);
 
 describe('PageLayout', () => {
+  describe('when only an essential action is provided', () => {
+    it('keeps it accessible in the page header', () => {
+      render(
+        <PageLayout primaryActions={<button>Config</button>}>
+          <p>Chat</p>
+        </PageLayout>,
+      );
+      expect(screen.getByRole('banner').contains(screen.getByRole('button', { name: 'Config' }))).toBe(true);
+    });
+  });
   describe('when breadcrumbs and header actions are provided', () => {
     it('renders them inside a header above the main content', () => {
       render(

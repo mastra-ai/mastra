@@ -13,7 +13,6 @@ import { Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -29,6 +28,7 @@ import {
   usePromptBlockEditForm,
   DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
+import { PromptBlockWorkspace } from '@/domains/prompt-blocks/components/prompt-block-workspace';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 
 const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb }];
@@ -177,8 +177,8 @@ function CmsPromptBlocksEditForm({
   }, [handlePublish, isViewingPreviousVersion, selectedVersionId, client, blockId, queryClient, navigate, paths]);
 
   return (
-    <AgentEditLayout
-      leftSlot={
+    <PromptBlockWorkspace
+      configuration={
         <PromptBlockEditSidebar
           form={form}
           onPublish={handlePublish}
@@ -216,7 +216,7 @@ function CmsPromptBlocksEditForm({
       <Form className="h-full">
         <PromptBlockEditMain form={form} formResetKey={formResetKey} />
       </Form>
-    </AgentEditLayout>
+    </PromptBlockWorkspace>
   );
 }
 
@@ -260,9 +260,9 @@ function CmsPromptBlocksEditPage() {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{blockId}</h1>
-        <AgentEditLayout leftSlot={<Spinner fill size="lg" />}>
+        <PromptBlockWorkspace configuration={<Spinner fill size="lg" />}>
           <Spinner fill size="lg" />
-        </AgentEditLayout>
+        </PromptBlockWorkspace>
       </PageLayout>
     );
   }
@@ -271,9 +271,9 @@ function CmsPromptBlocksEditPage() {
     return (
       <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{blockId}</h1>
-        <AgentEditLayout leftSlot={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
+        <PromptBlockWorkspace configuration={<EmptyState variant="fill" titleSlot="Prompt block not found" />}>
           <EmptyState variant="fill" titleSlot="Prompt block not found" />
-        </AgentEditLayout>
+        </PromptBlockWorkspace>
       </PageLayout>
     );
   }

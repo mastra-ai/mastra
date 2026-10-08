@@ -4,6 +4,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { authHandler, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
+import { StudioAreaNavigation } from '@/domains/navigation/components/studio-area-navigation';
 import { server } from '@/test/msw-server';
 
 const unauthenticatedCapabilities = {
@@ -61,7 +62,7 @@ const builderEnabledWithoutAgent: BuilderSettingsResponse = {
 beforeEach(() => {
   // ensure MASTRA_CLOUD_API_ENDPOINT isn't set — keeps useMastraPlatform off so
   // mainNav items aren't filtered out unexpectedly.
-  (window as unknown as Record<string, unknown>).MASTRA_CLOUD_API_ENDPOINT = '';
+  window.MASTRA_CLOUD_API_ENDPOINT = '';
 });
 
 afterEach(() => {
@@ -69,11 +70,11 @@ afterEach(() => {
   cleanup();
 });
 
-describe('AppSidebar — Agent Builder admin link', () => {
+describe('Agents navigation — Agent Builder access', () => {
   it('does not render the Agent Builder link for unauthenticated users', async () => {
     server.use(authHandler(unauthenticatedCapabilities), builderHandler(builderFullySetUp), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     // Wait until the auth query has resolved so the conditional has run.
     await waitFor(() => {
@@ -90,7 +91,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
       systemPackagesHandler(),
     );
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
@@ -99,7 +100,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
   it('renders the Agent Builder link for admin users when RBAC is on and the builder is enabled', async () => {
     server.use(authHandler(authenticatedAdminCapabilities), builderHandler(builderFullySetUp), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
@@ -116,7 +117,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
 
     server.use(authHandler(wildcardCapabilities), builderHandler(builderFullySetUp), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
@@ -133,7 +134,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
 
     server.use(authHandler(resourceWildcardCapabilities), builderHandler(builderFullySetUp), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
@@ -149,7 +150,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
       systemPackagesHandler(),
     );
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
@@ -166,7 +167,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
 
     server.use(authHandler(noAgentPermsCapabilities), builderHandler(builderFullySetUp), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: /agent builder/i })).toBeNull();
@@ -176,7 +177,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
   it('does not render the Agent Builder link when the builder is disabled', async () => {
     server.use(authHandler(authenticatedAdminCapabilities), builderHandler(builderDisabled), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: /agent builder/i })).toBeNull();
@@ -190,7 +191,7 @@ describe('AppSidebar — Agent Builder admin link', () => {
       systemPackagesHandler(),
     );
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: /agent builder/i })).toBeNull();
@@ -202,14 +203,14 @@ describe('AppSidebar — Agent Builder admin link', () => {
     // sidebar shortcut should appear as long as the builder is configured.
     server.use(authHandler(authDisabledCapabilities), builderHandler(builderFullySetUp), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
   });
 });
 
-describe('AppSidebar — RBAC link gating while permission data loads', () => {
+describe('Agents navigation — RBAC link gating while permission data loads', () => {
   const wildcardCapabilities = {
     enabled: true,
     login: { type: 'credentials' as const },
@@ -235,7 +236,7 @@ describe('AppSidebar — RBAC link gating while permission data loads', () => {
       systemPackagesHandler(),
     );
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     // The Agents link requires `agents:read`; the wildcard user clears it, but
     // it must stay hidden while the user's permissions are still loading.
@@ -253,7 +254,7 @@ describe('AppSidebar — RBAC link gating while permission data loads', () => {
   it('shows permission-gated links the user is allowed once permissions are loaded', async () => {
     server.use(authHandler(wildcardCapabilities), builderHandler(builderDisabled), systemPackagesHandler());
 
-    renderSidebar();
+    renderSidebar('/', <StudioAreaNavigation areaId="build" />);
 
     const agentsLink = await screen.findByRole('link', { name: /agents/i });
     expect(agentsLink.getAttribute('href')).toBe('/agents');

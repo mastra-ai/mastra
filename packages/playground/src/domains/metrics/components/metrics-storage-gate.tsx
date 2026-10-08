@@ -1,15 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsCapabilityError } from './metrics-capability-error';
+import { MetricsLayout } from './metrics-layout';
 import { MetricsPageLayout } from './metrics-page-layout';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 const filterFieldsWithoutDiscovery = createMetricsPropertyFilterFields({
@@ -37,12 +35,12 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
   }
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+      <MetricsLayout>
         <h1 className="sr-only">Metrics</h1>
         <div className="flex h-full items-center justify-center">
           <MetricsCapabilityError error={error} />
         </div>
-      </PageLayout>
+      </MetricsLayout>
     );
   }
   if (supportsMetrics) return children;

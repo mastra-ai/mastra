@@ -37,6 +37,8 @@ type PopoverContentProps = PopoverPopupProps &
   PopoverContentPositionerProps & {
     /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
+    /** Keep children mounted while closed, preserving their state and availability. */
+    keepMounted?: boolean;
   };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
@@ -44,6 +46,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
     {
       className,
       container,
+      keepMounted,
       align = 'center',
       alignOffset = 0,
       side = 'bottom',
@@ -80,7 +83,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
     };
 
     return (
-      <PopoverPrimitive.Portal container={resolvedContainer}>
+      <PopoverPrimitive.Portal container={resolvedContainer} keepMounted={keepMounted}>
         <PopoverPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <PopoverPrimitive.Popup
             ref={ref}

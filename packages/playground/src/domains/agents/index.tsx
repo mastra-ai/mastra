@@ -9,7 +9,7 @@ export * from './components/composer-model-switcher';
 export * from './utils/extractPrompt';
 export * from './components/agent-entity-header';
 export * from './components/memory-sidebar/agent-memory';
-export * from './components/agent-layout';
+export * from './components/agent-workspace-view';
 
 export * from './components/browser-view';
 export * from './components/agent-cms-blocks';
@@ -26,6 +26,6 @@ export * from './hooks/use-agent-cms-form';
 export * from './components/agent-cms-form-shell';
 export * from './components/agent-version-panel';
 export * from './components/agent-playground';
-export * from './components/agent-page-tabs';
+export * from './components/agent-view-navigation';
 export * from './components/agent-list/agents-list';
 export * from './components/agent-list/no-agents-info';

@@ -27,9 +27,6 @@ vi.mock('@/domains/agents/components/agent-information/agent-information', () =>
 vi.mock('@/domains/agents/components/browser-view', () => ({
   BrowserViewPanel: () => null,
 }));
-vi.mock('@/domains/agents/components/agent-layout', () => ({
-  AgentLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
 
 type TextStreamHandler = (
   reader: {

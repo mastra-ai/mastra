@@ -6,7 +6,7 @@ import type { LoaderFunctionArgs } from 'react-router';
 export const agentThreadsIndexLoader = ({ params }: LoaderFunctionArgs) =>
   redirect(`/agents/${params.agentId}/threads/new`);
 
-export const agentIndexLoader = ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`);
+export const agentIndexLoader = ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview`);
 
 export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
@@ -17,7 +17,7 @@ const toolSearch = (toolId: string) => `?${new URLSearchParams({ tool: toolId })
 
 export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
-  return redirect(`/agents/${params.agentId}/threads/new${search}`);
+  return redirect(`/agents/${params.agentId}/overview${search}`);
 };
 
 export const REVIEW_QUEUE_PATH = '/experiments/review-queue';
@@ -45,7 +45,7 @@ export function workspaceSkillFileLink(workspaceId?: string, skillPath?: string 
 }
 
 export const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
+  agentLink: (agentId: string) => `/agents/${agentId}/overview`,
   agentToolLink: (agentId: string, toolId: string, threadId?: string) =>
     `/agents/${agentId}/threads/${threadId ?? 'new'}${toolSearch(toolId)}`,
   agentSkillLink: (_agentId: string, _skillName: string, skillPath?: string, workspaceId?: string) =>
@@ -78,7 +78,7 @@ export const paths: LinkComponentProviderProps['paths'] = {
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
-  toolLink: (toolId: string) => `/tools${toolSearch(toolId)}`,
+  toolLink: (toolId: string) => `/tools/${encodeURIComponent(toolId)}`,
   skillLink: (_skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceSkillFileLink(workspaceId, skillPath),
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),

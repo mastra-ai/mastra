@@ -1,5 +1,6 @@
 import { Code } from '@mastra/playground-ui/components/Code';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { SendIcon } from 'lucide-react';
 import type { ToolRun } from '../utils/tool-run';
@@ -27,5 +28,9 @@ export function ToolResponseBody({ isRunning, lastRun }: ToolResponseBodyProps) 
     );
   }
 
-  return <Code code={getRunCode(lastRun)} lang="json" className="overflow-x-auto p-4 text-caption whitespace-pre" />;
+  return (
+    <ScrollArea orientation="horizontal" className="min-w-0" mask={false}>
+      <Code code={getRunCode(lastRun)} lang="json" className="p-4 text-caption whitespace-pre" />
+    </ScrollArea>
+  );
 }

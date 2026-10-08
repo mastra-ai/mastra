@@ -28,8 +28,8 @@ function observeRequests() {
   const onDiscovery = vi.fn();
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/scores`, () => HttpResponse.json(emptyScores)),
-    http.post(`${TEST_BASE_URL}/api/observability/metrics/:operation`, ({ params }) => {
-      onMetrics();
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/:operation`, async ({ params, request }) => {
+      onMetrics(await request.json());
       switch (params.operation) {
         case 'aggregate':
           return HttpResponse.json(aggregate);
@@ -65,10 +65,10 @@ function LocationProbe() {
   return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
-function renderPage(path = '/metrics') {
+function renderPage(path = '/metrics', agentScope?: { id: string; name: string }) {
   return renderWithProviders(
     <TestLinkProvider>
-      <Metrics />
+      <Metrics agentScope={agentScope} />
       <LocationProbe />
     </TestLinkProvider>,
     { router: { initialEntries: [path] } },
@@ -247,6 +247,26 @@ describe('Metrics storage support', () => {
       const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
       expect(url.searchParams.get('datePreset')).toBe('last-7d');
       expect(url.searchParams.get('filterEnvironment')).toBe('production');
+    });
+  });
+});
+
+describe('Agent metrics', () => {
+  describe('when the URL requests a different agent', () => {
+    it('keeps all metric requests scoped to the agent being viewed', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
+      const { onMetrics } = observeRequests();
+      const { queryClient } = renderPage('/agents/billing/metrics?filterEntityName=Other&rootEntityType=workflow', {
+        id: 'billing',
+        name: 'Billing Agent',
+      });
+      await waitFor(() => expect(onMetrics).toHaveBeenCalled());
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      for (const [request] of onMetrics.mock.calls) {
+        expect(request.filters).toMatchObject({ entityName: 'Billing Agent', rootEntityType: 'agent' });
+      }
     });
   });
 });

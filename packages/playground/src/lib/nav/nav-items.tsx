@@ -12,7 +12,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
+import { BookIcon, ClipboardCheck, LayoutGrid, MessageSquare, Plug } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -50,15 +50,18 @@ export const mainNav: NavSection[] = [
     key: 'primitives',
     title: 'Primitives',
     items: [
+      { name: 'Chat', url: '/chat', Icon: MessageSquare, isOnMastraPlatform: true },
       {
         name: 'Agents',
         url: '/agents',
+        activePaths: ['/cms/agents'],
         Icon: AgentIcon,
         isOnMastraPlatform: true,
       },
       {
         name: 'Prompts',
         url: '/prompts',
+        activePaths: ['/cms/prompts'],
         Icon: PromptIcon,
         isOnMastraPlatform: true,
       },
@@ -90,6 +93,12 @@ export const mainNav: NavSection[] = [
         foldable: true,
       },
       {
+        name: 'Integrations',
+        url: '/integrations',
+        Icon: Plug,
+        isOnMastraPlatform: true,
+      },
+      {
         name: 'Workspaces',
         url: '/workspaces',
         Icon: WorkspacesIcon,
@@ -105,6 +114,7 @@ export const mainNav: NavSection[] = [
       {
         name: 'Scorers',
         url: '/scorers',
+        activePaths: ['/cms/scorers'],
         Icon: ScorersIcon,
         isOnMastraPlatform: true,
       },
