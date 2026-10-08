@@ -266,7 +266,7 @@ describe('Knowledge importer runner', () => {
     for (const run of [succeeded, failed]) {
       for (const prefix of ['import-payload', 'import-lease']) {
         expect(
-          await knowledge.getImportState({
+          await knowledge.getImportStateInternal({
             importerId: 'calendar',
             binding,
             key: `__mastra_internal/${prefix}/${run.id}`,
@@ -289,7 +289,7 @@ describe('Knowledge importer runner', () => {
     };
     const seed = new Knowledge({ storage, structure, importers: [definition] });
     await seed.reconcile();
-    const domain = await seed.getStorage();
+    const domain = await seed.getStorageInternal();
     const binding = knowledgeImporterBindingKey(one);
     const heartbeatAt = new Date();
     await domain.enqueueImportRun({
@@ -342,7 +342,7 @@ describe('Knowledge importer runner', () => {
         expect.objectContaining({ interruptedRunId: 'orphan-run', replacementRunId: expect.any(String) }),
       );
 
-      const runs = (await live.listImportRuns({ importerId: 'calendar' })).runs;
+      const runs = (await live.listImportRunsInternal({ importerId: 'calendar' })).runs;
       expect(runs).toHaveLength(3);
       expect(runs).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: 'orphan-run', status: 'interrupted' })]),
@@ -351,7 +351,7 @@ describe('Knowledge importer runner', () => {
       for (const run of runs) {
         for (const prefix of ['import-payload', 'import-lease']) {
           expect(
-            await live.getImportState({
+            await live.getImportStateInternal({
               importerId: 'calendar',
               binding,
               key: `__mastra_internal/${prefix}/${run.id}`,
