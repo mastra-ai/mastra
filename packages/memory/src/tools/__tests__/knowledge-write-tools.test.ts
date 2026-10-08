@@ -4,7 +4,9 @@ import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../..';
+import { Subconscious } from '../../processors/observational-memory/subconscious';
 import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
+import type { SubconsciousConfig } from '../../processors/observational-memory/subconscious/types';
 
 const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
 
@@ -18,7 +20,7 @@ async function fixture() {
     sourceThreadId: 'alpha',
     defaultScope: 'resource',
   });
-  return { store, source, target, tools };
+  return { memory, store, source, target, tools };
 }
 
 describe('Subconscious knowledge write tools', () => {
@@ -167,8 +169,12 @@ describe('Subconscious knowledge write tools', () => {
     expect(appended.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
   });
 
-  it('writes and rescopes at every scope level the conversation can see', async () => {
-    const { store, source, tools } = await fixture();
+  it('writes and rescopes at every scope level the conversation can see, even with a legacy maxScope config', async () => {
+    const { memory, store, source } = await fixture();
+    // Mastra Code used to configure Subconscious with maxScope: 'resource', which blocked
+    // every org-level write. The option no longer exists and must not restrict the curator.
+    const legacy = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' } as SubconsciousConfig);
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', ...legacy.resolved });
 
     const created = (await tools.knowledge_create!.execute?.(
       { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', nodeScope: 'org', scope: 'org' },
