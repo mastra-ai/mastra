@@ -1201,18 +1201,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
                   }
 
+                  const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
                   const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
                   const stepMessageParts = stepMessage?.content?.parts;
                   const iterationPartOffset = stepMessage
                     ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
                     : undefined;
-                  const stepTextBeforeProcessing =
-                    stepMessageParts && iterationPartOffset !== undefined
-                      ? stepMessageParts
-                          .slice(iterationPartOffset)
-                          .map(part => (part.type === 'text' ? part.text : ''))
-                          .join('')
-                      : undefined;
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
@@ -1230,27 +1224,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     : undefined;
                   const processedStepParts = processedStepMessage?.content?.parts;
                   const stepText =
-                    processedStepParts &&
-                    stepMessageParts &&
-                    processedStepParts.length === stepMessageParts.length &&
-                    iterationPartOffset !== undefined
-                      ? processedStepParts
-                          .slice(iterationPartOffset)
-                          .map(part => (part.type === 'text' ? part.text : ''))
-                          .join('')
+                    outputText !== outputTextBeforeProcessing && processedStepMessage
+                      ? processedStepParts &&
+                        stepMessageParts &&
+                        processedStepParts.length === stepMessageParts.length &&
+                        iterationPartOffset !== undefined
+                        ? processedStepParts
+                            .slice(iterationPartOffset)
+                            .map(part => (part.type === 'text' ? part.text : ''))
+                            .join('')
+                        : outputText
                       : undefined;
 
-                  // Only update the last step when result processing changed that iteration's text.
-                  // The current response message must still exist with the same part structure so an
-                  // earlier response cannot be attributed to the final step. Compare against undefined,
-                  // not truthiness, so a processor clearing the text to '' still overwrites the original.
-                  if (
-                    self.#status !== 'canceled' &&
-                    lastStep &&
-                    stepText !== undefined &&
-                    stepText !== stepTextBeforeProcessing &&
-                    stepText !== lastStepText
-                  ) {
+                  // Only reconcile the final step when result processing changed the response text and
+                  // the same response message still exists. Preserve the iteration slice when its part
+                  // structure is stable; otherwise use the processor's replacement text so redaction is
+                  // not lost. Compare against undefined, not truthiness, so clearing to '' still applies.
+                  if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }
 

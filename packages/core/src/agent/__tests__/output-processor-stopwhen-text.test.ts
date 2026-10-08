@@ -134,6 +134,41 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     });
   }
 
+  it('uses processed step text when an output processor collapses text parts', async () => {
+    const model = scriptedModel([[...textPart('t1', 'secret '), ...textPart('t2', 'stuff'), finish('stop')]]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'collapse-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message =>
+              message.role === 'assistant'
+                ? {
+                    ...message,
+                    content: {
+                      ...message.content,
+                      content: 'REDACTED',
+                      parts: [{ type: 'text', text: 'REDACTED' }],
+                    },
+                  }
+                : message,
+            ),
+        },
+      ],
+    });
+
+    const stream = await agent.stream('hi');
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('REDACTED');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['REDACTED']);
+    expect(fullOutput.text).toBe('REDACTED');
+  });
+
   it('keeps feedback continuation steps iteration-local with an output processor', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
