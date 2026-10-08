@@ -87,6 +87,9 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
    * has no build status endpoint; re-calling the same builder's idempotent
    * `build()` is the status poll. After a restart the builder is recomputed
    * from the context and settings.
+   *
+   * TODO: once the platform API exposes build status and build history, read
+   * `get` from the API instead of this in-memory cache and add `builds.list`.
    */
   readonly #builders = new Map<string, SandboxTemplateBuilder>();
 
