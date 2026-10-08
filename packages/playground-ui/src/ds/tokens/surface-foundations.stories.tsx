@@ -42,6 +42,7 @@ const filledDestructiveLadder: { token: FillToken; use: string }[] = [
   { token: 'fill-destructive-hover', use: 'Hover' },
   { token: 'fill-destructive-active', use: 'Press' },
   { token: 'fill-destructive-disabled', use: 'Disabled' },
+  { token: 'fill-destructive-disabled-foreground', use: 'Text on a disabled destructive fill' },
 ];
 
 const fieldSurfaceTokens = [
@@ -129,8 +130,8 @@ export const SurfaceFoundations: Story = {
           Mode / {context.globals.theme === 'light' ? 'Light' : 'Dark'}
         </Txt>
       }
-      note="Light uses its own, much shallower alphas — a lightness step has to be large on near-black and small on near-white."
-      noteAside="Utilities: bg-fill-*, border-border-*."
+      note="The fill and boundary ladders share their alphas across themes, except focus. Light mode changes the tint; surface and field rims have their own theme values."
+      noteAside="Utilities: bg-fill-*, border-border-*, border-surface-rim."
     >
       <FoundationSection
         label="Fill ladder"
@@ -181,9 +182,11 @@ export const SurfaceFoundations: Story = {
             <Specimen key={token} name={`--${token}`} note={use}>
               <div
                 role="img"
-                aria-label={`--${token} swatch`}
-                className="h-16 border border-border"
-                style={{ background: `var(--${token})` }}
+                aria-label={`--${token} ${token === 'field-on-surface' ? 'fill' : 'edge'}`}
+                className={token === 'field-on-surface' ? 'h-16 rounded-md' : 'h-16 rounded-md border'}
+                style={
+                  token === 'field-on-surface' ? { background: `var(--${token})` } : { borderColor: `var(--${token})` }
+                }
               />
             </Specimen>
           ))}
@@ -271,7 +274,7 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Boundary ladder"
-        description="The four states of a control's 1px edge, shown on a filled body and on a transparent one."
+        description="Content dividers and control edges, shown at their authored opacity. Use border-border for dividers, border-border-strong for outlined controls, and the hover/focus roles for their states."
       >
         <SpecimenGroup label="Transparent, on the canvas">
           <BoundaryLadderRow filled={false} />
@@ -289,24 +292,27 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Rim"
-        description="The 1px inset edge shadow-raised draws, and the one edge focus moves on a field."
+        description="The shared edge for app frames, cards and panels. border-surface-rim and shadow-rim use the same token. Raised and overlay recipes compose it with other effects."
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
-          <Specimen name="--surface-rim" note="Rest — every raised and overlay surface">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Specimen name="--surface-rim" note="border-surface-rim — isolated 1px edge">
+            <div role="img" aria-label="surface-rim edge" className="h-20 rounded-md border border-surface-rim" />
+          </Specimen>
+          <Specimen name="Inset rim only" note="shadow-rim — same color, inside the box">
+            <div role="img" aria-label="surface-rim inset edge" className="h-20 rounded-md shadow-rim" />
+          </Specimen>
+          <Specimen name="Raised composition" note="Card fill + lip + rim + drops">
             <div className="h-20 rounded-md bg-card shadow-raised" />
           </Specimen>
-          <Specimen
-            name="Focused rim comparison"
-            note="--border-focus repaints the edge, never a second line beside it"
-          >
+          <Specimen name="Focused rim comparison" note="Raised composition with --border-focus replacing its rim">
             <div className="h-20 rounded-md bg-card shadow-raised [--surface-rim:var(--border-focus)]" />
           </Specimen>
         </div>
         <Txt variant="caption" tone="muted">
-          It is not --border. A divider has the whole surface behind it and needs that weight; the rim sits on the
-          boundary between two surfaces that already differ in fill and elevation, so the same alpha overshoots and the
-          surface reads as framed. Hover leaves it alone — the rim is the loudest part of a borderless surface, so a
-          pointer wash goes through --surface-tint instead.
+          Surface rims and content dividers serve different roles. A frame header uses the surface rim to match the edge
+          it meets; internal separators use --border. Use each token at its authored opacity. Reserve 1px inside an
+          inset frame so a child divider cannot paint over its rim. A surface recipe already draws that rim, so it needs
+          no extra border on the same edge.
         </Txt>
       </FoundationSection>
 

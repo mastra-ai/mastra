@@ -9,10 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
 
 export interface RenameExperimentDialogProps {
@@ -56,28 +57,27 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
         <DialogHeader>
           <DialogTitle>Rename Experiment</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <DialogBody>
-            <div className="space-y-2">
-              <Label htmlFor="rename-experiment-name">Name *</Label>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="rename-experiment-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter experiment name"
                 autoFocus
               />
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="rename-experiment-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Input
-                id="rename-experiment-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter experiment description (optional)"
               />
-            </div>
+            </Field>
           </DialogBody>
           <DialogFooter>
             <DialogCancel>Cancel</DialogCancel>
@@ -85,7 +85,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
               {updateExperiment.isPending ? 'Saving...' : 'Save'}
             </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

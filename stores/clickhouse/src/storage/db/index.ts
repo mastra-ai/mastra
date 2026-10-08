@@ -19,7 +19,7 @@ import {
   validateReplicationConfig,
 } from './replication';
 import type { ClickhouseConfig } from './utils';
-import { TABLE_ENGINES, transformRow } from './utils';
+import { skipIndexName, TABLE_ENGINES, TABLE_SKIP_INDEXES, transformRow } from './utils';
 
 /**
  * Configuration for standalone domain usage.
@@ -160,12 +160,51 @@ export class ClickhouseDB extends MastraBase {
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    const result = await this.client.query({
-      query: `DESCRIBE TABLE ${table}`,
-      format: 'JSONEachRow',
-    });
-    const columns = (await result.json()) as { name: string }[];
-    return columns.some(c => c.name === column);
+    // Cached per table; createTable/alterTable invalidate it.
+    return (await this.getTableColumns(table as TABLE_NAMES)).has(column);
+  }
+
+  /**
+   * Adds the bloom-filter skip indexes declared in {@link TABLE_SKIP_INDEXES}
+   * for `tableName`. Call after createTable/alterTable so optional columns
+   * exist. Indexes (or columns) already present are skipped: on Replicated
+   * tables every issued ALTER bumps the metadata version even with
+   * `IF NOT EXISTS`.
+   */
+  async ensureSkipIndexes(tableName: TABLE_NAMES): Promise<void> {
+    const columns = TABLE_SKIP_INDEXES[tableName];
+    if (!columns?.length) return;
+
+    try {
+      const existingColumns = await this.getTableColumns(tableName);
+      const result = await this.client.query({
+        query: `SELECT name FROM system.data_skipping_indices WHERE database = currentDatabase() AND table = {table:String}`,
+        query_params: { table: tableName },
+        format: 'JSONEachRow',
+      });
+      const existingIndexes = new Set(((await result.json()) as Array<{ name: string }>).map(row => row.name));
+
+      for (const column of columns) {
+        const name = skipIndexName(column);
+        if (existingIndexes.has(name) || !existingColumns.has(column)) continue;
+        await this.client.command({
+          query: addOnClusterToDDL(
+            `ALTER TABLE ${tableName} ADD INDEX IF NOT EXISTS ${name} "${column}" TYPE bloom_filter(0.01) GRANULARITY 1`,
+            this.replication,
+          ),
+        });
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'ENSURE_SKIP_INDEXES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -817,6 +856,9 @@ export class ClickhouseDB extends MastraBase {
           date_time_output_format: 'iso',
           use_client_time_zone: 1,
           output_format_json_quote_64bit_integers: 0,
+          // Snapshot loads filter on sort-key columns (workflow_name, run_id), which
+          // every version of a row shares, so the run_id skip index is safe under FINAL.
+          ...(tableName === TABLE_WORKFLOW_SNAPSHOT ? { use_skip_indexes_if_final: 1 } : {}),
         },
       });
 

@@ -1,21 +1,33 @@
-/* Chart series and span-type hues. Chart roles point at the colour ramps; span
-   roles keep their own hue wheel, one hue per span type. */
+/* Chart series and span-type hues. In dark mode the main chart hues share one
+   perceived lightness (OKLCH ~72%) and moderate chroma so no series shouts over
+   another; red keeps a little more chroma to read as urgent. Span roles keep their
+   own hue wheel, one hue per span type. */
 
 :root {
-  --chart-blue: var(--blue-300);
+  --chart-blue: oklch(0.72 0.11 240);
   --chart-blue-deep: var(--blue-600);
-  --chart-yellow: var(--yellow-300);
-  --chart-green: var(--green-400);
+  --chart-amber: oklch(0.78 0.13 80);
+  --chart-green: oklch(0.72 0.13 160);
+  --chart-cyan: oklch(0.72 0.11 205);
   --chart-purple: var(--purple-400);
   --chart-orange: var(--orange-400);
   --chart-pink: var(--pink-300);
-  --chart-red: var(--red-500);
+  --chart-red: oklch(0.68 0.17 20);
 
-  --chart-sequential-1: var(--purple-200);
-  --chart-sequential-2: var(--purple-300);
-  --chart-sequential-3: var(--purple-400);
-  --chart-sequential-4: var(--purple-500);
-  --chart-sequential-5: var(--purple-600);
+  --chart-sequential-1: oklch(0.84 0.07 290);
+  --chart-sequential-2: oklch(0.78 0.1 290);
+  --chart-sequential-3: oklch(0.72 0.13 290);
+  --chart-sequential-4: oklch(0.67 0.155 290);
+  --chart-sequential-5: oklch(0.62 0.18 290);
+  --chart-sequential-pale: var(--purple-200);
+
+  /* Share lists: green, sky, violet, teal, indigo, far apart on the wheel; rest is a quiet gray. */
+  --chart-share-1: oklch(0.82 0.16 145);
+  --chart-share-2: oklch(0.78 0.11 228);
+  --chart-share-3: oklch(0.72 0.11 295);
+  --chart-share-4: oklch(0.8 0.1 185);
+  --chart-share-5: oklch(0.66 0.12 265);
+  --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 
   --span-agent: oklch(0.75 0.133 250);
   --span-workflow: oklch(0.75 0.127 200);
@@ -33,12 +45,20 @@
 html.light {
   --chart-blue: var(--blue-500);
   --chart-blue-deep: var(--blue-800);
-  --chart-yellow: var(--yellow-500);
+  --chart-amber: var(--amber-500);
   --chart-green: var(--green-500);
+  --chart-cyan: var(--cyan-500);
   --chart-purple: var(--purple-600);
   --chart-orange: var(--orange-600);
   --chart-pink: var(--pink-500);
   --chart-red: var(--red-700);
+
+  --chart-share-1: oklch(0.64 0.17 150);
+  --chart-share-2: oklch(0.6 0.13 235);
+  --chart-share-3: oklch(0.56 0.15 295);
+  --chart-share-4: oklch(0.64 0.11 190);
+  --chart-share-5: oklch(0.5 0.15 265);
+  --chart-share-rest: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
 
   --span-agent: oklch(0.55 0.15 250);
   --span-workflow: oklch(0.55 0.093 200);
@@ -50,18 +70,19 @@ html.light {
   --span-workspace: oklch(0.55 0.15 20);
   --span-skill: oklch(0.55 0.148 130);
   --span-scorer: oklch(0.55 0.15 350);
-  --chart-sequential-1: var(--purple-800);
-  --chart-sequential-2: var(--purple-700);
-  --chart-sequential-3: var(--purple-600);
-  --chart-sequential-4: var(--purple-500);
-  --chart-sequential-5: var(--purple-400);
+  --chart-sequential-1: var(--purple-900);
+  --chart-sequential-2: var(--purple-800);
+  --chart-sequential-3: var(--purple-700);
+  --chart-sequential-4: var(--purple-600);
+  --chart-sequential-5: var(--purple-500);
 }
 
 @theme inline {
   --color-chart-blue: var(--chart-blue);
   --color-chart-blue-deep: var(--chart-blue-deep);
-  --color-chart-yellow: var(--chart-yellow);
+  --color-chart-amber: var(--chart-amber);
   --color-chart-green: var(--chart-green);
+  --color-chart-cyan: var(--chart-cyan);
   --color-chart-purple: var(--chart-purple);
   --color-chart-orange: var(--chart-orange);
   --color-chart-pink: var(--chart-pink);
@@ -71,6 +92,13 @@ html.light {
   --color-chart-sequential-3: var(--chart-sequential-3);
   --color-chart-sequential-4: var(--chart-sequential-4);
   --color-chart-sequential-5: var(--chart-sequential-5);
+  --color-chart-sequential-pale: var(--chart-sequential-pale);
+  --color-chart-share-1: var(--chart-share-1);
+  --color-chart-share-2: var(--chart-share-2);
+  --color-chart-share-3: var(--chart-share-3);
+  --color-chart-share-4: var(--chart-share-4);
+  --color-chart-share-5: var(--chart-share-5);
+  --color-chart-share-rest: var(--chart-share-rest);
   --color-span-agent: var(--span-agent);
   --color-span-workflow: var(--span-workflow);
   --color-span-model: var(--span-model);

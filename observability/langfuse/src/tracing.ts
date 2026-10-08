@@ -302,6 +302,12 @@ function mapMastraToLangfuseAttributes(
     delete attributes['gen_ai.usage.reasoning_tokens'];
   }
 
+  // A run attached under an existing span (tracingOptions.nestUnderParent) does
+  // not own the trace. Langfuse applies trace-level attributes from any span,
+  // so none of its spans may write them: they would replace the outer run's.
+  // The skipped values stay on the observation as mastra.metadata.*.
+  const nested = span.nestedUnderParent === true;
+
   // Environment and release: set directly since onStart() is not called
   if (environment) {
     attributes['langfuse.environment'] = environment;
@@ -336,7 +342,7 @@ function mapMastraToLangfuseAttributes(
         // Reserved identity keys (agentId/agentName/workflowId/workflowName) are set
         // by the root-span block below, which runs after this loop and takes precedence.
         for (const [key, value] of Object.entries(parsed)) {
-          if (key === 'prompt' || value === null || value === undefined) {
+          if (nested || key === 'prompt' || value === null || value === undefined) {
             continue;
           }
           const traceKey = `langfuse.trace.metadata.${key}`;
@@ -352,7 +358,9 @@ function mapMastraToLangfuseAttributes(
     } catch {
       // best effort — invalid JSON is silently ignored
     }
-    delete attributes['mastra.metadata.langfuse'];
+    if (!nested) {
+      delete attributes['mastra.metadata.langfuse'];
+    }
   }
 
   // TTFT: mastra.completion_start_time → langfuse.observation.completion_start_time
@@ -380,7 +388,7 @@ function mapMastraToLangfuseAttributes(
   }
 
   // User ID: mastra.metadata.userId → user.id
-  if (attributes['mastra.metadata.userId']) {
+  if (!nested && attributes['mastra.metadata.userId']) {
     attributes['user.id'] = attributes['mastra.metadata.userId'];
     delete attributes['mastra.metadata.userId'];
   }
@@ -394,7 +402,7 @@ function mapMastraToLangfuseAttributes(
       ? omCallerThreadId
       : attributes['mastra.metadata.threadId']);
   delete attributes[`${MASTRA_METADATA_PREFIX}${OM_CALLER_THREAD_ID}`];
-  if (sessionId) {
+  if (!nested && sessionId) {
     attributes['session.id'] = sessionId;
     delete attributes['mastra.metadata.sessionId'];
     delete attributes['mastra.metadata.threadId'];
@@ -407,7 +415,7 @@ function mapMastraToLangfuseAttributes(
   }
 
   // Trace name: mastra.metadata.traceName → langfuse.trace.name
-  if (attributes['mastra.metadata.traceName']) {
+  if (!nested && attributes['mastra.metadata.traceName']) {
     attributes['langfuse.trace.name'] = attributes['mastra.metadata.traceName'];
     delete attributes['mastra.metadata.traceName'];
   }
@@ -424,7 +432,7 @@ function mapMastraToLangfuseAttributes(
   // users can scope Langfuse evaluators per agent via trace name or metadata
   // filters. User-provided traceName (set via mastra.metadata.traceName) takes
   // precedence and is preserved.
-  if (span.isRootSpan) {
+  if (span.isRootSpan && !nested) {
     // Trace input/output: mirror the root span's input/output onto the trace.
     // Without this, Langfuse traces have empty trace-level input/output (the
     // span data only reaches the root OBSERVATION), which breaks LLM-as-a-judge

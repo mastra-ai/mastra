@@ -178,14 +178,12 @@ Pass a [`Classifier`](/reference/classifier/classifier) with constructor-configu
 
 ```typescript title="src/mastra/workflows/ticket-triage.ts"
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { createStep } from '@mastra/core/workflows'
 
 const router = new Classifier({
   id: 'ticket-router',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     route: {
       type: 'choice',

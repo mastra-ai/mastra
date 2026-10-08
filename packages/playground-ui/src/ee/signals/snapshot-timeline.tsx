@@ -49,7 +49,7 @@ export function TimelineTrack({
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-fill-hover'
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-muted-foreground'
             } ${grabbed ? 'ring-2 ring-foreground' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
@@ -64,7 +64,7 @@ export function TimelineTrack({
             as="span"
             variant="meta"
             tone="muted"
-            font="mono"
+
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
             className="absolute top-7 -translate-x-1/2 tabular-nums"
@@ -135,7 +135,7 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <Txt variant="caption" tone="muted" font="mono" className="tabular-nums" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" className="tabular-nums" data-testid="snapshot-summary">
           {summary}
         </Txt>
       </div>

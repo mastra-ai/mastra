@@ -12,11 +12,12 @@
  * `onComplete` with the collected choices.
  */
 
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, SelectList, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import type { ModePack, OMPack } from '@mastra/code-sdk/onboarding/packs';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
+import { LOGO_HEADER, LOGO_LARGE, renderLogo } from './components/banner.js';
 import { BOX_INDENT, theme, getSelectListTheme, mastra } from './theme.js';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,20 @@ export interface OnboardingOptions {
 
 type StepId = 'welcome' | 'auth' | 'modePack' | 'omPack' | 'yolo' | 'done';
 
+const STEP_LABELS = ['Welcome', 'Sign in', 'Models', 'Memory', 'Approval'];
+const STEP_INDEX: Record<StepId, number> = { welcome: 0, auth: 1, modePack: 2, omPack: 3, yolo: 4, done: 5 };
+
+/** "✓ Welcome   ● Sign in   ○ Models …": done steps checked, the current one bold. */
+function renderStepper(current: number): string {
+  return STEP_LABELS.map((label, i) =>
+    i < current
+      ? `${theme.fg('success', '✓')} ${theme.fg('muted', label)}`
+      : i === current
+        ? `${theme.fg('accent', '●')} ${theme.bold(theme.fg('text', label))}`
+        : theme.fg('dim', `○ ${label}`),
+  ).join('   ');
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -101,7 +116,8 @@ export class OnboardingInlineComponent extends Box implements Focusable {
   }
 
   constructor(options: OnboardingOptions) {
-    super(4, 2, (text: string) => theme.bg('overlayBg', text));
+    // Full-screen and borderless: no panel background (see render()).
+    super(4, 2, (text: string) => text);
     this.tui = options.tui;
     this.options = options;
 
@@ -126,6 +142,40 @@ export class OnboardingInlineComponent extends Box implements Focusable {
     }
 
     this.renderStep('welcome');
+  }
+
+  /**
+   * Full-screen setup: the large logo, a step indicator and the current step, centered. Earlier steps
+   * are not repeated (the indicator shows progress). On short terminals the gaps tighten, then the logo
+   * shrinks, then it is dropped, so the step itself is never cut off.
+   */
+  override render(width: number): string[] {
+    const rows = this.tui.terminal?.rows ?? 40;
+    const contentWidth = Math.max(20, Math.min(width - 8, 80));
+    const step = this.stepBox ? this.stepBox.render(contentWidth) : [];
+    // Trim padding so the block can be centered by its real width.
+    const body = step.map(line => line.replace(/\s+$/, ''));
+    while (body.length && body[0] === '') body.shift();
+    while (body.length && body.at(-1) === '') body.pop();
+
+    const center = (lines: string[]) => {
+      const blockWidth = Math.max(0, ...lines.map(line => visibleWidth(line)));
+      const pad = ' '.repeat(Math.max(0, Math.floor((width - blockWidth) / 2)));
+      return lines.map(line => (line ? pad + line : ''));
+    };
+    const stepper = center([renderStepper(STEP_INDEX[this.currentStep])]);
+    const layouts = [
+      [...center(renderLogo(LOGO_LARGE)), '', '', ...stepper, '', '', ...center(body)],
+      [...center(renderLogo(LOGO_LARGE)), '', ...stepper, '', ...center(body)],
+      [...center(renderLogo(LOGO_HEADER)), '', ...stepper, '', ...center(body)],
+      [...stepper, '', ...center(body)],
+      center(body),
+    ];
+    const content = layouts.find(layout => layout.length <= rows) ?? layouts.at(-1)!;
+    const top = Math.max(0, Math.floor((rows - content.length) / 2));
+    const screen = [...Array.from({ length: top }, () => ''), ...content];
+    while (screen.length < rows) screen.push('');
+    return screen.map(line => line + ' '.repeat(Math.max(0, width - visibleWidth(line))));
   }
 
   get finished(): boolean {
@@ -203,7 +253,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
   private makeBox(): Box {
     this.clearStep();
-    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => theme.bg('overlayBg', text));
+    this.stepBox = new Box(BOX_INDENT, 1, (text: string) => text);
     // Add a spacer between steps, but not before the very first one
     if (this.stepCount > 0) {
       this.addChild(new Spacer(1));
@@ -219,7 +269,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
   private renderWelcome(): void {
     const box = this.makeBox();
-    box.addChild(new Text(theme.bold(theme.fg('accent', '👋 Welcome to Mastra Code')), 0, 0));
+    box.addChild(new Text(theme.bold(theme.fg('text', 'Welcome to Mastra Code')), 0, 0));
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('text', "Let's configure your models and preferences."), 0, 0));
     box.addChild(new Text(chalk.white('You can re-run this anytime with /setup.'), 0, 0));
@@ -254,7 +304,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
   private renderAuth(): void {
     const box = this.makeBox();
-    box.addChild(new Text(theme.bold(theme.fg('accent', '🔑 Authentication')), 0, 0));
+    box.addChild(new Text(theme.bold(theme.fg('text', 'Authentication')), 0, 0));
     box.addChild(new Spacer(1));
 
     const providers = this.options.authProviders;
@@ -328,7 +378,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
       box.addChild(new Spacer(1));
     }
 
-    box.addChild(new Text(theme.bold(theme.fg('accent', 'Model Packs')), 0, 0));
+    box.addChild(new Text(theme.bold(theme.fg('text', 'Model Packs')), 0, 0));
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('text', 'Choose default models for each mode (build / plan / fast):'), 0, 0));
     box.addChild(new Spacer(1));
@@ -505,7 +555,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
     }
 
     const box = this.makeBox();
-    box.addChild(new Text(theme.bold(theme.fg('accent', '🧠 Observational Memory')), 0, 0));
+    box.addChild(new Text(theme.bold(theme.fg('text', 'Observational Memory')), 0, 0));
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('text', 'Choose the model for observational memory:'), 0, 0));
     box.addChild(new Text(theme.fg('dim', 'https://mastra.ai/docs/memory/observational-memory'), 0, 0));
@@ -572,7 +622,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
 
   private renderYolo(): void {
     const box = this.makeBox();
-    box.addChild(new Text(theme.bold(theme.fg('accent', '⚡ Tool Approval')), 0, 0));
+    box.addChild(new Text(theme.bold(theme.fg('text', 'Tool Approval')), 0, 0));
     box.addChild(new Spacer(1));
     box.addChild(new Text(theme.fg('text', 'YOLO mode auto-approves all tool calls (edits, commands, etc).'), 0, 0));
     box.addChild(new Text(theme.fg('text', 'You can toggle this anytime with Ctrl+Y or /yolo.'), 0, 0));
@@ -652,7 +702,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
   private collapseStep(summary: string): void {
     if (!this.stepBox) return;
     this.stepBox.clear();
-    this.stepBox.setBgFn((text: string) => theme.bg('overlayBg', text));
+    this.stepBox.setBgFn((text: string) => text);
     this.stepBox.addChild(new Text(`${theme.fg('success', '✓')} ${theme.fg('text', summary)}`, 0, 0));
     this.selectList = undefined;
     this.activeInlineQuestion = undefined;

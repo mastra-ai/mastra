@@ -66,6 +66,17 @@ describe('WorkflowDefinitionsPG', () => {
     expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
   });
 
+  it('advances updatedAt on every read path after an update', async () => {
+    const created = await store.upsert(baseInput);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const updated = await store.upsert({ id: 'wf-1', description: 'renamed' });
+
+    expect(updated.updatedAt.getTime()).toBeGreaterThan(created.updatedAt.getTime());
+    expect((await store.get('wf-1'))?.updatedAt.getTime()).toBe(updated.updatedAt.getTime());
+    const listed = (await store.list()).definitions.find(w => w.id === 'wf-1');
+    expect(listed?.updatedAt.getTime()).toBe(updated.updatedAt.getTime());
+  });
+
   it('lists workflows, filters by status, and archives via update', async () => {
     await store.upsert(baseInput);
     await store.upsert({ ...baseInput, id: 'wf-2', description: 'second' });

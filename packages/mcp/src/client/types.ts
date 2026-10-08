@@ -19,6 +19,8 @@ export type { FetchLike } from '@modelcontextprotocol/client';
 export type { ToolAnnotations } from '@modelcontextprotocol/client';
 // Re-export the MCP LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/client';
+/** The identity (`serverInfo`) a server announced when the connection was established. */
+export type { Implementation as MCPServerImplementation } from '@modelcontextprotocol/client';
 
 /** The current protocol revision; the one `/mcp` servers speak. */
 export const MCP_CLIENT_PROTOCOL_VERSION = '2026-07-28' as const;

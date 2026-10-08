@@ -36,6 +36,36 @@ function makeProvider(config: Partial<ConstructorParameters<typeof TelegramProvi
   return { provider, storage };
 }
 
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(opts.body)` yields "[object Object]" and parsing
+ * throws. Reply callbacks that need the body must therefore be async and read it.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+
+  const chunks: Uint8Array[] = [];
+  const collect = (chunk: unknown) => {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : Buffer.from(chunk as Uint8Array));
+  };
+
+  if (Array.isArray(body)) {
+    for (const chunk of body) collect(chunk);
+  } else if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    for await (const chunk of body as AsyncIterable<unknown>) collect(chunk);
+  } else {
+    return String(body);
+  }
+  // Join the raw bytes before decoding: a multibyte character split across two
+  // chunks would otherwise decode into two replacement characters.
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 function stubGetMe(token: string, opts: { ok?: boolean; username?: string } = {}) {
   const { ok = true, username = 'my_test_bot' } = opts;
   const status = ok ? 200 : 401;
@@ -58,8 +88,8 @@ function stubMethod(token: string, method: string): () => Record<string, unknown
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: `/bot${token}/${method}`, method: 'POST' })
-    .reply(200, opts => {
-      captured = JSON.parse(String(opts.body));
+    .reply(200, async opts => {
+      captured = JSON.parse(await readMockBody(opts.body));
       return { ok: true, result: true };
     });
   return () => captured;
@@ -85,6 +115,15 @@ describe('TelegramProvider — discovery + skeleton', () => {
       name: 'Telegram',
       isConfigured: false,
     });
+  });
+
+  it('is configured with a default botToken (self-managed credential source)', () => {
+    expect(makeProvider({ botToken: BOT_TOKEN }).provider.getInfo().isConfigured).toBe(true);
+  });
+
+  it('is configured with a tokenResolver (delegated mode, e.g. @mastra/connect)', () => {
+    const { provider } = makeProvider({ tokenResolver: async () => BOT_TOKEN });
+    expect(provider.getInfo().isConfigured).toBe(true);
   });
 
   it('mounts a single POST webhook route', () => {
@@ -247,10 +286,59 @@ describe('TelegramProvider.connect', () => {
     expect(record?.data.webhookUrl).toBeUndefined();
   });
 
+  it('polling mode rejects connecting a second agent to the same bot token', async () => {
+    const { provider } = makeProvider({ mode: 'polling' });
+    stubGetMe(BOT_TOKEN);
+    stubMethod(BOT_TOKEN, 'deleteWebhook');
+    stubMethod(BOT_TOKEN, 'setMyCommands');
+    await provider.connect('agent-1', { botToken: BOT_TOKEN });
+
+    await expect(provider.connect('agent-2', { botToken: BOT_TOKEN })).rejects.toThrow(
+      /already connected to agent "agent-1"/i,
+    );
+    expect(await provider.getInstallation('agent-2')).toBeNull();
+  });
+
   it('webhook mode without a baseUrl throws', async () => {
     const provider = new TelegramProvider({ storage: new InMemoryChannelsStorage(), mode: 'webhook' });
     stubGetMe(BOT_TOKEN);
     await expect(provider.connect('agent-1', { botToken: BOT_TOKEN })).rejects.toThrow(/baseUrl/i);
+  });
+
+  it('registers the webhook against MASTRA_SERVER_URL when no baseUrl or server override is set', async () => {
+    process.env.MASTRA_SERVER_URL = 'https://my-app.server.example.com/';
+    try {
+      const provider = new TelegramProvider({ storage: new InMemoryChannelsStorage(), mode: 'webhook' });
+      stubGetMe(BOT_TOKEN);
+      const webhookBody = stubMethod(BOT_TOKEN, 'setWebhook');
+      stubMethod(BOT_TOKEN, 'setMyCommands');
+
+      await provider.connect('agent-1', { botToken: BOT_TOKEN });
+
+      expect(String(webhookBody()?.url)).toMatch(/^https:\/\/my-app\.server\.example\.com\/telegram\/events\//);
+    } finally {
+      delete process.env.MASTRA_SERVER_URL;
+    }
+  });
+
+  it('explicit server.studio* config beats MASTRA_SERVER_URL', async () => {
+    process.env.MASTRA_SERVER_URL = 'https://env-var.example.com';
+    try {
+      const provider = new TelegramProvider({ storage: new InMemoryChannelsStorage(), mode: 'webhook' });
+      new Mastra({
+        server: { studioProtocol: 'https', studioHost: 'config-override.example.com', studioPort: 443 },
+        channels: { telegram: provider },
+      });
+      stubGetMe(BOT_TOKEN);
+      const webhookBody = stubMethod(BOT_TOKEN, 'setWebhook');
+      stubMethod(BOT_TOKEN, 'setMyCommands');
+
+      await provider.connect('agent-1', { botToken: BOT_TOKEN });
+
+      expect(String(webhookBody()?.url)).toMatch(/^https:\/\/config-override\.example\.com\/telegram\/events\//);
+    } finally {
+      delete process.env.MASTRA_SERVER_URL;
+    }
   });
 });
 
@@ -464,8 +552,8 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     mockAgent
       .get(API_ORIGIN)
       .intercept({ path: `/bot${token}/${method}`, method: 'POST' })
-      .reply(200, opts => {
-        const body = JSON.parse(String(opts.body)) as Record<string, unknown>;
+      .reply(200, async opts => {
+        const body = JSON.parse(await readMockBody(opts.body)) as Record<string, unknown>;
         calls.push(body);
         return {
           ok: true,

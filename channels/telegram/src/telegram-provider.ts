@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { AgentChannels, resolveWaitUntil } from '@mastra/core/channels';
 import type {
   ChannelAdapterConfig,
@@ -133,7 +133,7 @@ export class TelegramProvider implements ChannelProvider {
     return {
       id: this.id,
       name: 'Telegram',
-      isConfigured: this.#configured,
+      isConfigured: this.isConfigured(),
       connectOptionsSchema: {
         type: 'object',
         properties: {
@@ -346,11 +346,11 @@ export class TelegramProvider implements ChannelProvider {
       botToken = options.botToken ?? this.#config.botToken;
     }
     if (!botToken) {
-      const installationId = existing?.id ?? randomUUID();
+      const installationId = existing?.id ?? globalThis.crypto.randomUUID();
       await store.save({
         id: installationId,
         agentId,
-        webhookId: existing?.webhookId ?? randomUUID(),
+        webhookId: existing?.webhookId ?? globalThis.crypto.randomUUID(),
         status: 'pending',
         installedAt: existing?.installedAt ?? new Date(),
       });
@@ -364,35 +364,31 @@ export class TelegramProvider implements ChannelProvider {
         'TelegramProvider needs a baseUrl to register a webhook. Set `baseUrl`, configure the Mastra server, or use `mode: "polling"`.',
       );
     }
-    if (mode === 'webhook') {
-      if (this.#connectingBotTokens.has(botToken)) {
-        throw new Error('This Telegram bot is already being connected. Wait for that connection to finish.');
-      }
-      // Reserve before the storage lookup so concurrent calls cannot both register a webhook.
-      this.#connectingBotTokens.add(botToken);
+    if (this.#connectingBotTokens.has(botToken)) {
+      throw new Error('This Telegram bot is already being connected. Wait for that connection to finish.');
     }
+    // Reserve before the storage lookup so concurrent calls cannot both register the bot.
+    this.#connectingBotTokens.add(botToken);
     try {
       const me = await getMe(botToken, this.#apiBaseUrl());
-      if (mode === 'webhook') {
-        // Two agents on one bot would clobber each other's webhook. Prefer
-        // botUserId (which we just fetched via getMe) whenever the existing
-        // record has one — token comparison alone lets a rotated-and-repasted
-        // token slip past when the same bot was previously connected with a
-        // stale token still stored.
-        const duplicate = (await store.list()).find(
-          i =>
-            i.status === 'active' &&
-            i.agentId !== agentId &&
-            (i.botUserId !== undefined ? i.botUserId === me.id : i.botToken === botToken),
+      // Two agents on one bot would clobber each other's webhook, and two pollers get 409 from
+      // getUpdates. Prefer botUserId (which we just fetched via getMe) whenever the existing
+      // record has one — token comparison alone lets a rotated-and-repasted
+      // token slip past when the same bot was previously connected with a
+      // stale token still stored.
+      const duplicate = (await store.list()).find(
+        i =>
+          i.status === 'active' &&
+          i.agentId !== agentId &&
+          (i.botUserId !== undefined ? i.botUserId === me.id : i.botToken === botToken),
+      );
+      if (duplicate) {
+        throw new Error(
+          `This Telegram bot is already connected to agent "${duplicate.agentId}". Disconnect it before connecting another agent.`,
         );
-        if (duplicate) {
-          throw new Error(
-            `This Telegram bot is already connected to agent "${duplicate.agentId}". Disconnect it before connecting another agent.`,
-          );
-        }
       }
-      const installationId = existing?.id ?? randomUUID();
-      const webhookId = existing?.webhookId ?? randomUUID();
+      const installationId = existing?.id ?? globalThis.crypto.randomUUID();
+      const webhookId = existing?.webhookId ?? globalThis.crypto.randomUUID();
       const webhookUrl = mode === 'webhook' ? `${baseUrl}/${PLATFORM}/events/${webhookId}` : undefined;
       const commands = normalizeCommands(options.commands ?? this.#config.commands ?? DEFAULT_COMMANDS);
       const installation: TelegramInstallation = {
@@ -421,7 +417,7 @@ export class TelegramProvider implements ChannelProvider {
       await this.#config.onInstall?.(installation);
       return { type: 'immediate', installationId };
     } finally {
-      if (mode === 'webhook') this.#connectingBotTokens.delete(botToken);
+      this.#connectingBotTokens.delete(botToken);
     }
   }
 
@@ -493,12 +489,15 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   /**
-   * Whether at least one bot is actively registered. Mirrors
-   * `SlackProvider.isConfigured` (Telegram has no global credential to check —
-   * "configured" means an active installation exists).
+   * Whether the provider is ready to connect agents: either a bot is already
+   * registered (#configured) or a credential source exists — a default
+   * `botToken`, or a `tokenResolver` in delegated mode (@mastra/connect).
+   * Without the credential-source half, a freshly attached platform credential
+   * reports unconfigured and UIs hide the connect action entirely. Mirrors
+   * `DiscordProvider.isConfigured` / `SlackProvider.isConfigured`.
    */
   isConfigured(): boolean {
-    return this.#configured;
+    return this.#configured || Boolean(this.#config.tokenResolver ?? this.#config.botToken);
   }
 
   /**
@@ -719,6 +718,14 @@ export class TelegramProvider implements ChannelProvider {
   #getBaseUrl(): string | undefined {
     if (this.#config.baseUrl) return stripTrailingSlash(this.#config.baseUrl);
     const server = this.#mastra?.getServer();
+    // MASTRA_SERVER_URL is the server's public URL (deployment platforms
+    // inject it). It beats bind-address derivation — a deployed server binds
+    // 0.0.0.0, which Telegram rejects for webhooks — but explicit
+    // `server.studio*` overrides in user config still win.
+    const hasPublicOverride =
+      server?.studioHost != null || server?.studioPort != null || server?.studioProtocol != null;
+    const envUrl = process.env.MASTRA_SERVER_URL?.trim();
+    if (!hasPublicOverride && envUrl) return stripTrailingSlash(envUrl);
     if (!server) return undefined;
     const protocol = server.studioProtocol ?? 'http';
     const host = server.studioHost ?? server.host ?? 'localhost';

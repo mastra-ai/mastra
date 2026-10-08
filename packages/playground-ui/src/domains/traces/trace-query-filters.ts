@@ -1,10 +1,10 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { isLegacyAnyValue } from './trace-filters';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
-  'tags',
   'runId',
   'sessionId',
   'requestId',
@@ -25,6 +25,8 @@ export const TRACE_FILTER_OPERATOR_IDS = [
   'gte',
   'lt',
   'lte',
+  'matches',
+  'notMatches',
 ] as const;
 export type TraceFilterOperatorId = (typeof TRACE_FILTER_OPERATOR_IDS)[number];
 
@@ -57,6 +59,8 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
   gte: 'gte',
   lt: 'lt',
   lte: 'lte',
+  matches: 'matches',
+  notMatches: 'notMatches',
 } as const satisfies Record<TraceFilterOperatorId, TraceQueryScalarPredicate['op']>;
 
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
@@ -77,9 +81,12 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
 export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment']);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */
-const NEGATIVE_TO_POSITIVE = { isNot: 'is', notIn: 'in', notExists: 'exists' } as const satisfies Partial<
-  Record<TraceFilterOperatorId, TraceFilterOperatorId>
->;
+const NEGATIVE_TO_POSITIVE = {
+  isNot: 'is',
+  notIn: 'in',
+  notExists: 'exists',
+  notMatches: 'matches',
+} as const satisfies Partial<Record<TraceFilterOperatorId, TraceFilterOperatorId>>;
 type NegativeOperatorId = keyof typeof NEGATIVE_TO_POSITIVE;
 const isNegativeOperator = (op: TraceFilterOperatorId): op is NegativeOperatorId => op in NEGATIVE_TO_POSITIVE;
 
@@ -112,6 +119,11 @@ function scalarPredicate(
     case 'in':
     case 'notIn':
       return values.length ? { op: queryOp, value: { path }, set: values } : undefined;
+    case 'matches':
+    case 'notMatches': {
+      const [literal] = values;
+      return typeof literal === 'string' ? { op: queryOp, left: { path }, right: { literal } } : undefined;
+    }
     default: {
       if (!values.length) return undefined;
       // `is` with several values is set membership; `isNot` with several is exclusion.
@@ -130,15 +142,42 @@ type TokenPredicate =
   /** A positive predicate on a related row; the caller decides how to wrap it in `some`. */
   | { scope: TraceQueryRelatedScope; predicate: TraceQueryScalarPredicate };
 
+/** `tags` is a string array: membership is `includes` per tag; "in" any of
+ *  several tags is an `or`, "not in" all of them is an `and`. `notIncludes`
+ *  does not match traces without tags, so exclusion also keeps untagged traces. */
+function tagsPredicate(operatorId: TraceFilterOperatorId, tags: string[]): TraceQueryPredicate | undefined {
+  if (operatorId === 'exists' || operatorId === 'notExists') return { op: operatorId, path: 'tags' };
+  const negative = operatorId === 'notIn' || operatorId === 'isNot';
+  const args: TraceQueryPredicate[] = tags.map(value => ({
+    op: negative ? 'notIncludes' : 'includes',
+    path: 'tags',
+    value,
+  }));
+  const combined = args.length <= 1 ? args[0] : { op: negative ? ('and' as const) : ('or' as const), args };
+  if (!combined || !negative) return combined;
+  return { op: 'or', args: [combined, { op: 'notExists', path: 'tags' }] };
+}
+
+/** Fields the query API can only test for presence; any other operator is rejected with a 422. */
+const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
+
 function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | undefined {
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return undefined;
-  const operatorId = token.operatorId ?? 'is';
+  const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
+  // Hand-edited URLs can pair these fields with value operators; drop them rather than fail the page.
+  if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(token.fieldId) && !isPresence) return undefined;
 
   const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()) && value !== 'Any',
+    (value): value is string =>
+      typeof value === 'string' && Boolean(value.trim()) && !isLegacyAnyValue(value, operatorId),
   );
   if (!rawValues.length && !isPresence) return undefined;
+
+  if (token.fieldId === 'tags') {
+    const predicate = tagsPredicate(operatorId, rawValues);
+    return predicate ? { predicate } : undefined;
+  }
 
   let fieldId = token.fieldId;
   let values: (string | number)[] = rawValues;
@@ -153,6 +192,11 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
   } else if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(fieldId)) {
     values = rawValues.map(Number).filter(value => !Number.isNaN(value));
     if (!values.length && !isPresence) return undefined;
+  }
+  if (operatorId === 'matches' || operatorId === 'notMatches') {
+    // The query rejects a text literal with no letters or digits; drop it like non-numeric input.
+    values = values.filter(value => /[\p{L}\p{M}\p{N}]/u.test(String(value)));
+    if (!values.length) return undefined;
   }
 
   const { scope, path } = resolveTraceQueryPath(fieldId);

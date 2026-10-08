@@ -266,7 +266,13 @@ export class SyncObservationStrategy extends ObservationStrategy {
       observedMessageIds: processed.observedMessageIds,
     });
 
-    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+    await this.indexObservationGroups(
+      processed.observations,
+      threadId,
+      resourceId,
+      processed.lastObservedAt,
+      record.id,
+    );
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

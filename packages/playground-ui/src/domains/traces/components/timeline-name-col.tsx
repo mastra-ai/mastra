@@ -49,8 +49,9 @@ export function TimelineNameCol({
   // Nested rows mount late, once expansion opens their ancestors; the effect runs on that
   // mount as well as when the row becomes the selected / revealed one.
   useEffect(() => {
-    if (shouldScrollIntoView) rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [shouldScrollIntoView]);
+    if (shouldScrollIntoView)
+      rowRef.current?.scrollIntoView({ block: isRevealed ? 'center' : 'nearest', behavior: 'smooth' });
+  }, [shouldScrollIntoView, isRevealed]);
 
   const toggleLabel = isExpanded ? `Collapse children (${numOfChildren})` : `Expand children (${numOfChildren})`;
 
@@ -72,7 +73,8 @@ export function TimelineNameCol({
       <button
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
+          'text-foreground',
+          'flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 self-stretch rounded-md px-2 py-1 text-left',
           focusRingInset,
         )}
       >
@@ -80,25 +82,27 @@ export function TimelineNameCol({
           <span
             aria-hidden
             title={spanUI.label}
-            className="inline-block size-2 shrink-0 rounded-full"
             style={{ backgroundColor: spanUI.color }}
+            className="mt-[5px] inline-block size-2 shrink-0 rounded-full"
           />
         )}
         {/* Searchable: the span name is what the timeline search matches on. When the match
             is in the span's payload instead, the whole name is painted in the indirect color
             so the row explains its own presence. */}
-        {/* Duration stacks under the name on narrow layouts and moves inline at the end of the row from lg. */}
-        <span className="flex min-w-0 flex-1 flex-col lg:flex-row lg:items-center lg:justify-between lg:gap-2">
-          <span
+        {/* Duration always stacks under the name. */}
+        <span className="flex min-w-0 flex-1 flex-col">
+          <Txt
+            as="span"
+            variant="caption"
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
             title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
             className="min-w-0 truncate"
           >
             {span.name}
-          </span>
+          </Txt>
           {meta && (
-            <Txt as="span" variant="meta" tone="muted" className="shrink-0 lg:tabular-nums">
+            <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
               {meta}
             </Txt>
           )}

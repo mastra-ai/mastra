@@ -3,7 +3,7 @@ import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
@@ -543,6 +543,37 @@ describe('accumulateChunk - lifecycle', () => {
     const initial = reduce([startChunk('asst-1')]);
     const out = reduce([stepStartChunk('asst-1')], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  it('step-start uses the persisted assistant id after a user signal removes the pending message', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', 'hello'),
+      stepStartChunk('persisted-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello back'),
+      textEndChunk('t1'),
+    ]);
+
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ id: 'sig-1', role: 'user' });
+    expect(out[1]).toMatchObject({
+      id: 'persisted-1',
+      role: 'assistant',
+      content: { parts: [{ type: 'text', text: 'hello back' }] },
+    });
+  });
+
+  it('step-start does not duplicate an existing assistant message after a user signal', () => {
+    const initial = reduce([
+      startChunk('persisted-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello'),
+      textEndChunk('t1'),
+      dataUserMessageChunk('sig-1', 'hello back'),
+    ]);
+
+    expect(reduce([stepStartChunk('persisted-1')], streamMeta(), initial)).toEqual(initial);
   });
 
   it('step-start with a rotated message id re-keys the empty pending assistant message', () => {
@@ -1156,6 +1187,40 @@ describe('accumulateChunk - tool calls', () => {
         },
       },
     });
+  });
+
+  it('tool-call-resumed clears the matching suspendedTools entry (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'longRun', { x: 1 }),
+      toolCallChunk('tc-2', 'other', {}),
+      toolCallSuspendedChunk('tc-1', 'longRun', { x: 1 }, { reason: 'wait' }),
+      toolCallSuspendedChunk('tc-2', 'other', {}, { reason: 'wait' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'longRun', kind: 'suspension' },
+      } as unknown as ChunkType,
+    ]);
+    const suspendedTools = (out[0].content.metadata as { suspendedTools: Record<string, unknown> }).suspendedTools;
+    expect(Object.keys(suspendedTools)).toEqual(['other']);
+  });
+
+  it('tool-call-resumed clears a live approval from requireApprovalMetadata (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'deploy', { env: 'prod' }),
+      toolCallApprovalChunk('tc-1', 'deploy', { env: 'prod' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'deploy', kind: 'approval' },
+      } as unknown as ChunkType,
+    ]);
+    const meta = out[0].content.metadata as { requireApprovalMetadata?: Record<string, unknown> };
+    expect(meta.requireApprovalMetadata).toEqual({});
   });
 
   it('tool-output appends non-workflow output onto a partial-call result array', () => {
@@ -2082,6 +2147,35 @@ describe('accumulateChunk - workflow tool finish', () => {
     expect(result.status).toBe('success');
     // Terminal scalar payload is still surfaced for downstream renderers
     expect(result.output).toEqual({ result: 'suh', runId: RUN_ID });
+  });
+
+  it('rebuilds workflow steps when chunks are replayed onto a finished tool result', () => {
+    const run = () =>
+      reduce([
+        startChunk(),
+        toolCallChunk('wf-1', 'workflow-myWorkflow', { foo: 'bar' }),
+        toolResultChunk('wf-1', { result: 'suh', runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-start', { runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-step-start', { id: 'step-a' }),
+        workflowOutputChunk('wf-1', 'workflow-step-result', { id: 'step-a', status: 'success', output: { value: 1 } }),
+        workflowOutputChunk('wf-1', 'workflow-finish', { runId: RUN_ID, workflowStatus: 'success' }),
+      ]);
+
+    expect(run).not.toThrow();
+    const toolPart = run()
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    const result = (toolPart.toolInvocation as { result: Record<string, any> }).result;
+    expect(result.steps['step-a'].status).toBe('success');
+    expect(result.status).toBe('success');
+  });
+
+  it('mapWorkflowStreamChunkToWatchResult ignores a previous value without steps', () => {
+    const chunk = { type: 'workflow-step-start', runId: RUN_ID, from: 'WORKFLOW', payload: { id: 'step-a' } } as any;
+    for (const prev of [{ result: 'suh', runId: RUN_ID }, {}]) {
+      const next = mapWorkflowStreamChunkToWatchResult(prev as any, chunk);
+      expect(next.steps['step-a']).toEqual({ id: 'step-a' });
+    }
   });
 
   it('detects workflow tools by toolName prefix even with no prior tool-output', () => {

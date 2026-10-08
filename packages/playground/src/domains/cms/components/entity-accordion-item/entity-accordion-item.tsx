@@ -63,7 +63,7 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
+          className="min-h-[40px] border-dashed bg-card px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />
@@ -80,7 +80,7 @@ export function EntityAccordionItem({
               />
             </Icon>
             <Icon>
-              <Ruler className="text-warning-indicator" />
+              <Ruler className="text-warning-foreground" />
             </Icon>
             <Txt as="span" variant="caption" tone="ink">
               Display Conditions

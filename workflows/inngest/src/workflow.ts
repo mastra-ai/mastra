@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
@@ -296,7 +295,7 @@ export class InngestWorkflow<
     disableScorers?: boolean;
     pubsub?: PubSub;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
-    const runIdToUse = options?.runId || randomUUID();
+    const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     // Return a new Run instance with object parameters
     const existingInMemoryRun = this.runs.get(runIdToUse);
@@ -453,7 +452,7 @@ export class InngestWorkflow<
           // run. Warn rather than reject: an unnamed run is still a valid way to
           // start a workflow, it just can't be cancelled by id afterwards.
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
-            return randomUUID();
+            return globalThis.crypto.randomUUID();
           });
           this.logger.warn?.(
             `Workflow "${this.id}" was triggered without a runId, so run "${runId}" cannot be cancelled by id. ` +
@@ -667,32 +666,36 @@ export class InngestWorkflow<
                     })) ?? undefined;
                 }
 
+                const finalSnapshot: WorkflowRunState = {
+                  runId,
+                  status: result.status,
+                  value: result.state ?? initialState ?? {},
+                  context: toSnapshotContext(result.steps),
+                  activePaths: [],
+                  activeStepsPath: {},
+                  serializedStepGraph: this.serializedStepGraph,
+                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                  waitingPaths: {},
+                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                  result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
+                  error: result.status === 'failed' ? result.error : undefined,
+                  requestContext: requestContext.toJSON(),
+                  tracingContext: workflowSpanData
+                    ? {
+                        traceId: workflowSpanData.traceId,
+                        spanId: workflowSpanData.id,
+                      }
+                    : undefined,
+                  timestamp: Date.now(),
+                };
+
                 await workflowsStore.persistWorkflowSnapshot({
                   workflowName: this.id,
                   runId,
                   resourceId,
-                  snapshot: {
-                    runId,
-                    status: result.status,
-                    value: result.state ?? initialState ?? {},
-                    context: toSnapshotContext(result.steps),
-                    activePaths: [],
-                    activeStepsPath: {},
-                    serializedStepGraph: this.serializedStepGraph,
-                    suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
-                    waitingPaths: {},
-                    resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                    result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
-                    error: result.status === 'failed' ? result.error : undefined,
-                    requestContext: requestContext.toJSON(),
-                    tracingContext: workflowSpanData
-                      ? {
-                          traceId: workflowSpanData.traceId,
-                          spanId: workflowSpanData.id,
-                        }
-                      : undefined,
-                    timestamp: Date.now(),
-                  },
+                  snapshot: this.options.pruneSnapshot
+                    ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
+                    : finalSnapshot,
                 });
               }
             }

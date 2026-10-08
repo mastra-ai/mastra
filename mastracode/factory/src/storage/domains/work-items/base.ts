@@ -291,6 +291,15 @@ export interface FactoryAttentionReceiptRecord extends FactoryAttentionIdentity 
   updatedAt: Date;
 }
 
+/** Stages in which a bound run can still act on its work item. */
+export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+]);
+
 interface SetAttentionReceiptInput {
   orgId: string;
   factoryProjectId: string;
@@ -1507,6 +1516,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     table: 'factory_deferred_decisions' | 'factory_pending_starts',
     identity: FactoryLeaseIdentity,
     now: Date,
+    status?: 'superseded',
   ): Promise<GovernanceDbRow | null> {
     let completed = false;
     const row = await this.#db.updateAtomic<GovernanceDbRow>(
@@ -1516,7 +1526,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (current.status !== 'leased' || current.lease_owner !== identity.ownerId) return null;
         completed = true;
         return {
-          status: table === 'factory_pending_starts' ? 'sent' : 'succeeded',
+          status: status ?? (table === 'factory_pending_starts' ? 'sent' : 'succeeded'),
           lease_owner: null,
           lease_expires_at: null,
           completed_at: now,
@@ -2081,6 +2091,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     ).map(toDeferredDecision);
   }
 
+  async listDecisionsForEvaluations(
+    orgId: string,
+    factoryProjectId: string,
+    evaluationIds: string[],
+  ): Promise<FactoryDeferredDecisionRecord[]> {
+    if (evaluationIds.length === 0) return [];
+    return (
+      await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+        org_id: orgId,
+        factory_project_id: factoryProjectId,
+        evaluation_id: { in: [...new Set(evaluationIds)] },
+      })
+    ).map(toDeferredDecision);
+  }
+
   /** Read a bounded newest-first status page without exposing another tenant. */
   async listDeferredDecisionPage(input: FactoryDeferredDecisionPageInput): Promise<FactoryDeferredDecisionPage> {
     const rows = await this.#db.findMany<GovernanceDbRow>(
@@ -2435,6 +2460,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
     const row = await this.#completeLease('factory_deferred_decisions', identity, now);
+    return row ? toDeferredDecision(row) : null;
+  }
+
+  /** Settle a leased decision whose card moved on before it could act: nothing ran, and nothing needs a person. */
+  async supersedeLeasedDecision(
+    identity: FactoryLeaseIdentity,
+    now: Date,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#completeLease('factory_deferred_decisions', identity, now, 'superseded');
     return row ? toDeferredDecision(row) : null;
   }
 

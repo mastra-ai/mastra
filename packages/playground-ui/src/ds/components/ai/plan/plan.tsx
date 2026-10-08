@@ -1,27 +1,18 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useContext } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { CollapsibleBox, DEFAULT_COLLAPSED_HEIGHT, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
+import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
-const DEFAULT_COLLAPSED_HEIGHT = 220;
-
-interface PlanContextValue {
-  collapsedHeight: number;
-  isExpanded: boolean;
-  /** Whether the rendered content overflows the collapsed height (measured, not estimated). */
-  isClipped: boolean;
-  setClipped: (clipped: boolean) => void;
-  toggleExpanded: () => void;
-}
-
-const PlanContext = createContext<PlanContextValue | null>(null);
+const PlanContext = createContext<CollapsibleBoxState | null>(null);
 
 const usePlanContext = () => {
   const context = useContext(PlanContext);
@@ -38,20 +29,7 @@ export interface PlanProps extends ComponentProps<'div'> {
 }
 
 export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isClipped, setClipped] = useState(false);
-
-  const toggleExpanded = () => {
-    setIsExpanded(current => !current);
-  };
-
-  const contextValue = {
-    collapsedHeight,
-    isExpanded,
-    isClipped,
-    setClipped,
-    toggleExpanded,
-  };
+  const contextValue = useCollapsibleBox({ collapsedHeight });
 
   return (
     <PlanContext.Provider value={contextValue}>
@@ -160,7 +138,7 @@ export function PlanIntro({ children, className, ...props }: PlanIntroProps) {
   );
 }
 
-export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 'children' | 'variant'> {
+export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt<'h3'>>, 'as' | 'children' | 'variant'> {
   children: ReactNode;
 }
 
@@ -173,7 +151,7 @@ export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
 }
 
 export interface PlanPathProps extends Omit<
-  ComponentProps<typeof Txt>,
+  ComponentProps<typeof Txt<'p'>>,
   'as' | 'children' | 'font' | 'title' | 'variant'
 > {
   children: string;
@@ -214,48 +192,15 @@ export interface PlanContentProps extends Omit<ComponentProps<'div'>, 'children'
   children: string;
 }
 
-export function PlanContent({ children, className, style, ...props }: PlanContentProps) {
-  const { collapsedHeight, isExpanded, isClipped, setClipped } = usePlanContext();
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  // Measure the rendered content against the collapsed height so the clip hint
-  // and expand control track actual overflow — not an estimate of it.
-  useLayoutEffect(() => {
-    const element = contentRef.current;
-    if (!element) return;
-
-    const measure = () => setClipped(element.scrollHeight > collapsedHeight);
-    measure();
-
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [children, collapsedHeight, setClipped]);
-
-  const showClipHint = !isExpanded && isClipped;
+export function PlanContent({ children, ...props }: PlanContentProps) {
+  const state = usePlanContext();
 
   return (
-    <div
-      data-slot="plan-content"
-      // The clip hint masks the content itself, so it reads correctly on any card background.
-      {...(showClipHint ? { 'data-clipped': '' } : {})}
-      className={cn(
-        'relative',
-        !isExpanded && 'overflow-hidden',
-        showClipHint && 'mask-b-from-60% mask-b-to-100%',
-        className,
-      )}
-      style={!isExpanded ? { ...style, maxHeight: collapsedHeight } : style}
-      {...props}
-    >
-      <div
-        ref={contentRef}
-        className="[&_code]:bg-muted [&_h1]:text-title [&_h2]:text-heading [&_h3]:text-subheading [&_p]:text-body"
-      >
+    <CollapsibleBox data-slot="plan-content" state={state} {...props}>
+      <div className="[&_code]:bg-muted [&_h1]:text-title [&_h2]:text-heading [&_h3]:text-subheading [&_p]:text-body">
         <MarkdownRenderer className="text-foreground">{children}</MarkdownRenderer>
       </div>
-    </div>
+    </CollapsibleBox>
   );
 }
 

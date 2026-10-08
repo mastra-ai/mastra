@@ -150,6 +150,20 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ toolCallId: 'call-7', approved: true });
   });
 
+  it.each(['approveTool', 'respondToToolSuspension'] as const)(
+    'does not replay %s after a server error',
+    async method => {
+      (global.fetch as any).mockResolvedValue(new Response('boom', { status: 500 }));
+      const session = client.getAgentController('code').session('user-1');
+      const call =
+        method === 'approveTool'
+          ? session.approveTool('call-7', true)
+          : session.respondToToolSuspension('call-7', 'yes');
+      await expect(call).rejects.toThrow();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('responds to a suspended tool (ask_user)', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').respondToToolSuspension('call-9', 'my answer');
@@ -209,10 +223,18 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ modeId: 'plan' });
 
     mockJson({ ok: true });
-    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-4o', { scope: 'thread' });
+    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-4o');
     [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
-    expect(JSON.parse(init.body as string)).toMatchObject({ modelId: 'openai/gpt-4o', scope: 'thread' });
+    expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-4o' });
+  });
+
+  it('switches a model and thinking level in one request', async () => {
+    mockJson({ ok: true });
+    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-5.5', { thinkingLevel: 'off' });
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
+    expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' });
   });
 
   it('lists modes and threads, and switches thread', async () => {

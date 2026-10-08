@@ -292,6 +292,15 @@ describe('collectSkillForPublish', () => {
     expect(result.snapshot.metadata).toBeDefined();
     expect(result.snapshot.metadata!.author).toBe('test-user');
   });
+
+  it.each(['js', 'javascript'])('rejects ---%s frontmatter without evaluating it', async engine => {
+    const g = globalThis as { __publishFrontmatterEvaluated?: boolean };
+    const skillMd = `---${engine}\n{ name: (globalThis.__publishFrontmatterEvaluated = true, "js-skill"), description: "d" }\n---\nbody`;
+    const { source, skillPath } = createSkillSource({ 'SKILL.md': skillMd });
+
+    await expect(collectSkillForPublish(source, skillPath)).rejects.toThrow('JavaScript frontmatter is not supported');
+    expect(g.__publishFrontmatterEvaluated).toBeUndefined();
+  });
 });
 
 // =============================================================================

@@ -75,7 +75,9 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 ### Interactive API key prompt
 
-`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to change the active pack's model for the current mode. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+
+Model choices belong to the pack, not to an individual thread. Updating a pack changes that mode's model for every thread that uses the pack. Each thread remembers its active pack and current model. When you switch modes, Mastra Code applies the active pack's model for the new mode.
 
 `/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 
@@ -701,6 +703,28 @@ Mastra Code stores threads, messages, state, and observational memory in a datab
 Credentials and global settings are stored alongside the database. To switch to a remote LibSQL (Turso) or PostgreSQL backend, run `/settings` and select a storage backend. You'll be prompted for a connection URL.
 
 If a PostgreSQL connection fails on startup, Mastra Code falls back to LibSQL and shows a warning so you can fix the connection via `/settings`.
+
+### Reclaim disk space
+
+The database grows as threads, messages, and telemetry accumulate. Deleting rows doesn't shrink the file on its own, because SQLite keeps the freed pages for reuse.
+
+In a session, run `/prune` to delete data older than the retention policies. Run `/prune vacuum` to compact the files afterward and return that space to the operating system. Add `keep-memory` to keep chat history. Both forms close the session when they finish, because maintenance needs the database to itself.
+
+If a session won't start, run the same maintenance from a shell instead:
+
+```bash
+mastracode prune                 # delete rows past the retention policies
+mastracode prune --vacuum        # then compact the files to reclaim disk
+mastracode prune --keep-memory   # keep chat history
+```
+
+`--vacuum` needs enough free disk for the compacted copy before it can swap that copy into place. Compaction only applies to a local libsql database. With remote libsql or Postgres, `prune` deletes rows but doesn't compact or return space to the operating system.
+
+`mastracode prune` and `/prune` refuse to run while any other Mastra Code session is open. A session that starts while either is running waits until it finishes.
+
+The lock that coordinates this lives in the app data directory, not next to the database. Sessions that share one `MASTRA_DB_PATH` but use different `MASTRA_APP_DATA_DIR` values don't see each other, so close them all yourself before pruning.
+
+The retention defaults are 14 days for traces and logs, 30 days for scorer results and workflow snapshots, and 90 days for chat history.
 
 ## Observational memory
 

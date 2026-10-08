@@ -930,6 +930,16 @@ describe('Supervisor Pattern Integration Tests', () => {
           parentAgentId: 'supervisor',
         }),
       );
+
+      // The filter receives the model messages the parent LLM saw, not persisted DB messages
+      const { messages } = messageFilterSpy.mock.calls[0]![0];
+      expect(messages).toContainEqual(
+        expect.objectContaining({ role: 'system', content: 'You orchestrate sub-agents.' }),
+      );
+      expect(messages.some(m => m.role === 'tool')).toBe(false);
+      for (const message of messages) {
+        expect(typeof message.content === 'string' || Array.isArray(message.content)).toBe(true);
+      }
     });
 
     it('should call both onDelegationStart and onDelegationComplete in order', async () => {
@@ -2550,7 +2560,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     expect(callCount).toBe(2);
   });
 
-  it('should add feedback to conversation when provided', async () => {
+  it('should run one more iteration with feedback when the model stops', async () => {
     const feedbackMessages: string[] = [];
     let callCount = 0;
 
@@ -2562,13 +2572,16 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
         doGenerate: async ({ prompt }) => {
           callCount++;
 
-          // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find(
-            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
-          );
-          if (feedbackMsg) {
-            feedbackMessages.push((feedbackMsg as any).content);
+          const feedbackText = messages
+            .flatMap((m: any) =>
+              Array.isArray(m.content)
+                ? m.content.flatMap((part: any) => (part.type === 'text' ? [part.text] : []))
+                : [m.content],
+            )
+            .find((content: unknown) => typeof content === 'string' && content.includes('Please improve'));
+          if (feedbackText) {
+            feedbackMessages.push(feedbackText);
           }
 
           if (callCount === 1) {
@@ -2594,13 +2607,16 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
         doStream: async ({ prompt }) => {
           callCount++;
 
-          // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find(
-            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
-          );
-          if (feedbackMsg) {
-            feedbackMessages.push((feedbackMsg as any).content);
+          const feedbackText = messages
+            .flatMap((m: any) =>
+              Array.isArray(m.content)
+                ? m.content.flatMap((part: any) => (part.type === 'text' ? [part.text] : []))
+                : [m.content],
+            )
+            .find((content: unknown) => typeof content === 'string' && content.includes('Please improve'));
+          if (feedbackText) {
+            feedbackMessages.push(feedbackText);
           }
 
           if (callCount === 1) {
@@ -2658,17 +2674,15 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       onIterationComplete: () => {
         iterationCount++;
         if (iterationCount === 1) {
-          // Add feedback after first iteration
-          return {
-            continue: true,
-            feedback: 'Please improve your response with more details.',
-          };
+          return { continue: true, feedback: 'Please improve your response with more details.' };
         }
-        return { continue: false }; // Stop after second iteration
+        return { continue: false };
       },
     });
 
     expect(iterationCount).toBe(2);
+    expect(callCount).toBe(2);
+    expect(feedbackMessages).toEqual(['Please improve your response with more details.']);
   });
 
   it('should allow onIterationComplete continue:true to override final stop in stream (issue #14134)', async () => {
@@ -2835,9 +2849,25 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
  * - `suppressFeedback` stores a flag in the is-task-complete chunk payload and in the
  *   feedback message's metadata; it does NOT prevent the message from being added to
  *   the messageList or from being sent to the model in the next iteration.
- * - maxSteps does NOT terminate the loop when an isTaskComplete scorer keeps failing
- *   (unlike the network flow).  Always ensure a scorer eventually passes to avoid
- *   an infinite loop.
+ * - A positive maxSteps value caps scorer-driven continuation: once the accumulated
+ *   step count reaches it, a failing isTaskComplete scorer can no longer buy
+ *   another turn; its feedback is still injected for that final iteration.
+ *   One hook path looks like it should escape the budget but does not: `maxSteps`
+ *   is sugar for the stop condition `stepCountIs(maxSteps)`, which the model layer
+ *   composes in alongside any caller-supplied `stopWhen`
+ *   (`llm/model/model.loop.ts:156-162`). That condition has already matched at the
+ *   boundary, so an `onIterationComplete` hook returning
+ *   `{ feedback, continue: false }` cannot clear `isFinal`: the feedback is
+ *   injected, the run halts, and the feedback goes unused
+ *   (`loop/shared/continuation-core.ts:288-296`, pinned by
+ *   `loop/shared/continuation-core.test.ts:186-200`).
+ *   An unset or zero maxSteps disables only the ceiling; `stopWhen` still
+ *   applies, and with no custom condition the model layer defaults it to
+ *   `stepCountIs(5)`. The durable loop resolves unset to
+ *   DurableAgentDefaults.MAX_STEPS and keeps `maxSteps: 0` as a zero budget, so
+ *   its budget is always finite. The plain loop gained the ceiling in the #24569
+ *   loop extraction and keeps it deliberately; the durable ladder enforces the
+ *   same one.
  */
 describe('Supervisor Pattern - IsTaskComplete feedback', () => {
   it('should require all scorers to pass with "all" strategy', async () => {

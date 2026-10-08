@@ -8,6 +8,7 @@ export type {
   MCPClientProtocolVersion,
   MCPInputRequest,
   MCPInputRequestHandler,
+  MCPServerImplementation,
   ProgressHandler,
   InternalMastraMCPClientOptions,
   RequireToolApproval,

@@ -16,7 +16,12 @@ import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
-import type { MCPClientInfo, SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
+import type {
+  MCPClientInfo,
+  MCPServerImplementation,
+  SerializableMCPToolCatalog,
+  SerializableMCPToolDefinition,
+} from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -913,6 +918,24 @@ To fix this you have three different options:
     }
 
     return instructions;
+  }
+
+  /**
+   * Returns the identity each connected MCP server announced when the
+   * connection was established (`serverInfo`: name, version, and optionally
+   * title, description, websiteUrl, and icons), keyed by server name.
+   *
+   * A server's entry is `undefined` if it has not connected yet, or if it
+   * connected over the 2026-07-28 revision without announcing an identity, so
+   * don't use this to check connection state. Icon and website URLs come from
+   * the remote server and are not validated.
+   */
+  public getServerInfo(): Record<string, MCPServerImplementation | undefined> {
+    const info: Record<string, MCPServerImplementation | undefined> = {};
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      info[serverName] = this.mcpClientsById.get(serverName)?.serverInfo;
+    }
+    return info;
   }
 
   /**

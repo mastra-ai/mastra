@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Checkbox } from '../../../ds/components/Checkbox';
 import { EmptyState } from '../../../ds/components/EmptyState';
+import { Field, FieldLabel } from '../../../ds/components/Field';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Txt } from '../../../ds/components/Txt';
 import { cn } from '../../../lib/utils';
@@ -239,17 +240,20 @@ function ObservationHistoryPanel({
             <button
               key={record.id}
               type="button"
-              className={cn(
-                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
-                isSelected && 'border-l-border-strong bg-fill-hover',
-              )}
               onClick={() => onSelectRecord(record.id)}
-            >
-              {record.activeObservations || (
-                <span className="text-muted-foreground italic">
-                  {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
-                </span>
+              className={cn(
+                'text-foreground',
+                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left hover:bg-fill-subtle',
+                isSelected && 'border-l-foreground bg-fill-hover',
               )}
+            >
+              <Txt as="span" variant="caption" className="block">
+                {record.activeObservations || (
+                  <span className="text-muted-foreground italic">
+                    {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
+                  </span>
+                )}
+              </Txt>
             </button>
           );
         })}
@@ -313,17 +317,14 @@ export function ObservationDetailView({
 
   return (
     <div className="flex size-full overflow-hidden">
-      {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {previousRecord && (
           <div className="border-b border-border px-4 py-2">
             <div className="flex items-start justify-end gap-3">
-              <label className="flex cursor-pointer items-center gap-1.5 text-caption">
+              <Field orientation="horizontal" className="gap-1.5">
                 <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                <Txt as="span" variant="caption" tone="muted">
-                  Show diff
-                </Txt>
-              </label>
+                <FieldLabel size="smaller">Show diff</FieldLabel>
+              </Field>
             </div>
           </div>
         )}
@@ -349,7 +350,6 @@ export function ObservationDetailView({
         </div>
       </div>
 
-      {/* History sidebar */}
       <ObservationHistoryPanel records={sorted} selectedRecordId={selected.id} onSelectRecord={onSelectRecord} />
     </div>
   );

@@ -1,8 +1,10 @@
 'use client';
+
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -58,19 +60,19 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="flex min-w-0 items-center gap-3 text-caption text-warning-indicator">
-      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+    <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
+      <Txt as="span" variant="caption" className="truncate">
+        You are seeing v{activeDatasetVersion}, which is an older version of the dataset
+      </Txt>
       {onReturnToLatestVersion && (
         <button
           type="button"
           onClick={onReturnToLatestVersion}
-          className={cn(
-            quietTextHover,
-            controlStateColorTransition,
-            'shrink-0 text-caption underline underline-offset-2',
-          )}
+          className={cn(quietTextHover, controlStateColorTransition, 'shrink-0 underline underline-offset-2')}
         >
-          Return to latest
+          <Txt as="span" variant="caption" className="block">
+            Return to latest
+          </Txt>
         </button>
       )}
     </div>

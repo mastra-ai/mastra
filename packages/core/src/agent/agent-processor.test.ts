@@ -3,11 +3,16 @@ import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { Memory } from '../../../memory/src';
 import { noopLogger } from '../logger';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
+import { PrefillErrorHandler } from '../processors/prefill-error-handler';
+import { ProviderHistoryCompat } from '../processors/provider-history-compat';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
+import { StreamErrorRetryProcessor } from '../processors/stream-error-retry-processor';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage';
 import { createTool } from '../tools/tool';
 import { createStep, createWorkflow, isProcessor } from '../workflows';
 import type { MastraDBMessage } from './types';
@@ -3926,6 +3931,687 @@ describe('output tripwire text disclosure (#24443)', () => {
       }
       if (result.steps.length > 0) expect(result.steps.map(s => s.text).join('')).toBe(result.text);
       if (hook !== 'processOutputStep') expect(result.text).toBe(ANSWER);
+      else expect(result.text).toBe('');
     });
   }
+});
+
+describe('processOutputStep tripwire that ends the run drops the rejected reply (#26048)', () => {
+  const REJECTED = 'REJECTED: this reply must never be shown or remembered.';
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+  const makeModel = () =>
+    new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text' as const, text: REJECTED }],
+        finishReason: 'stop' as const,
+        usage,
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: REJECTED },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage },
+        ]),
+      }),
+    });
+
+  const makeAgent = (retry: boolean) => {
+    const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 20 } });
+    const guard: Processor = {
+      id: 'guard',
+      processOutputStep: async ({ text, abort, messageList }: any) => {
+        if (text?.includes('REJECTED')) return abort('Not allowed, try again.', { retry });
+        return messageList;
+      },
+    };
+    const agent = new Agent({
+      id: 'guarded',
+      name: 'guarded',
+      instructions: 'test',
+      model: makeModel(),
+      memory,
+      outputProcessors: [guard],
+      ...(retry ? { maxProcessorRetries: 2 } : {}),
+    });
+    return { agent, memory };
+  };
+
+  const savedMessages = async (memory: Memory) => {
+    const { messages } = await memory.recall({ threadId: 't1', perPage: false });
+    return messages;
+  };
+
+  for (const retry of [true, false]) {
+    const label = retry ? 'retries exhausted' : 'abort without retry';
+
+    it(`generate(): ${label}`, async () => {
+      const { agent, memory } = makeAgent(retry);
+      const result = await agent.generate('hello', { memory: { thread: 't1', resource: 'r1' } });
+
+      expect(result.finishReason).toBe('tripwire');
+      expect(result.tripwire).toBeDefined();
+      expect(result.text).toBe('');
+      expect(JSON.stringify(result.response?.messages ?? [])).not.toContain('REJECTED');
+
+      const messages = await savedMessages(memory);
+      expect(messages.some(m => m.role === 'user')).toBe(true);
+      expect(JSON.stringify(messages)).not.toContain('REJECTED');
+    });
+
+    it(`stream(): ${label}`, async () => {
+      const { agent, memory } = makeAgent(retry);
+      const stream = await agent.stream('hello', { memory: { thread: 't1', resource: 'r1' } });
+      const full = await stream.getFullOutput();
+
+      expect(stream.tripwire).toBeDefined();
+      expect(full.text).toBe('');
+      expect(JSON.stringify(full.response?.messages ?? [])).not.toContain('REJECTED');
+
+      const messages = await savedMessages(memory);
+      expect(messages.some(m => m.role === 'user')).toBe(true);
+      expect(JSON.stringify(messages)).not.toContain('REJECTED');
+    });
+  }
+
+  it('keeps an accepted tool step when a later text step is rejected', async () => {
+    let call = 0;
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'lookup',
+                input: JSON.stringify({ q: 'x' }),
+              },
+            ],
+            finishReason: 'tool-calls' as const,
+            usage,
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: REJECTED }],
+          finishReason: 'stop' as const,
+          usage,
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const memory = new Memory({ storage: new InMemoryStore(), options: { lastMessages: 20 } });
+    const agent = new Agent({
+      id: 'guarded-tools',
+      name: 'guarded-tools',
+      instructions: 'test',
+      model,
+      memory,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'lookup',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ found: 'TOOL_RESULT_OK' }),
+        }),
+      },
+      outputProcessors: [
+        {
+          id: 'guard',
+          processOutputStep: async ({ text, abort, messageList }: any) => {
+            if (text?.includes('REJECTED')) return abort('Not allowed.', { retry: true });
+            return messageList;
+          },
+        },
+      ],
+      maxProcessorRetries: 1,
+    });
+
+    const result = await agent.generate('hello', { memory: { thread: 't1', resource: 'r1' } });
+    expect(result.finishReason).toBe('tripwire');
+    expect(result.text).toBe('');
+
+    const saved = JSON.stringify(await savedMessages(memory));
+    expect(saved).toContain('TOOL_RESULT_OK');
+    expect(saved).not.toContain('REJECTED');
+  });
+});
+
+describe('error processors — shared stability defaults', () => {
+  const testModel = new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: 'ok' }],
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      rawCall: { rawPrompt: [], rawSettings: {} },
+      warnings: [],
+    }),
+  });
+
+  const DEFAULT_ERROR_PROCESSOR_IDS = [
+    'provider-history-compat',
+    'prefill-error-handler',
+    'stream-error-retry-processor',
+  ] as const;
+
+  const bareAgent = (config: Record<string, unknown> = {}) =>
+    new Agent({
+      id: 'stability-defaults-agent',
+      name: 'Stability Defaults Agent',
+      instructions: 'test',
+      model: testModel,
+      ...config,
+    });
+
+  it('resolves the shared stability defaults, in order, for a bare agent', async () => {
+    const agent = bareAgent();
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
+  });
+
+  it('keeps the caller list first and adds only the defaults it does not already carry', async () => {
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: [customProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    // The caller's processor runs first: error processors short-circuit on the first `{ retry: true }`,
+    // so a caller processor placed behind the default retry would never be reached.
+    expect(resolved[0]).toBe(customProcessor);
+    expect(resolved.map(processor => processor.id)).toEqual(['custom-error-processor', ...DEFAULT_ERROR_PROCESSOR_IDS]);
+  });
+
+  it('does not duplicate a caller processor whose id matches a default', async () => {
+    const customCompat = new ProviderHistoryCompat();
+    const agent = bareAgent({ errorProcessors: [customCompat] });
+
+    const resolved = await agent.listErrorProcessors();
+    const compatProcessors = resolved.filter(processor => processor.id === 'provider-history-compat');
+
+    expect(compatProcessors).toEqual([customCompat]);
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+    ]);
+    // The caller's instance is the one that runs, and it stays in the caller's position.
+    expect(resolved[0]).toBe(customCompat);
+  });
+
+  it('leaves a caller list that already names every default untouched', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const agent = bareAgent({
+      errorProcessors: [new ProviderHistoryCompat(), customRetry, new PrefillErrorHandler()],
+    });
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved).toHaveLength(3);
+    expect(resolved[1]).toBe(customRetry);
+  });
+
+  it('merges the defaults into an explicitly empty caller list', async () => {
+    const agent = bareAgent({ errorProcessors: [] });
+
+    // An empty list is a base like any other; `errorProcessorDefaults: false` is the only opt-out.
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toEqual([
+      ...DEFAULT_ERROR_PROCESSOR_IDS,
+    ]);
+  });
+
+  it('resolves a function-form errorProcessors list before deduping', async () => {
+    const customCompat = new ProviderHistoryCompat();
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: () => [customCompat, customProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'custom-error-processor',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+    ]);
+    expect(resolved[0]).toBe(customCompat);
+  });
+
+  it('resolves a dynamic error-processor list once per run and runs the same instance in both lanes', async () => {
+    const processLLMRequest = vi.fn(() => undefined);
+    const resolver = vi.fn((): Processor[] => [
+      { id: 'dynamic-error', processLLMRequest, processAPIError: () => undefined },
+    ]);
+    const agent = bareAgent({ errorProcessorDefaults: false, errorProcessors: resolver });
+
+    await agent.generate('hello');
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(processLLMRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('inserts the added repair processors ahead of a caller retry processor', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const agent = bareAgent({ errorProcessors: [customRetry] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    // Naming only the retry processor must not put it ahead of the repairs: error processors
+    // short-circuit on the first `{ retry: true }`, and a retry processor configured with broad
+    // matchers would claim errors the repairs could fix, so both repairs have to stay ahead of it.
+    expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
+    expect(resolved[2]).toBe(customRetry);
+  });
+
+  it('inserts added defaults in canonical order around a caller processor naming the last one', async () => {
+    const customPrefill = new PrefillErrorHandler();
+    const agent = bareAgent({ errorProcessors: [customPrefill] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    expect(resolved.map(processor => processor.id)).toEqual([...DEFAULT_ERROR_PROCESSOR_IDS]);
+    expect(resolved[1]).toBe(customPrefill);
+  });
+
+  it('does not reorder caller processors that carry no default id', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 5 });
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: [customRetry, customProcessor] });
+
+    const resolved = await agent.listErrorProcessors();
+
+    // Caller processors keep their relative order; the added default goes to the position its id
+    // gives it relative to the other defaults, and the unordered caller processor stays put.
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'stream-error-retry-processor',
+      'custom-error-processor',
+    ]);
+    expect(resolved[1]).toBeInstanceOf(PrefillErrorHandler);
+    expect(resolved[2]).toBe(customRetry);
+    expect(resolved[3]).toBe(customProcessor);
+  });
+
+  it('leaves getConfiguredProcessorIds reporting only what the caller configured', async () => {
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+
+    expect((await bareAgent().getConfiguredProcessorIds()).errorProcessorIds).toEqual([]);
+    expect(
+      (await bareAgent({ errorProcessors: [customProcessor] }).getConfiguredProcessorIds()).errorProcessorIds,
+    ).toEqual(['custom-error-processor']);
+  });
+
+  it('runs only the caller list when `errorProcessorDefaults` is false', async () => {
+    const customProcessor: Processor = {
+      id: 'custom-error-processor',
+      processAPIError: async () => ({ retry: true }),
+    };
+    const agent = bareAgent({ errorProcessors: [customProcessor], errorProcessorDefaults: false });
+
+    // The one thing `errorProcessors: [mine]` cannot otherwise express: no defaults merged in.
+    expect(await agent.listErrorProcessors()).toEqual([customProcessor]);
+  });
+
+  it('resolves no error processors for a bare agent when `errorProcessorDefaults` is false', async () => {
+    const agent = bareAgent({ errorProcessorDefaults: false });
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
+  });
+});
+
+describe('LLM request lane — error-phase processors', () => {
+  const promptTexts = (prompt: LanguageModelV2Prompt): string[] =>
+    prompt.flatMap(message =>
+      typeof message.content === 'string'
+        ? [message.content]
+        : message.content.flatMap(part => (part.type === 'text' ? [part.text] : [])),
+    );
+
+  /**
+   * Error processor that rewrites the outbound prompt and records what it saw, so a test can prove both
+   * that it ran and that its rewrite reached the model.
+   */
+  const makePromptRewritingErrorProcessor = () => {
+    const seenPrompts: LanguageModelV2Prompt[] = [];
+    const calls = { processLLMRequest: 0, processInput: 0, processInputStep: 0, processAPIError: 0 };
+    const processor: Processor & { id: string } = {
+      id: 'prompt-rewriting-error-processor',
+      processLLMRequest: ({ prompt }) => {
+        calls.processLLMRequest += 1;
+        seenPrompts.push(prompt);
+        return {
+          prompt: prompt.map(message => {
+            if (message.role !== 'user') return message;
+            return {
+              ...message,
+              content: [{ type: 'text' as const, text: 'REWRITTEN_BY_ERROR_PROCESSOR' }],
+            };
+          }),
+        };
+      },
+      processInput: async () => {
+        calls.processInput += 1;
+      },
+      processInputStep: async () => {
+        calls.processInputStep += 1;
+        return {};
+      },
+      processAPIError: async () => {
+        calls.processAPIError += 1;
+      },
+    };
+    return { processor, seenPrompts, calls };
+  };
+
+  it('runs processLLMRequest for an error-lane processor and shows it the model prompt', async () => {
+    const { processor, seenPrompts, calls } = makePromptRewritingErrorProcessor();
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const model = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        capturedPrompts.push(prompt);
+        return {
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model,
+      errorProcessors: [processor],
+    });
+
+    await agent.generate('hello');
+
+    expect(calls.processLLMRequest).toBeGreaterThan(0);
+    expect(seenPrompts[0]).toBeTruthy();
+    // The rewrite is what the model actually receives.
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    expect(promptTexts(capturedPrompts[0]!)).toContain('REWRITTEN_BY_ERROR_PROCESSOR');
+  });
+
+  it('does not leak an error-lane processor into the input step', async () => {
+    const { processor, calls } = makePromptRewritingErrorProcessor();
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+      errorProcessors: [processor],
+    });
+
+    await agent.generate('hello');
+
+    // The widening reaches the provider-boundary lane only: the input steps must not run for it.
+    expect(calls.processInput).toBe(0);
+    expect(calls.processInputStep).toBe(0);
+    expect(await agent.listResolvedInputProcessors()).not.toContain(processor);
+  });
+
+  it('lists an error-lane processor once when it is also an input processor', async () => {
+    const { processor } = makePromptRewritingErrorProcessor();
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+      inputProcessors: [processor],
+      errorProcessors: [processor],
+    });
+
+    const lane = await agent.__listLLMRequestProcessors();
+    expect(lane.filter(entry => !isProcessorWorkflow(entry) && entry.id === processor.id)).toHaveLength(1);
+  });
+
+  it('adds the error-phase defaults to the request lane without disturbing the input lane', async () => {
+    const agent = new Agent({
+      id: 'llm-request-lane-agent',
+      name: 'LLM Request Lane Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+    });
+
+    const laneIds = (await agent.__listLLMRequestProcessors())
+      .filter(entry => !isProcessorWorkflow(entry))
+      .map(entry => entry.id);
+
+    // An error-lane `ProviderHistoryCompat` is the reason the lane widens.
+    expect(laneIds).toContain('provider-history-compat');
+    // The input lane itself is untouched.
+    const inputIds = (await agent.listResolvedInputProcessors())
+      .filter(entry => !isProcessorWorkflow(entry))
+      .map(entry => entry.id);
+    expect(inputIds).not.toContain('provider-history-compat');
+    expect(laneIds).toEqual([...new Set(laneIds)]);
+  });
+
+  it('applies a call-time errorProcessors override to the request lane', async () => {
+    const { processor, calls } = makePromptRewritingErrorProcessor();
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const agent = new Agent({
+      id: 'llm-request-lane-override-agent',
+      name: 'LLM Request Lane Override Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          capturedPrompts.push(prompt);
+          return {
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    await agent.generate('hello', { errorProcessors: [processor] });
+
+    // The call-time processor runs its prompt hook even though the agent
+    // configured no error processors.
+    expect(calls.processLLMRequest).toBeGreaterThan(0);
+    expect(promptTexts(capturedPrompts[0]!)).toContain('REWRITTEN_BY_ERROR_PROCESSOR');
+  });
+
+  it('drops the default error processors from the request lane when the call-time list is empty', async () => {
+    const phcSpy = vi.spyOn(ProviderHistoryCompat.prototype, 'processLLMRequest');
+    const agent = new Agent({
+      id: 'llm-request-lane-empty-override-agent',
+      name: 'LLM Request Lane Empty Override Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+    });
+
+    await agent.generate('hello', { errorProcessors: [] });
+
+    // `errorProcessors: []` replaces the resolved list — defaults included — so
+    // the default ProviderHistoryCompat must not rewrite the outbound prompt.
+    expect(phcSpy).not.toHaveBeenCalled();
+    phcSpy.mockRestore();
+  });
+});
+
+describe('anthropic tool id repair — prompt-scoped through the agent', () => {
+  const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+
+  /** Formats the tool ids carried by a converted v2 prompt, in order. */
+  const promptToolIds = (prompt: LanguageModelV2Prompt): string[] =>
+    prompt
+      .flatMap(message => (Array.isArray(message.content) ? message.content : []))
+      .map(part => (part as { toolCallId?: string }).toolCallId)
+      .filter((id): id is string => typeof id === 'string');
+
+  /**
+   * Format-2 history carrying an Anthropic-illegal tool id (`call.abc:1`). The array is kept by
+   * reference so the test can assert afterwards that the agent did not rewrite it in place.
+   */
+  const historyWithInvalidToolId = () => [
+    { role: 'user' as const, content: 'search for this' },
+    {
+      role: 'assistant' as const,
+      content: [
+        { type: 'text' as const, text: 'Searching.' },
+        {
+          type: 'tool-call' as const,
+          toolCallId: 'call.abc:1',
+          toolName: 'search',
+          input: { query: 'Mastra' },
+        },
+      ],
+    },
+    {
+      role: 'tool' as const,
+      content: [
+        {
+          type: 'tool-result' as const,
+          toolCallId: 'call.abc:1',
+          toolName: 'search',
+          output: { type: 'text' as const, value: 'result' },
+        },
+      ],
+    },
+    { role: 'user' as const, content: 'thanks' },
+  ];
+
+  /** Every tool id the message objects carry, wherever the message shape stores it. */
+  const idsInMessages = (messages: unknown): string[] =>
+    JSON.stringify(messages).match(/call[._][A-Za-z0-9_:.]+/g) ?? [];
+
+  it('repairs the outbound prompt on a bare Anthropic agent, leaving persisted history alone', async () => {
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const agent = new Agent({
+      id: 'tool-id-repair-agent',
+      name: 'Tool Id Repair Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        provider: ANTHROPIC_MODEL.provider,
+        modelId: ANTHROPIC_MODEL.modelId,
+        doGenerate: async ({ prompt }) => {
+          capturedPrompts.push(prompt as LanguageModelV2Prompt);
+          return {
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    const history = historyWithInvalidToolId();
+    const before = structuredClone(history);
+
+    // A bare agent carries the shared stability defaults, so `ProviderHistoryCompat` runs in the
+    // prompt lane without the caller wiring anything.
+    await agent.generate(history as never);
+
+    expect(capturedPrompts).toHaveLength(1);
+    const sentIds = promptToolIds(capturedPrompts[0]!);
+    expect(sentIds).toEqual(['call_abc_1', 'call_abc_1']);
+    for (const id of sentIds) expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+
+    // Prompt-scoped: the caller's own message objects are not rewritten in place.
+    expect(history).toEqual(before);
+    expect(idsInMessages(history)).toEqual(['call.abc:1', 'call.abc:1']);
+  });
+
+  it('keeps the original ids in stored history when the agent has memory', async () => {
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, options: { lastMessages: 100, generateTitle: false } });
+    const capturedPrompts: LanguageModelV2Prompt[] = [];
+    const agent = new Agent({
+      id: 'tool-id-repair-memory-agent',
+      name: 'Tool Id Repair Memory Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2({
+        provider: ANTHROPIC_MODEL.provider,
+        modelId: ANTHROPIC_MODEL.modelId,
+        doGenerate: async ({ prompt }) => {
+          capturedPrompts.push(prompt as LanguageModelV2Prompt);
+          return {
+            content: [{ type: 'text' as const, text: 'ok' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+      memory,
+    });
+
+    const threadId = 'tool-id-repair-thread';
+    const resourceId = 'tool-id-repair-resource';
+    await agent.generate(historyWithInvalidToolId() as never, { memory: { thread: threadId, resource: resourceId } });
+
+    // The outbound prompt was sanitized.
+    expect(promptToolIds(capturedPrompts[0]!)).toEqual(['call_abc_1', 'call_abc_1']);
+
+    // Stored history still carries the original ids.
+    const memoryStore = await storage.getStore('memory');
+    const { messages } = await memoryStore!.listMessages({ threadId, perPage: 100 });
+    expect(idsInMessages(messages)).toEqual(['call.abc:1', 'call.abc:1']);
+  });
 });

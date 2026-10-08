@@ -26,6 +26,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   BatchCreateFeedbackArgs,
   BatchCreateLogsArgs,
   BatchCreateMetricsArgs,
@@ -108,9 +110,11 @@ import type {
   QueryThreadsResult,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -145,9 +149,13 @@ import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
+
+const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
@@ -371,6 +379,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
+        'trace-aggregate',
+        ...spanQueryFeatures,
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -390,6 +400,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'trace-query',
+      'trace-aggregate',
+      ...spanQueryFeatures,
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
@@ -464,9 +476,21 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#readClient, this.#schema, args));
   }
 
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return this.#run('QUERY_SPANS', () =>
+      spanQueryOps.querySpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return this.#run('QUERY_TRACES', () =>
       traceQueryOps.queryTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return this.#run('AGGREGATE_TRACES', () =>
+      traceAggregateOps.aggregateTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

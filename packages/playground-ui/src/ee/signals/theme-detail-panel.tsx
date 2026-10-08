@@ -101,8 +101,7 @@ export function ThemeDetailPanel({
             <Txt
               as="span"
               variant="column"
-              font="mono"
-              className="tracking-widest"
+
               style={{ color: getSignalColor(signalName) }}
             >
               {signalDisplayDescription ? (
@@ -129,7 +128,7 @@ export function ThemeDetailPanel({
           {insightTraceId === undefined && (
             <>
               {detailQuery.isPending && <Txt tone="muted">Loading theme details…</Txt>}
-              {detailQuery.isError && <Txt className="text-destructive-indicator">Unable to load theme details.</Txt>}
+              {detailQuery.isError && <Txt className="text-destructive-foreground">Unable to load theme details.</Txt>}
               {detailQuery.data && !detailQuery.data.theme && (
                 <section>
                   <Txt as="h2" variant="subheading" tone="ink">
@@ -143,20 +142,13 @@ export function ThemeDetailPanel({
               {detailQuery.data?.theme && (
                 <>
                   <section aria-labelledby="theme-summary-heading">
-                    <Txt
-                      as="h2"
-                      variant="caption"
-                      tone="muted"
-                      font="mono"
-                      id="theme-summary-heading"
-                      className="tracking-wider uppercase"
-                    >
+                    <Txt as="h2" variant="eyebrow" tone="muted" id="theme-summary-heading">
                       Summary
                     </Txt>
                     <Txt tone="ink" className="mt-3">
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </Txt>
-                    <Txt tone="ink" font="mono" className="mt-3 tabular-nums">
+                    <Txt tone="ink" className="mt-3 tabular-nums">
                       {shareSentence(
                         filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
                         filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
@@ -165,14 +157,7 @@ export function ThemeDetailPanel({
                   </section>
 
                   <section aria-labelledby="theme-examples-heading">
-                    <Txt
-                      as="h2"
-                      variant="caption"
-                      tone="muted"
-                      font="mono"
-                      id="theme-examples-heading"
-                      className="tracking-wider uppercase"
-                    >
+                    <Txt as="h2" variant="eyebrow" tone="muted" id="theme-examples-heading">
                       Examples
                     </Txt>
                     {examplesQuery.isPending && (
@@ -181,7 +166,7 @@ export function ThemeDetailPanel({
                       </Txt>
                     )}
                     {examplesQuery.isError && (
-                      <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
+                      <Txt className="mt-3 text-destructive-foreground">Unable to load examples.</Txt>
                     )}
                     {examplesQuery.data && (
                       <>
@@ -196,13 +181,16 @@ export function ThemeDetailPanel({
                                 <button
                                   type="button"
                                   aria-label={`View trace insight for ${example.signalText}`}
-                                  className={cn(
-                                    raisedSurfaceStyle,
-                                    'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
-                                  )}
                                   onClick={() => setInsightTraceId(example.traceId)}
+                                  className={cn(
+                                    'text-foreground',
+                                    raisedSurfaceStyle,
+                                    'state-layer w-full cursor-pointer rounded-md p-3 text-left',
+                                  )}
                                 >
-                                  {example.signalText}
+                                  <Txt as="span" variant="body" className="block">
+                                    {example.signalText}
+                                  </Txt>
                                 </button>
                               </li>
                             ))}
@@ -219,14 +207,7 @@ export function ThemeDetailPanel({
 
                   {snapshotTotal > 1 && (
                     <section aria-labelledby="theme-trend-heading">
-                      <Txt
-                        as="h2"
-                        variant="caption"
-                        tone="muted"
-                        font="mono"
-                        id="theme-trend-heading"
-                        className="tracking-wider uppercase"
-                      >
+                      <Txt as="h2" variant="eyebrow" tone="muted" id="theme-trend-heading">
                         Trend
                       </Txt>
                       {historyQuery.isPending && (
@@ -235,7 +216,7 @@ export function ThemeDetailPanel({
                         </Txt>
                       )}
                       {historyQuery.isError && (
-                        <Txt className="mt-3 text-destructive-indicator">Unable to load the trend.</Txt>
+                        <Txt className="mt-3 text-destructive-foreground">Unable to load the trend.</Txt>
                       )}
                       {oldestHistoryPoint !== undefined && (
                         <>

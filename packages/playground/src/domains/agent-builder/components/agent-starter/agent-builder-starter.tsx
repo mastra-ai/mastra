@@ -1,8 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
+import { useAuthCapabilities } from '@mastra/react/hooks/auth';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
@@ -12,8 +15,6 @@ import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allo
 import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-builder-settings';
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const AgentBuilderStarter = () => {
@@ -81,18 +82,13 @@ export const AgentBuilderStarter = () => {
   return (
     <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <Txt
-          as="h1"
-          variant="title"
-          tone="ink"
-          className="starter-heading text-center font-display tracking-tight md:text-display"
-        >
+        <Txt font="display" as="h1" variant="title" tone="ink" className="starter-heading text-center">
           What should we build today?
         </Txt>
 
-        <form
+        <Form
           onSubmit={handleSubmit}
-          className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
+          className="starter-prompt gap-0 rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -128,7 +124,7 @@ export const AgentBuilderStarter = () => {
               )}
             </Button>
           </div>
-        </form>
+        </Form>
 
         <ExampleList onExampleClick={handleExampleClick} />
       </div>

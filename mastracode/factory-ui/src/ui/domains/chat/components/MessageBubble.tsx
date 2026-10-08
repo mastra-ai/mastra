@@ -2,9 +2,12 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
 import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
+import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/message-attachments';
+import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { MessageFactory } from '@mastra/react/ui';
@@ -65,14 +68,16 @@ export function MessageBubble({
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
-  const message = { ...entry.message, content: { ...entry.message.content, parts } };
+  const { attachments, content } =
+    entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
+  const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
   const toolGroups = collectToolGroups(parts, suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
-  const prose = messageText(written);
+  const prose = messageText(entry.message.role === 'user' ? content : written);
   const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
@@ -88,6 +93,7 @@ export function MessageBubble({
       <Message
         from="user"
         pending={steeringPending}
+        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
         avatar={sender && <SenderAvatar author={sender} />}
         footer={
           <>
@@ -96,7 +102,7 @@ export function MessageBubble({
                 as="span"
                 variant="meta"
                 tone="muted"
-                className={cn(steeringFailed && 'text-destructive-indicator')}
+                className={cn(steeringFailed && 'text-destructive-foreground')}
                 aria-live="polite"
               >
                 {steeringStatus}
@@ -107,7 +113,7 @@ export function MessageBubble({
           </>
         }
       >
-        {children}
+        {(attachments.length === 0 || content.length > 0) && children}
       </Message>
     ),
     Assistant: ({ children }) => (
@@ -115,8 +121,8 @@ export function MessageBubble({
         {children}
       </Message>
     ),
-    System: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
-    Signal: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
+    System: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
+    Signal: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
   };
 
   const renderers = {

@@ -16,9 +16,8 @@ overrides:
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
+  hono@<4.13.11: 4.13.11
   better-auth: ^1.6.26
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
@@ -30,5 +29,9 @@ overrides:
   '@hono/node-server@<1.19.15': 1.19.15
   'fast-uri@<3.1.8': 3.1.8
   'js-yaml@>=3.0.0 <3.15.2': 3.15.2
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'nanoid@<5.1.16': 5.1.16
+  # Vanta 2026-10-06: nested-lock security floors
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
 allowBuilds:
   esbuild: true

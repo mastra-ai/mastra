@@ -5,6 +5,7 @@ import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { useParams, useLocation, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
@@ -13,10 +14,11 @@ import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { OverviewPanelShortcuts } from '@/domains/agents/components/overview-panel-shortcuts';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
-import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import { AgentToolDrawerBody } from '@/domains/tools/components/tool-drawer/agent-tool-drawer-body';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -38,7 +40,11 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
-  const { data: agent } = useAgent(agentId!, useEntityRequestContext('agent', agentId!)[0]);
+  const { data: agent } = useAgent({
+    agentId: agentId!,
+    requestContext: useEntityRequestContext('agent', agentId!)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const defaultProvider = cleanProviderId(agent?.provider ?? '');
   const defaultModel = agent?.modelId ?? '';
@@ -60,6 +66,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       <KeyboardScope>
         <AgentShortcuts agentId={agentId!} />
         <OverviewPanelShortcuts />
+        <ToolDrawer>
+          <AgentToolDrawerBody agentId={agentId!} />
+        </ToolDrawer>
 
         <PageLayout
           variant="fit"

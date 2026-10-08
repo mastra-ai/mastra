@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -12,7 +13,7 @@ import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import type { SourceControlRepository } from '../services/github';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
-import { GitLabIcon, SearchIcon } from '../../../ui/icons';
+import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface VcsFactoryStepProps {
@@ -93,25 +94,23 @@ export function VcsFactoryStep({
             </ProviderHeading>
             <button
               type="button"
-              className="text-meta text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               onClick={() => {
                 setQuery('');
                 setSelectedProvider(null);
               }}
+              className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
             >
-              Choose another provider
+              <Txt as="span" variant="meta" className="block">
+                Choose another provider
+              </Txt>
             </button>
           </div>
-          <div className="border-border bg-sidebar flex items-center gap-2 rounded-lg border px-3 py-2">
-            <SearchIcon size={15} className="text-placeholder" />
-            <input
-              aria-label="Search repositories"
-              className="text-caption text-foreground placeholder:text-placeholder min-w-0 flex-1 bg-transparent focus:outline-none"
-              placeholder="Filter repositories…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-          </div>
+          <SearchInput
+            label="Search repositories"
+            placeholder="Filter repositories…"
+            value={query}
+            onValueChange={setQuery}
+          />
           {mutationError && <RepositoryError message={mutationError} />}
           {selectedProvider === 'github' ? (
             <>
@@ -252,7 +251,7 @@ function ProviderConnection({
 
 function ProviderHeading({ children }: { children: string }) {
   return (
-    <Txt as="h2" variant="label" className="text-foreground m-0">
+    <Txt tone="ink" as="h2" variant="label" className="m-0">
       {children}
     </Txt>
   );
@@ -260,7 +259,7 @@ function ProviderHeading({ children }: { children: string }) {
 
 function RepositoryError({ message }: { message: string }) {
   return (
-    <Txt variant="caption" role="alert" className="text-destructive-indicator m-0">
+    <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
       {message}
     </Txt>
   );
@@ -291,7 +290,7 @@ function RepositoryRows({
     : repositories;
   if (visible.length === 0) {
     return (
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+      <Txt tone="muted" as="p" variant="caption" className="m-0">
         No {provider === 'gitlab' ? 'GitLab' : 'GitHub'} repositories found.
       </Txt>
     );

@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
@@ -151,11 +151,11 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
               {markAllRead.isPending ? 'Marking…' : 'Mark all open as read'}
             </Button>
           ) : null}
-          <Input
-            aria-label="Search attention items"
+          <SearchInput
+            label="Search attention items"
             placeholder="Search"
             value={search}
-            onChange={event => setSearch(event.target.value)}
+            onValueChange={setSearch}
             className="w-64"
           />
         </div>
@@ -202,7 +202,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
                       as="span"
                       variant="meta"
                       tone="muted"
-                      className="bg-fill min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none tabular-nums"
+                      className="bg-fill min-w-5 rounded-full px-1.5 py-0.5 text-center tabular-nums"
                     >
                       {unread}
                     </Txt>

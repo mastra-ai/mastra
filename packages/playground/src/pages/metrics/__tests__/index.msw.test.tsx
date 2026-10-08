@@ -14,6 +14,7 @@ import {
   emptyEntityNames,
   emptyEnvironments,
   emptyServiceNames,
+  emptyScores,
   emptyTags,
 } from './fixtures/metrics';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -26,6 +27,7 @@ function observeRequests() {
   const onMetrics = vi.fn();
   const onDiscovery = vi.fn();
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/scores`, () => HttpResponse.json(emptyScores)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/:operation`, ({ params }) => {
       onMetrics();
       switch (params.operation) {
@@ -60,7 +62,7 @@ function observeRequests() {
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.search}</output>;
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
 function renderPage(path = '/metrics') {
@@ -81,7 +83,7 @@ describe('Metrics storage support', () => {
   ] as const)('when the capability lookup returns HTTP %i', (status, title) => {
     it('shows the error without declaring the storage unsupported', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
           HttpResponse.json({ error: 'Capability lookup failed' }, { status }),
         ),
       );
@@ -99,7 +101,9 @@ describe('Metrics storage support', () => {
 
   describe('when storage does not support metrics', () => {
     it('shows the unavailable state without requesting metrics or filter discovery', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage();
@@ -112,21 +116,25 @@ describe('Metrics storage support', () => {
     });
 
     it('preserves the active URL filter without requesting discovery', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage('/metrics?filterEnvironment=production');
 
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
       expect(screen.getByText('production')).toBeTruthy();
-      expect(screen.getByTestId('location').textContent).toBe('?filterEnvironment=production');
+      expect(screen.getByTestId('location').textContent).toBe('/metrics?filterEnvironment=production');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
     });
 
     it('updates the date preset in the URL without requesting metrics', async () => {
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(unsupportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
+      );
       const { onMetrics, onDiscovery } = observeRequests();
 
       const { queryClient } = renderPage();
@@ -135,7 +143,7 @@ describe('Metrics storage support', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 7 days' }));
 
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('?period=7d'));
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/metrics?period=7d'));
       expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
@@ -146,19 +154,21 @@ describe('Metrics storage support', () => {
   describe('when a failed capability lookup recovers', () => {
     it('loads the supported dashboard after the next capability fetch', async () => {
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, () =>
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
           HttpResponse.json({ error: 'Temporarily unavailable' }, { status: 500 }),
         ),
       );
       const { onMetrics } = observeRequests();
       const { queryClient } = renderPage();
       expect(await screen.findByText('Failed to load storage capabilities')).toBeTruthy();
-      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(supportedStorage)));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
 
-      await act(() => queryClient.invalidateQueries({ queryKey: ['mastra-packages'] }));
+      await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByText('Total Agent Runs')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -169,10 +179,10 @@ describe('Metrics storage support', () => {
       const pending = new Promise<void>(resolve => {
         release = resolve;
       });
-      const onPackages = vi.fn();
+      const onCapabilities = vi.fn();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/system/packages`, async () => {
-          onPackages();
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
+          onCapabilities();
           await pending;
           return HttpResponse.json(supportedStorage);
         }),
@@ -181,7 +191,7 @@ describe('Metrics storage support', () => {
 
       const { queryClient } = renderPage();
 
-      await waitFor(() => expect(onPackages).toHaveBeenCalled());
+      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
       try {
         expect(screen.getByRole('status', { name: 'Loading storage capabilities' })).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
@@ -195,7 +205,48 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByText('Total Agent Runs')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeTruthy();
+    });
+  });
+
+  describe('when a KPI changed from the previous window', () => {
+    it.each([
+      ['/metrics', 'vs previous 24h'],
+      ['/metrics?period=7d', 'vs previous 7d'],
+      ['/metrics?period=custom&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-01-06T00:00:00Z', 'vs previous 5d'],
+      ['/metrics?period=custom&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-01-01T06:00:00Z', 'vs previous 6h'],
+    ])('names the previous window on %s', async (path, comparison) => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () =>
+          HttpResponse.json({ value: 120, previousValue: 100, changePercent: 20 }),
+        ),
+      );
+
+      renderPage(path);
+
+      expect((await screen.findAllByText(`+20% ${comparison} (100)`)).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('when the dashboard has data', () => {
+    it('opens traces with the dashboard filters from "View in Traces"', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
+
+      renderPage('/metrics?period=7d&filterEnvironment=production');
+
+      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in Traces' });
+      if (!tokenUsageTraces) throw new Error('No "View in Traces" button');
+      fireEvent.click(tokenUsageTraces);
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
+      const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
+      expect(url.searchParams.get('datePreset')).toBe('last-7d');
+      expect(url.searchParams.get('filterEnvironment')).toBe('production');
     });
   });
 });

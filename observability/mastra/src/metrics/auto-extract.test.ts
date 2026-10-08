@@ -274,6 +274,32 @@ describe('AutoExtractedMetrics', () => {
     expect(outputTokens!.metric.value).toBe(50);
   });
 
+  it('marks observed token metrics when the run aggregate is incomplete', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        usageIncomplete: true,
+        usage: {
+          inputTokens: 10,
+          outputTokens: 25,
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    const outputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_output_tokens');
+    expect(inputTokens?.metric).toMatchObject({ value: 10, labels: { usageIncomplete: 'true' } });
+    expect(outputTokens?.metric).toMatchObject({ value: 25, labels: { usageIncomplete: 'true' } });
+  });
+
   it('should extract all InputTokenDetails and OutputTokenDetails', () => {
     setup();
     const span = createMockSpan({

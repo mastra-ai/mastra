@@ -59,23 +59,23 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
         </Notice>
       )}
 
-      <div className="divide-y divide-border rounded border border-border text-body">
+      <div className="divide-y divide-border rounded border border-border">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}
             className="flex items-center justify-between gap-2 px-3 py-1.5"
           >
-            <span className="min-w-0 truncate">
+            <Txt as="span" variant="body" className="min-w-0 truncate">
               <Txt as="span" variant="body-sm" tone="muted" font="mono">
                 {row.toolName}
               </Txt>
               <Txt as="span" variant="caption" tone="muted" font="mono" className="ml-2">
                 {formatArgs(row.args)}
               </Txt>
-            </span>
-            <span className={`shrink-0 rounded px-2 py-0.5 text-caption ${outcomeClass(row.outcome)}`}>
+            </Txt>
+            <Txt as="span" variant="caption" className={`shrink-0 rounded px-2 py-0.5 ${outcomeClass(row.outcome)}`}>
               {row.outcome}
-            </span>
+            </Txt>
           </div>
         ))}
       </div>
@@ -88,7 +88,7 @@ function outcomeClass(outcome: ReportRow['outcome']): string {
     case 'served':
       return 'bg-success-subtle text-success-subtle-foreground';
     case 'live':
-      return 'bg-badge-orange-strong text-badge-orange-foreground';
+      return 'bg-badge-orange-subtle text-badge-orange-foreground';
     case 'unconsumed':
       return 'bg-muted-foreground/10 text-muted-foreground';
   }

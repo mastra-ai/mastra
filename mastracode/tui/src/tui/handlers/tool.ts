@@ -22,7 +22,6 @@ import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
-import { showModalOverlay } from '../overlay.js';
 import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
@@ -269,7 +268,7 @@ function handleSubagentProgress(
       component.addToolEnd(progress.toolName, progress.result, progress.isError ?? false);
       break;
     case 'finish':
-      component.finish(progress.isError ?? false, progress.durationMs ?? 0, progress.result);
+      component.finish(progress.isError ?? false, progress.durationMs, progress.result);
       break;
   }
 
@@ -371,13 +370,29 @@ export function handleToolApprovalRequired(
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
   };
 
+  // The card names the tool and its arguments itself unless the row above shows exactly this call: the
+  // approval can target something else (a wrapper tool asking for an inner one), there can be no row, and
+  // quiet mode rows show a description instead of the command.
+  // An ask_user call has no tool row: its question preview is the row, so fill it with the final arguments.
+  const askPreview = toolName === 'ask_user' ? state.pendingAskUserComponents.get(toolCallId) : undefined;
+  askPreview?.updateArgs(args);
+  const visibleCall = state.pendingTools.get(toolCallId)?.getToolCall?.();
+  const showTarget =
+    !askPreview &&
+    (state.quietMode ||
+      !visibleCall ||
+      visibleCall.toolName !== toolName ||
+      safeStringify(visibleCall.args) !== safeStringify(args));
+
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,
     toolName,
     args,
     categoryLabel,
+    showTarget,
+    requestRender: () => state.ui.requestRender(),
     onAction: (action: ApprovalAction) => {
-      state.ui.hideOverlay();
+      removeApproval();
       state.pendingApprovalDismiss = null;
       // Every response carries the call id of the dialog's own tool call, so it
       // can only release that gate — never a different pending approval.
@@ -398,16 +413,24 @@ export function handleToolApprovalRequired(
     },
   });
 
+  // The prompt lives inline in the chat; keys reach it through the editor (see activeInlineApproval).
+  const removeApproval = () => {
+    if (state.activeInlineApproval === dialog) state.activeInlineApproval = undefined;
+    state.chatContainer.removeChild(dialog);
+    state.ui.requestRender();
+  };
+
   // Set up dismissal to decline
   state.pendingApprovalDismiss = declineContext => {
-    state.ui.hideOverlay();
+    removeApproval();
     state.pendingApprovalDismiss = null;
     firePermissionResult('dismissed');
     state.session.respondToToolApproval({ decision: 'decline', toolCallId, declineContext });
   };
 
-  // Show the dialog as an overlay
-  showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
+  // Show the prompt inline, right under the pending tool call
+  ctx.addChildBeforeFollowUps(dialog);
+  state.activeInlineApproval = dialog;
   dialog.focused = true;
   flushRender(state);
 }
@@ -810,7 +833,7 @@ export function handleToolEnd(
       if (background?.status === 'running' && !isError) {
         flushRender(state);
       } else {
-        subagentComponent.finish(isError, 0, resultText);
+        subagentComponent.finish(isError, undefined, resultText);
         state.pendingSubagents.delete(toolCallId);
         pluginSubagentToolCallIds.delete(toolCallId);
         flushRender(state);

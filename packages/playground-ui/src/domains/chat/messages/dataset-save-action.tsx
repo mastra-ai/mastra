@@ -17,9 +17,10 @@ import {
   DialogBody,
   DialogFooter,
 } from '@/ds/components/Dialog';
-import { Label } from '@/ds/components/Label';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
+import { Txt } from '@/ds/components/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
@@ -104,19 +105,21 @@ function DatasetSaveDialog({
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <div className="grid gap-2">
-            <Label htmlFor="ds-target">Dataset</Label>
+          <Field>
+            <FieldLabel>Dataset</FieldLabel>
             <Select
               value={selectedDatasetId}
               onValueChange={setSelectedDatasetId}
               disabled={addItem.isPending || isDatasetsLoading}
             >
-              <SelectTrigger id="ds-target">
+              <SelectTrigger>
                 <SelectValue placeholder={isDatasetsLoading ? 'Loading...' : 'Select a dataset'} />
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -126,22 +129,22 @@ function DatasetSaveDialog({
                 )}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Input (JSON)</Label>
+          <Field>
+            <FieldLabel>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={onInputChange} showCopyButton={false} className="max-h-60 min-h-30" />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Ground Truth (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={setGroundTruth}
               showCopyButton={false}
               className="max-h-40 min-h-20"
             />
-          </div>
+          </Field>
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
@@ -254,11 +257,13 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 text-meta disabled:opacity-50',
+          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
         )}
       >
         {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
-        Save full conversation to dataset
+        <Txt as="span" variant="meta" className="block">
+          Save full conversation to dataset
+        </Txt>
       </button>
       <DatasetSaveDialog
         open={dialogOpen}

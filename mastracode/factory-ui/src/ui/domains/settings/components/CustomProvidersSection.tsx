@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus } from 'lucide-react';
@@ -91,7 +92,7 @@ export function CustomProvidersSection() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <Txt as="p" variant="caption" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption">
           OpenAI-compatible endpoints.
         </Txt>
         {!draft && (
@@ -102,17 +103,15 @@ export function CustomProvidersSection() {
       </div>
 
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-indicator">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}
 
       {draft && (
         <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Name
-            </Txt>
+          <Field className="gap-1">
+            <FieldLabel>Name</FieldLabel>
             <Input
               size="sm"
               placeholder="e.g. my-llm"
@@ -120,22 +119,18 @@ export function CustomProvidersSection() {
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               autoFocus
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Base URL
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Base URL</FieldLabel>
             <Input
               size="sm"
               placeholder="https://api.example.com/v1"
               value={draft.url}
               onChange={e => setDraft({ ...draft, url: e.target.value })}
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}</FieldLabel>
             <Input
               type="password"
               size="sm"
@@ -143,18 +138,16 @@ export function CustomProvidersSection() {
               value={draft.apiKey}
               onChange={e => setDraft({ ...draft, apiKey: e.target.value })}
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Models (comma-separated)
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Models (comma-separated)</FieldLabel>
             <Input
               size="sm"
               placeholder="model-a, model-b"
               value={draft.models}
               onChange={e => setDraft({ ...draft, models: e.target.value })}
             />
-          </label>
+          </Field>
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
               {draft.editingId ? 'Save' : 'Add'}
@@ -174,7 +167,7 @@ export function CustomProvidersSection() {
             <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <Txt as="span" variant="body" className="text-foreground truncate">
+                  <Txt tone="ink" as="span" variant="body" className="truncate">
                     {p.name}
                   </Txt>
                   {p.hasApiKey && (
@@ -183,11 +176,11 @@ export function CustomProvidersSection() {
                     </Badge>
                   )}
                 </div>
-                <Txt as="span" variant="meta" className="text-muted-foreground truncate">
+                <Txt tone="muted" as="span" variant="meta" className="truncate">
                   {p.url}
                 </Txt>
                 {p.models.length > 0 && (
-                  <Txt as="span" variant="meta" className="text-muted-foreground">
+                  <Txt tone="muted" as="span" variant="meta">
                     {p.models.length} model{p.models.length === 1 ? '' : 's'}
                   </Txt>
                 )}

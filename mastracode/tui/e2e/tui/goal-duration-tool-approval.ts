@@ -49,7 +49,7 @@ export const goalDurationToolApprovalScenario: McE2eScenario = {
 
     terminal.submit(`/goal ${OBJECTIVE}`);
     await runtime.waitForScreenText(/APPROVAL_ONE_DONE/i, terminal, 15_000);
-    await runtime.waitForScreenText(/Tool Approval Required/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Allow\?/, terminal, 8_000);
     runtime.printScreen('goal-duration approval 1 visible', terminal);
 
     const beforeFirst = readGoal(dbPath);
@@ -67,7 +67,7 @@ export const goalDurationToolApprovalScenario: McE2eScenario = {
     terminal.write('y');
 
     await runtime.waitForScreenText(/APPROVAL_TWO_SHOULD_NOT_RUN/i, terminal, 15_000);
-    await runtime.waitForScreenText(/Tool Approval Required/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Allow\?/, terminal, 8_000);
     runtime.printScreen('goal-duration approval 2 visible', terminal);
 
     const beforeSecond = readGoal(dbPath);

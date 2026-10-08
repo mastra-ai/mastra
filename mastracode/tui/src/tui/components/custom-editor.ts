@@ -10,8 +10,8 @@ import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { getClipboardImage, getClipboardText } from '@mastra/code-sdk/clipboard/index';
 import type { ClipboardImage } from '@mastra/code-sdk/clipboard/index';
 import chalk from 'chalk';
-import { mastra, theme } from '../theme.js';
-import type { GradientAnimator } from './obi-loader.js';
+import { displayModeColor, mastra, theme } from '../theme.js';
+import { fadePanel } from './surface.js';
 import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
 
 // Mirrors pi-tui's SLASH_COMMAND_SELECT_LIST_LAYOUT so slash-command rows keep
@@ -84,42 +84,6 @@ function parseHex(hex: string): [number, number, number] {
 // Vertical bar glyphs ordered low→high; cycled to animate a soundwave cell.
 const VOICE_WAVE_BARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
 
-const DEFAULT_PROMPT_ICON = '•';
-const PROMPT_ICON_CHOICES = [
-  '☯',
-  '✺',
-  '☻',
-  '✿',
-  '◒',
-  '◓',
-  '♞',
-  '☘',
-  '☸',
-  '❂',
-  '❁',
-  '✽',
-  '❉',
-  '✹',
-  '❨',
-  '❩',
-  '✚',
-  '⚉',
-  '❣',
-  '❥',
-  '♫',
-  '❤',
-] as const;
-
-function getRandomPromptIcon(currentIcon: string): string {
-  if (Math.random() < 0.99) {
-    return DEFAULT_PROMPT_ICON;
-  }
-
-  const nextChoices = PROMPT_ICON_CHOICES.filter(icon => icon !== currentIcon);
-  const choices = nextChoices.length > 0 ? nextChoices : PROMPT_ICON_CHOICES;
-  return choices[Math.floor(Math.random() * choices.length)]!;
-}
-
 export class CustomEditor extends Editor {
   private actionHandlers: Map<AppAction, () => unknown> = new Map();
 
@@ -127,7 +91,6 @@ export class CustomEditor extends Editor {
   public escapeEnabled = true;
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
-  public getPromptAnimator?: () => GradientAnimator | undefined;
   public requestRender?: () => void;
   private pendingBracketedPaste: string | null = null;
 
@@ -166,8 +129,6 @@ export class CustomEditor extends Editor {
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
-  private promptIcon = DEFAULT_PROMPT_ICON;
-  private lastPromptWasInvisible = false;
 
   private requestEditorRender(): void {
     if (this.requestRender) {
@@ -226,65 +187,8 @@ export class CustomEditor extends Editor {
     const isSlash = text.startsWith('/');
     const isAt = text.startsWith('@');
     const isBang = text.startsWith('!');
-    const color = this.getModeColor?.() || mastra.green;
-    const promptAnimator = this.getPromptAnimator?.();
-    const shouldAnimatePrompt = !isSlash && !isAt && !isBang;
-    const isPromptAnimated = shouldAnimatePrompt && Boolean(promptAnimator?.isRunning());
-    const fadeProgress = isPromptAnimated ? promptAnimator!.getFadeProgress() : 1;
-    const isTransitioningIn = isPromptAnimated && promptAnimator!.isFadingIn();
-    const isTransitioningOut = isPromptAnimated && promptAnimator!.isFadingOut();
-    const promptOffset = isPromptAnimated ? promptAnimator!.getOffset() : 0;
-    const pulseWave = isPromptAnimated ? (Math.sin(promptOffset * Math.PI * 2) + 1) / 2 : 0;
-    const transitionPhase = isTransitioningIn || isTransitioningOut ? 1 - fadeProgress : 1;
-    const chevronBrightness = isPromptAnimated
-      ? isTransitioningIn
-        ? transitionPhase < 0.5
-          ? Math.max(0, 1 - transitionPhase * 2)
-          : 0
-        : isTransitioningOut
-          ? transitionPhase <= 0.5
-            ? Math.max(0, 1 - transitionPhase * 2)
-            : 0
-          : 0
-      : 1;
-    const dotBrightness = isPromptAnimated
-      ? isTransitioningIn
-        ? transitionPhase <= 0.5
-          ? 0
-          : Math.max(0, (transitionPhase - 0.5) * 2)
-        : isTransitioningOut
-          ? transitionPhase < 0.5
-            ? 0
-            : Math.max(0, (transitionPhase - 0.5) * 2)
-          : pulseWave
-      : 0;
-
-    const isSteadyPulse = isPromptAnimated && !isTransitioningIn && !isTransitioningOut;
-    if (!isPromptAnimated) {
-      this.promptIcon = DEFAULT_PROMPT_ICON;
-      this.lastPromptWasInvisible = false;
-    } else if (!isSteadyPulse) {
-      this.lastPromptWasInvisible = false;
-    }
-
-    const promptIsInvisible = isSteadyPulse && dotBrightness <= 0.05;
-    if (promptIsInvisible && !this.lastPromptWasInvisible) {
-      this.promptIcon = getRandomPromptIcon(this.promptIcon);
-    }
-    this.lastPromptWasInvisible = promptIsInvisible;
-
-    const promptChar = isSlash
-      ? '/'
-      : isAt
-        ? '@'
-        : isBang
-          ? '!'
-          : chevronBrightness > 0.05
-            ? '›'
-            : dotBrightness > 0.05
-              ? this.promptIcon
-              : ' ';
-    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
+    const color = displayModeColor(this.getModeColor?.() || mastra.green);
+    const promptChar = isSlash ? '/' : isAt ? '@' : isBang ? '!' : '→';
 
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {
@@ -308,17 +212,13 @@ export class CustomEditor extends Editor {
         Math.round(bValue * brightness),
       )(bar);
     } else {
-      prompt = chalk.bold.rgb(
-        Math.round(r * promptBrightness),
-        Math.round(g * promptBrightness),
-        Math.round(bValue * promptBrightness),
-      )(promptChar);
+      prompt = chalk.bold.rgb(r, g, bValue)(promptChar);
     }
 
-    // Box structure: "│ > content │" or "│   content │"
-    // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
-    const promptWidth = 4; // "│ > " or "│   "
-    const contentWidth = width - 6;
+    // Slim panel: " → content " on a shaded background, framed by half blocks (no border).
+    // Left: " → " (3), right padding (1) = 4 chars total
+    const promptWidth = 3;
+    const contentWidth = width - 4;
     // Slash, mention and shell markers are rendered in the prompt chrome, so remove them
     // from the editor's layout state before wrapping and restore the state after.
     const editorState = (
@@ -376,26 +276,16 @@ export class CustomEditor extends Editor {
       contentLines.push(line);
     }
 
-    // Build rounded box
     const result: string[] = [];
-    const hBarLen = width - 2;
-
-    // Solid mode-color border
-    const top = b('╭') + b('─').repeat(hBarLen) + b('╮');
-    const leftBorder = b('│');
-    const rightBorder = b('│');
-    const bottom = b('╰') + b('─').repeat(hBarLen) + b('╯');
-
-    // Assemble box
     const textColorOpen = `\x1b[38;2;${parseHex(theme.getTheme().text).join(';')}m`;
     const textColorClose = '\x1b[39m';
-    result.push(top);
 
     // How many trailing characters are dictated and should render greyed-out.
     const fullText = this.getText();
     let greyRemaining =
       this.voiceTranscriptText.length > 0 && fullText.endsWith(this.voiceTranscriptText)
-        ? this.voiceTranscriptText.length
+        ? // Count code points to match greyifyTrailing, which consumes per code point.
+          [...this.voiceTranscriptText].length
         : 0;
     const greyOpen = `\x1b[38;2;${parseHex(theme.getTheme().muted).join(';')}m`;
 
@@ -407,18 +297,15 @@ export class CustomEditor extends Editor {
       }
     }
 
-    for (let i = 0; i < contentLines.length; i++) {
-      const line = `${textColorOpen}${contentLines[i]!}${textColorClose}`;
-      if (i === 0) {
-        result.push(`${leftBorder} ${prompt} ${line} ${rightBorder}`);
-      } else {
-        result.push(`${leftBorder}${' '.repeat(promptWidth - 1)}${line} ${rightBorder}`);
-      }
-    }
+    const rows = contentLines.map((content, i) => {
+      const line = `${textColorOpen}${content}${textColorClose}`;
+      return i === 0 ? ` ${prompt} ${line}` : `${' '.repeat(promptWidth)}${line}`;
+    });
+    // The shade fades to the terminal background on the right, starting a little darker than the
+    // sent-message panel (step 2).
+    result.push(...fadePanel(rows, width, 1.5));
 
-    result.push(bottom);
-
-    // Scroll indicators below the box
+    // Scroll indicators below the panel
     for (const ind of scrollIndicators) {
       result.push(ind);
     }
