@@ -572,37 +572,46 @@ describe('Subconscious knowledge write tools', () => {
     expect(appended.createdAt.getTime()).toBeGreaterThanOrEqual(before);
   });
 
-  it("ignores a legacy maxScope config and writes with the session's own resource and thread authority", async () => {
+  it('writes and rescopes at the org rung once org access is granted, even with a legacy maxScope config', async () => {
     const { memory, store, source } = await fixture();
-    // Mastra Code used to configure Subconscious with maxScope, which blocked writes above it. The option no
-    // longer exists: curator writes are bounded by the session's grants, never by a configured ceiling.
-    const legacy = new Subconscious({ defaultScope: 'resource', maxScope: 'thread' } as SubconsciousConfig);
+    // Mastra Code used to configure Subconscious with maxScope: 'resource', which blocked every org-level
+    // write. The option no longer exists; only the session's grants decide where the curator can write.
+    const legacy = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' } as SubconsciousConfig);
     expect(legacy.resolved).not.toHaveProperty('maxScope');
     const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
 
-    const created = (await tools.knowledge_create!.execute?.(
-      { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', nodeScope: 'resource', scope: 'resource' },
+    // Without org access, org writes are refused.
+    const refused = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Not yet shared', scope: 'org' },
       {} as any,
     )) as any;
-    expect(await store.getNodeScopeIds(created.node.id)).toEqual([scopeIds[1]]);
-    expect(await store.getRecordScopeIds(created.record.id)).toEqual([scopeIds[1]]);
+    expect(refused?.error).toBe(true);
+
+    // The org grants this conversation's resource append access; the org rung itself is never vouched.
+    await store.upsertScopeGrant({ scopeNodeId: scopeIds[0]!, scopeRefId: scopeIds[1]!, role: 'append' });
+
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', nodeScope: 'org', scope: 'org' },
+      {} as any,
+    )) as any;
+    expect(await store.getNodeScopeIds(created.node.id)).toEqual([scopeIds[0]]);
+    expect(await store.getRecordScopeIds(created.record.id)).toEqual([scopeIds[0]]);
+
+    const appended = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Shared with the whole org', scope: 'org' },
+      {} as any,
+    )) as any;
+    expect(await store.getRecordScopeIds(appended.id)).toEqual([scopeIds[0]]);
 
     const narrow = (await tools.knowledge_append!.execute?.(
       { node: source.id, text: 'Started in this thread', scope: 'thread' },
       {} as any,
     )) as any;
     await tools.knowledge_rescope!.execute?.(
-      { recordId: narrow.id, expectedVersion: narrow.version, scope: 'resource' },
+      { recordId: narrow.id, expectedVersion: narrow.version, scope: 'org' },
       {} as any,
     );
-    expect(await store.getRecordScopeIds(narrow.id)).toEqual([scopeIds[1]]);
-
-    // The org rung is never the session's own authority, so the curator cannot select it.
-    const orgWide = (await tools.knowledge_append!.execute?.(
-      { node: source.id, text: 'Shared with the whole org', scope: 'org' },
-      {} as any,
-    )) as any;
-    expect(orgWide?.error).toBe(true);
+    expect(await store.getRecordScopeIds(narrow.id)).toEqual([scopeIds[0]]);
   });
 
   it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {
