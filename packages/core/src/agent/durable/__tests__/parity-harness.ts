@@ -798,17 +798,7 @@ interface KnownTurnDifference {
   matches: (wrapped: unknown, plain: unknown) => boolean;
 }
 
-const KNOWN_TURN_DIFFERENCES: readonly KnownTurnDifference[] = [
-  {
-    ticket: 'COR-1398',
-    reason:
-      'Durable and evented rebuild their output from the resumed chunks only, so after a resume they keep the ' +
-      '`toolResults` entry for the tool call that suspended but not the matching `toolCalls` entry.',
-    field: 'toolCalls',
-    appliesTo: turn => turn.resumed,
-    matches: (wrapped, plain) => isEmptyValue(wrapped) && !isEmptyValue(plain),
-  },
-];
+const KNOWN_TURN_DIFFERENCES: readonly KnownTurnDifference[] = [];
 
 function declaredMissingKeysFor(chunkType: string): string[] {
   return KNOWN_CHUNK_DIFFERENCES.filter(d => d.chunkType === chunkType).flatMap(d => [...(d.missingKeys ?? [])]);
