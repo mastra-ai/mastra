@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
@@ -722,6 +724,7 @@ export class PlatformSandbox extends MastraSandbox {
       mode,
       totalMs: Date.now() - startedAt,
       requestMs,
+      ...(this._templateDefinition ? { templateHash: templateHash(this._templateDefinition) } : {}),
     });
   }
 
@@ -1550,4 +1553,13 @@ export class PlatformSandbox extends MastraSandbox {
     if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
     return defaultInstructions;
   }
+}
+
+/**
+ * Content identity of the serialized template a sandbox was provisioned
+ * with: the same definition (repositories, pinned heads, setup commands,
+ * resources) hashes the same on warm and cold boots.
+ */
+function templateHash(definition: SerializedSandboxTemplate): string {
+  return createHash('sha256').update(JSON.stringify(definition)).digest('hex').slice(0, 16);
 }

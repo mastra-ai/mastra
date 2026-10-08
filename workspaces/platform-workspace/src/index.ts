@@ -39,6 +39,11 @@ export {
 } from './repo-template.js';
 export { platformFilesystemProvider, platformSandboxProvider } from './provider.js';
 export {
+  PlatformFactorySandbox,
+  type PlatformFactorySandboxOptions,
+  type PlatformFactorySandboxSettings,
+} from './factory-sandbox.js';
+export {
   execViaPrivateNetwork,
   PrivateNetExecHttpError,
   type PrivateNetExecOptions,
