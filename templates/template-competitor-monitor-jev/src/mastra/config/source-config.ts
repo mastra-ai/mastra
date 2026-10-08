@@ -48,6 +48,8 @@ export const TIMING = {
   browserCleanupMs: 1_000,
   // Whole Jev evaluation deadline, including all SDK retries.
   jevCallMs: 30_000,
+  // Maximum wait per notification provider; failed deliveries remain pending.
+  notificationCallMs: 30_000,
   // Whole summary generation deadline, including retries.
   summaryCallMs: 30_000,
   // Shared acquisition deadline across HTTP, browser fallback and retry waits.

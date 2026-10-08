@@ -9,8 +9,8 @@ export type ChangeNotification = {
   changes: ReportChange[];
 };
 
-/** Destinations must deduplicate eventId if replay after delivery but before its durable receipt matters. */
+/** Destinations must deduplicate eventId and honor abortSignal before external side effects. */
 export interface NotificationProvider {
   id: string;
-  notify(event: ChangeNotification): Promise<void>;
+  notify(event: ChangeNotification, options?: { abortSignal?: AbortSignal }): Promise<void>;
 }

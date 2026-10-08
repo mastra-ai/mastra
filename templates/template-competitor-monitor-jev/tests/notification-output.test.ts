@@ -7,11 +7,14 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { expect, it, vi } from 'vitest';
 
-import { loadConfig } from '../src/mastra/config';
+import { loadConfig, TIMING } from '../src/mastra/config';
 import { dailyMonitorSchedules, scheduledMonitorInputs } from '../src/mastra/config/scheduled-monitors';
 import { CLASSIFIER_ID, COMPETITOR_CHANGE_QUESTIONS, QUESTION_SET_VERSION } from '../src/mastra/lib/classification';
 import { EVALUATION_FIXTURES } from './fixtures/evaluation-dataset';
 import { MonitorStore } from '../src/mastra/lib/store';
+import { createNotifyStep } from '../src/mastra/workflows/competitor-monitor-steps/notify';
+import { createStepContext } from '../src/mastra/workflows/competitor-monitor-steps/workflow-context';
+import type { ChangeNotification } from '../src/mastra/notifications';
 import { MarkdownReportProvider } from '../src/mastra/notifications/markdown-report';
 import { createCompetitorMonitorWorkflow } from '../src/mastra/workflows/competitor-monitor-workflow';
 
@@ -238,3 +241,83 @@ it('recovered_scheduled_alert_is_delivered_once_with_evidence', async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it.each(['timeout', 'cancel'] as const)(
+  'releases a monitor after notification %s without acknowledging late delivery',
+  async failure => {
+    const directory = await mkdtemp(join(tmpdir(), 'competitor-notification-deadline-'));
+    const config = loadConfig({ MONITOR_DATABASE_URL: `file:${join(directory, 'monitor.db')}` });
+    const store = MonitorStore.open(config.storage.monitorUrl);
+    const run = await store.beginRun('deadline-monitor');
+    const event: ChangeNotification = {
+      eventId: 'pending-event',
+      runId: run.id,
+      monitorId: run.monitorId,
+      monitorName: 'Monitor',
+      date: '2026-10-08',
+      changes: [],
+    };
+    const pending = vi.spyOn(store, 'pendingNotifications').mockResolvedValue([event]);
+    const acknowledge = vi.spyOn(store, 'acknowledgeNotification');
+    let finishDelivery!: () => void;
+    let started!: () => void;
+    const deliveryStarted = new Promise<void>(resolve => {
+      started = resolve;
+    });
+    let providerSignal: AbortSignal | undefined;
+    const notify = vi.fn((_event: ChangeNotification, options?: { abortSignal?: AbortSignal }) => {
+      providerSignal = options?.abortSignal;
+      started();
+      return new Promise<void>(resolve => {
+        finishDelivery = resolve;
+      });
+    });
+    const controller = new AbortController();
+    const step = createNotifyStep(
+      createStepContext({ store, config, notificationProviders: [{ id: 'hung', notify }] }),
+    );
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const result = step.execute!({
+        inputData: {
+          runId: run.id,
+          monitorId: run.monitorId,
+          status: 'no_change',
+          counts: {
+            sourcesRequested: 1,
+            sourcesChecked: 1,
+            sourcesFailed: 0,
+            candidatesDetected: 0,
+            candidatesClassified: 0,
+            candidatesDeferred: 0,
+          },
+          sources: [],
+          changes: [],
+          report: {},
+        },
+        getInitData: () => ({ runMode: 'scheduled', monitorId: run.monitorId }),
+        abortSignal: controller.signal,
+      } as unknown as Parameters<NonNullable<typeof step.execute>>[0]);
+      await deliveryStarted;
+      if (failure === 'cancel') controller.abort(new Error('TEST_CANCELED'));
+      else await vi.advanceTimersByTimeAsync(TIMING.notificationCallMs);
+      expect(await result).toMatchObject({ status: 'partial', notificationFailures: ['hung'] });
+      expect(providerSignal?.aborted).toBe(true);
+      expect(acknowledge).not.toHaveBeenCalled();
+      // A provider that ignores cancellation may finish later; it must not gain a receipt.
+      finishDelivery();
+      await Promise.resolve();
+      expect(acknowledge).not.toHaveBeenCalled();
+      const nextRun = await store.beginRun(run.monitorId);
+      await store.finishRun(nextRun, 'success', {});
+      expect(pending).toHaveBeenCalledWith(run.monitorId, 'hung');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      pending.mockRestore();
+      acknowledge.mockRestore();
+      await store.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

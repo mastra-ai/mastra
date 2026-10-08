@@ -49,13 +49,16 @@ export class MarkdownReportProvider implements NotificationProvider {
 
   constructor(private readonly directory: string) {}
 
-  async notify(event: ChangeNotification) {
+  async notify(event: ChangeNotification, options?: { abortSignal?: AbortSignal }) {
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
     await mkdir(this.directory, { recursive: true });
     const key = createHash('sha256').update(event.eventId).digest('hex');
     const path = join(this.directory, `${key}.md`);
     const temporary = join(this.directory, `.${key}.${randomUUID()}.tmp`);
     try {
-      await writeFile(temporary, formatMarkdownReport(event), { flag: 'wx' });
+      await writeFile(temporary, formatMarkdownReport(event), { flag: 'wx', signal });
+      signal?.throwIfAborted();
       await rename(temporary, path);
     } finally {
       await rm(temporary, { force: true });
