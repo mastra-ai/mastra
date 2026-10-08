@@ -281,9 +281,13 @@ session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallI
 session.respondToToolApproval({ decision: 'always_allow_category', toolCallId: event.toolCallId })
 ```
 
-#### `respondToToolSuspension({ resumeData, toolCallId?, requestContext? })`
+#### `respondToToolSuspension({ resumeData, address?, toolCallId?, requestContext? })`
 
-Resume a suspended tool with application-provided data. Supply `toolCallId` when several tool calls are suspended.
+Resume a suspended tool with application-provided data. Supply `toolCallId` for a prompt on the active thread. To resume after switching threads, retain the full `address` returned by `session.claimToolSuspension(toolCallId, runId)` and pass it instead of `toolCallId`.
+
+An addressed resume uses the source thread's mode, model, and thread-owned preferences, without selecting that thread or replacing the active thread's subscription. Tool state callbacks remain bound to the source even if you switch threads during execution. Host-owned custom state and permission rules remain shared.
+
+After a process restart, a full address can recover a persisted suspension through the controller's configured agents. Recovery requires a uniquely identified originating agent and the existing resume authorization checks. A setup failure leaves the prompt retryable; it doesn't finish another thread's active run.
 
 ```typescript
 await session.respondToToolSuspension({
@@ -350,6 +354,10 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 ### `session.thread.create({ title?, id?, requestContext? })`
 
 Create a thread, bind the session to it, and open its event stream. Pass `requestContext` when memory is a function that reads the signed-in user.
+
+For a session created with `createInitialThread: false`, explicit mode, model, and thread-preference selections made before its first binding seed the first new thread. This also applies to `ensureId()` and the first message. Failed creation leaves those selections available for retry.
+
+After the session has bound a conversation, creating another thread uses controller defaults, not the previous conversation's choices. Clearing or deleting the binding doesn't restore the first-thread behavior. Opening an existing thread restores that thread's settings instead of applying unbound startup selections.
 
 ```typescript
 const thread = await session.thread.create({
@@ -815,7 +823,13 @@ After every event, the session emits `display_state_changed` with the latest sna
 
 ## State
 
-`session.state` owns the schema-validated AgentController state for the conversation. It holds the current snapshot and validates updates against the `stateSchema` passed to the AgentController. Updates are serialized, and every change emits a `state_changed` event.
+`session.state` exposes the active conversation's thread-owned preferences together with host-owned state. Updates are serialized and validated against the `stateSchema` passed to the AgentController. Visible state changes emit `state_changed`.
+
+Thread-owned preferences include thinking level, observational memory settings, and subagent model selections. Switching threads leaves host-owned custom fields and permission rules unchanged and doesn't persist them.
+
+A queued write keeps its source thread through asynchronous updates and validation. Switching from A to B while a write is pending doesn't apply A's preferences to B. Host-field updates still affect the host. A retained run and the active view of the same thread share update ordering. A resumed run sees edits made while it was parked. Events without a source address that affect the conversation display are emitted only while that source is active.
+
+Inside a tool's controller request context, `state` is a snapshot taken when the context was built. Use `getState()` or `session.state.get()` to read the latest source-thread state after a write.
 
 ### `session.state.get()`
 
@@ -846,9 +860,13 @@ const added = await session.state.update(current => ({
 
 ## Persistence boundaries
 
-A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
+A `Session` is a live runtime object. Its event bus, arbitrary custom state, permission rules, permission grants, follow-ups, and active stream don't automatically survive controller or process recreation. The host must restore the host-owned state it needs.
 
-Configured storage persists threads and messages along with token usage, while thread settings restore mode and model choices. Restored settings can include observational memory and subagent model selections with per-agent-type overrides. A chat channel can map back to stored threads. However, `AgentControllerChannels` keeps channel-to-session and auto-approval state in memory.
+Configured storage persists threads and messages along with token usage, while thread settings restore mode, model, and supported preferences. Restored settings can include thinking level, observational memory, and subagent model selections with per-agent-type overrides. Persisted suspended runs can be recovered using their full suspension address and originating agent; this doesn't make arbitrary custom state durable.
+
+While a run retains a source-thread view, successful in-memory preference writes remain available when returning to that thread even if best-effort metadata persistence fails. A cold restart can recover only persisted settings and controller defaults.
+
+A chat channel can map back to stored threads. However, `AgentControllerChannels` keeps channel-to-session and auto-approval state in memory.
 
 ## Related
 
