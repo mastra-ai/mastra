@@ -616,7 +616,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             repoFullName,
             // Stored nullable; the context speaks `undefined` for absent.
             setupCommand: projectRepository.setupCommand ?? undefined,
-            // Deferred call — only dereferenced when a provider needs the repo
+            // Deferred call, only dereferenced when a provider needs the repo
             // outside the VM (template build time).
             getRepositoryAccess: () =>
               sourceControl.versionControl.getRepositoryAccess({
