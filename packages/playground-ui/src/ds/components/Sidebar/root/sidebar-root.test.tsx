@@ -890,28 +890,3 @@ describe('Sidebar', () => {
     await waitFor(() => expect(document.activeElement).toBe(mobileTrigger));
   });
 });
-
-describe('Sidebar AppShell inset', () => {
-  const insetClass = 'pt-[var(--app-shell-inset-top,0px)]';
-  const renderSidebar = (variant: 'default' | 'raised') => {
-    mockMatchMedia(false);
-    render(
-      <SidebarProvider>
-        <Sidebar variant={variant}>
-          <Sidebar.Nav />
-        </Sidebar>
-      </SidebarProvider>,
-    );
-    const panel = document.querySelector('.sidebar-layout');
-    if (!panel) throw new Error('sidebar panel not rendered');
-    return panel;
-  };
-
-  it("takes AppShell's top inset so the header lines up with the page header", () => {
-    expect(renderSidebar('default').className).toContain(insetClass);
-  });
-
-  it('leaves the raised variant to its own surface margin', () => {
-    expect(renderSidebar('raised').className).not.toContain(insetClass);
-  });
-});

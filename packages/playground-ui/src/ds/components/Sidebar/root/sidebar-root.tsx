@@ -13,23 +13,15 @@ export function SidebarRoot({
   'aria-label': ariaLabel = 'Sidebar',
   mobileMode = 'takeover',
   variant = 'default',
-  className,
   children,
   ...props
 }: SidebarRootProps) {
   const sidebar = useMaybeSidebarState();
-  const isMobile = sidebar?.isMobile ?? false;
-  const isRaised = variant === 'raised' && !isMobile;
+  const isRaised = variant === 'raised' && !sidebar?.isMobile;
 
   return (
     <aside aria-label={ariaLabel} className="contents">
-      <SidebarPanel
-        mobileMode={mobileMode}
-        // Takes `AppShell`'s top inset so the header lines up with the page header; 0 outside the shell.
-        // The raised surface brings its own margin, and the mobile drawer its safe-area padding.
-        className={cn(!isMobile && !isRaised && 'pt-[var(--app-shell-inset-top,0px)]', className)}
-        {...props}
-      >
+      <SidebarPanel mobileMode={mobileMode} {...props}>
         {isRaised ? (
           <div
             data-slot="sidebar-surface"
