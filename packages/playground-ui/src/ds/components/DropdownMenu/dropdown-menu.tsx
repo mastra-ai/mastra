@@ -300,9 +300,6 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
             data-slot="dropdown-menu-content"
             className={cn(menuPopupClass, menu.containerClassName, size === 'sm' && 'rounded-md p-0.5', className)}
             {...props}
-            role={props.role ?? 'menu'}
-            aria-orientation="vertical"
-            {...dropGeneratedLabelledBy(props)}
             {...menu.getContainerProps(props, ref)}
           >
             <FluidMenuItems menu={menu} className={size === 'sm' ? 'rounded-sm' : undefined}>
@@ -337,7 +334,7 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
       className={cn(
         variant === 'destructive' ? menuItemDestructiveClass : menuItemClass,
         useItemHighlightClass(variant),
-        size === 'sm' && 'h-control-sm gap-2 rounded-sm py-1 text-caption',
+        size === 'sm' && 'h-control-sm gap-2 rounded-sm py-1 text-caption leading-none',
         inset && menuItemInsetClass,
         className,
       )}
