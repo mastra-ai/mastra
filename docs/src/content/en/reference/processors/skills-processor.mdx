@@ -143,7 +143,7 @@ const agent = new Agent({
 })
 ```
 
-With the list turned off, the agent finds skills only by searching, so configure [BM25 or vector search](/docs/sandbox/search) on the workspace. The agent workflow is:
+With the list turned off, the agent finds skills by searching. `skill_search` works without any search setup; for larger collections, configure [BM25 or vector search](/docs/sandbox/search) on the workspace to improve ranking, as in the example above. The agent workflow is:
 
 1. Agent receives a user message
 1. Agent calls `skill_search` with keywords (e.g., "release notes")

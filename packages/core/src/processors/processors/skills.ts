@@ -83,8 +83,9 @@ interface SkillsProcessorBaseOptions {
    * source discovered no skills, and `format` and `formatLocation` have no
    * effect because no catalog is rendered.
    *
-   * The model finds skills only through `skill_search`, so configure BM25 or
-   * vector search on the workspace. Agent-level skills are always indexed.
+   * The model finds skills through `skill_search`, which works without any
+   * search setup. For larger collections, configure BM25 or vector search on
+   * the workspace to improve ranking. Agent-level skills are always indexed.
    *
    * @default true
    */

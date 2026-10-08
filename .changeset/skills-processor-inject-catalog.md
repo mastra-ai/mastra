@@ -18,4 +18,4 @@ const agent = new Agent({
 });
 ```
 
-Configure BM25 or vector search on the workspace when you turn the list off, since the agent finds skills only through `skill_search`. The instruction is left out when the `skill_search` tool isn't active for the request, or when the processor's own skills source discovered no skills. The option defaults to `true`, so existing agents are unchanged.
+When you turn the list off, `skill_search` can find skills without additional search setup. For larger collections, configure BM25 or vector search on the workspace to improve ranking and retrieval. The instruction is left out when the `skill_search` tool isn't active for the request, or when the processor's own skills source discovered no skills. The option defaults to `true`, so existing agents are unchanged.

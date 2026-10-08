@@ -102,7 +102,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-The agent keeps the `skill`, `skill_read`, and `skill_search` tools for both filesystem-backed and [agent skills](/docs/skills). Because the agent finds skills only by searching, configure [BM25 or vector search](#search-skill-content) on the workspace. Agent skills are always indexed.
+The agent keeps the `skill`, `skill_read`, and `skill_search` tools for both filesystem-backed and [agent skills](/docs/skills). `skill_search` works without any search setup: it matches query words against skill names, descriptions, and content. For larger collections, configure [BM25 or vector search](#search-skill-content) on the workspace to improve ranking. Agent skills are always indexed.
 
 Keep the default list when you have a few dozen skills: the agent sees every option at once, and the list is a stable prefix that providers can cache. Turn it off when you have around a hundred skills or more, or when the size of the system message matters. The search instruction stays the same size however many skills you add.
 
