@@ -2115,7 +2115,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     // Nothing streamed before the abort, so the partial text is an empty string
     // rather than undefined.
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
-    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(result.stepResult).toMatchObject({ reason: 'abort', isContinued: false });
   });
 
   it('hands onAbort the text streamed before the abort', async () => {
