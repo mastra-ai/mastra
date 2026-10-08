@@ -11,7 +11,6 @@ import { createFactoryStorageForTests, LibSQLStore } from '../../../factory/src/
 
 const orgId = 'canvas-proof-org';
 const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNOWLEDGE_PROOF_OUTPUT) : undefined;
-const results = new Map<string, string>();
 
 async function createCanvasHarness() {
   const factory = await createFactoryStorageForTests({ autoClose: false });
@@ -171,15 +170,10 @@ async function installRoutes(context: BrowserContext) {
   return harness;
 }
 
-async function recordResult(page: Page, title: string, screenshot: string) {
-  results.set(title, 'passed');
+async function captureProof(page: Page, screenshot: string) {
   if (!output) return;
   fs.mkdirSync(output, { recursive: true });
   await page.screenshot({ path: path.join(output, screenshot), fullPage: true });
-  fs.writeFileSync(
-    path.join(output, 'results.json'),
-    JSON.stringify({ tests: [...results].map(([testTitle, status]) => ({ title: testTitle, status })) }, null, 2),
-  );
 }
 
 test.describe('Knowledge graph canvas', () => {
@@ -206,7 +200,7 @@ test.describe('Knowledge graph canvas', () => {
       await page.getByRole('button', { name: 'Scope map' }).click();
       await expect(page.getByLabel('Scope map')).toContainText('platform');
       await expect(page.getByLabel('Scope map')).toContainText('1 scope omitted by canvas bounds');
-      await recordResult(page, 'bounded canvas lifecycle', 'canvas-boundary.png');
+      await captureProof(page, 'canvas-boundary.png');
     });
   });
 });
