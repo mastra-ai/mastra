@@ -13,6 +13,7 @@ import {
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
   TRACE_FILTER_BAR_OPERATORS,
+  traceFilterFieldColor,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from './trace-filters';
@@ -91,6 +92,20 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
 });
 
 describe('createTraceFilterBarFields', () => {
+  describe('when built-in and metadata filters are available', () => {
+    it('gives every field a neutral gray accent', () => {
+      const fields = createTraceFilterBarFields({
+        availableRootEntityNames: ['weather-agent'],
+        availableEnvironments: ['prod'],
+        canonicalTraceFields: [{ path: 'tags', operators: ['includes'], valueSuggestions: true }],
+        metadataFields: [{ path: 'metadata.region', suggestions: async () => [] }],
+      });
+
+      expect(fields.map(field => field.id)).toEqual(expect.arrayContaining(['tags', 'metadata.region', 'spans.error']));
+      expect(new Set(fields.map(field => field.color))).toEqual(new Set(['var(--muted-foreground)']));
+    });
+  });
+
   const fields = createTraceFilterBarFields({
     availableRootEntityNames: ['weather-agent'],
     availableEnvironments: ['prod'],
@@ -398,6 +413,17 @@ describe('createTraceFilterBarFields', () => {
   });
 });
 
+describe('traceFilterFieldColor', () => {
+  describe('when a time, known, or dynamic field requests an accent', () => {
+    it.each(['timeRange', 'status', 'spans.error', 'metadata.region', 'customField'])(
+      'uses neutral gray for %s',
+      fieldId => {
+        expect(traceFilterFieldColor(fieldId)).toBe('var(--muted-foreground)');
+      },
+    );
+  });
+});
+
 describe('metadata filter URL params', () => {
   it('reads filterMetadata.<key> params as metadata.<key> tokens in insertion order', () => {
     const params = new URLSearchParams('filterMetadata.region=eu-west&filterTraceId=abc&filterMetadata.tenant=acme');
@@ -527,21 +553,20 @@ describe('filter group URL params', () => {
 });
 
 describe('presence-only filter URL params', () => {
-  describe('when a hand-edited URL gives the feedback comment a text value', () => {
-    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
-      'drops the token for %s',
-      query => {
-        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
-          { fieldId: 'traceId', value: 'abc' },
-        ]);
-      },
-    );
+  describe('when the URL gives the feedback comment a text value', () => {
+    it('keeps the token so the comment can be matched', () => {
+      expect(
+        getTracePropertyFilterTokens(
+          new URLSearchParams('filterFeedbackComment=wrong&filterFeedbackComment.op=matches'),
+        ),
+      ).toEqual([{ fieldId: 'feedback.comment', value: 'wrong', operatorId: 'matches' }]);
+    });
   });
 
-  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
+  describe('when a hand-edited URL gives a presence-only field a value operator', () => {
     it.each([
-      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
-      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
+      'filterSpanError=boom',
+      'filterSpanError=boom&filterSpanError.op=is',
       'filterSpanError=boom&filterSpanError.op=in',
     ])('drops the token for %s', query => {
       expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
