@@ -1,13 +1,15 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { ListFilter, Search, Tag, UsersRound } from 'lucide-react';
+import { FolderKanban, Inbox, ListFilter, Search, Tag, UsersRound } from 'lucide-react';
 
 import { BOARD_FILTER_FIELD, boardFilterItems, boardFilterStateFromItems } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
 import { boardRelevanceOptions } from '../boardRelevance';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardKind } from '../boardStages';
+import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
+import type { LinearProject } from '../services/linear';
 
 /** `contains` carries the free-text search; the closed dimensions pick one or several values. */
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [
@@ -22,6 +24,7 @@ interface BoardFilterFieldsOptions {
   availableLabels: readonly string[];
   currentUserId?: string;
   teammateSelected: boolean;
+  linearProjects?: readonly LinearProject[];
 }
 
 export function boardFilterFields({
@@ -30,8 +33,25 @@ export function boardFilterFields({
   availableLabels,
   currentUserId,
   teammateSelected,
+  linearProjects = [],
 }: BoardFilterFieldsOptions): FilterBarField[] {
   return [
+    {
+      id: BOARD_FILTER_FIELD.source,
+      label: 'Intake source',
+      icon: Inbox,
+      operators: ['in'],
+      strict: true,
+      suggestions: BOARD_SOURCE_OPTIONS,
+    },
+    {
+      id: BOARD_FILTER_FIELD.linearProject,
+      label: 'Linear project',
+      icon: FolderKanban,
+      operators: ['in'],
+      strict: true,
+      suggestions: linearProjects.map(project => ({ value: project.id, label: project.name })),
+    },
     { id: BOARD_FILTER_FIELD.text, label: 'Text', icon: Search, search: true, operators: ['contains'] },
     {
       id: BOARD_FILTER_FIELD.teammate,

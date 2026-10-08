@@ -1,0 +1,132 @@
+---
+title: 'Tools | Connect'
+description: "Give Mastra agents tools for connected providers, combine them with your own tools, and control access and approval."
+packages:
+  - '@mastra/connect'
+---
+
+# Tools
+
+[`tools()`](/reference/connect/tools) gives an agent ready-made tools for providers connected to your project, such as `linear_list_issues` and `linear_create_issue` for Linear. Each call goes through the platform proxy, which adds the connection's credential before forwarding the request. You don't need to implement these tools or store provider credentials in your application.
+
+Before you start, follow the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to configure your project and connect a provider.
+
+## Add tools to an agent
+
+Pass `tools()` to the agent's `tools` option:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: tools(),
+})
+```
+
+With no options, the agent gets tools for every connected provider with a supported toolset. The resolver picks up connection changes without a restart. See [the resolver reference](/reference/connect/tools#the-resolver) for caching, manual refresh, and passing tools to individual agent calls.
+
+Some providers supply tools through a hosted [Model Context Protocol (MCP) server](/docs/mastra-platform/connect/providers#mcp-providers). You use the same `tools()` API for these providers, but their tool names are discovered at runtime rather than included in the package.
+
+## Combine with your own tools
+
+To give an agent Connect tools alongside tools you define yourself, spread the resolver's result in a `tools` function. Your tools win when a key collides:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+import { weatherTool } from '../tools/weather'
+
+const connectTools = tools()
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear and GitHub.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool }),
+})
+```
+
+## Limit available tools
+
+Use `providers` to give an agent tools from selected providers rather than every connected account:
+
+```typescript
+tools({
+  providers: ['linear', 'github'],
+})
+```
+
+To restrict which actions an agent can take, configure an allowlist of tool keys for each provider:
+
+```typescript
+tools({
+  providers: {
+    linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] },
+  },
+})
+```
+
+Find tool keys in the [provider toolsets reference](/reference/connect/providers). The [`tools()` reference](/reference/connect/tools#parameters) covers exclusion filters, wildcard patterns, shared policies, and validation behavior.
+
+## Filter tools per request
+
+The `providers` option selects which providers the resolver can load. To vary the available tools by request, use the agent's `tools` function with [request context](/docs/server/request-context):
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+const connectTools = tools({ providers: ['linear'] })
+const viewerTools = new Set(['linear_list_issues'])
+
+export const opsAgent = new Agent({
+  id: 'ops',
+  name: 'ops',
+  instructions: 'You help the team track work in Linear.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: async ctx => {
+    const all = await connectTools(ctx)
+
+    if (ctx.requestContext?.get('role') === 'viewer') {
+      return Object.fromEntries(Object.entries(all).filter(([key]) => viewerTools.has(key)))
+    }
+    return all
+  },
+})
+```
+
+This example gives viewers only `linear_list_issues` and gives other roles the resolved Linear tools. Set the role in trusted server-side code based on the authenticated user. The resolver caches its toolset, while the callback filters it for each request.
+
+## Require approval for sensitive tools
+
+Tools run without [human approval](/docs/agents/human-in-the-loop) by default. Set `requireApproval` to pause before selected tools execute:
+
+```typescript
+tools({
+  providers: {
+    linear: { requireApproval: ['linear_create_issue'] },
+  },
+})
+```
+
+Pass `requireApproval: true` to require approval for every tool from a provider. Approval works with both generated toolsets and MCP providers. Follow the [human-in-the-loop guide](/docs/agents/human-in-the-loop) to handle approval requests and resume execution.
+
+## Choose between connections
+
+If a project links two Slack workspaces, the agent chooses a workspace on each call. The same applies to any provider with more than one connection: the toolset gains a `<provider>__list_connections` tool, and every other tool takes a `connection_name` input. Give connections [names you can tell apart](/reference/cli/mastra#mastra-connect-add).
+
+To always use one connection, pin it:
+
+```typescript
+tools({
+  providers: {
+    slack: { connectionId: 'c_yourconnectionid' },
+  },
+})
+```

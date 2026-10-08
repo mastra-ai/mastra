@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "61.0.0",
+  "version": "62.0.0-alpha.1",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -227,7 +227,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
     "@storybook/addon-mcp": "^10.6.0",
@@ -239,6 +239,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "^5.90.21",
     "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.7",
     "@types/json-schema": "^7.0.15",
     "@types/mdast": "^4.0.4",
     "@types/node": "22.20.1",

@@ -58,7 +58,7 @@ function mockResult(answer: any) {
 describe('createClassifierScorer', () => {
   it('projects choice answers with explicit scores and retains safe evidence', async () => {
     const classifier = createClassifier();
-    vi.spyOn(classifier, 'evaluate').mockResolvedValue(
+    vi.spyOn(classifier, 'decide').mockResolvedValue(
       mockResult({
         type: 'choice',
         choice: 'partial',
@@ -96,7 +96,7 @@ describe('createClassifierScorer', () => {
 
   it('normalizes score answers to 0-1 and projects boolean probabilities directly', async () => {
     const scoreClassifier = createClassifier();
-    vi.spyOn(scoreClassifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1.5 }) as any);
+    vi.spyOn(scoreClassifier, 'decide').mockResolvedValue(mockResult({ type: 'score', score: 1.5 }) as any);
     const scoreScorer = createClassifierScorer({
       id: 'quality-score',
       classifier: scoreClassifier,
@@ -105,9 +105,7 @@ describe('createClassifierScorer', () => {
     });
 
     const booleanClassifier = createClassifier();
-    vi.spyOn(booleanClassifier, 'evaluate').mockResolvedValue(
-      mockResult({ type: 'boolean', probability: 0.37 }) as any,
-    );
+    vi.spyOn(booleanClassifier, 'decide').mockResolvedValue(mockResult({ type: 'boolean', probability: 0.37 }) as any);
     const booleanScorer = createClassifierScorer({
       id: 'factual-score',
       classifier: booleanClassifier,
@@ -122,7 +120,7 @@ describe('createClassifierScorer', () => {
   it('forwards the selected state and classifier options', async () => {
     const classifier = createClassifier();
     const evaluate = vi
-      .spyOn(classifier, 'evaluate')
+      .spyOn(classifier, 'decide')
       .mockResolvedValue(mockResult({ type: 'boolean', probability: 0.8 }) as any);
     const scorer = createClassifierScorer({
       id: 'factual-score',
@@ -145,7 +143,7 @@ describe('createClassifierScorer', () => {
   it('passes the run request context to the state selector', async () => {
     const classifier = createClassifier();
     const evaluate = vi
-      .spyOn(classifier, 'evaluate')
+      .spyOn(classifier, 'decide')
       .mockResolvedValue(mockResult({ type: 'boolean', probability: 0.8 }) as any);
     const scorer = createClassifierScorer({
       id: 'policy-factual',
@@ -161,7 +159,7 @@ describe('createClassifierScorer', () => {
 
   it('resolves registered classifier IDs at run time', async () => {
     const classifier = createClassifier();
-    vi.spyOn(classifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1 }) as any);
+    vi.spyOn(classifier, 'decide').mockResolvedValue(mockResult({ type: 'score', score: 1 }) as any);
     const scorer = createClassifierScorer<typeof classifier, 'quality'>({
       id: 'registered-score',
       classifier: 'response-judge',

@@ -6,6 +6,7 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'abort-queued-followup'
   | 'startup-interrupted'
   | 'account-rotation'
   | 'account-routing-targeted'
@@ -204,6 +205,7 @@ export type ScenarioName =
   | 'task-patch-tools'
   | 'task-progress-events'
   | 'terminal-resize-reflow'
+  | 'think-picker-per-model'
   | 'task-prompt-context-next-turn'
   | 'resume-locked-thread'
   | 'resume-missing-thread'

@@ -21,6 +21,8 @@ import { PlaygroundModelProvider } from '@/domains/agents/context/playground-mod
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import { AgentToolDrawerBody } from '@/domains/tools/components/tool-drawer/agent-tool-drawer-body';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -86,6 +88,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       <KeyboardScope>
         <AgentShortcuts agentId={agentId!} />
         <OverviewPanelShortcuts />
+        <ToolDrawer>
+          <AgentToolDrawerBody agentId={agentId!} />
+        </ToolDrawer>
 
         <PageLayout
           variant="fit"

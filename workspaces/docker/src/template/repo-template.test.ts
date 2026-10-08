@@ -25,6 +25,20 @@ describe('buildRepoTemplate', () => {
     expect(dockerfile).toContain('WORKDIR /workspace/app');
   });
 
+  it('chowns the checkout to the owner for non-root base images', () => {
+    const owned = buildRepoTemplate({
+      cloneUrl,
+      sha,
+      workingDirectory: '/workspace',
+      baseImage: 'node:22',
+      owner: 'node',
+    });
+    expect(owned.dockerfile).toContain('COPY --chown=node --from=mastra-secret-0 /workspace/app /workspace/app');
+    const plain = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace', baseImage: 'node:22' });
+    expect(plain.dockerfile).toContain('COPY --from=mastra-secret-0 /workspace/app /workspace/app');
+    expect(() => buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace', owner: '' })).toThrow();
+  });
+
   it('pins the sha with a full clone + detached checkout, making it part of the identity', () => {
     const a = buildRepoTemplate({ cloneUrl, sha, workingDirectory: '/workspace' });
     const b = buildRepoTemplate({ cloneUrl, sha: 'f'.repeat(40), workingDirectory: '/workspace' });

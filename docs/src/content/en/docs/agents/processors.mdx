@@ -266,6 +266,8 @@ export class DynamicModelProcessor implements Processor {
 }
 ```
 
+Returning `toolChoice: 'none'` stops the model from calling tools but still sends the tool definitions, so earlier tool calls and results stay in the conversation. Mastra only drops the tool definitions when the step also sends a structured-output schema to the model.
+
 The method receives the current `stepNumber`, `model`, `tools`, `toolChoice`, `messages`, and more. Return an object with any properties you want to override for that step, for example `{ model, toolChoice, tools, systemMessages }`.
 
 See the [`Processor` reference](/reference/processors/processor-interface#processinputstep) for all available arguments and return types.
@@ -578,14 +580,18 @@ Pass `scope: null` to deliberately share entries across all callers. Only use th
 
 ### Custom cache backend
 
-`ResponseCache` accepts any `MastraServerCache`. For production, use `RedisCache` from `@mastra/redis`:
+`ResponseCache` accepts any `MastraServerCache`. For production, use `RedisServerCache` from `@mastra/redis`:
 
 ```typescript title="src/mastra/agents/cached-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { ResponseCache } from '@mastra/core/processors'
-import { RedisCache } from '@mastra/redis'
+import { RedisServerCache } from '@mastra/redis'
+import { createClient } from 'redis'
 
-const cache = new RedisCache({ url: process.env.REDIS_URL })
+const client = createClient({ url: process.env.REDIS_URL })
+await client.connect()
+
+const cache = new RedisServerCache({ client })
 
 export const agent = new Agent({
   id: 'cached-agent',

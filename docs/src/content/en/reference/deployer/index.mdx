@@ -75,7 +75,7 @@ class CustomDeployer extends Deployer {
     name: 'getEnvFiles',
     type: '() => Promise<string[]>',
     description:
-      "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
+      "Returns the environment files to be used during deployment. By default, it returns every existing file among '.env', '.env.local', and '.env.production', in that order (lowest to highest precedence).",
   },
   {
     name: 'deploy',
@@ -117,7 +117,7 @@ The Deployer class inherits the following key methods from the Bundler class:
 The Deployer abstract class implements a structured deployment lifecycle:
 
 1. **Initialization**: The deployer is initialized with a name and creates a Deps instance for dependency management.
-1. **Environment Setup**: The `getEnvFiles` method identifies environment files (.env.production, .env) to be used during deployment.
+1. **Environment Setup**: The `getEnvFiles` method identifies the environment files (`.env`, `.env.local`, `.env.production`) to be used during deployment.
 1. **Preparation**: The `prepare` method (inherited from Bundler) cleans the output directory and creates necessary subdirectories.
 1. **Bundling**: The `_bundle` method (inherited from Bundler) packages the application code and its dependencies.
 1. **Deployment**: The abstract `deploy` method is implemented by subclasses to handle the actual deployment process.
@@ -126,23 +126,16 @@ The Deployer abstract class implements a structured deployment lifecycle:
 
 The Deployer class includes built-in support for environment file management through the `getEnvFiles` method. This method:
 
-- Looks for environment files in a predefined order (.env.production, .env)
-- Uses the FileService to find the first existing file
-- Returns an array of found environment files
+- Looks for environment files in a predefined order, from lowest to highest precedence: `.env`, `.env.local`, `.env.production`
+- Returns every file that exists, in that order, so values in later files override earlier ones
 - Returns an empty array if no environment files are found
 
 ```typescript oxfmt:false
 getEnvFiles(): Promise<string[]> {
-  const possibleFiles = ['.env.production', '.env.local', '.env'];
+  const possibleFiles = ['.env', '.env.local', '.env.production'];
+  const fileService = new FileService();
 
-  try {
-    const fileService = new FileService();
-    const envFile = fileService.getFirstExistingFile(possibleFiles);
-
-    return Promise.resolve([envFile]);
-  } catch {}
-
-  return Promise.resolve([]);
+  return Promise.resolve(fileService.getExistingFiles(possibleFiles));
 }
 ```
 
