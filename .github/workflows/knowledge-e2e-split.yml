@@ -49,6 +49,11 @@ jobs:
           printf '#!/bin/sh\nexec docker compose "$@"\n' > "$HOME/bin/docker-compose"
           chmod +x "$HOME/bin/docker-compose"
           echo "$HOME/bin" >> "$GITHUB_PATH"
+      - name: Start DynamoDB Local ahead of the suite
+        run: |
+          docker compose -f stores/dynamodb/src/storage/docker-compose.yml up -d
+          for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8000 && break; sleep 2; done
+          curl -s -o /dev/null -w 'dynamodb-local http %{http_code}\n' http://127.0.0.1:8000 || true
       - name: Normalize project name
         id: normalize
         run: echo "id=$(echo '${{ matrix.side }}-${{ matrix.project }}' | tr '/' '-')" >> $GITHUB_OUTPUT
