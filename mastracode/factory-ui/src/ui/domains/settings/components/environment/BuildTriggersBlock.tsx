@@ -75,7 +75,7 @@ export function BuildTriggersBlock({
           label="On push"
           description={
             <span className="flex flex-col gap-2">
-              <span>Rebuild after a push to a repository's base branch.</span>
+              <span>Rebuild right after a push to a repository's base branch.</span>
               {pushSignal === 'none' && onPush.enabled && (
                 <span role="alert" className="text-warning-foreground flex items-center gap-1.5">
                   <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
@@ -85,7 +85,7 @@ export function BuildTriggersBlock({
               )}
               {onPush.enabled && (
                 <>
-                  <Knob text="Wait" unit="minutes after the last push (0 to 1440)">
+                  <Knob text="Then hold further pushes for" unit="minutes before building again (0 to 1440)">
                     <CommittedInput
                       label="Push debounce in minutes"
                       type="number"
