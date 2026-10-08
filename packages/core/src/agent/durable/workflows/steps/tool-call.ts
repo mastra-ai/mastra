@@ -449,7 +449,7 @@ export function createDurableToolCallStep() {
       // provider tool advertises the snake-case name), then by id, then fall
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
-      const registryEntry = globalRunRegistry.get(runId);
+      let registryEntry = globalRunRegistry.get(runId);
       const registryModel = registryEntry?.model as { __metadataOnly?: boolean } | undefined;
       const hasAuthoritativeToolSnapshot =
         !!registryEntry &&
@@ -517,7 +517,9 @@ export function createDurableToolCallStep() {
       // threadId regardless. Without this guard every tool call on a memoryless durable run would
       // pay for a full rebuild to obtain something that can neither exist nor be used.
       const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
-      if (((!tool && !hasAuthoritativeToolSnapshot) || needsSaveQueueForFlush) && mastra) {
+      // A persistence-only rebuild restores tools and the save queue, but not processors.
+      const needsProcessorPipeline = !registryEntry?.outputProcessors || !registryEntry.processorStates;
+      if (((!tool && !hasAuthoritativeToolSnapshot) || needsSaveQueueForFlush || needsProcessorPipeline) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
@@ -526,9 +528,11 @@ export function createDurableToolCallStep() {
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
           requestContext,
+          rehydrateProcessors: true,
           logger,
         });
         if (rebuilt) {
+          registryEntry = globalRunRegistry.get(runId);
           rebuiltTools = rebuilt.tools;
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
@@ -1728,9 +1732,9 @@ export function createDurableToolCallStep() {
         // stream. Processors mutate via messageList.updateToolInvocation, but
         // llm-mapping re-derives the transcript from the llm-execution snapshot
         // plus the serialized step outputs, so the processed value must travel
-        // through the returned `result` field. Requires the live in-process
-        // registry (processor states are unserializable) — a cross-process
-        // resume skips, same as the chunk pipeline below.
+        // through the returned `result` field. Requires a live messageList,
+        // so a cross-process resume skips this hook; the chunk pipeline below
+        // still runs with the rebuilt output processors.
         if (!wasSuspended && registryEntry?.outputProcessors?.length && registryEntry.processorStates && messageList) {
           const resultProcessorRunner = new ProcessorRunner({
             inputProcessors: [],
