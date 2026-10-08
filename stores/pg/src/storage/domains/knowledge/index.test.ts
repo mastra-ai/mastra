@@ -20,9 +20,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { PoolAdapter } from '../../client';
 import { generateTableSQL } from '../../db';
+import type { DbClient } from '../../db';
 import { PostgresStore } from '../../index';
 import { connectionString } from '../../test-utils';
-import type { DbClient } from '../../db';
 
 import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
 
