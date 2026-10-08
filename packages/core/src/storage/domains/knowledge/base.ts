@@ -701,3 +701,92 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
 }
+
+/**
+ * Hierarchical scope entries (`org:<id>`, `resource:<id>`, `thread:<id>`) used by published
+ * `@mastra/memory` versions before Knowledge scopes became scope nodes.
+ *
+ * @deprecated Knowledge scopes are scope-node IDs. Kept only so published `@mastra/memory`
+ * versions that import the helpers below still load.
+ */
+type LegacyKnowledgeScopeLevel = 'org' | 'resource' | 'thread';
+
+const LEGACY_SCOPE_ORDER: Record<LegacyKnowledgeScopeLevel, number> = { org: 0, resource: 1, thread: 2 };
+
+/**
+ * Maximum length of a Knowledge node description, counted in UTF-16 code units.
+ *
+ * @deprecated Kept only so published `@mastra/memory` versions that import it still load.
+ */
+export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
+
+/**
+ * Knowledge has no record scope ceilings. Never throws.
+ *
+ * @deprecated No longer enforced. Kept only so published `@mastra/memory` versions that import it still load.
+ */
+export function assertKnowledgeScopeWithinCeiling(_scope: string[], _maxScope?: LegacyKnowledgeScopeLevel): void {}
+
+/**
+ * @deprecated Knowledge scopes are scope-node IDs; use {@link canonicalizeKnowledgeScopeIds}. Kept only
+ * so published `@mastra/memory` versions that import it still load.
+ */
+export function canonicalizeKnowledgeScope(scope: string[]): string[] {
+  const entriesByLevel = new Map<LegacyKnowledgeScopeLevel, string>();
+  for (const entry of scope) {
+    const separator = entry.indexOf(':');
+    const level = entry.slice(0, separator) as LegacyKnowledgeScopeLevel;
+    const id = entry.slice(separator + 1);
+    const isUncuratedCompanion =
+      (level === 'resource' || level === 'thread') && id.endsWith(':uncurated') && id.length > ':uncurated'.length;
+    if (separator <= 0 || !id || id.includes('\u001f') || LEGACY_SCOPE_ORDER[level] === undefined) {
+      throw new Error(`Invalid knowledge scope entry: ${entry}`);
+    }
+    if (isUncuratedCompanion) continue;
+    const existing = entriesByLevel.get(level);
+    if (existing && existing !== entry) {
+      throw new Error(`Knowledge scope contains multiple ${level} entries`);
+    }
+    entriesByLevel.set(level, entry);
+  }
+  if (scope.length === 0) {
+    throw new Error('Knowledge scope cannot be empty');
+  }
+  if (entriesByLevel.has('thread') && (!entriesByLevel.has('resource') || !entriesByLevel.has('org'))) {
+    throw new Error('Thread knowledge scope requires resource and org ancestors');
+  }
+  if (entriesByLevel.has('resource') && !entriesByLevel.has('org')) {
+    throw new Error('Resource knowledge scope requires an org ancestor');
+  }
+
+  const unique = [...new Set(scope)];
+  unique.sort((a, b) => {
+    const aOrder = LEGACY_SCOPE_ORDER[a.slice(0, a.indexOf(':')) as LegacyKnowledgeScopeLevel];
+    const bOrder = LEGACY_SCOPE_ORDER[b.slice(0, b.indexOf(':')) as LegacyKnowledgeScopeLevel];
+    return aOrder - bOrder || a.localeCompare(b);
+  });
+  return unique;
+}
+
+/**
+ * @deprecated Knowledge scopes are scope-node IDs; use {@link knowledgeScopeIdsKey}. Kept only so
+ * published `@mastra/memory` versions that import it still load.
+ */
+export function knowledgeScopeKey(scope: string[]): string {
+  return canonicalizeKnowledgeScope(scope).join('\u001f');
+}
+
+/**
+ * @deprecated Knowledge scopes are scope-node IDs. Kept only so published `@mastra/memory` versions
+ * that import it still load.
+ */
+export function expandKnowledgeScope(context: string[], level: LegacyKnowledgeScopeLevel): string[] {
+  const maxOrder = LEGACY_SCOPE_ORDER[level];
+  const expanded = canonicalizeKnowledgeScope(context).filter(
+    entry => LEGACY_SCOPE_ORDER[entry.slice(0, entry.indexOf(':')) as LegacyKnowledgeScopeLevel] <= maxOrder,
+  );
+  if (!expanded.some(entry => entry.startsWith(`${level}:`))) {
+    throw new Error(`Cannot expand knowledge scope to ${level}: context has no ${level} entry`);
+  }
+  return expanded;
+}
