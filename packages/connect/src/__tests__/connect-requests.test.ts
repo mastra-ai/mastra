@@ -1,30 +1,40 @@
 import { createHmac } from 'node:crypto';
 
 import { Agent } from '@mastra/core/agent';
-import type { ChannelProvider } from '@mastra/core/channels';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { notifyChannelInstalled } from '../connect-requests.js';
+import { channels as connectChannels } from '../channels.js';
+import type { InstalledChannel } from '../connect-requests.js';
 import { tools } from '../tools.js';
+
+type InstallHook = (installation: InstalledChannel) => Promise<void>;
+const installHooks: InstallHook[] = [];
+vi.mock('../registry.js', async importOriginal => {
+  const connect = async () => ({ type: 'deep_link', url: 'https://t.me/bot?start=x', installationId: 'inst_1' });
+  const create = async ({ onInstall }: { onInstall: InstallHook }) => {
+    installHooks.push(onInstall);
+    return { provider: { id: 'telegram', getRoutes: () => [], connect } };
+  };
+  const registry = await importOriginal<typeof import('../registry.js')>();
+  return { ...registry, CHANNELS: [{ integrationId: 'telegram', create }] };
+});
 
 const SECRET = 'whsec_test';
 const context = { requestId: 'call_1', agentId: 'agent', threadId: 't1', resourceId: 'u1', integration: 'linear' };
 const event = {
   key: 'conn_1:call_1:active',
+  projectId: 'proj_1',
   type: 'connection.active',
   connection: { id: 'conn_1', integrationId: 'linear', status: 'active', accountLabel: 'acme' },
   error: null,
   context: { ...context, trace: { traceId: 'trace_1', spanId: 'span_1' } },
 };
 
-async function setup(
-  requestConnections = true,
-  { connections = [] as unknown[], channels = {} as Record<string, ChannelProvider> } = {},
-) {
+async function setup(requestConnections = true, { connections = [] as unknown[], storage = new InMemoryStore() } = {}) {
   const session = { connectionId: 'conn_1', connectUrl: 'https://c.test/s', expiresAt: '2030-01-01T00:00:00Z' };
   const catalog = { integrations: [{ id: 'linear', displayName: 'Linear', capabilities: {} }] };
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
@@ -32,23 +42,26 @@ async function setup(
       init?.method === 'POST' ? session : String(input).endsWith('/v2/integrations') ? catalog : { connections },
     ),
   );
+  const client = { accessToken: 'tok', baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch };
   const resolver = tools({
     projectId: 'proj_1',
     providers: ['linear'],
-    client: { accessToken: 'tok', baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+    client,
     ...(requestConnections ? { requestConnections: { allow: () => true, channels: ['telegram'] } } : {}),
   });
   if (!requestConnections) return { resolver, fetchMock };
   const agent = new Agent({ id: 'agent', name: 'a', instructions: 'x', model: createMockModel({ mockText: 'ok' }) });
   const provider = resolver.signalProvider();
   provider.connect(agent);
-  const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), channels, logger: false });
+  const channels = await connectChannels({ projectId: 'proj_1', providers: ['telegram'], client });
+  const install = installHooks.at(-1)!;
+  const mastra = new Mastra({ agents: { agent }, storage, channels, logger: false });
   provider.__registerMastra(mastra);
   const thread = { id: 't1', resourceId: 'u1', title: '', createdAt: new Date(), updatedAt: new Date() };
   await (await mastra.getStorage()!.getStore('memory'))!.saveThread({ thread });
   const app = new Hono();
   for (const route of resolver.routes()) app.on(route.method, route.path, route.handler as never);
-  return { resolver, fetchMock, agent, provider, mastra, app };
+  return { resolver, fetchMock, agent, provider, mastra, app, install };
 }
 
 function sign(body: string, t = Math.floor(Date.now() / 1000)) {
@@ -57,11 +70,8 @@ function sign(body: string, t = Math.floor(Date.now() / 1000)) {
 
 function post(app: Hono, payload: unknown, signature?: string) {
   const body = JSON.stringify(payload);
-  return app.request('/connect/webhook', {
-    method: 'POST',
-    body,
-    headers: { 'x-mastra-signature': signature ?? sign(body) },
-  });
+  const headers = { 'x-mastra-signature': signature ?? sign(body) };
+  return app.request('/connect/webhook', { method: 'POST', body, headers });
 }
 
 async function connectTool(resolver: Awaited<ReturnType<typeof setup>>['resolver']) {
@@ -115,9 +125,10 @@ it('writes the request part and returns pending', async () => {
   );
 });
 
-it('wakes the thread nested under the tool span and dedupes the key across restarts', async () => {
+it('answers 503 when the wake fails, then wakes under the tool span and dedupes across restarts', async () => {
   const { resolver, agent, app, mastra } = await setup();
-  const stream = vi.spyOn(agent!, 'stream');
+  const stream = vi.spyOn(agent!, 'stream').mockRejectedValueOnce(new Error('model unavailable'));
+  expect((await post(app!, event)).status).toBe(503);
   const response = await post(app!, event);
   expect([response.status, await response.json()]).toEqual([200, { outcome: 'delivered' }]);
   await vi.waitFor(() => expect(stream).toHaveBeenCalled());
@@ -127,39 +138,21 @@ it('wakes the thread nested under the tool span and dedupes the key across resta
   expect(await restarted.deliver(event as never)).toBe('duplicate');
 });
 
-it('answers 503 when the wake fails and delivers the same key on retry', async () => {
-  const { agent, app } = await setup();
-  vi.spyOn(agent!, 'stream').mockRejectedValueOnce(new Error('model unavailable'));
-  expect((await post(app!, event)).status).toBe(503);
-  expect(await (await post(app!, event)).json()).toEqual({ outcome: 'delivered' });
-});
-
-it('wakes the thread when a requested channel install completes', async () => {
-  const telegram = {
-    id: 'telegram',
-    getRoutes: () => [],
-    listInstallations: async () => [],
-    connect: async () => ({ type: 'deep_link' as const, url: 'https://t.me/bot?start=x', installationId: 'inst_1' }),
-  };
-  const { resolver, agent, mastra } = await setup(true, {
-    connections: [{ id: 'conn_tg', integrationId: 'telegram', status: 'active' }],
-    channels: { telegram },
-  });
-  const stream = vi.spyOn(agent!, 'stream');
-  const custom = vi.fn();
-  const tool = await connectTool(resolver);
+it('wakes the thread once when the install finishes on another instance', async () => {
+  const storage = new InMemoryStore();
+  const connections = [{ id: 'conn_tg', integrationId: 'telegram', status: 'active' }];
+  const [hostA, hostB] = [await setup(true, { connections, storage }), await setup(true, { connections, storage })];
+  const [streamA, streamB] = [vi.spyOn(hostA.agent!, 'stream'), vi.spyOn(hostB.agent!, 'stream')];
+  const tool = await connectTool(hostA.resolver);
   const result = await tool.execute(
     { integration: 'telegram', reason: 'To message you there.' },
-    { mastra, writer: { custom }, agent: { ...context, toolCallId: 'call_1' } },
+    { mastra: hostA.mastra, writer: { custom: vi.fn() }, agent: { ...context, toolCallId: 'call_1' } },
   );
-  expect([result, custom.mock.calls[0]![0].data.connectUrl]).toEqual([
-    { status: 'pending' },
-    'https://t.me/bot?start=x',
-  ]);
-  notifyChannelInstalled('telegram', { id: 'inst_1', agentId: 'agent' });
-  await vi.waitFor(() => expect(stream).toHaveBeenCalled());
-  expect(stream.mock.calls[0]![0]).toMatchObject({
-    type: 'notification',
-    attributes: { connectRequestId: 'call_1', connectionId: 'inst_1', integration: 'telegram', outcome: 'connected' },
-  });
+  await hostA.resolver.disconnect();
+  await hostB.install({ id: 'inst_1', agentId: 'agent' });
+  await vi.waitFor(() => expect(streamB).toHaveBeenCalled());
+  const signals = streamB.mock.calls.map(([signal]) => signal as { id: string; attributes: { connectionId: string } });
+  const wakes = new Set(signals.map(signal => signal.id)).size;
+  expect(result).toEqual({ status: 'pending' });
+  expect([streamA.mock.calls.length, wakes, signals[0]!.attributes.connectionId]).toEqual([0, 1, 'inst_1']);
 });

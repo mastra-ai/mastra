@@ -10,7 +10,6 @@ import {
   CONNECT_INTEGRATION_TOOL,
   connectRoutes,
   ConnectSignalProvider,
-  listenForChannelInstalls,
 } from './connect-requests.js';
 import type { ConnectRequestHost, RequestConnectionsOptions } from './connect-requests.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
@@ -372,7 +371,8 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
         try {
           while (inflight) await inflight.catch(() => undefined);
           cache = undefined;
-          for (const poller of requestHost?.pollers ?? []) poller.abort();
+          for (const dispose of requestHost?.disposers ?? []) dispose();
+          requestHost?.disposers.clear();
           requestHost?.pendingInstalls.clear();
           const clients = Array.from(mcpClients.values(), entry => entry.client);
           mcpClients.clear();
@@ -438,7 +438,7 @@ function createRequestHost(
       'MASTRA_CONNECT_WEBHOOK_URL is set without MASTRA_CONNECT_WEBHOOK_SECRET, so Platform webhooks could not be verified.',
     );
   }
-  const host: ConnectRequestHost = {
+  return {
     client,
     projectId,
     allow: requestConnections.allow,
@@ -447,11 +447,10 @@ function createRequestHost(
     integrations,
     channels,
     pendingInstalls: new Map(),
-    pollers: new Set(),
+    reconciling: new Set(),
+    disposers: new Set(),
     ...snapshot,
   };
-  if (channels.length > 0) listenForChannelInstalls(host);
-  return host;
 }
 
 /**

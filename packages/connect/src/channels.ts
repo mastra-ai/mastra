@@ -385,6 +385,7 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   channelRefreshers.add(refresh);
   invocable.disconnect = async (): Promise<void> => {
     cache = undefined;
+    channelRefreshers.delete(refresh);
   };
   return invocable;
 }

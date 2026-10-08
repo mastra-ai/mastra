@@ -8,6 +8,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import { WebhookSignalProvider } from '@mastra/core/signals';
+import type { ChannelConfig, ChannelsStorage } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -22,8 +23,8 @@ const CONNECT_DONE_PATH = '/connect/done';
 
 const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 const POLL_INTERVAL_MS = 2_000;
-const IDLE_CHECK_MS = 250;
-const IDLE_WAIT_MS = 8_000;
+const REFRESH_WAIT_MS = 3_000;
+const MAX_WEBHOOK_BYTES = 64 * 1024;
 const CHANNEL_REQUEST_TTL_MS = 15 * 60_000;
 
 export type ConnectRequestData = {
@@ -64,6 +65,7 @@ export interface RequestConnectionsOptions {
 
 const connectEventSchema = z.object({
   key: z.string(),
+  projectId: z.string(),
   type: z.enum(['connection.active', 'connection.failed']),
   connection: z.object({ id: z.string(), integrationId: z.string(), accountLabel: z.string().nullish() }),
   error: z.object({ code: z.string() }).nullish(),
@@ -79,7 +81,10 @@ const connectEventSchema = z.object({
 
 export type ConnectEvent = z.infer<typeof connectEventSchema>;
 
-type PendingInstall = { provider: ConnectSignalProvider; context: ConnectEvent['context']; expiresAt: number };
+const pendingInstallSchema = z.object({
+  requests: z.array(z.object({ context: connectEventSchema.shape.context, expiresAt: z.number() })),
+});
+type PendingStore = Pick<ChannelsStorage, 'getConfig' | 'saveConfig' | 'deleteConfig'>;
 
 export interface ConnectRequestHost {
   client: ResolvedClient;
@@ -89,8 +94,9 @@ export interface ConnectRequestHost {
   webhookSecret: string | undefined;
   integrations: string[];
   channels: string[];
-  pendingInstalls: Map<string, PendingInstall>;
-  pollers: Set<AbortController>;
+  pendingInstalls: Map<string, ChannelConfig>;
+  reconciling: Set<string>;
+  disposers: Set<() => void>;
   refresh(): Promise<unknown>;
   catalog(): IntegrationCatalogEntry[];
 }
@@ -134,22 +140,33 @@ const connectProviders = new Map<string, ConnectSignalProvider>();
 
 export type InstalledChannel = { id: string; agentId: string };
 
-const channelInstallListeners = new Set<(platform: string, installation: InstalledChannel) => void>();
 export const channelRefreshers = new Set<() => Promise<Record<string, ChannelProvider>>>();
 
 export function notifyChannelInstalled(platform: string, installation: InstalledChannel): void {
-  for (const listener of channelInstallListeners) listener(platform, installation);
+  void connectProviders.get(installation.agentId)?.completeInstall(platform, installation.id);
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function waitForIdleThread(agent: Agent<any, any, any, any>, target: { resourceId: string; threadId: string }) {
-  const deadline = Date.now() + IDLE_WAIT_MS;
-  while (agent.getActiveThreadRunId(target)) {
-    if (Date.now() > deadline) return false;
-    await sleep(IDLE_CHECK_MS);
+const pendingKey = (installationId: string) => `mastra-connect:pending:${installationId}`;
+
+async function pendingStore(
+  host: ConnectRequestHost,
+  mastra: Pick<Mastra, 'getStorage'> | undefined,
+  warn = false,
+): Promise<PendingStore> {
+  const store = await mastra?.getStorage()?.getStore('channels');
+  if (store) return store;
+  if (warn) {
+    console.warn(
+      '[@mastra/connect] No channels storage domain: a channel install that finishes on another instance will not wake the thread.',
+    );
   }
-  return true;
+  return {
+    getConfig: async key => host.pendingInstalls.get(key) ?? null,
+    saveConfig: async config => void host.pendingInstalls.set(config.platform, config),
+    deleteConfig: async key => void host.pendingInstalls.delete(key),
+  };
 }
 
 export class ConnectSignalProvider extends WebhookSignalProvider {
@@ -165,6 +182,33 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
   connect(agent: Agent<any, any, any, any>): void {
     super.connect(agent);
     connectProviders.set(agent.id, this);
+    this.#host.disposers.add(() => {
+      if (connectProviders.get(agent.id) === this) connectProviders.delete(agent.id);
+    });
+  }
+
+  async completeInstall(platform: string, installationId: string): Promise<void> {
+    try {
+      const store = await pendingStore(this.#host, this.mastra);
+      const pending = await store.getConfig(pendingKey(installationId));
+      if (!pending) return;
+      await store.deleteConfig(pendingKey(installationId));
+      for (const { context, expiresAt } of pendingInstallSchema.parse(pending.data).requests) {
+        const event: ConnectEvent = {
+          key: `${installationId}:${context.requestId}:active`,
+          projectId: this.#host.projectId,
+          type: 'connection.active',
+          connection: { id: installationId, integrationId: platform },
+          error: null,
+          context,
+        };
+        void pollUntil(this.#host, expiresAt, async () => !retryable(await this.deliver(event)));
+      }
+    } catch (error) {
+      console.warn(
+        `[@mastra/connect] Could not finish the ${platform} install: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   async deliver(event: ConnectEvent): Promise<DeliverOutcome> {
@@ -188,7 +232,12 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
   async #wake(event: ConnectEvent): Promise<DeliverOutcome> {
     const { context, connection } = event;
     const target = { resourceId: context.resourceId, threadId: context.threadId };
-    if (![...this.#host.integrations, ...this.#host.channels].includes(context.integration)) return 'rejected';
+    if (
+      event.projectId !== this.#host.projectId ||
+      ![...this.#host.integrations, ...this.#host.channels].includes(context.integration)
+    ) {
+      return 'rejected';
+    }
     const storage = this.mastra?.getStorage();
     const notifications = await storage?.getStore('notifications');
     const memory = await storage?.getStore('memory');
@@ -205,8 +254,8 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
 
     const agent = this.agent;
     if (!agent) throw new Error('The connect signal provider is not connected to an agent.');
-    await this.#host.refresh();
-    if (!(await waitForIdleThread(agent, target))) return 'failed';
+    if (agent.getActiveThreadRunId(target)) return 'failed';
+    await Promise.race([this.#host.refresh().catch(() => undefined), sleep(REFRESH_WAIT_MS)]);
 
     const outcome = event.type === 'connection.active' ? 'connected' : 'failed';
     const name = displayNameOf(this.#host, context.integration);
@@ -254,35 +303,31 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
   }
 }
 
-export function pollUntil(host: ConnectRequestHost, deadline: number, step: () => Promise<boolean>): void {
+function pollUntil(host: ConnectRequestHost, deadline: number, step: () => Promise<boolean>): Promise<void> {
   const controller = new AbortController();
-  host.pollers.add(controller);
-  void runUntraced(async () => {
+  const stop = () => controller.abort();
+  host.disposers.add(stop);
+  return runUntraced(async () => {
     while (!controller.signal.aborted && Date.now() < deadline) {
       if (await step().catch(() => false)) break;
       await sleep(POLL_INTERVAL_MS);
     }
-    host.pollers.delete(controller);
+    host.disposers.delete(stop);
   });
 }
 
 const retryable = (outcome: DeliverOutcome) => outcome === 'failed' || outcome === 'in_flight';
 
-export function listenForChannelInstalls(host: ConnectRequestHost): void {
-  channelInstallListeners.add((platform, installation) => {
-    const key = `${platform}:${installation.agentId}`;
-    const pending = host.pendingInstalls.get(key);
-    if (!pending || pending.expiresAt < Date.now()) return;
-    host.pendingInstalls.delete(key);
-    const event: ConnectEvent = {
-      key: `${installation.id}:${pending.context.requestId}:active`,
-      type: 'connection.active',
-      connection: { id: installation.id, integrationId: platform },
-      error: null,
-      context: pending.context,
-    };
-    pollUntil(host, pending.expiresAt, async () => !retryable(await pending.provider.deliver(event)));
-  });
+async function readCappedBody(request: Request): Promise<string | undefined> {
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_WEBHOOK_BYTES) return undefined;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of request.body ?? []) {
+    size += chunk.byteLength;
+    if (size > MAX_WEBHOOK_BYTES) return undefined;
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 const DONE_PAGE =
@@ -294,7 +339,8 @@ export function connectRoutes(secret: string | undefined): ApiRoute[] {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const rawBody = await c.req.text();
+        const rawBody = await readCappedBody(c.req.raw);
+        if (rawBody === undefined) return c.json({ error: 'payload_too_large' }, 413);
         if (!secret || !verifyConnectSignature(rawBody, c.req.header('x-mastra-signature'), secret)) {
           return c.json({ error: 'invalid_signature' }, 401);
         }
@@ -418,7 +464,7 @@ export function buildConnectIntegrationTool(host: ConnectRequestHost, connection
 async function requestChannelInstall(
   host: ConnectRequestHost,
   provider: ConnectSignalProvider,
-  mastra: Pick<Mastra, 'resolveChannels'>,
+  mastra: Pick<Mastra, 'resolveChannels' | 'getStorage'>,
   context: ConnectEvent['context'],
   writeRequest: (
     target: Pick<ConnectRequestData, 'connectionId' | 'connectUrl' | 'expiresAt'>,
@@ -444,17 +490,24 @@ async function requestChannelInstall(
   if (result.type === 'immediate') return { status: 'connected' };
 
   const expiresAt = Date.now() + CHANNEL_REQUEST_TTL_MS;
-  const key = `${integration}:${agentId}`;
-  host.pendingInstalls.set(key, { provider, context, expiresAt });
+  const { installationId } = result;
+  const key = pendingKey(installationId);
+  const store = await pendingStore(host, mastra, true);
+  const previous = pendingInstallSchema.safeParse((await store.getConfig(key))?.data).data?.requests ?? [];
+  const requests = [...previous.filter(request => request.expiresAt > Date.now()), { context, expiresAt }];
+  await store.saveConfig({ platform: key, data: { requests }, updatedAt: new Date() });
   const reconcile = channel.reconcileInstallation?.bind(channel);
-  if (integration === 'discord' && reconcile) {
-    pollUntil(host, expiresAt, async () => {
-      await reconcile(agentId);
-      return !host.pendingInstalls.has(key);
-    });
+  if (integration === 'discord' && reconcile && !host.reconciling.has(installationId)) {
+    host.reconciling.add(installationId);
+    void pollUntil(host, expiresAt, async () => {
+      if (!(await store.getConfig(key))) return true;
+      if ((await reconcile(agentId))?.status !== 'active') return false;
+      await provider.completeInstall(integration, installationId);
+      return true;
+    }).finally(() => host.reconciling.delete(installationId));
   }
   return writeRequest({
-    connectionId: result.installationId,
+    connectionId: installationId,
     connectUrl: result.type === 'oauth' ? result.authorizationUrl : result.url,
     expiresAt: new Date(expiresAt).toISOString(),
   });
@@ -466,7 +519,7 @@ function pollForConnection(
   session: { connectionId: string; expiresAt: string },
   context: ConnectEvent['context'],
 ): void {
-  pollUntil(host, Date.parse(session.expiresAt), async () => {
+  void pollUntil(host, Date.parse(session.expiresAt), async () => {
     const connection = (await listProjectConnections(host.client, host.projectId)).find(
       candidate => candidate.id === session.connectionId,
     );
@@ -474,6 +527,7 @@ function pollForConnection(
     if (!connection || !outcome) return false;
     const delivered = await provider.deliver({
       key: `${connection.id}:${context.requestId}:${outcome}`,
+      projectId: host.projectId,
       type: `connection.${outcome}`,
       connection,
       error: null,
