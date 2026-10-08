@@ -145,6 +145,15 @@ export const nodePinnedTransport: PinnedTransport = ({ url, hostname, address, t
       response => {
         const chunks: Buffer[] = [];
         let received = 0;
+        const fail = () => {
+          clearTimeout(deadline);
+          cleanupAbort();
+          reject(new AcquisitionError('HTTP_INCOMPLETE_RESPONSE', true));
+        };
+        response.once('error', fail);
+        response.once('close', () => {
+          if (!response.complete) fail();
+        });
         response.on('data', chunk => {
           received += chunk.length;
           if (received > SOURCE_LIMITS.maxHtmlBytes) {
@@ -154,7 +163,12 @@ export const nodePinnedTransport: PinnedTransport = ({ url, hostname, address, t
           chunks.push(Buffer.from(chunk));
         });
         response.on('end', () => {
+          if (!response.complete) {
+            fail();
+            return;
+          }
           clearTimeout(deadline);
+          cleanupAbort();
           resolve({ status: response.statusCode ?? 0, headers: response.headers, body: Buffer.concat(chunks) });
         });
       },

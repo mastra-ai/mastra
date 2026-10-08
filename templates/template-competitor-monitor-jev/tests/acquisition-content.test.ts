@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import https from 'node:https';
+import { createServer } from 'node:http';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -151,6 +152,7 @@ describe('acquisition and semantic content', () => {
         end: () => {
           const response = Object.assign(new EventEmitter(), {
             statusCode: 200,
+            complete: true,
             headers: { 'content-type': 'text/html' },
           });
           callback(response);
@@ -340,4 +342,52 @@ describe('acquisition and semantic content', () => {
     });
     expect(input.sources).toHaveLength(1);
   });
+});
+
+it.each([false, true])('settles a real HTTP response when complete=%s and removes abort listeners', async complete => {
+  const body = '<main>Public pricing</main>';
+  const server = createServer((_request, response) => {
+    response.writeHead(200, {
+      'Content-Type': 'text/html',
+      'Content-Length': complete ? Buffer.byteLength(body) : 5000,
+    });
+    response.write(body);
+    if (complete) response.end();
+    else setTimeout(() => response.destroy(), 10);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('TEST_SERVER_ADDRESS');
+  const controller = new AbortController();
+  const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const result = await Promise.race([
+      nodePinnedTransport({
+        url: new URL(`http://transport.example:${address.port}/`),
+        hostname: 'transport.example',
+        address: { address: '127.0.0.1', family: 4 },
+        timeoutMs: 200,
+        abortSignal: controller.signal,
+      }).then(
+        response => ({ response }),
+        error => ({ error }),
+      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('TRANSPORT_DID_NOT_SETTLE')), 1000);
+      }),
+    ]);
+    if (complete) {
+      expect(result).toHaveProperty('response.status', 200);
+      expect('response' in result && Buffer.from(result.response.body).toString()).toBe(body);
+    } else {
+      expect(result).toMatchObject({ error: { code: 'HTTP_INCOMPLETE_RESPONSE', retryable: true } });
+    }
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  } finally {
+    clearTimeout(timer);
+    removeListener.mockRestore();
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
 });
