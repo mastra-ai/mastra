@@ -4431,12 +4431,14 @@ export class Session<TState = unknown> {
     tracingContext,
     tracingOptions,
     untilIdle,
+    abortSignal,
     includeStreamOptions = true,
   }: {
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
+    abortSignal?: AbortSignal;
     includeStreamOptions?: boolean;
   }) {
     const threadId = await this.thread.ensureId({ requestContext });
@@ -4451,6 +4453,7 @@ export class Session<TState = unknown> {
       tracingContext,
       tracingOptions,
       untilIdle,
+      abortSignal,
     });
 
     return {
@@ -4520,6 +4523,10 @@ export class Session<TState = unknown> {
       requestContext: requestContextInput,
       tracingContext,
       tracingOptions,
+      // A message queued behind an active run must not inherit that run's abort
+      // signal: aborting the active run would otherwise start the queued run
+      // already aborted, silently dropping it.
+      abortSignal: wasActive ? new AbortController().signal : undefined,
     });
     const messageInput = this.createMessageInput({ content, files });
     const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));

@@ -1,5 +1,5 @@
 import type { WriteStream } from 'node:fs';
-import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
@@ -12,20 +12,31 @@ export class FileTransport extends LoggerTransport {
     this.path = path;
 
     if (!existsSync(this.path)) {
-      console.info(this.path);
       throw new Error('File path does not exist');
     }
 
+    if (!statSync(this.path).isFile()) {
+      throw new Error(`File path must point to a file: ${this.path}`);
+    }
+
     this.fileStream = createWriteStream(this.path, { flags: 'a' });
+    // Without a listener, the file stream's 'error' event would crash the process.
+    // Write failures already reach the transport through the write callback, so only
+    // forward errors that have not destroyed the transport yet (e.g. open failures).
+    this.fileStream.on('error', error => {
+      if (!this.destroyed) this.destroy(error);
+    });
   }
 
-  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk: any) => void) {
+  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk?: any) => void) {
     try {
-      this.fileStream.write(chunk);
+      this.fileStream.write(chunk, error => {
+        if (error) callback(error);
+        else callback(null, chunk);
+      });
     } catch (error) {
-      console.error('Error parsing log entry:', error);
+      callback(error as Error);
     }
-    callback(null, chunk);
   }
 
   _flush(callback: Function) {

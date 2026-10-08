@@ -129,6 +129,34 @@ const restartedResult = await run.restart()
       },
     ],
   },
+  {
+    name: 'outputOptions',
+    type: 'OutputOptions',
+    isOptional: true,
+    description: 'Options for output configuration.',
+    properties: [
+      {
+        parameters: [
+          {
+            name: 'includeState',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Whether to include the workflow run state in the result.',
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
+            name: 'includeResumeLabels',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Whether to include resume labels in the result.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
