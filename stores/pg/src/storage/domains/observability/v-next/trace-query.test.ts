@@ -17,11 +17,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DbClient } from '../../../client';
 import {
+  compactJsonbText,
   compilePostgresThreadQuery,
   compilePostgresTraceQuery,
   compilePostgresTraceQueryValues,
   queryThreads,
   queryTraces,
+  TRACE_STATUS_SQL,
 } from './trace-query';
 import { ObservabilityStoragePostgresVNext } from '.';
 
@@ -45,13 +47,41 @@ describe('Postgres advanced trace query', () => {
     if (wasEnabled) coreFeatures.add('observability-delta-polling');
     vi.restoreAllMocks();
   });
-  it('projects root output and error only when selected', () => {
+  it('builds root output and error previews only when selected', () => {
     const plain = compilePostgresTraceQuery('custom', plan());
     const selected = compilePostgresTraceQuery('custom', plan({ select: ['outputPreview', 'errorPreview'] }));
-    expect(plain.text).not.toContain('AS "selectedError"');
-    expect(plain.text).not.toContain('AS "output"');
-    expect(selected.text).toContain('r."output" AS "output"');
-    expect(selected.text).toContain('r."error" AS "selectedError"');
+    expect(plain.text).toContain('AS "inputPreview"');
+    expect(plain.text).not.toContain('AS "outputPreview"');
+    expect(plain.text).not.toContain('AS "errorPreview"');
+    expect(selected.text).toContain('AS "outputPreview"');
+    expect(selected.text).toContain('AS "errorPreview"');
+  });
+
+  it.each([
+    ['keyset', {}],
+    ['page', { pagination: { page: 1, perPage: 10 } }],
+  ])('reads root payloads only for the page rows in %s mode', (_mode, input) => {
+    const compiled = compilePostgresTraceQuery('custom', plan({ ...input, select: ['outputPreview', 'errorPreview'] }));
+    expectPayloadsOnlyForPageRows(compiled.text, 'custom');
+    expect(compiled.text).toContain('ORDER BY page."startedAt" DESC, page."traceId" ASC');
+  });
+
+  it('keeps count queries on the narrow candidates', () => {
+    const compiled = compilePostgresTraceQuery('custom', plan({ pagination: {} }), 'count');
+    expect(compiled.text).not.toContain('page AS (');
+    expect(compiled.text).not.toContain('r."input"');
+    expect(compiled.text).toContain('SELECT COUNT(*)::text AS count\nFROM candidates');
+  });
+
+  it('removes the spaces jsonb text adds after colons and commas outside strings', () => {
+    const value = { b: [1, 2, { c: null }], a: 'x, y: z', 'k"e, y': 'back\\slash", tab\t', e: {}, f: [] };
+    // jsonb's own text output for `value` (keys in jsonb order).
+    const jsonbText =
+      '{"a": "x, y: z", "b": [1, 2, {"c": null}], "e": {}, "f": [], "k\\"e, y": "back\\\\slash\\", tab\\t"}';
+    expect(JSON.parse(jsonbText)).toEqual(value);
+    expect(compactJsonbText(jsonbText)).toBe(JSON.stringify(JSON.parse(jsonbText)));
+    // A cut can end inside a string or right after an escape.
+    expect(compactJsonbText('{"a": "x, y\\')).toBe('{"a":"x, y\\');
   });
   it('rejects invalid trace-query timeout configuration at construction', () => {
     expect(
@@ -632,7 +662,7 @@ describe('Postgres advanced trace query', () => {
       ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
       entityId: null,
       metadata: null,
-      input: null,
+      inputPreview: null,
     };
     const any = vi.fn().mockResolvedValue([row]);
     const query = vi.fn();
@@ -709,6 +739,26 @@ describe('Postgres advanced trace query', () => {
   });
 });
 
+/** Asserts that sorting and limiting see no payload columns and only the page rows read them. */
+function expectPayloadsOnlyForPageRows(text: string, schema: string) {
+  // The status column only tests `error` for NULL, which reads no payload.
+  const candidates = text
+    .slice(text.indexOf('candidates AS ('), text.indexOf('page AS ('))
+    .replace(TRACE_STATUS_SQL, '"status"');
+  const page = text.slice(text.indexOf('page AS ('), text.indexOf('SELECT page.*'));
+  for (const payload of ['input', 'output', 'error', 'metadataRaw']) {
+    expect(candidates).not.toContain(`r."${payload}"`);
+    expect(page).not.toContain(`"${payload}"`);
+  }
+  expect(page).toContain('FROM candidates');
+  expect(page).toContain('LIMIT $');
+  expect(text).toContain(`FROM page
+JOIN "${schema}"."mastra_span_events" r
+  ON r."traceId" = page."traceId" AND r."spanId" = page."rootSpanId" AND r."endedAt" = page."endedAt"`);
+  expect(text).toContain('r."metadataRaw" AS "metadata"');
+  expect(text).toContain('AS "inputPreview"');
+}
+
 function queryCursor(plan: TrustedTraceQueryPlan, values: { sortValue: string; traceId: string }): string {
   if (plan.result !== 'traces') throw new Error('Expected a trace plan');
   return encodeTraceQueryCursor(plan, { result: 'traces', ...values });
@@ -722,7 +772,7 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: { customer: { id: 'customer-1' }, count: 2 },
-    input: { messages: [{ role: 'user', content: 'Help with my order' }] },
+    inputPreview: 'tHelp with my order',
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),
@@ -785,6 +835,8 @@ describe('Postgres advanced trace delta polling', () => {
     expect(compiled.text).toContain('(r."xactId", r."cursorId") > ($3::xid8, $4::bigint)');
     expect(compiled.text).toContain('"xactId" < $5::xid8');
     expect(compiled.text).toContain('ORDER BY "xactId" ASC, "cursorId" ASC');
+    expectPayloadsOnlyForPageRows(compiled.text, 'public');
+    expect(compiled.text).toContain('ORDER BY page."xactId" ASC, page."cursorId" ASC');
     expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, '100', '4', '200', 2]);
   });
 
