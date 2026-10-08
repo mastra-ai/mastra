@@ -4,7 +4,12 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible, knowledgeVisibleScopeKeys } from '@mastra/core/storage';
+import {
+  canonicalizeKnowledgeScope,
+  isKnowledgeScopeVisible,
+  knowledgeScopeKey,
+  knowledgeVisibleScopeKeys,
+} from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -237,7 +242,7 @@ export class KnowledgeSemanticIndexCoordinator {
       record_id: document.recordId,
       name: document.name,
       scope: [...document.scope],
-      scope_key: document.scope.join('\u001f'),
+      scope_key: knowledgeScopeKey(document.scope),
       text: document.text,
     };
     for (const entry of document.scope) {
