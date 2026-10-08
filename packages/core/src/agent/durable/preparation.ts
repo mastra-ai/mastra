@@ -687,6 +687,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // only output guidance. Withhold it there and let the generated schema instruction stand.
         instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
+        hasStructuringModel: so.model ? true : undefined,
         // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
         // live Zod/standard-schema instance does not survive that round trip.
         schema: asJsonSchema(structuredOutputSchema),

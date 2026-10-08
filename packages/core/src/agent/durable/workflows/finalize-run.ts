@@ -7,6 +7,7 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
+import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
@@ -189,6 +190,23 @@ export async function runDurableFinishSideEffects({
   // SaveQueueManager may reclassify flushed response messages as persisted
   // memory, so resolve the final response text before persistence runs.
   const outputText = resolveOutputText(messageList);
+
+  // The caller-side MastraModelOutput only sees the finish event after this step has
+  // persisted messages, and remote/recovered runs have no caller at all. Attach the
+  // validated object here so the saved assistant message matches plain Agent output.
+  const structuredOutput = initData.options?.structuredOutput;
+  if (structuredOutput?.schema && !structuredOutput.hasStructuringModel && outputText) {
+    const result = await createOutputHandler({ schema: structuredOutput.schema }).validateAndTransformFinal(outputText);
+    const lastAssistantMessage = messageList.get.response
+      .db()
+      .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    if (result.success && lastAssistantMessage) {
+      lastAssistantMessage.content.metadata = {
+        ...lastAssistantMessage.content.metadata,
+        structuredOutput: result.value,
+      };
+    }
+  }
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
