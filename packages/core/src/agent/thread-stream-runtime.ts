@@ -586,14 +586,20 @@ export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
   #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
-  #threadlessRunFinalizer = new FinalizationRegistry<{
-    state: AgentThreadRuntimeState;
-    runId: string;
-    token: object;
-  }>(({ state, runId, token }) => {
-    if (state.preparedRunsById.get(runId)?.finalizerToken !== token) return;
-    this.#cleanupPreparedRun(state, runId);
-  });
+  // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
+  // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
+  // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
+  #threadlessRunFinalizer =
+    typeof FinalizationRegistry === 'function'
+      ? new FinalizationRegistry<{
+          state: AgentThreadRuntimeState;
+          runId: string;
+          token: object;
+        }>(({ state, runId, token }) => {
+          if (state.preparedRunsById.get(runId)?.finalizerToken !== token) return;
+          this.#cleanupPreparedRun(state, runId);
+        })
+      : undefined;
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
@@ -2652,7 +2658,7 @@ export class AgentThreadStreamRuntime {
     state.streamSeqByRunId.clear();
     state.watchedThreadStreamIds.clear();
     for (const preparedRun of state.preparedRunsById.values()) {
-      if (preparedRun.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
+      if (preparedRun.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
     }
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
@@ -2664,12 +2670,12 @@ export class AgentThreadStreamRuntime {
     if (expectedPreparedRun && preparedRun !== expectedPreparedRun) {
       expectedPreparedRun.cleanup();
       if (expectedPreparedRun.finalizerToken) {
-        this.#threadlessRunFinalizer.unregister(expectedPreparedRun.finalizerToken);
+        this.#threadlessRunFinalizer?.unregister(expectedPreparedRun.finalizerToken);
       }
       return;
     }
     preparedRun?.cleanup();
-    if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
+    if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
     state.abortedRunIds.delete(runId);
   }
@@ -2948,7 +2954,7 @@ export class AgentThreadStreamRuntime {
         : undefined;
       if (preparedRun) {
         preparedRun.finalizerToken = finalizerToken;
-        this.#threadlessRunFinalizer.register(output, { state, runId, token: finalizerToken }, finalizerToken);
+        this.#threadlessRunFinalizer?.register(output, { state, runId, token: finalizerToken }, finalizerToken);
         void Promise.allSettled([output._waitUntilFinished()]).then(() => {
           this.#cleanupPreparedRun(state, runId, preparedRun);
         });
