@@ -991,9 +991,6 @@ importers:
 
   browser/agent-browser:
     dependencies:
-      agent-browser:
-        specifier: 0.38.1
-        version: 0.38.1
       playwright-core:
         specifier: ^1.61.1
         version: 1.61.1
@@ -23149,11 +23146,6 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
-
-  agent-browser@0.38.1:
-    resolution: {integrity: sha512-k58FCz0yUOCANoNkMiqJe+H2y6r6sUZazqXsWF+MYq1iRC42PjtLcBoag6SSTOD/FRQppvPDvE5HDYEhclvnhw==}
-    engines: {node: '>=24.0.0', pnpm: '>=11.0.0'}
-    hasBin: true
 
   agentfs-sdk@0.6.4:
     resolution: {integrity: sha512-exhzph6u+jZlh2V24O0Af9j9iweNYQ4Yb7M1SEYKE9ljxB/kKVaiaumK2zsTW/Pmi8kqPSezGvqqpi4+vkZTfQ==}
@@ -47982,8 +47974,6 @@ snapshots:
       - supports-color
 
   agent-base@7.1.4: {}
-
-  agent-browser@0.38.1: {}
 
   agentfs-sdk@0.6.4(just-bash@2.14.5(supports-color@10.2.2)):
     dependencies:

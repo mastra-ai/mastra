@@ -1,7 +1,7 @@
 {
   "name": "@mastra/agent-browser",
   "version": "0.5.3",
-  "description": "Browser automation for Mastra agents using agent-browser",
+  "description": "Browser automation for Mastra agents using Playwright",
   "type": "module",
   "files": [
     "dist"
@@ -30,7 +30,6 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.38.1",
     "playwright-core": "^1.61.1"
   },
   "devDependencies": {

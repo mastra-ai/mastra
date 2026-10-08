@@ -1,39 +1,54 @@
-import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { accessSync, chmodSync, constants, existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { arch, platform } from 'node:os';
-import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 
 import { chromium } from 'playwright-core';
-import type { Browser, BrowserContext, CDPSession, Locator, Page } from 'playwright-core';
+import type {
+  Browser,
+  BrowserContext,
+  BrowserContextOptions,
+  CDPSession,
+  LaunchOptions,
+  Locator,
+  Page,
+} from 'playwright-core';
 
 /**
  * Options for {@link BrowserManager.launch}.
  */
 export interface BrowserLaunchOptions {
+  /** Run without a visible window. Defaults to `true`. */
   headless?: boolean;
+  /**
+   * Page viewport. `null` disables viewport emulation (the window size wins).
+   * Defaults to 1280x720 unless `args` sets the window size.
+   */
   viewport?: { width: number; height: number } | null;
   /** Extra Chrome launch args. */
   args?: string[];
-  /** Chrome profile name or directory (persistent user data). */
+  /** Chrome user data directory (persistent cookies, storage and extensions). */
   profile?: string;
+  /** Path to the Chrome/Chromium executable. */
   executablePath?: string;
-  /** Path to a Playwright-style storage state JSON file. */
+  /**
+   * Playwright browser channel such as `'chrome'`, `'chrome-beta'` or `'msedge'`.
+   * Ignored when `executablePath` is set.
+   */
+  channel?: string;
+  /** Path to a Playwright storage state JSON file. */
   storageState?: string;
   /** Connect to an existing browser instead of launching one. */
   cdpUrl?: string;
   /** Headers sent with the CDP websocket handshake (e.g. Authorization). */
   cdpHeaders?: Record<string, string>;
   userAgent?: string;
+  /** Proxy server URL, e.g. `http://proxy.example.com:8080`. */
   proxy?: string;
   ignoreHTTPSErrors?: boolean;
 }
 
+/** Element described by a snapshot ref. */
 export interface SnapshotRef {
   role: string;
   name?: string;
-  nth?: number;
 }
 
 export interface EnhancedSnapshot {
@@ -42,8 +57,11 @@ export interface EnhancedSnapshot {
 }
 
 export interface SnapshotOptions {
+  /** Only list interactive elements (buttons, links, inputs, ...), flattened. */
   interactive?: boolean;
+  /** Drop unnamed structural wrappers (generic, group, list, ...). */
   compact?: boolean;
+  /** Maximum depth of the accessibility tree. */
   depth?: number;
 }
 
@@ -58,84 +76,61 @@ export interface MouseEventInput {
   modifiers?: number;
 }
 
-interface CliResponse<T> {
-  success: boolean;
-  data: T | null;
-  error: string | null;
-}
+const CONNECT_TIMEOUT_MS = 60_000;
+const DEFAULT_VIEWPORT = { width: 1280, height: 720 };
 
-interface CliTab {
-  tabId: string;
-  active: boolean;
-  targetId: string;
-  url: string;
-}
+/** Message used when neither Playwright's Chromium nor an installed Chrome is available. */
+export const CHROME_NOT_FOUND_MESSAGE =
+  'Chrome executable not found. Install Google Chrome, run `npx playwright install chromium`, or set `executablePath`.';
 
-const CLI_TIMEOUT_MS = 60_000;
+/** Refs from Playwright's AI snapshot: `e12` on the page, `f1e3` inside the first iframe. */
+const REF_PATTERN = /^(?:f\d+)?e\d+$/;
 
-function getRequire(): NodeRequire {
-  // __filename exists in the CJS build; import.meta.url in the ESM build.
-  return createRequire(typeof __filename === 'string' ? __filename : import.meta.url);
-}
+const INTERACTIVE_ROLES = new Set([
+  'button',
+  'checkbox',
+  'combobox',
+  'link',
+  'listbox',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'radio',
+  'searchbox',
+  'slider',
+  'spinbutton',
+  'switch',
+  'tab',
+  'textbox',
+  'treeitem',
+]);
 
-let cachedCli: { command: string; prefixArgs: string[] } | undefined;
+const STRUCTURAL_ROLES = new Set([
+  'application',
+  'directory',
+  'document',
+  'generic',
+  'grid',
+  'group',
+  'list',
+  'menu',
+  'menubar',
+  'none',
+  'presentation',
+  'row',
+  'rowgroup',
+  'table',
+  'tablist',
+  'toolbar',
+  'tree',
+  'treegrid',
+]);
 
-/**
- * Locate the agent-browser CLI. Prefers the platform's native binary shipped in
- * the npm package and falls back to the package's node launcher.
- * `AGENT_BROWSER_CLI_PATH` overrides the lookup.
- */
-export function resolveAgentBrowserCli(): { command: string; prefixArgs: string[] } {
-  if (process.env.AGENT_BROWSER_CLI_PATH) {
-    return { command: process.env.AGENT_BROWSER_CLI_PATH, prefixArgs: [] };
-  }
-  if (cachedCli) return cachedCli;
-
-  const pkgDir = dirname(getRequire().resolve('agent-browser/package.json'));
-  const binDir = join(pkgDir, 'bin');
-  const os = platform();
-  const cpu = arch() === 'arm64' ? 'arm64' : 'x64';
-  const osKey = os === 'win32' ? 'win32' : os === 'darwin' ? 'darwin' : isMusl() ? 'linux-musl' : 'linux';
-  const native = join(binDir, `agent-browser-${osKey}-${cpu}${os === 'win32' ? '.exe' : ''}`);
-
-  if (existsSync(native)) {
-    if (os !== 'win32') {
-      try {
-        accessSync(native, constants.X_OK);
-      } catch {
-        try {
-          chmodSync(native, 0o755);
-        } catch {
-          // fall through to the node launcher below
-        }
-      }
-    }
-    try {
-      if (os !== 'win32') accessSync(native, constants.X_OK);
-      cachedCli = { command: native, prefixArgs: [] };
-      return cachedCli;
-    } catch {
-      // not executable
-    }
-  }
-
-  cachedCli = { command: process.execPath, prefixArgs: [join(binDir, 'agent-browser.js')] };
-  return cachedCli;
-}
-
-function isMusl(): boolean {
-  if (platform() !== 'linux') return false;
-  try {
-    const report = (process.report?.getReport?.() ?? {}) as { header?: { glibcVersionRuntime?: string } };
-    return !report.header?.glibcVersionRuntime;
-  } catch {
-    return existsSync('/lib/ld-musl-x86_64.so.1') || existsSync('/lib/ld-musl-aarch64.so.1');
-  }
-}
-
-function parseRef(arg: string): string | null {
+/** Normalize `e1`, `@e1`, `ref=e1` (and frame refs like `@f1e2`) to the bare ref. */
+export function parseRef(arg: string): string | null {
   const ref = arg.trim().replace(/^@/, '').replace(/^ref=/, '');
-  return /^e\d+$/.test(ref) ? ref : null;
+  return REF_PATTERN.test(ref) ? ref : null;
 }
 
 function normalizeCdpEndpoint(endpoint: string): string {
@@ -143,68 +138,185 @@ function normalizeCdpEndpoint(endpoint: string): string {
   return `http://127.0.0.1:${endpoint}`;
 }
 
+function expandHome(path: string): string {
+  return path === '~' || path.startsWith('~/') ? homedir() + path.slice(1) : path;
+}
+
+function resolveViewport(options: BrowserLaunchOptions): { width: number; height: number } | null {
+  if (options.viewport !== undefined) return options.viewport;
+  const sizedByArgs = options.args?.some(arg => arg === '--start-maximized' || arg.startsWith('--window-size='));
+  return sizedByArgs ? null : DEFAULT_VIEWPORT;
+}
+
+function isMissingExecutable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Executable doesn't exist") || /distribution '[^']+' is not found/.test(message);
+}
+
 /**
- * Browser session backed by the agent-browser CLI.
+ * Launch with Playwright's Chromium, falling back to an installed Google Chrome
+ * when Playwright's browsers aren't downloaded. An explicit `executablePath` or
+ * `channel` is used as-is.
+ */
+async function launchWithChromeFallback<T>(
+  launch: (options: LaunchOptions) => Promise<T>,
+  options: LaunchOptions,
+): Promise<T> {
+  if (options.executablePath || options.channel) return launch(options);
+  try {
+    return await launch(options);
+  } catch (error) {
+    if (!isMissingExecutable(error)) throw error;
+    try {
+      return await launch({ ...options, channel: 'chrome' });
+    } catch (fallbackError) {
+      if (!isMissingExecutable(fallbackError)) throw fallbackError;
+      throw new Error(CHROME_NOT_FOUND_MESSAGE, { cause: error });
+    }
+  }
+}
+
+interface SnapshotLine {
+  indent: number;
+  /** Line content without the `- ` marker and YAML quoting. */
+  text: string;
+  role?: string;
+  name?: string;
+  ref?: string;
+  /** Text after the element's attributes, e.g. a textbox value (`: v`). */
+  hasInlineText: boolean;
+}
+
+function unescapeName(raw: string): string {
+  try {
+    return JSON.parse(`"${raw}"`) as string;
+  } catch {
+    return raw;
+  }
+}
+
+function parseSnapshotLine(line: string): SnapshotLine | null {
+  const match = /^(\s*)- (.*)$/.exec(line);
+  if (!match) return null;
+  const indent = match[1]!.length;
+  let text = match[2]!;
+
+  // Playwright YAML-quotes entries that contain `:` or quotes:
+  //   - 'button "Say: \"hi\"" [ref=e2]'
+  //   - 'link "x: y" [ref=e3]':
+  if (text.startsWith("'")) {
+    let key = '';
+    let i = 1;
+    while (i < text.length) {
+      if (text[i] === "'") {
+        if (text[i + 1] === "'") {
+          key += "'";
+          i += 2;
+          continue;
+        }
+        break;
+      }
+      key += text[i++];
+    }
+    text = key + text.slice(i + 1);
+  }
+
+  const head = /^([a-z][\w-]*)(?: "((?:[^"\\]|\\.)*)")?(.*)$/.exec(text);
+  if (!head) return { indent, text, hasInlineText: false };
+  const rest = head[3]!;
+  const ref = /\[ref=((?:f\d+)?e\d+)\]/.exec(rest)?.[1];
+  return {
+    indent,
+    text,
+    role: head[1]!,
+    ...(head[2] !== undefined ? { name: unescapeName(head[2]) } : {}),
+    ...(ref ? { ref } : {}),
+    hasInlineText: /^\s*:\s*\S/.test(rest.replace(/\[[^\]]*\]/g, '')),
+  };
+}
+
+/**
+ * Filter a Playwright AI snapshot (`page.ariaSnapshot({ mode: 'ai' })`) and
+ * collect the refs it shows. Refs are kept exactly as Playwright assigned them,
+ * so `aria-ref=<ref>` resolves them, including refs inside iframes (`f1e2`).
+ */
+export function processAiSnapshot(tree: string, options: SnapshotOptions = {}): EnhancedSnapshot {
+  const refs: Record<string, SnapshotRef> = {};
+  const addRef = (line: SnapshotLine) => {
+    if (line.ref && line.role) {
+      refs[line.ref] = { role: line.role, ...(line.name ? { name: line.name } : {}) };
+    }
+  };
+
+  const lines = tree.split('\n').filter(line => line.trim() !== '');
+
+  if (options.interactive) {
+    const out: string[] = [];
+    for (const raw of lines) {
+      const line = parseSnapshotLine(raw);
+      if (!line?.ref || !line.role || !INTERACTIVE_ROLES.has(line.role)) continue;
+      addRef(line);
+      out.push(`- ${line.text.replace(/:\s*$/, '')}`);
+    }
+    return { tree: out.join('\n') || '(no interactive elements)', refs };
+  }
+
+  const out: string[] = [];
+  // Ancestors of the current line; dropped wrappers shift their children left.
+  const stack: Array<{ indent: number; dropped: boolean }> = [];
+  for (const raw of lines) {
+    const indent = /^\s*/.exec(raw)![0].length;
+    while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop();
+    const shift = stack.filter(entry => entry.dropped).length * 2;
+    const line = parseSnapshotLine(raw);
+
+    const drop =
+      !!options.compact &&
+      !!line?.role &&
+      STRUCTURAL_ROLES.has(line.role) &&
+      !line.name &&
+      !line.hasInlineText &&
+      !raw.includes('[cursor=pointer]');
+    stack.push({ indent, dropped: drop });
+    if (drop) continue;
+
+    if (line) addRef(line);
+    out.push(raw.slice(Math.min(shift, indent)));
+  }
+  return { tree: out.join('\n'), refs };
+}
+
+/**
+ * Browser session driven entirely by Playwright.
  *
- * The CLI launches and owns Chrome (binary discovery, profiles, storage state)
- * and produces the ref-annotated accessibility snapshots. Playwright attaches to
- * the same browser over CDP for page-level work: navigation, locators,
- * screencast and input injection.
+ * Local launches start Chrome as a child of this Node process (Playwright's
+ * Chromium, or an installed Google Chrome as a fallback), so the browser never
+ * outlives the process. With `cdpUrl` the manager attaches to an existing
+ * browser and `close()` only disconnects from it.
+ *
+ * Snapshots come from Playwright's AI aria snapshot; refs resolve through
+ * Playwright's `aria-ref` selector, including elements inside iframes.
  */
 export class BrowserManager {
-  readonly session = `mastra-${process.pid}-${randomUUID().slice(0, 8)}`;
-
   private browser: Browser | null = null;
   private contexts: BrowserContext[] = [];
   private pages: Page[] = [];
   private activePageIndex = 0;
   private cdpSession: CDPSession | null = null;
   private refMap: Record<string, SnapshotRef> = {};
-  /** 'role' refs come from the CLI snapshot; 'aria' refs from Playwright's AI snapshot. */
-  private refMode: 'role' | 'aria' = 'role';
+  /** Page the current {@link refMap} was captured on. */
+  private snapshotPage: Page | null = null;
   private ownsBrowser = false;
-  private cliAttached = false;
-  private readonly targetIds = new WeakMap<Page, string>();
-
-  /** Run an agent-browser CLI command for this session and return its `data`. */
-  async cli<T = Record<string, unknown>>(args: string[], timeout = CLI_TIMEOUT_MS): Promise<T> {
-    const { command, prefixArgs } = resolveAgentBrowserCli();
-    const fullArgs = [...prefixArgs, '--session', this.session, '--json', ...args];
-    const { stdout, stderr, error } = await new Promise<{ stdout: string; stderr: string; error: Error | null }>(
-      resolve => {
-        execFile(command, fullArgs, { timeout, maxBuffer: 64 * 1024 * 1024 }, (err, out, errOut) => {
-          resolve({ stdout: String(out ?? ''), stderr: String(errOut ?? ''), error: err });
-        });
-      },
-    );
-
-    const line = stdout
-      .trim()
-      .split('\n')
-      .reverse()
-      .find(l => l.trim().startsWith('{'));
-    let parsed: CliResponse<T> | undefined;
-    if (line) {
-      try {
-        parsed = JSON.parse(line) as CliResponse<T>;
-      } catch {
-        parsed = undefined;
-      }
-    }
-    if (!parsed) {
-      const detail = (stderr || stdout || error?.message || 'no output').trim();
-      throw new Error(`agent-browser ${args[0] ?? ''} failed: ${detail}`);
-    }
-    if (!parsed.success) {
-      throw new Error(parsed.error ?? `agent-browser ${args[0] ?? ''} failed`);
-    }
-    return (parsed.data ?? {}) as T;
-  }
+  private pendingLaunch: Promise<void> | null = null;
 
   isLaunched(): boolean {
-    return this.browser !== null;
+    return this.browser !== null || this.contexts.length > 0;
   }
 
+  /**
+   * Launch Chrome, or connect to an existing browser when `cdpUrl` is set.
+   * A failed launch or connect releases everything it acquired before rethrowing.
+   */
   async launch(options: BrowserLaunchOptions = {}): Promise<void> {
     if (options.profile && options.cdpUrl) {
       throw new Error('Profile cannot be used with CDP connection');
@@ -212,105 +324,117 @@ export class BrowserManager {
     if (options.storageState && options.profile) {
       throw new Error('Storage state cannot be used with profile (profile is already persistent storage)');
     }
+    if (this.pendingLaunch) return this.pendingLaunch;
     if (this.isLaunched()) return;
 
-    let browser: Browser;
-    if (options.cdpUrl) {
-      const endpoint = normalizeCdpEndpoint(options.cdpUrl);
-      browser = await chromium
-        .connectOverCDP(endpoint, { headers: options.cdpHeaders, timeout: CLI_TIMEOUT_MS })
-        .catch(() => {
-          throw new Error(
-            `Failed to connect via CDP to ${endpoint}. ` +
-              (endpoint.includes('127.0.0.1')
-                ? 'Make sure the browser is running with remote debugging enabled.'
-                : 'Make sure the remote browser is accessible and the URL is correct.'),
-          );
-        });
-      this.ownsBrowser = false;
-      // The CLI can't send custom handshake headers, so with cdpHeaders we
-      // snapshot through Playwright instead.
-      if (!options.cdpHeaders) {
-        try {
-          await this.cli(['connect', endpoint]);
-          this.cliAttached = true;
-        } catch {
-          this.cliAttached = false;
+    const launching = (async () => {
+      try {
+        if (options.cdpUrl) {
+          await this.connect(options.cdpUrl, options.cdpHeaders);
+        } else {
+          await this.launchLocal(options);
         }
+        await this.trackInitialPages();
+      } catch (error) {
+        await this.teardown().catch(() => {});
+        throw error;
       }
-    } else {
-      await this.cli([...this.launchFlags(options), 'open', 'about:blank']);
-      this.ownsBrowser = true;
-      this.cliAttached = true;
-      const { cdpUrl } = await this.cli<{ cdpUrl: string }>(['get', 'cdp-url']);
-      browser = await chromium.connectOverCDP(cdpUrl, { timeout: CLI_TIMEOUT_MS });
-    }
-
+    })();
+    this.pendingLaunch = launching;
     try {
-      const contexts = browser.contexts();
-      if (contexts.length === 0) {
-        throw new Error('No browser context found. Make sure the browser has an open window.');
-      }
-      this.browser = browser;
-      for (const context of contexts) {
-        this.contexts.push(context);
-        this.trackContext(context);
-      }
-      // Pages with an empty URL can hang Playwright; skip them.
-      for (const page of contexts.flatMap(c => c.pages()).filter(p => p.url())) {
-        this.trackPage(page);
-      }
+      await launching;
+    } finally {
+      if (this.pendingLaunch === launching) this.pendingLaunch = null;
+    }
+  }
 
-      if (this.ownsBrowser) {
-        await this.adoptCliTab();
-        if (options.viewport) {
-          await this.cli(['set', 'viewport', String(options.viewport.width), String(options.viewport.height)]);
-        }
-      }
-
-      if (this.pages.length === 0) {
-        const page = await this.contexts[0]!.newPage();
-        this.trackPage(page);
-        this.activePageIndex = 0;
-      }
+  private async connect(cdpUrl: string, headers?: Record<string, string>): Promise<void> {
+    const endpoint = normalizeCdpEndpoint(cdpUrl);
+    let browser: Browser;
+    try {
+      browser = await chromium.connectOverCDP(endpoint, { headers, timeout: CONNECT_TIMEOUT_MS });
     } catch (error) {
-      await this.close().catch(() => {});
-      throw error;
+      throw new Error(
+        `Failed to connect via CDP to ${endpoint}. ` +
+          (endpoint.includes('127.0.0.1')
+            ? 'Make sure the browser is running with remote debugging enabled.'
+            : 'Make sure the remote browser is accessible and the URL is correct.'),
+        { cause: error },
+      );
     }
+    this.browser = browser;
+    this.ownsBrowser = false;
+    this.watchBrowser(browser);
+
+    const contexts = browser.contexts();
+    if (contexts.length === 0) {
+      throw new Error('No browser context found. Make sure the browser has an open window.');
+    }
+    for (const context of contexts) this.addContext(context);
   }
 
-  private launchFlags(options: BrowserLaunchOptions): string[] {
-    const flags: string[] = [];
-    if (options.headless === false) flags.push('--headed');
-    if (options.executablePath) flags.push('--executable-path', options.executablePath);
-    if (options.profile) flags.push('--profile', options.profile);
-    if (options.storageState) flags.push('--state', options.storageState);
-    if (options.args?.length) flags.push('--args', options.args.join(','));
-    if (options.userAgent) flags.push('--user-agent', options.userAgent);
-    if (options.proxy) flags.push('--proxy', options.proxy);
-    if (options.ignoreHTTPSErrors) flags.push('--ignore-https-errors');
-    return flags;
+  private async launchLocal(options: BrowserLaunchOptions): Promise<void> {
+    const launchOptions: LaunchOptions = {
+      headless: options.headless ?? true,
+      ...(options.args?.length ? { args: options.args } : {}),
+      ...(options.executablePath ? { executablePath: options.executablePath } : {}),
+      ...(options.channel && !options.executablePath ? { channel: options.channel } : {}),
+      ...(options.proxy ? { proxy: { server: options.proxy } } : {}),
+    };
+    const contextOptions: BrowserContextOptions = {
+      viewport: resolveViewport(options),
+      ignoreHTTPSErrors: options.ignoreHTTPSErrors ?? false,
+      ...(options.userAgent ? { userAgent: options.userAgent } : {}),
+    };
+
+    this.ownsBrowser = true;
+    if (options.profile) {
+      const profileDir = expandHome(options.profile);
+      const context = await launchWithChromeFallback(
+        opts => chromium.launchPersistentContext(profileDir, { ...opts, ...contextOptions }),
+        launchOptions,
+      );
+      this.addContext(context);
+      this.browser = context.browser();
+      if (this.browser) this.watchBrowser(this.browser);
+      return;
+    }
+
+    const browser = await launchWithChromeFallback(opts => chromium.launch(opts), launchOptions);
+    this.browser = browser;
+    this.watchBrowser(browser);
+    const context = await browser.newContext({
+      ...contextOptions,
+      ...(options.storageState ? { storageState: options.storageState } : {}),
+    });
+    this.addContext(context);
   }
 
-  /** Make the CLI's active tab ours and drop Chrome's stray new-tab page. */
-  private async adoptCliTab(): Promise<void> {
-    const { tabs } = await this.cli<{ tabs: CliTab[] }>(['tab', 'list']);
-    const active = tabs.find(t => t.active);
-    if (!active) return;
-    let activePage: Page | undefined;
-    for (const page of this.pages) {
-      if ((await this.getTargetId(page)) === active.targetId) activePage = page;
-    }
-    if (!activePage) return;
-    for (const page of [...this.pages]) {
-      if (page !== activePage && page.url().startsWith('chrome://new-tab-page')) {
-        await page.close().catch(() => {});
-      }
-    }
-    this.activePageIndex = Math.max(0, this.pages.indexOf(activePage));
+  /** Forget a browser that went away on its own (crash, killed, remote closed). */
+  private watchBrowser(browser: Browser): void {
+    browser.on('disconnected', () => {
+      if (this.browser !== browser) return;
+      this.browser = null;
+      this.contexts = [];
+      this.cdpSession = null;
+      this.ownsBrowser = false;
+    });
   }
 
-  private trackContext(context: BrowserContext): void {
+  private async trackInitialPages(): Promise<void> {
+    // Pages with an empty URL can hang Playwright; skip them.
+    for (const page of this.contexts.flatMap(c => c.pages()).filter(p => p.url())) {
+      if (!this.pages.includes(page)) this.trackPage(page);
+    }
+    if (this.pages.length === 0) {
+      const page = await this.contexts[0]!.newPage();
+      if (!this.pages.includes(page)) this.trackPage(page);
+    }
+    this.activePageIndex = 0;
+  }
+
+  private addContext(context: BrowserContext): void {
+    this.contexts.push(context);
     context.on('page', page => {
       if (!this.pages.includes(page)) this.trackPage(page);
       // Follow popups / target=_blank so later commands hit the new tab.
@@ -320,36 +444,25 @@ export class BrowserManager {
         void this.invalidateCDPSession();
       }
     });
+    context.on('close', () => {
+      const index = this.contexts.indexOf(context);
+      if (index !== -1) this.contexts.splice(index, 1);
+    });
   }
 
   private trackPage(page: Page): void {
     this.pages.push(page);
-    page.on('close', () => {
-      const index = this.pages.indexOf(page);
-      if (index === -1) return;
-      this.pages.splice(index, 1);
-      if (this.activePageIndex >= this.pages.length) {
-        this.activePageIndex = Math.max(0, this.pages.length - 1);
-      } else if (this.activePageIndex > index) {
-        this.activePageIndex--;
-      }
-    });
+    page.on('close', () => this.untrackPage(page));
   }
 
-  private async getTargetId(page: Page): Promise<string | undefined> {
-    const cached = this.targetIds.get(page);
-    if (cached) return cached;
-    try {
-      const session = await page.context().newCDPSession(page);
-      try {
-        const { targetInfo } = (await session.send('Target.getTargetInfo')) as { targetInfo: { targetId: string } };
-        this.targetIds.set(page, targetInfo.targetId);
-        return targetInfo.targetId;
-      } finally {
-        await session.detach().catch(() => {});
-      }
-    } catch {
-      return undefined;
+  private untrackPage(page: Page): void {
+    const index = this.pages.indexOf(page);
+    if (index === -1) return;
+    this.pages.splice(index, 1);
+    if (this.activePageIndex >= this.pages.length) {
+      this.activePageIndex = Math.max(0, this.pages.length - 1);
+    } else if (this.activePageIndex > index) {
+      this.activePageIndex--;
     }
   }
 
@@ -392,7 +505,8 @@ export class BrowserManager {
     }
     if (index !== this.activePageIndex) await this.invalidateCDPSession();
     this.activePageIndex = index;
-    return { index, url: this.pages[index]!.url(), title: '' };
+    const page = this.pages[index]!;
+    return { index, url: page.url(), title: await page.title().catch(() => '') };
   }
 
   async closeTab(index?: number): Promise<{ closed: number; remaining: number }> {
@@ -407,12 +521,7 @@ export class BrowserManager {
     const page = this.pages[target]!;
     await page.close();
     // The page 'close' handler normally removes it; make sure it's gone.
-    const stillThere = this.pages.indexOf(page);
-    if (stillThere !== -1) {
-      this.pages.splice(stillThere, 1);
-      if (this.activePageIndex >= this.pages.length) this.activePageIndex = this.pages.length - 1;
-      else if (this.activePageIndex > stillThere) this.activePageIndex--;
-    }
+    this.untrackPage(page);
     return { closed: target, remaining: this.pages.length };
   }
 
@@ -428,67 +537,36 @@ export class BrowserManager {
   }
 
   /**
-   * Capture an accessibility snapshot with element refs and cache the ref map
-   * for {@link getLocatorFromRef}.
+   * Capture an accessibility snapshot of the active tab with element refs and
+   * cache the refs for {@link getLocatorFromRef}.
    */
   async getSnapshot(options: SnapshotOptions = {}): Promise<EnhancedSnapshot> {
     const page = this.getPage();
-    if (this.cliAttached && (await this.focusCliOn(page))) {
-      const args = ['snapshot'];
-      if (options.interactive) args.push('-i');
-      if (options.compact) args.push('-c');
-      if (options.depth !== undefined) args.push('-d', String(options.depth));
-      const data = await this.cli<{ snapshot?: string; refs?: Record<string, SnapshotRef> }>(args);
-      this.refMap = withNth(data.refs ?? {});
-      this.refMode = 'role';
-      return { tree: data.snapshot ?? '', refs: this.refMap };
-    }
-
-    const tree = await page.ariaSnapshot({ mode: 'ai', depth: options.depth });
-    const refs: Record<string, SnapshotRef> = {};
-    for (const match of tree.matchAll(/- ([a-z]+)(?: "([^"]*)")?[^\n]*\[ref=(e\d+)\]/g)) {
-      refs[match[3]!] = { role: match[1]!, ...(match[2] ? { name: match[2] } : {}) };
-    }
-    this.refMap = refs;
-    this.refMode = 'aria';
-    return { tree, refs };
-  }
-
-  /** Point the CLI at the same tab Playwright considers active. */
-  private async focusCliOn(page: Page): Promise<boolean> {
-    try {
-      const targetId = await this.getTargetId(page);
-      if (!targetId) return false;
-      const { tabs } = await this.cli<{ tabs: CliTab[] }>(['tab', 'list']);
-      const tab = tabs.find(t => t.targetId === targetId);
-      if (!tab) return false;
-      if (!tab.active) await this.cli(['tab', tab.tabId]);
-      return true;
-    } catch {
-      return false;
-    }
+    const tree = await page.ariaSnapshot({
+      mode: 'ai',
+      ...(options.depth !== undefined ? { depth: options.depth } : {}),
+    });
+    const snapshot = processAiSnapshot(tree, options);
+    this.refMap = snapshot.refs;
+    this.snapshotPage = page;
+    return snapshot;
   }
 
   getRefMap(): Record<string, SnapshotRef> {
     return this.refMap;
   }
 
-  /** Resolve a ref (`e1`, `@e1`, `ref=e1`) from the last snapshot to a locator. */
+  /**
+   * Resolve a ref (`e1`, `@e1`, `ref=e1`, `@f1e2`) from the last snapshot to a
+   * locator. Returns null for refs the last snapshot didn't show, or when that
+   * snapshot was taken on a different tab.
+   */
   getLocatorFromRef(refArg: string): Locator | null {
     const ref = parseRef(refArg);
-    if (!ref) return null;
-    const data = this.refMap[ref];
-    if (!data) return null;
+    if (!ref || !this.refMap[ref]) return null;
     const page = this.getPage();
-    if (this.refMode === 'aria') {
-      return page.locator(`aria-ref=${ref}`);
-    }
-    let locator = page.getByRole(data.role as Parameters<Page['getByRole']>[0], {
-      ...(data.name ? { name: data.name } : {}),
-      exact: true,
-    });
-    if (data.nth !== undefined) locator = locator.nth(data.nth);
-    return locator;
+    if (page !== this.snapshotPage) return null;
+    return page.locator(`aria-ref=${ref}`);
   }
 
   async getCDPSession(): Promise<CDPSession> {
@@ -519,47 +597,34 @@ export class BrowserManager {
     });
   }
 
+  /**
+   * Close the session. A browser this manager launched is shut down; a browser
+   * reached over `cdpUrl` is only disconnected and keeps running.
+   * Waits for an in-flight {@link launch} so it can't leave a browser behind.
+   */
   async close(): Promise<void> {
+    if (this.pendingLaunch) await this.pendingLaunch.catch(() => {});
+    await this.teardown();
+  }
+
+  private async teardown(): Promise<void> {
     await this.invalidateCDPSession();
     const browser = this.browser;
+    const contexts = this.contexts;
+    const ownsBrowser = this.ownsBrowser;
     this.browser = null;
     this.contexts = [];
     this.pages = [];
     this.activePageIndex = 0;
     this.refMap = {};
-    // Over CDP this only disconnects Playwright; the CLI owns the process.
-    if (browser) await browser.close().catch(() => {});
-    if (this.ownsBrowser || this.cliAttached) {
-      // For an attached (not owned) browser this just ends the CLI session.
-      await this.cli(['close']).catch(() => {});
-    }
+    this.snapshotPage = null;
     this.ownsBrowser = false;
-    this.cliAttached = false;
-  }
-}
 
-/** Add `nth` to refs that share a role+name so locators can disambiguate. */
-function withNth(refs: Record<string, SnapshotRef>): Record<string, SnapshotRef> {
-  const ordered = Object.entries(refs).sort(([a], [b]) => Number(a.slice(1)) - Number(b.slice(1)));
-  const counts = new Map<string, number>();
-  for (const [, ref] of ordered) {
-    const key = `${ref.role}\u0000${ref.name ?? ''}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (ownsBrowser) {
+      // Closing the contexts first flushes persistent profiles to disk.
+      for (const context of contexts) await context.close().catch(() => {});
+    }
+    // Owned: terminates the Chrome child process. Over CDP: disconnects only.
+    if (browser) await browser.close().catch(() => {});
   }
-  const seen = new Map<string, number>();
-  const out: Record<string, SnapshotRef> = {};
-  for (const [id, ref] of ordered) {
-    const key = `${ref.role}\u0000${ref.name ?? ''}`;
-    const index = seen.get(key) ?? 0;
-    seen.set(key, index + 1);
-    out[id] =
-      ref.nth !== undefined || (counts.get(key) ?? 0) < 2
-        ? {
-            role: ref.role,
-            ...(ref.name ? { name: ref.name } : {}),
-            ...(ref.nth !== undefined ? { nth: ref.nth } : {}),
-          }
-        : { role: ref.role, ...(ref.name ? { name: ref.name } : {}), nth: index };
-  }
-  return out;
 }
