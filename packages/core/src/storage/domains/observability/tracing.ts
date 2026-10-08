@@ -461,6 +461,13 @@ export function extractBranchSpans<
 /** Maximum length of the rendered `inputPreview` / `outputPreview` text. */
 export const PREVIEW_MAX_LENGTH = 100;
 
+/**
+ * UTF-16 range of the first half of a surrogate pair (emoji and other characters outside the BMP).
+ * Cutting right after one would leave a broken character, so truncation steps back by one.
+ */
+const HIGH_SURROGATE_START = 0xd800;
+const HIGH_SURROGATE_END = 0xdbff;
+
 const inputPreviewField = z.string().describe('Short text preview of the span input');
 const outputPreviewField = z.string().describe('Short text preview of the span output');
 
@@ -474,7 +481,7 @@ function truncatePreview(text: string, maxLength: number): string | undefined {
   if (!text) return undefined;
   if (text.length <= maxLength) return text;
   const lastCode = text.charCodeAt(maxLength - 1);
-  const end = lastCode >= 0xd800 && lastCode <= 0xdbff ? maxLength - 1 : maxLength;
+  const end = lastCode >= HIGH_SURROGATE_START && lastCode <= HIGH_SURROGATE_END ? maxLength - 1 : maxLength;
   return `${text.slice(0, end)}…`;
 }
 
