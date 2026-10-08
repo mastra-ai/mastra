@@ -108,16 +108,18 @@ function getTemporalWorkflowRuntimeOptions(program: t.Program): t.ObjectExpressi
         continue;
       }
 
+      const runtimeProperties: t.ObjectProperty[] = [];
       for (const property of temporalParams.properties) {
-        if (
-          t.isObjectProperty(property) &&
-          getObjectPropertyName(property) === 'startToCloseTimeout' &&
-          t.isExpression(property.value)
-        ) {
-          return t.objectExpression([
-            t.objectProperty(t.identifier('startToCloseTimeout'), t.cloneNode(property.value, true)),
-          ]);
+        if (!t.isObjectProperty(property) || !t.isExpression(property.value)) {
+          continue;
         }
+        const name = getObjectPropertyName(property);
+        if (name === 'startToCloseTimeout' || name === 'retry') {
+          runtimeProperties.push(t.objectProperty(t.identifier(name), t.cloneNode(property.value, true)));
+        }
+      }
+      if (runtimeProperties.length > 0) {
+        return t.objectExpression(runtimeProperties);
       }
     }
   }

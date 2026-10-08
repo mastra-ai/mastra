@@ -19,6 +19,36 @@ async function transform(source: string): Promise<string> {
 }
 
 describe('workflow transform', () => {
+  it.each([true, false])('injects activity retries with configured timeout: %s', async withTimeout => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const { createWorkflow } = init({
+        client: undefined,
+        taskQueue: 'mastra',
+        ${withTimeout ? "startToCloseTimeout: '5 minutes'," : ''}
+        retry: {
+          initialInterval: '5 seconds',
+          backoffCoefficient: 2,
+          maximumInterval: '5 minutes',
+          maximumAttempts: 5,
+          nonRetryableErrorTypes: ['ValidationError'],
+        },
+      });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(/createWorkflow\('weather-workflow',\s*\{/);
+    expect(result).toContain('retry: {');
+    expect(result).toContain("initialInterval: '5 seconds'");
+    expect(result).toContain('backoffCoefficient: 2');
+    expect(result).toContain("maximumInterval: '5 minutes'");
+    expect(result).toContain('maximumAttempts: 5');
+    expect(result).toContain("nonRetryableErrorTypes: ['ValidationError']");
+    if (withTimeout) {
+      expect(result).toContain("startToCloseTimeout: '5 minutes'");
+    }
+  });
+
   it.each(['weather-workflow'])('matches fixture output for %s', async fixtureName => {
     const inputPath = fileURLToPath(new URL(`./__fixtures__/workflow/${fixtureName}/input.mjs`, import.meta.url));
     const outputPath = fileURLToPath(new URL(`./__fixtures__/workflow/${fixtureName}/output.js`, import.meta.url));
