@@ -432,12 +432,10 @@ describe('Subconscious knowledge write tools', () => {
     expect(legacy.resolved).not.toHaveProperty('maxScope');
     const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
 
-    // Without org access, org writes are refused.
-    const refused = (await tools.knowledge_append!.execute?.(
-      { node: source.id, text: 'Not yet shared', scope: 'org' },
-      {} as any,
-    )) as any;
-    expect(refused?.error).toBe(true);
+    // Without org access, the org scope is absent to the session, so org writes are refused.
+    await expect(
+      tools.knowledge_append!.execute?.({ node: source.id, text: 'Not yet shared', scope: 'org' }, {} as any),
+    ).rejects.toThrow(`Knowledge scope not found: ${scopeIds[0]}`);
 
     // The org grants this conversation's resource append access; the org rung itself is never vouched.
     await store.upsertScopeGrant({ scopeNodeId: scopeIds[0]!, scopeRefId: scopeIds[1]!, role: 'append' });
