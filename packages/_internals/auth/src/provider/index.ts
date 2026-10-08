@@ -66,6 +66,14 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * Map an authenticated user to a memory resource id
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
+  /**
+   * Return response headers (typically `Set-Cookie` for a rotated session)
+   * that the provider accumulated while handling this request and clear them
+   * from the provider's per-request state. The server middleware appends them
+   * to the outgoing response so that server-to-server session refreshes
+   * reach the browser.
+   */
+  consumePendingResponseHeaders?(request: MastraAuthRequest): Record<string, string> | undefined;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {

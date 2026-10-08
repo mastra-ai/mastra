@@ -10,7 +10,7 @@ import type {
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
-import { getRequestHeader } from '@internal/auth';
+import { getRequestHeader, getWebRequest } from '@internal/auth';
 import type { EEUser, IRBACProvider, RoleMapping } from '@internal/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -142,6 +142,20 @@ export class MastraAuthStudio
    */
   private organizationBootstrapInFlight = new Map<string, Promise<string | undefined>>();
 
+  /**
+   * Per-request response headers to forward to the browser — specifically a
+   * rotated `wos-session` `Set-Cookie` returned by the shared API when the
+   * platform `sessionAuth` middleware transparently refreshes an expired
+   * access token. Without this, the browser's sealed cookie would never
+   * rotate: platform would succeed server-to-server by refreshing on every
+   * request, but the next refresh would hit `invalid_grant` once WorkOS
+   * invalidated the previous refresh token.
+   *
+   * Keyed by the underlying `Request` (via `getWebRequest`) so we don't retain
+   * requests after the response is written.
+   */
+  private pendingResponseHeaders = new WeakMap<Request, Record<string, string>>();
+
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
     const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
@@ -204,7 +218,7 @@ export class MastraAuthStudio
     const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
 
     if (sessionCookie) {
-      user = await this.verifySessionCookie(sessionCookie);
+      user = await this.verifySessionCookie(sessionCookie, request);
     }
 
     // Fall back to Bearer token (CLI / API token flow)
@@ -645,6 +659,66 @@ export class MastraAuthStudio
   }
 
   /**
+   * Read every `Set-Cookie` header from a response, falling back to the
+   * single-value accessor on runtimes without `Headers.getSetCookie()`.
+   */
+  private readSetCookieHeaders(res: Response): string[] {
+    const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+    if (typeof headers.getSetCookie === 'function') {
+      return headers.getSetCookie();
+    }
+    const single = res.headers.get('Set-Cookie');
+    return single ? [single] : [];
+  }
+
+  /**
+   * If the shared API rotated the sealed `wos-session` cookie on this
+   * response, stash the `Set-Cookie` header against the inbound request so
+   * the server middleware can forward it to the browser, and invalidate the
+   * short-TTL verification cache entry for the old cookie value.
+   */
+  private captureRotatedCookie(
+    res: Response,
+    oldSessionCookie: string,
+    oldCacheKey: string,
+    request: MastraAuthRequest | undefined,
+  ): boolean {
+    const setCookies = this.readSetCookieHeaders(res);
+    if (setCookies.length === 0) return false;
+
+    const rotatedCookieHeader = setCookies.find(h => parseCookieFromHeader(h, COOKIE_NAME) !== null);
+    if (!rotatedCookieHeader) return false;
+
+    const rotatedValue = parseCookieFromHeader(rotatedCookieHeader, COOKIE_NAME);
+    if (!rotatedValue || rotatedValue === oldSessionCookie) return false;
+
+    // The old sealed cookie's refresh token is now invalidated at WorkOS,
+    // so caching the StudioUser against it would hand back a user that the
+    // next refresh will reject.
+    this.verifiedCredentials.delete(oldCacheKey);
+
+    if (!request) return true;
+    const rawRequest = getWebRequest(request);
+    if (!rawRequest) return true;
+    this.pendingResponseHeaders.set(rawRequest, { 'Set-Cookie': rotatedCookieHeader });
+    return true;
+  }
+
+  /**
+   * Server middleware hook: emit any response headers the provider
+   * accumulated for this request (currently a rotated `Set-Cookie`) and
+   * clear them from the provider's per-request state.
+   */
+  consumePendingResponseHeaders(request: MastraAuthRequest): Record<string, string> | undefined {
+    const rawRequest = getWebRequest(request);
+    if (!rawRequest) return undefined;
+    const headers = this.pendingResponseHeaders.get(rawRequest);
+    if (!headers) return undefined;
+    this.pendingResponseHeaders.delete(rawRequest);
+    return headers;
+  }
+
+  /**
    * Fetch the shared API's `/auth/me` and return the raw response body, or
    * `null` on any non-OK / network error. Split out so `ensureOrganization`
    * and `isOrganizationAdmin` can reuse it without duplicating the shape.
@@ -676,7 +750,10 @@ export class MastraAuthStudio
    * Forward a sealed session cookie to the shared API's /auth/me endpoint
    * to validate it and get user info.
    */
-  private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
+  private async verifySessionCookie(
+    sessionCookie: string,
+    request?: MastraAuthRequest,
+  ): Promise<StudioUser | null> {
     const cacheKey = await this.verificationKey('cookie', sessionCookie);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) {
@@ -692,6 +769,13 @@ export class MastraAuthStudio
         },
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
+
+      // The shared API's `sessionAuth` middleware may have transparently
+      // refreshed the sealed cookie — forward the rotated `Set-Cookie` to
+      // the browser so its session actually rotates. Without this the
+      // sealed cookie would stay frozen at its original value, and the
+      // next refresh would hit `invalid_grant`.
+      const rotated = this.captureRotatedCookie(res, sessionCookie, cacheKey, request);
 
       if (!res.ok) {
         this.logger.warn('verifySessionCookie: shared API returned non-OK status', {
@@ -733,7 +817,9 @@ export class MastraAuthStudio
       const user = await this.asPinnedOrganizationMember(sessionUser, sessionCookie);
       // Don't pin brand-new users in the no-org state: org bootstrap runs on
       // the next request, which must re-read /auth/me to see the new org.
-      if (user.organizationId) this.cacheVerification(cacheKey, user);
+      // Also skip caching when the sealed cookie just rotated — the key here
+      // is the OLD cookie, whose refresh token WorkOS has now invalidated.
+      if (user.organizationId && !rotated) this.cacheVerification(cacheKey, user);
       return user;
     } catch (error) {
       this.logger.error('verifySessionCookie: fetch to shared API failed', {

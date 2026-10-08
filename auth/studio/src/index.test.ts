@@ -347,6 +347,93 @@ describe('MastraAuthStudio', () => {
 
       expect(user?.name).toBeUndefined();
     });
+
+    // ---------------------------------------------------------------------
+    // Rotated Set-Cookie propagation
+    //
+    // Platform's `sessionAuth` middleware transparently refreshes an expired
+    // access token and returns a rotated sealed `wos-session` cookie via
+    // `Set-Cookie` on `/auth/me`. The provider must forward it to the
+    // browser, otherwise the browser never gets the rotated cookie and the
+    // next refresh hits `invalid_grant`.
+    // ---------------------------------------------------------------------
+    describe('Set-Cookie forwarding from /auth/me', () => {
+      it('exposes a rotated wos-session Set-Cookie via consumePendingResponseHeaders', async () => {
+        const rotated = 'wos-session=sealed-v2; Domain=.mastra.ai; HttpOnly; SameSite=Lax; Path=/';
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': rotated },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        const user = await auth.authenticateToken('', req);
+
+        expect(user?.id).toBe('user-1');
+        expect(auth.consumePendingResponseHeaders(req)).toEqual({ 'Set-Cookie': rotated });
+        // Second consume clears state so middleware doesn't double-emit.
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+
+      it('does not expose a Set-Cookie when platform did not rotate the cookie', async () => {
+        fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await auth.authenticateToken('', req);
+
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+
+      it('ignores a Set-Cookie that re-emits the same sealed value', async () => {
+        const same = 'wos-session=sealed-v1; Path=/';
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': same },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await auth.authenticateToken('', req);
+
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+
+      it('invalidates the verification cache for the old sealed cookie on rotation', async () => {
+        // First call rotates sealed-v1 → sealed-v2.
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        );
+        const first = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-v1' }));
+        expect(first?.id).toBe('user-1');
+
+        // A later request still carrying sealed-v1 must re-verify against the
+        // shared API rather than returning the stale cached user: the old
+        // refresh token has been invalidated by WorkOS.
+        fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+        await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-v1' }));
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+      });
+
+      it('ignores non-wos-session Set-Cookie headers', async () => {
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'analytics=xyz; Path=/' },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await auth.authenticateToken('', req);
+
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
