@@ -3,7 +3,10 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  isRunFenceConflictError,
   MemoryStorage,
+  resolveRunFence,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_MESSAGES,
@@ -16,6 +19,7 @@ import {
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
+  RunFence,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -30,6 +34,8 @@ import type {
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
+import { assertRunFence, raiseRunFence, runClaimKey, writeBatch } from '../run-fencing';
+import type { RunFenceCheck } from '../run-fencing';
 import { getKey, processRecord } from '../utils';
 
 function getThreadMessagesKey(threadId: string): string {
@@ -57,10 +63,36 @@ export class StoreMemoryUpstash extends MemoryStorage {
     this.#db = new UpstashDB({ client });
   }
 
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      return await raiseRunFence(this.client, fence);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence);
+    return resolved && { claims: TABLE_MEMORY_RUN_FENCES, fence: resolved, operation };
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
+    await this.#db.scanAndDelete(`${runClaimKey(TABLE_MEMORY_RUN_FENCES, '')}*`);
   }
 
   async getThreadById({
@@ -223,14 +255,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
+    const check = this.#runFenceCheck(fence, 'saveThread');
     try {
-      await this.#db.insert({
-        tableName: TABLE_THREADS,
-        record: thread,
-      });
+      const { key, processedRecord } = processRecord(TABLE_THREADS, thread);
+      const batch = writeBatch(this.client, check);
+      batch.set(key, processedRecord);
+      await batch.exec();
       return thread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'SAVE_THREAD', 'FAILED'),
@@ -252,10 +286,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -282,9 +318,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
     };
 
     try {
-      await this.saveThread({ thread: updatedThread });
+      await this.saveThread({ thread: updatedThread, fence });
       return updatedThread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'UPDATE_THREAD', 'FAILED'),
@@ -335,8 +372,12 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
+    const check = this.#runFenceCheck(args.fence, 'saveMessages');
     if (messages.length === 0) return { messages: [] };
 
     try {
@@ -423,7 +464,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
-        const pipeline = this.client.pipeline();
+        const pipeline = writeBatch(this.client, check);
         const batchTouchedThreadIds = new Set<string>();
         const batchExistingThreadIds = existingThreadIds.slice(i, i + batch.length);
 
@@ -919,6 +960,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    return this.#saveResource(resource, undefined);
+  }
+
+  async #saveResource(resource: StorageResourceType, check: RunFenceCheck | undefined): Promise<StorageResourceType> {
     try {
       const key = `${TABLE_RESOURCES}:${resource.id}`;
       const serializedResource = {
@@ -928,11 +973,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
         updatedAt: resource.updatedAt.toISOString(),
       };
 
-      await this.client.set(key, serializedResource);
+      const batch = writeBatch(this.client, check);
+      batch.set(key, serializedResource);
+      await batch.exec();
 
       return resource;
     } catch (error) {
-      this.logger.error('Error saving resource:', error);
+      if (!isRunFenceConflictError(error)) this.logger.error('Error saving resource:', error);
       throw error;
     }
   }
@@ -941,11 +988,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
+    const check = this.#runFenceCheck(fence, 'updateResource');
     try {
       const existingResource = await this.getResourceById({ resourceId });
 
@@ -958,7 +1008,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        return this.saveResource({ resource: newResource });
+        return await this.#saveResource(newResource, check);
       }
 
       const updatedResource = {
@@ -971,10 +1021,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
         updatedAt: new Date(),
       };
 
-      await this.saveResource({ resource: updatedResource });
+      await this.#saveResource(updatedResource, check);
       return updatedResource;
     } catch (error) {
-      this.logger.error('Error updating resource:', error);
+      if (!isRunFenceConflictError(error)) this.logger.error('Error updating resource:', error);
       throw error;
     }
   }
@@ -984,12 +1034,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
 
     if (messages.length === 0) {
       return [];
     }
+    const check = this.#runFenceCheck(args.fence, 'updateMessages');
 
     try {
       // Get all message IDs to update
@@ -1064,6 +1116,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       if (existingMessages.length === 0) {
+        await assertRunFence(this.client, check);
         return [];
       }
 
@@ -1115,7 +1168,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         }
       }
 
-      const pipeline = this.client.pipeline();
+      const pipeline = writeBatch(this.client, check);
 
       // Process each existing message for updates
       for (const existingMessage of existingMessages) {
@@ -1239,10 +1292,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) {
       return;
     }
+    const check = this.#runFenceCheck(options?.fence, 'deleteMessages');
 
     try {
       const threadIds = new Set<string>();
@@ -1293,10 +1347,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       if (messageKeys.length === 0) {
         // none of the message ids existed
+        await assertRunFence(this.client, check);
         return;
       }
 
-      const pipeline = this.client.pipeline();
+      const pipeline = writeBatch(this.client, check);
 
       // Delete all messages
       for (const key of messageKeys) {
@@ -1328,6 +1383,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // TODO: Delete from vector store if semantic recall is enabled
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'DELETE_MESSAGES', 'FAILED'),
