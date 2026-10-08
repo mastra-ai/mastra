@@ -211,7 +211,6 @@ describe('getDynamicMemory', () => {
     expect(config.embedder).toBe('fastembed-small');
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
-      maxScope: 'resource',
       pins: true,
     });
     expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
@@ -386,7 +385,6 @@ describe('getDynamicMemory', () => {
     );
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
-      maxScope: 'resource',
       pins: true,
       maxSteps: 25,
     });

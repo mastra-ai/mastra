@@ -17,7 +17,6 @@ async function fixture() {
     scope,
     sourceThreadId: 'alpha',
     defaultScope: 'resource',
-    maxScope: 'resource',
   });
   return { store, source, target, tools };
 }
@@ -146,11 +145,10 @@ describe('Subconscious knowledge write tools', () => {
     }
     expect(createNode).not.toHaveBeenCalled();
 
-    // Scope levels are the only scope input the model has, and the ceiling still wins.
+    // Scope levels are the only scope input the model has; raw scope entries are rejected.
     for (const tool of ['knowledge_create', 'knowledge_append'] as const) {
       const base =
         tool === 'knowledge_create' ? { name: 'Escalate', kind: 'project', text: 'x' } : { node: source.id, text: 'x' };
-      await expect(tools[tool]!.execute?.({ ...base, scope: 'org' }, {} as any)).rejects.toThrow(/ceiling|scope/i);
       const bogus = (await tools[tool]!.execute?.({ ...base, scope: 'org:evil' }, {} as any)) as any;
       expect(bogus?.error).toBe(true);
     }
@@ -167,6 +165,31 @@ describe('Subconscious knowledge write tools', () => {
       deletedAt: undefined,
     });
     expect(appended.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('writes and rescopes at every scope level the conversation can see', async () => {
+    const { store, source, tools } = await fixture();
+
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', nodeScope: 'org', scope: 'org' },
+      {} as any,
+    )) as any;
+    expect(created.node.scope).toEqual(['org:acme']);
+    expect(created.record.scope).toEqual(['org:acme']);
+
+    const appended = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Shared with the whole org', scope: 'org' },
+      {} as any,
+    )) as any;
+    expect(appended.scope).toEqual(['org:acme']);
+
+    const narrow = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Started in this thread', scope: 'thread' },
+      {} as any,
+    )) as any;
+    const widened = (await tools.knowledge_rescope!.execute?.({ recordId: narrow.id, scope: 'org' }, {} as any)) as any;
+    expect(widened.scope).toEqual(['org:acme']);
+    expect(await store.getKnowledge({ id: narrow.id })).toMatchObject({ scope: ['org:acme'] });
   });
 
   it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {

@@ -1,6 +1,4 @@
 import {
-  assertKnowledgeCeilingRaised,
-  assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
@@ -115,7 +113,6 @@ function recordFromDocument(row: Document): KnowledgeRecord {
     sourceThreadId: String(row.sourceThreadId),
     capturedAt: new Date(row.capturedAt),
     when: row.when ? new Date(row.when) : undefined,
-    maxScope: row.maxScope ?? undefined,
     metadata: row.metadata ?? undefined,
     deletedAt: row.deletedAt ? new Date(row.deletedAt) : undefined,
     deletedBy: row.deletedBy ?? undefined,
@@ -414,7 +411,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
-    assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
     return this.#connector.withTransaction(async session => {
       const parent = await this.#resolveTerminalNode(nodeReferenceId(input.node), session);
       if (!parent) throw new KnowledgeNotFoundError('node', nodeReferenceId(input.node));
@@ -429,7 +425,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         sourceThreadId: input.sourceThreadId,
         capturedAt: new Date(),
         when: input.when,
-        maxScope: input.maxScope,
         metadata: input.metadata,
       };
       await (
@@ -439,7 +434,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
           ...record,
           scopeKey: knowledgeScopeKey(scope),
           when: record.when ?? null,
-          maxScope: record.maxScope ?? null,
           deletedAt: null,
           deletedBy: null,
         },
@@ -530,7 +524,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return this.#connector.withTransaction(async session => {
       const record = await this.#getKnowledge(input.id, true, session);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
       await (
         await this.#knowledge()
       ).updateOne({ id: input.id }, { $set: { scope, scopeKey: knowledgeScopeKey(scope) } }, sessionOptions(session));
@@ -539,15 +532,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       if (!record.deletedAt) await this.#outbox('record', input.id, 'upsert', createKnowledgeUlid(), scope, session);
       return { ...record, scope };
     });
-  }
-
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeRecord['maxScope'] }): Promise<KnowledgeRecord> {
-    const record = await this.#getKnowledge(input.id, true);
-    if (!record) throw new KnowledgeNotFoundError('record', input.id);
-    assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
-    assertKnowledgeCeilingRaised(record.maxScope, input.maxScope);
-    await (await this.#knowledge()).updateOne({ id: input.id }, { $set: { maxScope: input.maxScope ?? null } });
-    return { ...record, maxScope: input.maxScope };
   }
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {

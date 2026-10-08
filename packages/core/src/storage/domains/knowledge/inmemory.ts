@@ -1,8 +1,6 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
-  assertKnowledgeCeilingRaised,
   assertKnowledgeDescriptionWithinBound,
-  assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
@@ -345,7 +343,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const parent = this.#resolveTerminalNode(node);
     if (!parent) throw new KnowledgeNotFoundError('node', node);
     const scope = canonicalizeKnowledgeScope(input.scope);
-    assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
     const record: KnowledgeRecord = {
       id: input.id ?? createKnowledgeUlid(),
       node: parent.id,
@@ -354,7 +351,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       sourceThreadId: input.sourceThreadId,
       capturedAt: new Date(),
       when: input.when ? new Date(input.when) : undefined,
-      maxScope: input.maxScope,
       metadata: input.metadata,
     };
     if (this.#db.knowledgeRecords.has(record.id)) throw new Error(`Knowledge already exists: ${record.id}`);
@@ -435,7 +431,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     const canonical = canonicalizeKnowledgeScope(scope);
-    assertKnowledgeScopeWithinCeiling(canonical, record.maxScope);
     const updated = { ...record, scope: canonical };
     this.#db.knowledgeRecords.set(id, updated);
     this.#recordActivity('record-rescoped', 'record', id, canonical, record.sourceThreadId);
@@ -445,22 +440,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     if (!record.deletedAt) {
       this.#enqueue('record', id, 'upsert', createKnowledgeUlid(), canonical);
     }
-    return cloneRecord(updated);
-  }
-
-  async raiseKnowledgeCeiling({
-    id,
-    maxScope,
-  }: {
-    id: string;
-    maxScope?: KnowledgeRecord['maxScope'];
-  }): Promise<KnowledgeRecord> {
-    const record = this.#db.knowledgeRecords.get(id);
-    if (!record) throw new KnowledgeNotFoundError('record', id);
-    assertKnowledgeScopeWithinCeiling(record.scope, maxScope);
-    assertKnowledgeCeilingRaised(record.maxScope, maxScope);
-    const updated = { ...record, maxScope };
-    this.#db.knowledgeRecords.set(id, updated);
     return cloneRecord(updated);
   }
 

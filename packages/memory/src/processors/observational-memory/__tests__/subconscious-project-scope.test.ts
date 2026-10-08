@@ -114,7 +114,6 @@ describe('Subconscious project scope override', () => {
     const subconscious = new Subconscious({
       observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
       defaultScope: 'resource',
-      maxScope: 'resource',
     });
     let curatorAgent: Agent | undefined;
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {

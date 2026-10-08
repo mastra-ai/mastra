@@ -806,7 +806,6 @@ export const KNOWLEDGE_V2_RECORDS_SCHEMA: Record<string, StorageColumn> = {
   scopeKey: { type: 'text', nullable: true },
   sourceThreadId: { type: 'text', nullable: true },
   when: { type: 'timestamp', nullable: true },
-  maxScope: { type: 'text', nullable: true },
 };
 
 export const KNOWLEDGE_V2_MENTIONS_SCHEMA: Record<string, StorageColumn> = {

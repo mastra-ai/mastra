@@ -59,18 +59,6 @@ describe('Subconscious pinned knowledge', () => {
     expect(pins.map(pin => pin.text)).toEqual(['explicit default']);
   });
 
-  it('honors a thread maxScope ceiling: the reserved node itself is created at the thread level', async () => {
-    const memory = createMemory();
-    // defaultScope deliberately left at resource: an unscoped pin must narrow to the ceiling, not throw.
-    const tools = createTools(memory, { maxScope: 'thread' });
-    const pinned = await tools.knowledge_pin!.execute!({ text: 'thread ceiling pin' } as any, {} as any);
-    const store = await getStore(memory);
-    const entity = await store.getNode(pinned.node);
-    expect(entity!.scope).toEqual(threadScope);
-    const { pins } = await listPinnedKnowledge({ store, scope: threadScope });
-    expect(pins.map(pin => pin.id)).toEqual([pinned.id]);
-  });
-
   it('pins a KnowledgeRecord and assembles it into the pin set', async () => {
     const memory = createMemory();
     const tools = createTools(memory);

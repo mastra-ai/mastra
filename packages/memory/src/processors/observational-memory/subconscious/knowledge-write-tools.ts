@@ -1,7 +1,6 @@
 import type { KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
-  assertKnowledgeScopeWithinCeiling,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
@@ -29,7 +28,6 @@ export interface KnowledgeWriteToolsOptions {
   scope: KnowledgeScope;
   sourceThreadId: string;
   defaultScope: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
 }
 
 async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeStorage> {
@@ -39,9 +37,7 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
 }
 
 function resolveWriteScope(options: KnowledgeWriteToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  const scope = expandKnowledgeScope(options.scope, level ?? options.defaultScope);
-  assertKnowledgeScopeWithinCeiling(scope, options.maxScope);
-  return scope;
+  return expandKnowledgeScope(options.scope, level ?? options.defaultScope);
 }
 
 function requireVisible(scope: KnowledgeScope, options: KnowledgeWriteToolsOptions, label: string): void {
@@ -101,7 +97,6 @@ export function createKnowledgeWriteTools(
           scope: recordScope,
           sourceThreadId: options.sourceThreadId,
           when,
-          maxScope: options.maxScope,
           resolutionScope: options.scope,
           defaultScope: nodeScope,
         });
@@ -137,7 +132,6 @@ export function createKnowledgeWriteTools(
           scope,
           sourceThreadId: options.sourceThreadId,
           when,
-          maxScope: options.maxScope,
           resolutionScope: options.scope,
           defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
         });
@@ -262,7 +256,7 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_rescope: createTool({
       id: 'knowledge_rescope',
-      description: 'Change a record visibility scope without exceeding its stamped ceiling.',
+      description: 'Change a record visibility scope to any scope level visible in this conversation.',
       inputSchema: {
         type: 'object',
         properties: { recordId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
@@ -276,7 +270,6 @@ export function createKnowledgeWriteTools(
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         requireVisible(record.scope, options, 'KnowledgeRecord');
         const scope = resolveWriteScope(options, value.scope);
-        assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
         return store.rescopeKnowledge({ id: record.id, scope });
       },
     }),

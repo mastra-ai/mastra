@@ -1,6 +1,4 @@
 import {
-  assertKnowledgeCeilingRaised,
-  assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
@@ -160,7 +158,6 @@ function parseKnowledge(row: Record<string, unknown>): KnowledgeRecord {
     sourceThreadId: String(row.sourceThreadId),
     capturedAt: toDate(row.capturedAt),
     when: optionalDate(row.when),
-    maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeRecord['maxScope']),
     metadata: row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadata),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
@@ -508,7 +505,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
-    assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
     return this.#transaction(async tx => {
       const parent = await this.#resolveTerminalNode(tx, nodeReferenceId(input.node));
       if (!parent) throw new KnowledgeNotFoundError('node', nodeReferenceId(input.node));
@@ -520,11 +516,10 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         sourceThreadId: input.sourceThreadId,
         capturedAt: new Date(),
         when: input.when ? new Date(input.when) : undefined,
-        maxScope: input.maxScope,
         metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,jsonb(?),NULL,NULL)`,
         args: [
           record.id,
           record.node,
@@ -534,7 +529,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
           record.sourceThreadId,
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
-          record.maxScope ?? null,
           record.metadata ? JSON.stringify(record.metadata) : null,
         ],
       });
@@ -618,7 +612,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
       await tx.execute({
         sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
         args: [JSON.stringify(scope), knowledgeScopeKey(scope), input.id],
@@ -628,20 +621,6 @@ export class KnowledgeMySQL extends KnowledgeStorage {
         await this.#outbox(tx, 'record', input.id, 'delete', createKnowledgeUlid(), record.scope);
       if (!record.deletedAt) await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), scope);
       return { ...record, scope };
-    });
-  }
-
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeRecord['maxScope'] }): Promise<KnowledgeRecord> {
-    return this.#transaction(async tx => {
-      const record = await this.#getKnowledge(tx, input.id, true);
-      if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
-      assertKnowledgeCeilingRaised(record.maxScope, input.maxScope);
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
-        args: [input.maxScope ?? null, input.id],
-      });
-      return { ...record, maxScope: input.maxScope };
     });
   }
 

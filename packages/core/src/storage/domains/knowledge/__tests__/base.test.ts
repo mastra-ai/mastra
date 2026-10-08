@@ -251,7 +251,6 @@ describe('InMemoryKnowledgeStorage', () => {
       scope: thread,
       sourceThreadId: 't1',
       when: new Date('2026-07-01'),
-      maxScope: 'resource',
       resolutionScope: thread,
       defaultScope: resource,
     });
@@ -350,7 +349,6 @@ describe('InMemoryKnowledgeStorage', () => {
       sourceThreadId: 't1',
       resolutionScope: thread,
       defaultScope: resource,
-      maxScope: 'org',
     });
     const beforeMerge = (await store.listSemanticOutbox()).length;
 
@@ -394,22 +392,21 @@ describe('InMemoryKnowledgeStorage', () => {
     ).rejects.toThrow('Knowledge curation cursors were removed');
   });
 
-  it('enforces Knowledge ceilings', async () => {
+  it('writes and rescopes records to broader scopes without a ceiling', async () => {
     const store = createStore();
-    const node = await store.createNode({ name: 'Secret', kind: 'task', scope: resource });
+    const node = await store.createNode({ name: 'Team practice', kind: 'task', scope: org });
     const record = await store.appendKnowledge({
       node: node.id,
-      text: 'Private detail',
-      scope: resource,
+      text: 'Reviews happen on Tuesdays',
+      scope: org,
       sourceThreadId: 't1',
-      maxScope: 'resource',
       resolutionScope: thread,
       defaultScope: resource,
     });
+    expect(record.scope).toEqual(org);
+    expect(record).not.toHaveProperty('maxScope');
 
-    await expect(store.rescopeKnowledge({ id: record.id, scope: org })).rejects.toThrow('ceiling');
-    await store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'org' });
-    await expect(store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'resource' })).rejects.toThrow('lowered');
+    await store.rescopeKnowledge({ id: record.id, scope: resource });
     await expect(store.rescopeKnowledge({ id: record.id, scope: org })).resolves.toEqual(
       expect.objectContaining({ scope: org }),
     );

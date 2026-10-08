@@ -125,7 +125,6 @@ export class Subconscious {
           : resolveExtractor(entry),
       ),
       defaultScope: config.defaultScope ?? 'resource',
-      maxScope: config.maxScope,
       tools: config.tools !== false,
       activity: recentUpdates === false ? false : { recentUpdates },
       pins,

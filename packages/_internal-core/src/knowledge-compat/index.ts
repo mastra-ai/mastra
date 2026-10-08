@@ -104,7 +104,6 @@ export const KNOWLEDGE_V2_RECORDS_SCHEMA = {
   scopeKey: { type: 'text', nullable: true },
   sourceThreadId: { type: 'text', nullable: true },
   when: { type: 'timestamp', nullable: true },
-  maxScope: { type: 'text', nullable: true },
 } as const satisfies KnowledgeSchema;
 
 export const KNOWLEDGE_V2_MENTIONS_SCHEMA = {

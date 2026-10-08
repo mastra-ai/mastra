@@ -38,9 +38,8 @@ describe('knowledge scopes', () => {
     expect(() => canonicalizeKnowledgeScope(['tenant:t1'])).toThrow('Invalid knowledge scope entry');
   });
 
-  it('enforces scope ceilings using the narrowest reserved level', () => {
-    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1', 'resource:r1'], 'resource')).not.toThrow();
-    expect(() => assertKnowledgeScopeWithinCeiling(context, 'resource')).not.toThrow();
-    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'resource')).toThrow('exceeds resource ceiling');
+  it('keeps the deprecated ceiling assertion as a no-op for published memory versions', () => {
+    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'resource')).not.toThrow();
+    expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'thread')).not.toThrow();
   });
 });
