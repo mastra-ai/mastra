@@ -1,12 +1,14 @@
 import { createHmac } from 'node:crypto';
 
 import { Agent } from '@mastra/core/agent';
+import type { ChannelProvider } from '@mastra/core/channels';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
+import { notifyChannelInstalled } from '../connect-requests.js';
 import { tools } from '../tools.js';
 
 const SECRET = 'whsec_test';
@@ -25,25 +27,28 @@ const nested = {
   metadata: { connectionId: 'conn_1', connectRequestId: 'call_1', integration: 'linear', outcome: 'connected' },
 };
 
-async function setup(requestConnections = true) {
+async function setup(
+  requestConnections = true,
+  { connections = [] as unknown[], channels = {} as Record<string, ChannelProvider> } = {},
+) {
   const session = { connectionId: 'conn_1', connectUrl: 'https://c.test/s', expiresAt: '2030-01-01T00:00:00Z' };
   const catalog = { integrations: [{ id: 'linear', displayName: 'Linear', capabilities: {} }] };
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
     Response.json(
-      init?.method === 'POST' ? session : String(input).endsWith('/v2/integrations') ? catalog : { connections: [] },
+      init?.method === 'POST' ? session : String(input).endsWith('/v2/integrations') ? catalog : { connections },
     ),
   );
   const resolver = tools({
     projectId: 'proj_1',
     providers: ['linear'],
     client: { accessToken: 'tok', baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
-    ...(requestConnections ? { requestConnections: { allow: () => true } } : {}),
+    ...(requestConnections ? { requestConnections: { allow: () => true, channels: ['telegram'] } } : {}),
   });
   if (!requestConnections) return { resolver, fetchMock };
   const agent = new Agent({ id: 'agent', name: 'a', instructions: 'x', model: createMockModel({ mockText: 'ok' }) });
   const provider = resolver.signalProvider();
   provider.connect(agent);
-  const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+  const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), channels, logger: false });
   provider.__registerMastra(mastra);
   const memory = await mastra.getStorage()!.getStore('memory');
   await memory!.saveThread({
@@ -136,4 +141,35 @@ it('answers 503 when the wake fails and delivers the same key on retry', async (
   vi.spyOn(agent!, 'stream').mockRejectedValueOnce(new Error('model unavailable'));
   expect((await post(app!, event)).status).toBe(503);
   expect(await (await post(app!, event)).json()).toEqual({ outcome: 'delivered' });
+});
+
+it('wakes the thread when a requested channel install completes', async () => {
+  const telegram = {
+    id: 'telegram',
+    getRoutes: () => [],
+    listInstallations: async () => [],
+    connect: async () => ({ type: 'deep_link' as const, url: 'https://t.me/bot?start=x', installationId: 'inst_1' }),
+  };
+  const { resolver, agent, mastra } = await setup(true, {
+    connections: [{ id: 'conn_tg', integrationId: 'telegram', status: 'active' }],
+    channels: { telegram },
+  });
+  const stream = vi.spyOn(agent!, 'stream');
+  const custom = vi.fn();
+  const result = await (
+    await connectTool(resolver)
+  ).execute(
+    { integration: 'telegram', reason: 'To message you there.' },
+    { mastra, writer: { custom }, agent: { ...context, toolCallId: 'call_1' } },
+  );
+  expect([result, custom.mock.calls[0]![0].data.connectUrl]).toEqual([
+    { status: 'pending' },
+    'https://t.me/bot?start=x',
+  ]);
+  notifyChannelInstalled('telegram', { id: 'inst_1', agentId: 'agent' });
+  await vi.waitFor(() => expect(stream).toHaveBeenCalled());
+  expect(stream.mock.calls[0]![0]).toMatchObject({
+    type: 'notification',
+    attributes: { connectRequestId: 'call_1', connectionId: 'inst_1', integration: 'telegram', outcome: 'connected' },
+  });
 });

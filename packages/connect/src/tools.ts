@@ -10,6 +10,7 @@ import {
   CONNECT_INTEGRATION_TOOL,
   connectRoutes,
   ConnectSignalProvider,
+  listenForChannelInstalls,
 } from './connect-requests.js';
 import type { ConnectRequestHost, RequestConnectionsOptions } from './connect-requests.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
@@ -19,7 +20,7 @@ import {
   listConnectionsToolKey,
 } from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { PROVIDERS } from './registry.js';
+import { CHANNELS, PROVIDERS } from './registry.js';
 import {
   connectionIdEnvVar,
   groupByIntegrationId,
@@ -372,6 +373,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
           while (inflight) await inflight.catch(() => undefined);
           cache = undefined;
           for (const poller of requestHost?.pollers ?? []) poller.abort();
+          requestHost?.pendingInstalls.clear();
           const clients = Array.from(mcpClients.values(), entry => entry.client);
           mcpClients.clear();
           await Promise.allSettled(clients.map(mcp => mcp.disconnect()));
@@ -402,15 +404,24 @@ function createRequestHost(
   const integrations = Array.isArray(options.providers)
     ? options.providers
     : Object.entries(options.providers ?? {}).flatMap(([id, value]) => (value === true ? [id] : []));
-  if (integrations.length === 0) {
+  const channels = requestConnections.channels ?? [];
+  const knownChannels = new Set(CHANNELS.map(registration => registration.integrationId));
+  const unknownChannels = channels.filter(id => !knownChannels.has(id));
+  if (unknownChannels.length > 0) {
     throw new MastraConnectError(
       'invalid_options',
-      'requestConnections needs a providers allowlist: an array of ids, or `true` entries in the record form.',
+      `Unknown channel(s) in requestConnections.channels: ${unknownChannels.join(', ')}. Known channels: ${[...knownChannels].join(', ')}.`,
     );
   }
-  if (integrations.length > 25) {
+  if (integrations.length + channels.length === 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'requestConnections needs a providers allowlist (an array of ids, or `true` entries in the record form) or requestConnections.channels.',
+    );
+  }
+  if (integrations.length + channels.length > 25) {
     console.warn(
-      `[@mastra/connect] requestConnections offers ${integrations.length} providers; connect_integration lists each one, so narrow the allowlist to keep its description short.`,
+      `[@mastra/connect] requestConnections offers ${integrations.length + channels.length} providers; connect_integration lists each one, so narrow the allowlist to keep its description short.`,
     );
   }
   const webhookUrl = process.env.MASTRA_CONNECT_WEBHOOK_URL?.trim() || undefined;
@@ -434,9 +445,12 @@ function createRequestHost(
     webhookUrl,
     webhookSecret,
     integrations,
+    channels,
+    pendingInstalls: new Map(),
     pollers: new Set(),
     ...snapshot,
   };
+  if (channels.length > 0) listenForChannelInstalls(host);
   return host;
 }
 

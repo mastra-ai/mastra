@@ -2,6 +2,8 @@ import type { ChannelProvider } from '@mastra/core/channels';
 
 import type { ConnectClientOptions, ProjectConnection } from './client.js';
 import { getConnectionContext, getCredential, listProjectConnections, resolveClient } from './client.js';
+import { channelRefreshers, notifyChannelInstalled } from './connect-requests.js';
+import type { InstalledChannel } from './connect-requests.js';
 import { MastraConnectError } from './errors.js';
 import type { ChannelInstance, ChannelProviderRegistration, ChannelRuntime } from './providers/channel-provider.js';
 import type {
@@ -245,7 +247,18 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
       },
     };
     try {
-      state.instance = await registration.create(overrides.providerOptions ?? {}, runtime);
+      const providerOptions = overrides.providerOptions ?? {};
+      const onInstall = providerOptions.onInstall as ((installation: InstalledChannel) => Promise<void>) | undefined;
+      state.instance = await registration.create(
+        {
+          ...providerOptions,
+          onInstall: async (installation: InstalledChannel) => {
+            notifyChannelInstalled(registration.integrationId, installation);
+            await onInstall?.(installation);
+          },
+        },
+        runtime,
+      );
     } catch (error) {
       // Warn-and-skip so one broken integration (e.g. a failed module load)
       // never takes down the others. The skipped channel gets no routes and
@@ -369,6 +382,7 @@ export async function channels(options: ChannelsOptions = {}): Promise<ChannelsR
   const invocable = ((_context?: ChannelsResolverContext) => resolve()) as ChannelsResolver;
   invocable.getRoutes = (): ApiRoute[] => states.flatMap(state => state.instance.provider.getRoutes());
   invocable.refresh = refresh;
+  channelRefreshers.add(refresh);
   invocable.disconnect = async (): Promise<void> => {
     cache = undefined;
   };

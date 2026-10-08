@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import type { Agent } from '@mastra/core/agent';
+import type { ChannelProvider } from '@mastra/core/channels';
+import type { Mastra } from '@mastra/core/mastra';
 import { nestUnderRun } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
@@ -16,11 +18,13 @@ import { runUntraced } from './instrumentation.js';
 export const CONNECT_REQUEST_PART = 'data-mastra-connect-request';
 export const CONNECT_SIGNAL_SOURCE = 'mastra-connect';
 export const CONNECT_INTEGRATION_TOOL = 'connect_integration';
+const CONNECT_DONE_PATH = '/connect/done';
 
 const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 const POLL_INTERVAL_MS = 2_000;
 const IDLE_CHECK_MS = 250;
 const IDLE_WAIT_MS = 15_000;
+const CHANNEL_REQUEST_TTL_MS = 15 * 60_000;
 
 export type ConnectRequestData = {
   requestId: string;
@@ -55,6 +59,7 @@ export interface RequestConnectionsContext {
 
 export interface RequestConnectionsOptions {
   allow(ctx: RequestConnectionsContext): boolean | Promise<boolean>;
+  channels?: string[];
 }
 
 const connectEventSchema = z.object({
@@ -74,6 +79,8 @@ const connectEventSchema = z.object({
 
 export type ConnectEvent = z.infer<typeof connectEventSchema>;
 
+type PendingInstall = { provider: ConnectSignalProvider; context: ConnectEvent['context']; expiresAt: number };
+
 export interface ConnectRequestHost {
   client: ResolvedClient;
   projectId: string;
@@ -81,6 +88,8 @@ export interface ConnectRequestHost {
   webhookUrl: string | undefined;
   webhookSecret: string | undefined;
   integrations: string[];
+  channels: string[];
+  pendingInstalls: Map<string, PendingInstall>;
   pollers: Set<AbortController>;
   refresh(): Promise<unknown>;
   catalog(): IntegrationCatalogEntry[];
@@ -122,6 +131,15 @@ const OUTCOME_STATUS: Record<DeliverOutcome, 200 | 403 | 409 | 503> = {
 };
 
 const connectProviders = new Map<string, ConnectSignalProvider>();
+
+export type InstalledChannel = { id: string; agentId: string };
+
+const channelInstallListeners = new Set<(platform: string, installation: InstalledChannel) => void>();
+export const channelRefreshers = new Set<() => Promise<Record<string, ChannelProvider>>>();
+
+export function notifyChannelInstalled(platform: string, installation: InstalledChannel): void {
+  for (const listener of channelInstallListeners) listener(platform, installation);
+}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -170,7 +188,7 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
   async #wake(event: ConnectEvent): Promise<DeliverOutcome> {
     const { context, connection } = event;
     const target = { resourceId: context.resourceId, threadId: context.threadId };
-    if (!this.#host.integrations.includes(context.integration)) return 'rejected';
+    if (![...this.#host.integrations, ...this.#host.channels].includes(context.integration)) return 'rejected';
     const storage = this.mastra?.getStorage();
     const notifications = await storage?.getStore('notifications');
     const memory = await storage?.getStore('memory');
@@ -250,6 +268,26 @@ export function pollUntil(host: ConnectRequestHost, deadline: number, step: () =
 
 const retryable = (outcome: DeliverOutcome) => outcome === 'failed' || outcome === 'in_flight';
 
+export function listenForChannelInstalls(host: ConnectRequestHost): void {
+  channelInstallListeners.add((platform, installation) => {
+    const key = `${platform}:${installation.agentId}`;
+    const pending = host.pendingInstalls.get(key);
+    if (!pending || pending.expiresAt < Date.now()) return;
+    host.pendingInstalls.delete(key);
+    const event: ConnectEvent = {
+      key: `${installation.id}:${pending.context.requestId}:active`,
+      type: 'connection.active',
+      connection: { id: installation.id, integrationId: platform },
+      error: null,
+      context: pending.context,
+    };
+    pollUntil(host, pending.expiresAt, async () => !retryable(await pending.provider.deliver(event)));
+  });
+}
+
+const DONE_PAGE =
+  '<!doctype html><meta charset="utf-8"><title>Connected</title><p>Connected. You can close this window.</p><script>window.close()</script>';
+
 export function connectRoutes(secret: string | undefined): ApiRoute[] {
   return [
     registerApiRoute('/connect/webhook', {
@@ -273,16 +311,25 @@ export function connectRoutes(secret: string | undefined): ApiRoute[] {
         return c.json({ outcome }, OUTCOME_STATUS[outcome]);
       },
     }),
+    registerApiRoute(CONNECT_DONE_PATH, {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => c.html(DONE_PAGE),
+    }),
   ];
 }
 
 export function buildConnectIntegrationTool(host: ConnectRequestHost, connections: ProjectConnection[]) {
-  const offers = host.integrations.flatMap(id => {
+  const integrationOffers = host.integrations.flatMap(id => {
     const own = connections.filter(connection => connection.integrationId === id);
     if (own.some(connection => connection.status === 'active')) return [];
     const needsReauth = own.some(connection => connection.status === 'needs_reauth');
     return [{ id, line: `- ${id}: ${displayNameOf(host, id)}${needsReauth ? ' (needs reconnecting)' : ''}` }];
   });
+  const offers = [
+    ...integrationOffers,
+    ...host.channels.map(id => ({ id, line: `- ${id}: ${displayNameOf(host, id)} (channel)` })),
+  ];
   const [first, ...rest] = offers.map(offer => offer.id);
   if (!first) return undefined;
 
@@ -348,6 +395,9 @@ export function buildConnectIntegrationTool(host: ConnectRequestHost, connection
         connection => connection.integrationId === integration,
       );
       if (own.some(connection => connection.status === 'active')) {
+        if (host.channels.includes(integration)) {
+          return requestChannelInstall(host, provider, context.mastra, callbackContext, writeRequest);
+        }
         void host.refresh().catch(() => undefined);
         return { status: 'connected' };
       }
@@ -362,6 +412,51 @@ export function buildConnectIntegrationTool(host: ConnectRequestHost, connection
       if (!host.webhookUrl) pollForConnection(host, provider, session, callbackContext);
       return result;
     },
+  });
+}
+
+async function requestChannelInstall(
+  host: ConnectRequestHost,
+  provider: ConnectSignalProvider,
+  mastra: Pick<Mastra, 'resolveChannels'>,
+  context: ConnectEvent['context'],
+  writeRequest: (
+    target: Pick<ConnectRequestData, 'connectionId' | 'connectUrl' | 'expiresAt'>,
+  ) => Promise<{ status: string }>,
+) {
+  const { integration, agentId } = context;
+  let channel = (await mastra.resolveChannels())[integration];
+  if (!channel) {
+    await Promise.allSettled([...channelRefreshers].map(refresh => refresh()));
+    channel = (await mastra.resolveChannels())[integration];
+  }
+  if (!channel?.connect) {
+    return {
+      status: 'error',
+      message: `The ${displayNameOf(host, integration)} channel is not set up on this server: pass channels() from @mastra/connect to Mastra.`,
+    };
+  }
+  const installations = (await channel.listInstallations?.()) ?? [];
+  if (installations.some(installation => installation.agentId === agentId && installation.status === 'active')) {
+    return { status: 'connected' };
+  }
+  const result = await channel.connect(agentId, { redirectUrl: CONNECT_DONE_PATH });
+  if (result.type === 'immediate') return { status: 'connected' };
+
+  const expiresAt = Date.now() + CHANNEL_REQUEST_TTL_MS;
+  const key = `${integration}:${agentId}`;
+  host.pendingInstalls.set(key, { provider, context, expiresAt });
+  const reconcile = channel.reconcileInstallation?.bind(channel);
+  if (integration === 'discord' && reconcile) {
+    pollUntil(host, expiresAt, async () => {
+      await reconcile(agentId);
+      return !host.pendingInstalls.has(key);
+    });
+  }
+  return writeRequest({
+    connectionId: result.installationId,
+    connectUrl: result.type === 'oauth' ? result.authorizationUrl : result.url,
+    expiresAt: new Date(expiresAt).toISOString(),
   });
 }
 
