@@ -346,3 +346,27 @@ it('keeps hostile page excerpts literal inside fences that their content cannot 
   expect(report).toContain('After:\n```text\n(empty)\n```');
   expect(event.changes[0]?.evidence?.beforeExcerpt).toBe(excerpt);
 });
+
+it('renders report metadata as separate Markdown list items', () => {
+  const report = formatMarkdownReport({
+    eventId: 'event',
+    runId: 'run',
+    monitorId: 'monitor',
+    monitorName: 'Monitor',
+    date: '2026-10-08',
+    changes: [
+      {
+        id: 'change',
+        sourceId: 'pricing',
+        status: 'classified',
+        route: 'alert',
+        reason: 'Material price change',
+        evidence: { sourceUrl: 'https://public.example/pricing', beforeExcerpt: '$19', afterExcerpt: '$29' },
+      },
+    ],
+  });
+  expect(report).toContain('- Date: 2026-10-08\n- Monitor: monitor\n- Run: run\n- Event: event\n');
+  expect(report).toContain(
+    '- Status: classified\n- Route: alert\n- Reason: Material price change\n- Source: https://public.example/pricing\n',
+  );
+});

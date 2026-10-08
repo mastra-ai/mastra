@@ -14,19 +14,19 @@ export function formatMarkdownReport(event: ChangeNotification) {
   const lines = [
     `# Changes for ${event.monitorName}`,
     '',
-    `Date: ${event.date}`,
-    `Monitor: ${event.monitorId}`,
-    `Run: ${event.runId}`,
-    `Event: ${event.eventId}`,
+    `- Date: ${event.date}`,
+    `- Monitor: ${event.monitorId}`,
+    `- Run: ${event.runId}`,
+    `- Event: ${event.eventId}`,
     '',
   ];
   for (const change of event.changes) {
-    lines.push(`## ${change.sourceId}`, '', `Status: ${change.status}`);
-    if (change.route) lines.push(`Route: ${change.route}`);
-    if (change.reason) lines.push(`Reason: ${change.reason}`);
+    lines.push(`## ${change.sourceId}`, '', `- Status: ${change.status}`);
+    if (change.route) lines.push(`- Route: ${change.route}`);
+    if (change.reason) lines.push(`- Reason: ${change.reason}`);
     if (change.evidence) {
       lines.push(
-        `Source: ${change.evidence.sourceUrl}`,
+        `- Source: ${change.evidence.sourceUrl}`,
         '',
         'Before:',
         quote(change.evidence.beforeExcerpt || '(empty)'),
