@@ -912,6 +912,47 @@ describe('KnowledgePage', () => {
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('Payments');
   });
 
+  it('pages child scopes into the tree and keeps loaded scopes when a later page fails', async () => {
+    stubKnowledgeRoute();
+    const cursors: Array<string | null> = [];
+    let failNext = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor');
+        cursors.push(cursor);
+        if (!cursor) return HttpResponse.json({ ...scopeTreeFixture, nextCursor: 'scopes-2' });
+        if (failNext) return HttpResponse.json({ error: 'error', message: 'scopes unavailable' }, { status: 500 });
+        return HttpResponse.json({
+          scope: scopeTreeFixture.scope,
+          children: [{ ...scopeTreeFixture.children[0]!, id: 'scope:billing', name: 'Billing' }],
+          nextCursor: 'scopes-3',
+        } satisfies KnowledgeScopeTreePayload);
+      }),
+    );
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      renderRoute();
+      const user = userEvent.setup();
+      const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+      await user.click(await within(scopes).findByRole('button', { name: 'Load more scopes' }));
+      expect(await within(scopes).findByRole('button', { name: 'Billing' })).toBeInTheDocument();
+      expect(within(scopes).getByRole('button', { name: 'Payments' })).toBeInTheDocument();
+      expect(cursors).toContain('scopes-2');
+
+      failNext = true;
+      await user.click(within(scopes).getByRole('button', { name: 'Load more scopes' }));
+      expect(await within(scopes).findByText('Unable to load more scopes.')).toBeInTheDocument();
+      expect(within(scopes).getByRole('button', { name: 'Billing' })).toBeInTheDocument();
+      // The page keeps the tree instead of replacing the view with an error notice.
+      expect(screen.queryByText('scopes unavailable')).not.toBeInTheDocument();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('keeps the selected node addressable through ?node= and reopens it from the link', async () => {
     stubKnowledgeRoute();
     const { router, unmount } = renderRoute();

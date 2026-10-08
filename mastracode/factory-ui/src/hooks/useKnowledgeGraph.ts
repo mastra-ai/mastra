@@ -23,6 +23,7 @@ import {
   reviewKnowledgeProposal,
   type KnowledgeActivityFilters,
   type KnowledgeProposalStatus,
+  type KnowledgeScopeTreePayload,
 } from '../ui/domains/factory/services/knowledge';
 import { RequestError } from '../ui/domains/factory/services/request';
 
@@ -44,11 +45,20 @@ export function useKnowledgeScopes(
   threadId?: string,
 ) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: [...queryKeys.knowledgeScopes(factoryProjectId, scopeId, threadId)],
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchKnowledgeScopes(baseUrl, factoryProjectId, scopeId, threadId, signal)
+      ? ({ pageParam, signal }) =>
+          fetchKnowledgeScopes(baseUrl, factoryProjectId, scopeId, threadId, signal, pageParam || undefined)
       : skipToken,
+    initialPageParam: '',
+    getNextPageParam: page => page.nextCursor,
+    // Child scopes arrive one bounded page at a time; the tree reads them as one list.
+    select: (data): KnowledgeScopeTreePayload => ({
+      scope: data.pages[0]!.scope,
+      children: data.pages.flatMap(page => page.children),
+      nextCursor: data.pages.at(-1)?.nextCursor,
+    }),
   });
 }
 
