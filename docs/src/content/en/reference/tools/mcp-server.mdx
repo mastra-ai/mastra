@@ -1022,18 +1022,18 @@ A standalone `MCPServer` with no `mastra` instance produces no spans.
 
 ### Linking to the caller's trace
 
-A request that carries a W3C `traceparent` keeps its own trace and links to the caller's span. The request span records the caller's trace ID and span ID in its `links`, so you can follow a tool call from the caller's trace to the request it started. Neither trace is merged into the other, and each keeps its own root span and trace summary.
+A request that carries a W3C `traceparent` keeps its own trace, root span, and trace summary. Its request span links to the caller's span, so you can follow a tool call from the caller's trace to the request it started.
 
 The server reads `traceparent` and `tracestate` from two places, in this order:
 
 1. The request `_meta`. `MCPClient` sends `traceparent` there for every traced tool call an agent or workflow makes, over HTTP and stdio.
 1. The HTTP headers. OpenTelemetry HTTP instrumentation in a non-Mastra caller sends them there.
 
-The request span also records a valid `traceparent` as the `callerTraceparent` attribute, and the `tracestate` sent with it as `callerTracestate`, capped at 512 characters. Exporters without span link support still carry these attributes. A request without a valid `traceparent` gets no link and no caller attributes. The trace fields are left out of the span input, and `baggage` is never recorded.
+The request span also records a valid `traceparent` as the `callerTraceparent` attribute, and the `tracestate` sent with it as `callerTracestate`, capped at 512 characters. Exporters without span link support still carry these attributes. A request without a valid `traceparent` gets no link and no caller attributes. The trace fields are left out of the span input.
 
 The link also works in the other direction. When a `tools/call` request carried a `traceparent`, the reply's `_meta.mastra.traceparent` names the request span, and `MCPClient` adds a link from its tool call span to it. Callers that sent no trace context get nothing back.
 
-Mastra storage saves the links with the spans. The OpenTelemetry exporter, [`OtelBridge`](/integrations/observability/opentelemetry#bridge), and the Datadog and Sentry exporters send them as span links.
+Mastra storage saves the links with the spans. The OpenTelemetry exporter, [`OtelBridge`](/integrations/observability/opentelemetry#bridge), `DatadogBridge`, `DatadogExporter`, and `SentryExporter` send them as span links. `DatadogExporter` and `SentryExporter` give spans their own IDs, so a link between two Mastra spans doesn't resolve in those backends.
 
 ## Notification delivery
 

@@ -123,11 +123,6 @@ export interface SentryExporterConfig extends BaseExporterConfig {
   options?: Partial<Sentry.NodeOptions>;
 }
 
-/**
- * Internal span tracking data.
- * generation tracks the single MODEL_GENERATION for AGENT_RUN response attributes.
- * toolCalls tracks child tool calls for MODEL_GENERATION spans.
- */
 /** Sentry span links for Mastra span links. Only full-length W3C IDs are kept. */
 function toSentryLinks(links: { traceId: string; spanId: string }[] | undefined) {
   return (links ?? [])
@@ -135,6 +130,11 @@ function toSentryLinks(links: { traceId: string; spanId: string }[] | undefined)
     .map(link => ({ context: { traceId: link.traceId, spanId: link.spanId, traceFlags: 1 } }));
 }
 
+/**
+ * Internal span tracking data.
+ * generation tracks the single MODEL_GENERATION for AGENT_RUN response attributes.
+ * toolCalls tracks child tool calls for MODEL_GENERATION spans.
+ */
 type SpanData = {
   span: Sentry.Span;
   spanType: SpanType;
