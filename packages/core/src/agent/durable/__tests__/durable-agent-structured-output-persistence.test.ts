@@ -125,6 +125,23 @@ describe('structured output persistence (issue #26432)', () => {
     },
   );
 
+  // The caller routes truncation through errorStrategy, so a fallback config returns and saves fallbackValue.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'saves the fallbackValue when truncated output uses errorStrategy fallback (%s)',
+    async engine => {
+      const fallbackValue = { name: 'Fallback', age: 1 };
+      const { object, metadata } = await runAndRecall(
+        engine,
+        { schema, errorStrategy: 'fallback', fallbackValue },
+        JSON.stringify(expected),
+        'length',
+      );
+
+      expect(object).toEqual(fallbackValue);
+      expect(metadata?.structuredOutput).toEqual(fallbackValue);
+    },
+  );
+
   // Refinements and transforms do not survive the JSON Schema conversion, so in-process
   // runs must validate with the live schema to match the object returned to the caller.
   it.each(['plain', 'durable', 'evented'] as const)(
