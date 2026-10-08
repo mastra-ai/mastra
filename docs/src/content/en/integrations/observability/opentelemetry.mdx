@@ -756,7 +756,7 @@ Both services must have:
 1. W3C Trace Context propagator enabled
 1. Mastra with `OtelBridge` configured
 
-A Mastra `MCPServer` keeps its own trace for each request instead of joining the caller's trace. When a request carries a W3C `traceparent`, in `_meta` or as an HTTP header, the request span links to the caller's span, and the exporter and the bridge send that link as an OpenTelemetry span link. See [Linking to the caller's trace](/reference/tools/mcp-server#linking-to-the-callers-trace).
+A Mastra `MCPServer` request over HTTP follows the same rule. With this setup, it joins the caller's trace. Without HTTP instrumentation on the server, each request keeps its own trace. In both cases, when a request carries a W3C `traceparent`, in `_meta` or as an HTTP header, the request span links to the caller's span, and the exporter and the bridge send that link as an OpenTelemetry span link. See [Linking to the caller's trace](/reference/tools/mcp-server#linking-to-the-callers-trace).
 
 ### Using tags
 

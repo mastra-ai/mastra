@@ -925,7 +925,7 @@ This creates a single distributed trace that includes both the HTTP request hand
 
 ### MCP calls
 
-Model Context Protocol (MCP) calls link the caller's trace and the server's trace without any setup. When an agent or workflow calls a tool through `MCPClient`, the `MCPServer` that handles it keeps its own trace and records a link to the tool call span, and the tool call span links back to the server's span. Each side keeps its own trace, root span, and trace summary. Mastra storage saves the links with the spans, and exporters with span link support send them too.
+Model Context Protocol (MCP) calls link the caller's trace and the server's trace without any setup. When an agent or workflow calls a tool through `MCPClient`, the `MCPServer` that handles it keeps its own trace and records a link to the tool call span, and the tool call span links back to the server's span. Each side keeps its own trace, root span, and trace summary. When the server uses a tracing bridge and its HTTP instrumentation continues the caller's trace, the request joins that trace instead. Mastra storage saves the links with the spans, and exporters with span link support send them too.
 
 This also works with non-Mastra software on either side. See the [`MCPServer` reference](/reference/tools/mcp-server#linking-to-the-callers-trace) for details, and the [`MCPClient` reference](/reference/tools/mcp-client) to send your own trace context.
 

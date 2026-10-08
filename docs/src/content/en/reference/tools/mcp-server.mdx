@@ -1024,6 +1024,8 @@ A standalone `MCPServer` with no `mastra` instance produces no spans.
 
 A request that carries a W3C `traceparent` keeps its own trace, root span, and trace summary. Its request span links to the caller's span, so you can follow a tool call from the caller's trace to the request it started.
 
+With a tracing bridge, the request span starts under the span that's active when the request arrives. If HTTP instrumentation on the server continues the caller's trace from the `traceparent` header, the request joins the caller's trace instead of starting its own. Its link then points to a span in the same trace.
+
 The server reads `traceparent` and `tracestate` from two places, in this order:
 
 1. The request `_meta`. `MCPClient` sends `traceparent` there for every traced tool call an agent or workflow makes, over HTTP and stdio.
