@@ -15,7 +15,12 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY, SUSPENDED_RUN_MEMORY_KEY } from './session';
+import {
+  ABORTED_BY_USER_REASON,
+  SOURCE_APPROVAL_CALLS_KEY,
+  SUSPENDED_RUN_AGENT_KEY,
+  SUSPENDED_RUN_MEMORY_KEY,
+} from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -949,6 +954,12 @@ export class SessionRunEngine {
         if (currentSuspensionRequiresApproval === false) {
           break;
         }
+
+        if (
+          this.#session.approval.isArmed({ toolCallId, threadId: binding.threadId, runId: binding.runId }) ||
+          (binding.runId && this.#machinery.getRunScope(binding.runId)?.get(SOURCE_APPROVAL_CALLS_KEY)?.has(toolCallId))
+        )
+          break;
 
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });

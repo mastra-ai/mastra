@@ -60,6 +60,7 @@ import type {
 } from './types';
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
+export const SOURCE_APPROVAL_CALLS_KEY = createRunScopeKey<Set<string>>('agent-controller.sourceApprovalCalls');
 
 /**
  * Bucket key for grants that apply to every thread. Grant calls that name no
@@ -5489,11 +5490,22 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
+    const abortSignal =
+      inputAbortSignal ??
+      (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
+        ? this.run.ensureAbortController().signal
+        : new AbortController().signal);
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
+      threadId,
+      resourceId,
+      runId,
+      abortSignal,
+      execution: true,
+    });
+    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -5502,7 +5514,7 @@ export class Session<TState = unknown> {
       approved: true,
       requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
-      abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
+      abortSignal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
       // Without the shared budget the resumed run falls back to the agent's
@@ -5547,11 +5559,22 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
-    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
+    const abortSignal =
+      inputAbortSignal ??
+      (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
+        ? this.run.ensureAbortController().signal
+        : new AbortController().signal);
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
+      threadId,
+      resourceId,
+      runId,
+      abortSignal,
+      execution: true,
+    });
+    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -5561,7 +5584,7 @@ export class Session<TState = unknown> {
       declineContext,
       requireToolApproval: !isYolo,
       memory: { thread: threadId, resource: resourceId },
-      abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
+      abortSignal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
       // Without the shared budget the resumed run falls back to the agent's
@@ -5587,7 +5610,11 @@ export class Session<TState = unknown> {
     };
     const boundary = new Promise<void>(resolve => {
       unsubscribe = this.subscribe(event => {
-        const isTerminal = event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error';
+        const isTerminal =
+          event.type === 'tool_suspended' ||
+          event.type === 'tool_approval_required' ||
+          event.type === 'agent_end' ||
+          event.type === 'error';
         const completedResumedTool = resolveOnToolEnd && event.type === 'tool_end' && event.toolCallId === toolCallId;
         if (isTerminal || completedResumedTool) resolve();
       });
@@ -5627,13 +5654,75 @@ export class Session<TState = unknown> {
     }
     requestContext.set(markerKey, attempt);
     const context = requestContext.get('controller') as AgentControllerRequestContext<TState>;
+    context.abortSignal?.addEventListener('abort', detach, { once: true });
+    if (context.abortSignal?.aborted) detach();
     let dispatched = false;
+    let cancelled = false;
     const promise = (async () => {
       try {
         for await (const chunk of subscription.stream) {
           if (subscription.__getCurrentRunRequestContext?.()?.get(markerKey) !== attempt) continue;
           if (chunk.runId && chunk.runId !== address.runId) continue;
           dispatched = true;
+          if (chunk.type === 'tool-call-approval') {
+            if (context.isThreadActive?.()) return;
+            const next = { ...address, toolCallId: chunk.payload.toolCallId };
+            if (this.approval.isArmed(next)) return;
+            // Keep ownership after the gate is answered: reattachment can replay
+            // its approval chunk before dispatch advances the persisted run.
+            const runScope = this.machinery.getRunScope(address.runId);
+            const ownedCalls = runScope?.get(SOURCE_APPROVAL_CALLS_KEY) ?? new Set<string>();
+            ownedCalls.add(next.toolCallId);
+            runScope?.set(SOURCE_APPROVAL_CALLS_KEY, ownedCalls);
+            const policy = this.resolveToolApproval(chunk.payload.toolName, address.threadId);
+            const decision: Promise<ApprovalDecision> =
+              policy === 'ask'
+                ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
+                : Promise.resolve({ decision: policy === 'allow' ? ('approve' as const) : ('decline' as const) });
+            let approvalDisposed = false;
+            const removeApprovalDeletionListener = this.machinery.onSessionDeleted?.(() => {
+              approvalDisposed = true;
+              this.approval.cancel(next);
+            });
+            if (policy === 'ask')
+              context.emitEvent?.({
+                type: 'tool_approval_required',
+                threadId: address.threadId,
+                toolCallId: next.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+              });
+            void decision
+              .then(async approval => {
+                if (approvalDisposed) return;
+                const continuation = await this.machinery.buildRequestContext(
+                  approval.requestContext ?? requestContext,
+                  { ...next, execution: true, abortSignal: context.abortSignal },
+                );
+                if (approvalDisposed) return;
+                const observer = await this.observeSourceResume(agent, next, continuation);
+                try {
+                  if (approvalDisposed) return;
+                  const binding = { ...next, agent, requestContext: continuation, abortSignal: context.abortSignal };
+                  if (approval.decision === 'approve') await this.approveToolCall(binding);
+                  else
+                    await this.declineToolCall({
+                      ...binding,
+                      declineContext: approval.declineContext,
+                    });
+                  await observer.promise;
+                } finally {
+                  observer.cancel();
+                }
+              })
+              .catch(error => context.emitEvent?.({ type: 'error', error: getErrorFromUnknown(error) }))
+              .finally(() => {
+                ownedCalls.delete(next.toolCallId);
+                if (!ownedCalls.size) runScope?.delete(SOURCE_APPROVAL_CALLS_KEY);
+                removeApprovalDeletionListener?.();
+              });
+            return;
+          }
           if (chunk.type === 'tool-call-suspended') {
             const next = { ...address, toolCallId: chunk.payload.toolCallId };
             if (!this.suspensions.has(next)) {
@@ -5661,13 +5750,22 @@ export class Session<TState = unknown> {
           }
           if (chunk.type === 'finish') return;
         }
+        if (!cancelled) throw new Error('Source resume subscription closed before a matching run boundary');
       } finally {
+        context.abortSignal?.removeEventListener('abort', detach);
         subscription.unsubscribe();
         removeDeletionListener?.();
       }
     })();
     void promise.catch(() => undefined);
-    return { promise, cancel: () => subscription.unsubscribe(), dispatched: () => dispatched };
+    return {
+      promise,
+      cancel: () => {
+        cancelled = true;
+        subscription.unsubscribe();
+      },
+      dispatched: () => dispatched,
+    };
   }
 
   /**

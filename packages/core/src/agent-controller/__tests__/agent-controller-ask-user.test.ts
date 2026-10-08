@@ -24,7 +24,7 @@ import { createTool } from '../../tools';
 import { askUserTool } from '../../tools/builtin/ask-user';
 
 import { AgentController } from '../agent-controller';
-import { SessionApproval } from '../session';
+import { SessionApproval, SOURCE_APPROVAL_CALLS_KEY } from '../session';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerRequestContext, AgentControllerEvent } from '../types';
 
@@ -111,6 +111,9 @@ describe('AgentController: ask_user native suspension', () => {
     'warm',
     'warm-reattach',
     'warm-setup-navigation',
+    'warm-approval',
+    'warm-approval-reattach',
+    'warm-stream-closed',
     'cold',
     'cold-durable',
     'cold-storage-only',
@@ -150,6 +153,9 @@ describe('AgentController: ask_user native suspension', () => {
             thread: controller.threadId,
           });
           await controller.setState({ thinkingLevel: 'medium' });
+          expect(controller.state.thinkingLevel).toBe('high');
+          expect(controller.getState().thinkingLevel).toBe('medium');
+          expect(controller.session.state.get().thinkingLevel).toBe('medium');
           await controller.session.state.update(async value => {
             if (recovery === 'warm-reattach' && observations.length === 2) {
               writeEntered.resolve();
@@ -360,9 +366,59 @@ describe('AgentController: ask_user native suspension', () => {
         expect(events.some(event => event.type === 'agent_end' || event.type === 'error')).toBe(false);
         return;
       }
+      if (recovery === 'warm-stream-closed') {
+        const subscribe = session.machinery.subscribeToThread.bind(session.machinery);
+        const unsubscribe = vi.fn();
+        const removeListener = vi.fn();
+        vi.spyOn(session.machinery, 'onSessionDeleted').mockReturnValue(removeListener);
+        vi.spyOn(session.machinery, 'subscribeToThread').mockImplementation(async input => {
+          const subscription = await subscribe(input);
+          const detach = subscription.unsubscribe.bind(subscription);
+          subscription.unsubscribe = () => {
+            unsubscribe();
+            detach();
+          };
+          subscription.unsubscribe();
+          return subscription;
+        });
+        vi.spyOn(fixture.source, 'sendStreamResume').mockResolvedValue({
+          accepted: true,
+          runId: address.runId,
+          toolCallId: address.toolCallId,
+        });
+        await expect(session.respondToToolSuspension({ address, resumeData: 'first' })).rejects.toThrow(
+          'closed before a matching run boundary',
+        );
+        expect(removeListener).toHaveBeenCalledOnce();
+        expect(unsubscribe).toHaveBeenCalled();
+        expect(session.run.getRunId()).toBe(activeRunId);
+        expect(session.run.getAbortSignal()).toBe(abortSignal);
+        expect(abortSignal?.aborted).toBe(false);
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(session.displayState.get()).toEqual(display);
+        return;
+      }
+      if (recovery.startsWith('warm-approval')) await session.state.set({ yolo: false });
       releaseSetup.resolve();
       await (pendingResume ?? session.respondToToolSuspension({ address, resumeData: 'first' }));
       const second = { ...address, toolCallId: 'owned-2' };
+      if (recovery.startsWith('warm-approval')) {
+        await vi.waitFor(() => expect(session.approval.isArmed(second)).toBe(true));
+        expect(events.filter(event => event.type === 'tool_approval_required')).toMatchObject([
+          { threadId: address.threadId, toolCallId: second.toolCallId },
+        ]);
+        expect(session.displayState.get()).toEqual(display);
+        if (recovery === 'warm-approval-reattach') {
+          navigated = true;
+          await session.thread.switch({ threadId: address.threadId });
+          expect(events.filter(event => event.type === 'tool_approval_required')).toHaveLength(1);
+        }
+        session.respondToToolApproval({ decision: 'approve', toolCallId: second.toolCallId });
+        await vi.waitFor(() => expect(session.suspensions.has(second)).toBe(true));
+        await vi.waitFor(() =>
+          expect(session.machinery.getRunScope(address.runId)?.has(SOURCE_APPROVAL_CALLS_KEY)).not.toBe(true),
+        );
+      }
       expect(session.suspensions.has(second)).toBe(true);
       const resumed = session.respondToToolSuspension({ address: second, resumeData: 'second' });
       if (recovery === 'warm-reattach') {
@@ -389,6 +445,15 @@ describe('AgentController: ask_user native suspension', () => {
         return;
       }
       await resumed;
+      if (recovery === 'warm-approval-reattach') {
+        await vi.waitFor(() =>
+          expect(events.filter(event => event.type === 'agent_end' && event.reason === 'complete')).toHaveLength(1),
+        );
+        expect(session.state.get()).toMatchObject({ thinkingLevel: 'high', hostCount: 2 });
+        expect(observations).toHaveLength(2);
+        expect(sourceCalls).toBe(3);
+        return;
+      }
       expect(observations).toEqual(
         [1, 2].map(() => ({
           level: 'high',
