@@ -451,13 +451,21 @@ export class GithubRules {
       repositoryExternalId: String(repositoryId),
     });
     for (const project of projects) {
-      await this.options.onPush({
-        orgId: project.orgId,
-        factoryProjectId: project.factoryProjectId,
-        repositoryExternalId: String(repositoryId),
-        ref,
-        after,
-      });
+      try {
+        await this.options.onPush({
+          orgId: project.orgId,
+          factoryProjectId: project.factoryProjectId,
+          repositoryExternalId: String(repositoryId),
+          ref,
+          after,
+        });
+      } catch (error) {
+        // One project's listener must not fail the delivery for the others.
+        console.warn('[Mastra Factory] Push listener failed', {
+          factoryProjectId: project.factoryProjectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

@@ -72,6 +72,7 @@ describe('runEnvironmentBuild', () => {
     const finishedAt = new Date('2026-10-07T10:04:00Z');
     const { build, sandboxTemplate, contexts } = templateReturning([{ status: 'ready', templateId: 'tpl-1' }]);
     const heads = { 'acme/api': SHA_A, 'acme/web': SHA_B };
+    await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: claimedAt, staleAfterMs: 1 });
 
     const outcome = await runEnvironmentBuild(
       {
@@ -140,10 +141,12 @@ describe('runEnvironmentBuild', () => {
       input: { activeTemplateId: 'tpl-old', activeTemplateHeads: { 'acme/api': SHA_A, 'acme/web': SHA_A } },
     });
     const { sandboxTemplate } = templateReturning([{ status: 'failed', templateId: 'tpl-1', error: 'setup exploded' }]);
+    const claimedAt = new Date();
+    await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: claimedAt, staleAfterMs: 1 });
 
     const outcome = await runEnvironmentBuild(
       { projects: seed.projects, sourceControl: { storage: github, versionControl }, sandboxTemplate },
-      { project, claimedAt: new Date(), heads: { 'acme/api': SHA_B, 'acme/web': SHA_B } },
+      { project, claimedAt, heads: { 'acme/api': SHA_B, 'acme/web': SHA_B } },
     );
 
     expect(outcome).toEqual({ status: 'failed', error: 'setup exploded' });
@@ -184,18 +187,21 @@ describe('runEnvironmentBuild', () => {
     const { seed, project, github, versionControl } = await seedEnvironment();
     const sandboxTemplate = vi.fn(() => async () => ({
       build: async () => {
-        throw new Error('platform unreachable');
+        throw new Error('clone of https://x-access-token:secret-token@github.com/acme/api failed (ghs_secrettoken)');
       },
     }));
+    const claimedAt = new Date();
+    await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: claimedAt, staleAfterMs: 1 });
 
     const outcome = await runEnvironmentBuild(
       { projects: seed.projects, sourceControl: { storage: github, versionControl }, sandboxTemplate },
-      { project, claimedAt: new Date(), heads: { 'acme/api': SHA_A, 'acme/web': SHA_B } },
+      { project, claimedAt, heads: { 'acme/api': SHA_A, 'acme/web': SHA_B } },
     );
 
-    expect(outcome).toEqual({ status: 'failed', error: 'platform unreachable' });
+    expect(outcome).toEqual({ status: 'failed', error: 'clone of https://***@github.com/acme/api failed (***)' });
     const recorded = await seed.projects.get({ orgId: 'org-1', id: project.id });
-    expect(JSON.stringify(recorded)).not.toContain('secret-token');
+    expect(recorded?.lastBuildError).toBe('clone of https://***@github.com/acme/api failed (***)');
+    expect(JSON.stringify(recorded)).not.toContain('secret');
   });
 
   it('skips a project whose host returns no template, recording nothing', async () => {

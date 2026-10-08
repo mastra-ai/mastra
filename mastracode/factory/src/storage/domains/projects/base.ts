@@ -104,7 +104,15 @@ export interface RecordFactoryProjectBuildInput {
   now: Date;
   /** The claim the attempt ran under; a request made after it stays pending. */
   claimedAt: Date;
-  result: { status: 'ready'; templateId: string; heads: Record<string, string> } | { status: 'failed'; error: string };
+  /**
+   * `skipped`: the attempt found nothing to build (every head still matches
+   * the recorded template); the lease is released and the attempt stamped,
+   * the template, status and failure count stay as they were.
+   */
+  result:
+    | { status: 'ready'; templateId: string; heads: Record<string, string> }
+    | { status: 'failed'; error: string }
+    | { status: 'skipped' };
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -359,16 +367,20 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     id,
     now,
     staleAfterMs,
+    when,
   }: {
     orgId: string;
     id: string;
     now: Date;
     staleAfterMs: number;
+    /** Re-checked on the locked row, so a decision made on a stale listing cannot claim. */
+    when?: (current: FactoryProject) => boolean;
   }): Promise<FactoryProject | null> {
     let claimed = false;
     const row = await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, current => {
       const held = current.build_claimed_at;
       if (held && now.getTime() - held.getTime() < staleAfterMs) return null;
+      if (when && !when(toFactoryProject(current))) return null;
       claimed = true;
       return { build_claimed_at: now, last_build_status: 'building', updated_at: now };
     });
@@ -381,7 +393,9 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * that landed while the build ran stays newer than the attempt and is
    * served next); only `ready` moves the template id, heads and
    * `last_built_at`. A request made after the claim stays pending so the
-   * next tick serves it.
+   * next tick serves it. Writes nothing (and resolves null) when the row no
+   * longer carries this attempt's claim: a holder whose lease went stale and
+   * was taken over must not overwrite the new holder's result.
    */
   async recordBuild({
     orgId,
@@ -392,31 +406,37 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     id: string;
     input: RecordFactoryProjectBuildInput;
   }): Promise<FactoryProject | null> {
+    let recorded = false;
     const row = await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, current => {
+      if (current.build_claimed_at?.getTime() !== input.claimedAt.getTime()) return null;
+      recorded = true;
       const requested = current.build_requested_at;
       const stillRequested = requested !== null && requested.getTime() > input.claimedAt.getTime();
+      const result = input.result;
       return {
         last_build_attempted_at: input.claimedAt,
         build_claimed_at: null,
         build_requested_at: stillRequested ? requested : null,
-        ...(input.result.status === 'ready'
-          ? {
-              last_build_status: 'ready',
-              last_build_error: null,
-              last_built_at: input.now,
-              active_template_id: input.result.templateId,
-              active_template_heads: input.result.heads,
-              build_failure_count: 0,
-            }
-          : {
-              last_build_status: 'failed',
-              last_build_error: input.result.error,
-              build_failure_count: (current.build_failure_count ?? 0) + 1,
-            }),
+        ...(result.status === 'skipped'
+          ? { last_build_status: current.active_template_id ? 'ready' : null }
+          : result.status === 'ready'
+            ? {
+                last_build_status: 'ready',
+                last_build_error: null,
+                last_built_at: input.now,
+                active_template_id: result.templateId,
+                active_template_heads: result.heads,
+                build_failure_count: 0,
+              }
+            : {
+                last_build_status: 'failed',
+                last_build_error: result.error,
+                build_failure_count: (current.build_failure_count ?? 0) + 1,
+              }),
         updated_at: input.now,
       };
     });
-    return row ? toFactoryProject(row) : null;
+    return recorded && row ? toFactoryProject(row) : null;
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {

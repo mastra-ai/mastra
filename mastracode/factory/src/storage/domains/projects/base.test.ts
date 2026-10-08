@@ -182,12 +182,61 @@ describe('FactoryProjectsStorage', () => {
 
       const requestedDuring = new Date('2026-10-07T10:02:00.000Z');
       await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildRequestedAt: requestedDuring } });
+      await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: claimedAt, staleAfterMs: 1 });
       const again = await seed.projects.recordBuild({
         orgId: 'org-1',
         id: project.id,
         input: { now: finishedAt, claimedAt, result: { status: 'ready', templateId: 'tpl-2', heads: {} } },
       });
       expect(again).toMatchObject({ buildRequestedAt: requestedDuring, activeTemplateId: 'tpl-2' });
+    });
+
+    it('refuses to record for a claim that was taken over, and re-checks the trigger on the locked row', async () => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+      const first = new Date('2026-10-07T10:00:00.000Z');
+      const second = new Date('2026-10-07T11:00:00.000Z');
+      await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: first, staleAfterMs: 1 });
+      // The first holder went stale; a second worker takes the lease.
+      expect(
+        await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: second, staleAfterMs: 1 }),
+      ).not.toBeNull();
+      // The late first holder writes nothing.
+      expect(
+        await seed.projects.recordBuild({
+          orgId: 'org-1',
+          id: project.id,
+          input: { now: second, claimedAt: first, result: { status: 'ready', templateId: 'tpl-late', heads: {} } },
+        }),
+      ).toBeNull();
+      expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
+        activeTemplateId: null,
+        buildClaimedAt: second,
+        lastBuildStatus: 'building',
+      });
+      // A skipped attempt releases the lease and stamps the attempt only.
+      const skipped = await seed.projects.recordBuild({
+        orgId: 'org-1',
+        id: project.id,
+        input: { now: second, claimedAt: second, result: { status: 'skipped' } },
+      });
+      expect(skipped).toMatchObject({
+        buildClaimedAt: null,
+        lastBuildAttemptedAt: second,
+        lastBuildStatus: null,
+        buildFailureCount: 0,
+      });
+      // `when` runs on the locked row, so a stale decision cannot claim.
+      expect(
+        await seed.projects.claimBuild({
+          orgId: 'org-1',
+          id: project.id,
+          now: second,
+          staleAfterMs: 1,
+          when: current => current.buildRequestedAt !== null,
+        }),
+      ).toBeNull();
+      expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.buildClaimedAt).toBeNull();
     });
 
     it('records a failed build without touching the active template, heads or last successful build', async () => {

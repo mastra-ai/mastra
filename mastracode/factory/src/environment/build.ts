@@ -35,6 +35,14 @@ export type EnvironmentBuildOutcome =
   | { status: 'skipped'; reason: 'no_environment' | 'no_template' };
 
 /** The synthetic sandbox id a project's build runs under; never a session. */
+/**
+ * A build error may echo a clone URL or a token; strip URL userinfo and
+ * GitHub token shapes before the message is stored or logged.
+ */
+export function redactCredentials(message: string): string {
+  return message.replace(/\/\/[^/\s@]+@/g, '//***@').replace(/\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+/g, '***');
+}
+
 export function environmentBuildSessionId(projectId: string): string {
   return `environment-build:${projectId}`;
 }
@@ -119,7 +127,7 @@ export async function runEnvironmentBuild(
     return { status: 'ready', templateId: result.templateId, heads };
   }
 
-  const error = result.error ?? 'Build failed.';
+  const error = redactCredentials(result.error ?? 'Build failed.');
   await deps.projects.recordBuild({
     orgId: project.orgId,
     id: project.id,
