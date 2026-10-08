@@ -1123,6 +1123,20 @@ describe('MastraAuthStudio', () => {
       expect(user?.email).toBe('alice@example.com');
     });
 
+    it('exposes a rotated session cookie for the caller to forward', async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockMeResponse), {
+          status: 200,
+          headers: { 'Set-Cookie': 'wos-session=token-2; Domain=.mastra.ai; Path=/' },
+        }),
+      );
+
+      const req = mockRequest({ cookie: 'wos-session=token' });
+      await auth.getCurrentUser(req);
+
+      expect(auth.consumePendingResponseHeaders(req)?.['Set-Cookie']).toMatch(/^wos-session=token-2;/);
+    });
+
     it('should fall back to Bearer token', async () => {
       fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
 
@@ -1186,6 +1200,27 @@ describe('MastraAuthStudio IOrganizationsProvider', () => {
   }
 
   describe('ensureOrganization', () => {
+    it('acts with the rotated cookie after /auth/me rotates the session', async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockMeResponse), {
+          status: 200,
+          headers: { 'Set-Cookie': 'wos-session=sealed-2; Domain=.mastra.ai; Path=/' },
+        }),
+      );
+      await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-1' }));
+      fetchSpy.mockClear();
+
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      await auth.ensureOrganization('user-1');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${SHARED_API}/auth/me`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Cookie: 'wos-session=sealed-2' }),
+        }),
+      );
+    });
+
     it('returns undefined when no cached cookie exists for the user', async () => {
       const orgId = await auth.ensureOrganization('never-seen-user');
       expect(orgId).toBeUndefined();

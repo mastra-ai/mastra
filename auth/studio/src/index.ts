@@ -487,7 +487,7 @@ export class MastraAuthStudio
     const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
 
     if (sessionCookie) {
-      return this.verifySessionCookie(sessionCookie);
+      return this.verifySessionCookie(sessionCookie, request);
     }
 
     // Try bearer token
@@ -696,22 +696,23 @@ export class MastraAuthStudio
    * If the shared API rotated the sealed `wos-session` cookie on this
    * response, stash the `Set-Cookie` header against the inbound request so
    * the server middleware can forward it to the browser, and invalidate the
-   * short-TTL verification cache entry for the old cookie value.
+   * short-TTL verification cache entry for the old cookie value. Returns the
+   * rotated sealed value, or null when the cookie was not rotated.
    */
   private captureRotatedCookie(
     res: Response,
     oldSessionCookie: string,
     oldCacheKey: string,
     request: MastraAuthRequest | undefined,
-  ): boolean {
+  ): string | null {
     const setCookies = this.readSetCookieHeaders(res);
-    if (setCookies.length === 0) return false;
+    if (setCookies.length === 0) return null;
 
     const rotatedCookieHeader = setCookies.find(h => parseCookieFromHeader(h, COOKIE_NAME) !== null);
-    if (!rotatedCookieHeader) return false;
+    if (!rotatedCookieHeader) return null;
 
     const rotatedValue = parseCookieFromHeader(rotatedCookieHeader, COOKIE_NAME);
-    if (!rotatedValue || rotatedValue === oldSessionCookie) return false;
+    if (!rotatedValue || rotatedValue === oldSessionCookie) return null;
 
     // Re-issue under this deployment's cookie attributes: the shared API
     // scopes its cookie to its own domain, which browsers on other parent
@@ -728,11 +729,11 @@ export class MastraAuthStudio
     // next refresh will reject.
     this.verifiedCredentials.delete(oldCacheKey);
 
-    if (!request) return true;
-    const rawRequest = getWebRequest(request);
-    if (!rawRequest) return true;
-    this.pendingResponseHeaders.set(rawRequest, reissued);
-    return true;
+    if (request) {
+      const rawRequest = getWebRequest(request);
+      if (rawRequest) this.pendingResponseHeaders.set(rawRequest, reissued);
+    }
+    return rotatedValue;
   }
 
   /**
@@ -830,7 +831,7 @@ export class MastraAuthStudio
 
       // Remember the sealed cookie for this user so IOrganizationsProvider
       // methods (invoked with only a userId) can act on the user's behalf.
-      this.rememberUserSession(data.user.id, sessionCookie);
+      this.rememberUserSession(data.user.id, rotated ?? sessionCookie);
 
       const sessionUser: StudioUser = {
         id: data.user.id,
@@ -938,7 +939,7 @@ function isAdminRole(role: string | undefined): boolean {
 
 /**
  * Parse a cookie value from a Set-Cookie header.
- * Set-Cookie format: "name=value; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400"
+ * Set-Cookie format: "name=value; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600"
  */
 function parseCookieFromHeader(setCookieHeader: string, name: string): string | null {
   // Set-Cookie header starts with "name=value" followed by optional attributes

@@ -388,13 +388,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   const authRequest = adaptToMastraAuthRequest(rawRequest);
 
   type ConsumePendingResponseHeadersFn = (request: typeof authRequest) => Record<string, string> | undefined;
-  const mergePendingProviderHeaders = () => {
+  const mergePendingProviderHeaders = (request: typeof authRequest = authRequest) => {
     const consume = (authConfig as { consumePendingResponseHeaders?: ConsumePendingResponseHeadersFn })
       .consumePendingResponseHeaders;
     if (typeof consume !== 'function') return;
     let pending: Record<string, string> | undefined;
     try {
-      pending = consume.call(authConfig, authRequest);
+      pending = consume.call(authConfig, request);
     } catch {
       // Forwarding a rotated cookie is best-effort; never fail auth over it.
       return;
@@ -443,8 +443,9 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
               try {
-                user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
-                mergePendingProviderHeaders();
+                const retryAuthRequest = adaptToMastraAuthRequest(refreshedRequest);
+                user = await authConfig.authenticateToken(cookieValue, retryAuthRequest);
+                mergePendingProviderHeaders(retryAuthRequest);
               } catch (retryErr) {
                 retryHttpError = retryErr instanceof HTTPException ? retryErr : undefined;
                 throw retryErr;

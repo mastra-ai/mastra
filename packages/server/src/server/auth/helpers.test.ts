@@ -630,6 +630,39 @@ describe('auth helpers', () => {
         expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
       });
 
+      it('emits headers stashed during the post-refresh retry, not the stale first attempt', async () => {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        let calls = 0;
+        const provider = {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            calls++;
+            if (calls === 1) return null; // expired session → middleware refreshes
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v3; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          getSessionIdFromRequest: () => 'v1',
+          refreshSession: async () => ({ id: 'v2', userId: 'user-1', expiresAt: new Date(), createdAt: new Date() }),
+          getSessionHeaders: (session: { id: string }) => ({ 'Set-Cookie': `wos-session=${session.id}; Path=/` }),
+          getClearSessionHeaders: () => ({}),
+          createSession: async () => ({}),
+          validateSession: async () => null,
+          destroySession: async () => {},
+        };
+
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents', { headers: { Cookie: 'wos-session=v1' } }),
+          mastra: createMockMastra(),
+          authConfig: provider as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v3; Path=/' });
+      });
+
       it('still authenticates when consumePendingResponseHeaders throws', async () => {
         const result = await coreAuthMiddleware({
           ...baseCtx,
