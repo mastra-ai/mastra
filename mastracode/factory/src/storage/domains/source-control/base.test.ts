@@ -561,7 +561,7 @@ describe('SourceControlStorage', () => {
       await backend.ops.updateMany(
         'factory_projects',
         { id: projectId },
-        { sandbox_provider: null, sandbox_workdir: null, sandbox_cpu_count: null, sandbox_memory_mb: null },
+        { sandbox_workdir: null, sandbox_cpu_count: null, sandbox_memory_mb: null },
       );
     }
 
@@ -618,7 +618,6 @@ describe('SourceControlStorage', () => {
       expect(await linkRow(third.id)).toMatchObject({ position: 3, in_environment: true });
       expect(await linkRow(fourth.id)).toMatchObject({ position: 4, in_environment: false });
       expect(await projects.getById({ id: project.id })).toMatchObject({
-        sandboxProvider: 'local',
         sandboxWorkdir: '/workspace/oldest',
         sandboxCpuCount: 4,
         sandboxMemoryMb: 8192,
@@ -643,7 +642,6 @@ describe('SourceControlStorage', () => {
       const withLink = await createProject({ name: 'with link' });
       const withoutLink = await createProject({ name: 'without link' });
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
-        sandboxProvider: null,
         sandboxWorkdir: null,
         sandboxCpuCount: null,
         sandboxMemoryMb: null,
@@ -663,13 +661,11 @@ describe('SourceControlStorage', () => {
       await domain.init();
 
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
-        sandboxProvider: 'local',
         sandboxWorkdir: '/workspace/linked',
         sandboxCpuCount: 4,
         sandboxMemoryMb: 8192,
       });
       expect(await projects.getById({ id: withoutLink.id })).toMatchObject({
-        sandboxProvider: null,
         sandboxWorkdir: null,
         sandboxCpuCount: 4,
         sandboxMemoryMb: 8192,

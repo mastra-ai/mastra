@@ -245,7 +245,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "sandboxCpuCount",
       "sandboxIdleTimeoutMinutes",
       "sandboxMemoryMb",
-      "sandboxProvider",
       "sandboxWorkdir",
       "workspaceSetupCommand"
     ],
@@ -964,12 +963,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "environment": {
           "type": "object",
           "properties": {
-            "sandboxProvider": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "sandboxWorkdir": {
               "type": [
                 "string",
@@ -1111,7 +1104,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           },
           "required": [
-            "sandboxProvider",
             "sandboxWorkdir",
             "sandboxCpuCount",
             "sandboxMemoryMb",
@@ -1410,68 +1402,54 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "sandboxProvider": {
+        "sandboxWorkdir": {
           "$ref": "#/$defs/__schema0"
         },
-        "sandboxWorkdir": {
-          "$ref": "#/$defs/__schema1"
-        },
         "sandboxCpuCount": {
-          "$ref": "#/$defs/__schema4"
+          "$ref": "#/$defs/__schema3"
         },
         "sandboxMemoryMb": {
-          "$ref": "#/$defs/__schema5"
+          "$ref": "#/$defs/__schema4"
         },
         "sandboxIdleTimeoutMinutes": {
-          "$ref": "#/$defs/__schema6"
+          "$ref": "#/$defs/__schema5"
         },
         "workspaceSetupCommand": {
-          "$ref": "#/$defs/__schema7"
+          "$ref": "#/$defs/__schema6"
         },
         "repositories": {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema7"
         }
       },
       "$defs": {
         "__schema0": {
           "anyOf": [
             {
-              "type": "string",
-              "maxLength": 100
+              "$ref": "#/$defs/__schema1"
             },
             {
-              "type": "null"
+              "$ref": "#/$defs/__schema2"
             }
           ]
         },
         "__schema1": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/__schema2"
-            },
-            {
-              "$ref": "#/$defs/__schema3"
-            }
-          ]
-        },
-        "__schema2": {
           "type": "string",
           "maxLength": 1000
         },
-        "__schema3": {
+        "__schema2": {
           "type": "null"
         },
-        "__schema4": {
+        "__schema3": {
           "type": "integer",
           "minimum": 1,
           "maximum": 64
         },
-        "__schema5": {
+        "__schema4": {
           "type": "integer",
           "minimum": 512,
           "maximum": 65536
         },
-        "__schema6": {
+        "__schema5": {
           "anyOf": [
             {
               "type": "integer",
@@ -1483,7 +1461,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema7": {
+        "__schema6": {
           "anyOf": [
             {
               "type": "string",
@@ -1494,14 +1472,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema8": {
+        "__schema7": {
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema9"
+            "$ref": "#/$defs/__schema8"
           }
         },
-        "__schema9": {
+        "__schema8": {
           "type": "object",
           "properties": {
             "projectRepositoryId": {
@@ -1552,12 +1530,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "environment": {
           "type": "object",
           "properties": {
-            "sandboxProvider": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "sandboxWorkdir": {
               "type": [
                 "string",
@@ -1699,7 +1671,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           },
           "required": [
-            "sandboxProvider",
             "sandboxWorkdir",
             "sandboxCpuCount",
             "sandboxMemoryMb",

@@ -79,7 +79,6 @@ const environmentRepositorySchema = z.object({
 
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
-    sandboxProvider: z.string().nullable(),
     sandboxWorkdir: z.string().nullable(),
     sandboxCpuCount: z.number().int(),
     sandboxMemoryMb: z.number().int(),
@@ -101,7 +100,6 @@ const environmentRepositoryPatchSchema = z.object({
 
 export const updateProjectEnvironmentBodySchema = z
   .object({
-    sandboxProvider: nullableTrimmed(100).optional(),
     sandboxWorkdir: nullableTrimmed(1_000)
       .refine(value => value === null || value.startsWith('/'), { message: 'sandboxWorkdir must be absolute' })
       .optional(),

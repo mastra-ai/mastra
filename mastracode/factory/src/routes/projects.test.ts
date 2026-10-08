@@ -746,7 +746,6 @@ describe('ProjectRoutes', () => {
       expect(read.status).toBe(200);
       const initial = (await read.json()) as { environment: Record<string, unknown> };
       expect(initial.environment).toMatchObject({
-        sandboxProvider: null,
         sandboxWorkdir: null,
         sandboxCpuCount: 4,
         sandboxMemoryMb: 8192,
@@ -774,7 +773,6 @@ describe('ProjectRoutes', () => {
       ]);
 
       const updated = await patch(app, project.id, {
-        sandboxProvider: 'platform',
         sandboxWorkdir: '/home/user',
         sandboxCpuCount: 8,
         sandboxMemoryMb: 16384,
@@ -789,7 +787,6 @@ describe('ProjectRoutes', () => {
       expect(updated.status).toBe(200);
       const after = (await updated.json()) as { environment: Record<string, unknown> };
       expect(after.environment).toMatchObject({
-        sandboxProvider: 'platform',
         sandboxWorkdir: '/home/user',
         sandboxCpuCount: 8,
         sandboxMemoryMb: 16384,
