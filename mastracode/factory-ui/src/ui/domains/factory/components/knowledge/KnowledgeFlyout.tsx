@@ -11,7 +11,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ExternalLink, Maximize2, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -240,6 +240,8 @@ export interface KnowledgeFlyoutProps {
   /** Card expand/collapse selects (or clears) the knowledge record page-wide — the graph lights it up too. */
   onSelectRecord?: (recordId: string | null) => void;
   onClose: () => void;
+  /** Shown where the flyout is hosted off the graph page: opens this node on the knowledge graph. */
+  onExpand?: () => void;
   onNodeRef?: (name: string) => void;
   onOpenThread?: (threadId: string) => void;
 }
@@ -251,6 +253,7 @@ export function KnowledgeFlyout({
   focusRecordId,
   onSelectRecord,
   onClose,
+  onExpand,
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
@@ -284,6 +287,11 @@ export function KnowledgeFlyout({
                 <RungBadge rung={nodeQuery.data.node.rung} />
               </div>
             </div>
+            {onExpand && (
+              <Button variant="ghost" size="icon-sm" aria-label="Open in knowledge graph" onClick={onExpand}>
+                <Maximize2 />
+              </Button>
+            )}
             <Button variant="ghost" size="icon-sm" aria-label="Close details" className="ml-auto" onClick={onClose}>
               <X />
             </Button>

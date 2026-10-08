@@ -187,6 +187,7 @@ describe('TranscriptEntries signal rows', () => {
             </div>
           ),
         },
+        { path: '/factories/:factoryId/knowledge', element: <p>knowledge page</p> },
       ],
       { initialEntries: ['/factories/f-1/user/threads/t-1'] },
     );
@@ -208,6 +209,15 @@ describe('TranscriptEntries signal rows', () => {
     expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
     expect(router.state.location.search).toBe('');
     expect(screen.getByRole('group', { name: 'Signal: remembered' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Project Atlas' }));
+    const reopened = await screen.findByTestId('knowledge-flyout');
+    const expand = await within(reopened).findByRole('button', { name: 'Open in knowledge graph' });
+    expand.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByText('knowledge page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/f-1/knowledge');
+    expect(router.state.location.search).toBe('?node=node-1&record=rec-1');
   });
 
   it.each([undefined, 'not json', '[{"name":"no id"}]'])(

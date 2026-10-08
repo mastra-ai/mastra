@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { KnowledgeFlyout } from '../../factory/components/knowledge/KnowledgeFlyout';
 
@@ -9,6 +9,7 @@ import { KnowledgeFlyout } from '../../factory/components/knowledge/KnowledgeFly
 export function SessionKnowledgeFlyout() {
   const { factoryId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const nodeId = searchParams.get('node');
   if (!factoryId || !nodeId) return null;
 
@@ -32,6 +33,12 @@ export function SessionKnowledgeFlyout() {
       focusRecordId={searchParams.get('record') ?? undefined}
       onSelectRecord={recordId => update(recordId, nodeId)}
       onClose={() => update(null, null)}
+      onExpand={() => {
+        const params = new URLSearchParams({ node: nodeId });
+        const record = searchParams.get('record');
+        if (record) params.set('record', record);
+        void navigate(`/factories/${encodeURIComponent(factoryId)}/knowledge?${params}`);
+      }}
     />
   );
 }

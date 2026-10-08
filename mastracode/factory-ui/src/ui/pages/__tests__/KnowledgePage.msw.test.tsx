@@ -392,6 +392,7 @@ describe('KnowledgePage', () => {
     const flyout = await screen.findByTestId('knowledge-flyout');
     expect(await within(flyout).findByText('Payments Service')).toBeInTheDocument();
     expect(router.state.location.search).toBe('');
+    expect(screen.queryByRole('button', { name: 'Open in knowledge graph' })).not.toBeInTheDocument();
     fireEvent.click(within(flyout).getByRole('button', { name: /close/i }));
     expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
   });
