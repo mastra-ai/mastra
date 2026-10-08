@@ -564,6 +564,7 @@ function ValueEditor() {
     query,
     enabled: open,
     initialValue: chip.item.value,
+    setQuery,
     onCommit,
   });
 
@@ -602,7 +603,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
-      {step.hasSuggestions && (
+      {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
@@ -619,7 +620,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="sm" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="sm" variant="default" onClick={() => step.commitDone()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>

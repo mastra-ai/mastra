@@ -7,7 +7,7 @@ description: "Browse OVHcloud AI Endpoints model IDs, capabilities, context wind
 
 # <img src="https://models.dev/logos/ovhcloud.svg" alt="OVHcloud AI Endpoints logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OVHcloud AI Endpoints
 
-Access 14 OVHcloud AI Endpoints models through Mastra's model router. Authentication is handled automatically using the `OVHCLOUD_API_KEY` environment variable.
+Access 13 OVHcloud AI Endpoints models through Mastra's model router. Authentication is handled automatically using the `OVHCLOUD_API_KEY` environment variable.
 
 Learn more in the [OVHcloud AI Endpoints documentation](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog//).
 
@@ -128,18 +128,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 1.01,
     "outputCost": 1.01
-  },
-  {
-    "model": "ovhcloud/qwen3-coder-30b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.07,
-    "outputCost": 0.26
   },
   {
     "model": "ovhcloud/qwen3.5-397b-a17b",

@@ -30,5 +30,7 @@ overrides:
   zod@>=4.0.0 <4.6.5: 4.6.5
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'raw-body@<4.0.0': 4.0.0
+  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
+  'http-cache-semantics@<4.3.0': 4.3.0
 patchedDependencies:
   'body-parser@1.20.6': patches/body-parser@1.20.6.patch
