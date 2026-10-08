@@ -407,8 +407,8 @@ export class MastraFactory {
   }
 
   /**
-   * The host sandbox's provider, settings schema (JSON Schema), template
-   * fields and capabilities, for the environment route. Undefined before
+   * The host sandbox's provider, settings schema (JSON Schema) and
+   * capabilities, as the environment route reports them. Undefined before
    * `prepare()` and when sandboxes are disabled.
    */
   get sandboxDescription(): FactorySandboxDescription | undefined {
