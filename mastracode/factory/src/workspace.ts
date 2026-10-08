@@ -52,7 +52,6 @@ import { repositoryDirectoryName } from './sandbox/workdir.js';
 import { clearSessionEnvironment, recordSessionEnvironment } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
-import { DEFAULT_SANDBOX_CPU_COUNT, DEFAULT_SANDBOX_MEMORY_MB } from './storage/domains/source-control/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
@@ -404,8 +403,9 @@ export interface SessionEnvironment {
   workspaceSetupCommand: string | undefined;
   /** Only an absolute root is passed on; the templates reject anything else. */
   workingDirectory: string | undefined;
-  cpuCount: number;
-  memoryMB: number;
+  /** vCPUs and memory; null leaves the provider default (identity-bearing in the template). */
+  cpuCount: number | null;
+  memoryMB: number | null;
 }
 
 /**
@@ -476,8 +476,8 @@ async function resolveSessionEnvironment(
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
-    cpuCount: project.sandboxCpuCount ?? DEFAULT_SANDBOX_CPU_COUNT,
-    memoryMB: project.sandboxMemoryMb ?? DEFAULT_SANDBOX_MEMORY_MB,
+    cpuCount: project.sandboxCpuCount,
+    memoryMB: project.sandboxMemoryMb,
   };
 }
 
