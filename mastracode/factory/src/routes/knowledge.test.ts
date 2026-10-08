@@ -1192,4 +1192,53 @@ describe('KnowledgeRoutes', () => {
       expect(event.scope.length).toBeGreaterThan(0);
     }
   });
+
+  it('returns a cursor past a hidden backlog longer than the activity scan cap', async () => {
+    const h = await createHarness();
+    const visible = await node(h.knowledge, 'Older Visible Service', h.projectScope);
+    const evidence = await record(h.knowledge, visible, 'Older visible evidence', h.projectScope);
+
+    const flood = await node(h.knowledge, 'Hidden Flood Node', h.projectScope);
+    for (let i = 0; i < 1_050; i++) {
+      const flooded = await record(h.knowledge, flood, `Hidden ${i}`, h.projectScope);
+      await h.knowledge.rescopeKnowledge({ id: flooded.id, scope: h.threadScope('other-thread') });
+    }
+
+    const first = await activity(h);
+    expect(first.status).toBe(200);
+    expect(first.body.nextCursor).toBeDefined();
+
+    let cursor = first.body.nextCursor;
+    const seen = [...first.body.events];
+    for (let page = 0; cursor && page < 10; page++) {
+      const next = await activity(h, `?cursor=${cursor}`);
+      seen.push(...next.body.events);
+      cursor = next.body.nextCursor;
+    }
+    expect(cursor).toBeUndefined();
+    expect(seen.map(event => event.recordId)).toContain(evidence.id);
+    expect(JSON.stringify(seen)).not.toContain('other-thread');
+  });
+
+  it('404s node detail for a structural scope node instead of failing on its missing scope', async () => {
+    const h = await createHarness();
+    const scopeNodeId = crypto.randomUUID();
+    const getNode = h.knowledge.getNode.bind(h.knowledge);
+    h.knowledge.getNode = async id =>
+      id === scopeNodeId
+        ? ({
+            id,
+            name: 'features',
+            kind: 'domain',
+            isScope: true,
+            scope: null,
+            version: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as unknown as KnowledgeNode)
+        : getNode(id);
+
+    const response = await nodeDetail(h, scopeNodeId);
+    expect(response.status).toBe(404);
+  });
 });
