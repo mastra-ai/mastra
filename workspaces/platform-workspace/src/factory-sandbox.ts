@@ -1,5 +1,5 @@
-import { FactorySandbox } from '@mastra/core/workspace';
 import type { PublicSchema } from '@mastra/core/schema';
+import { FactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 
 import { createRepoTemplate } from './repo-template.js';

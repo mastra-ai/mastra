@@ -53,11 +53,11 @@ new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH!
 
 `LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
 
-A setting the environment leaves unset is absent from the stored document, so the provider applies its own default. Factory never stores a resource value the user did not set.
+A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it, and factory only stores values the user typed.
 
 ### Deprecated callback
 
-The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps working. Factory wraps it as a `provider: 'custom'` sandbox with no settings, no template and no builds, so there is nothing to tune.
+The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps working. Factory wraps it as a `provider: 'custom'` sandbox. Everything about the sandbox stays inside the callback, and the environment exposes nothing to tune.
 
 ## Class
 
@@ -170,7 +170,7 @@ Everything factory knows about the session, passed to `create`, `template` and t
 
 ## Build status
 
-`FactorySandboxBuild.status` is one of `pending`, `building`, `ready`, `failed` or `unknown`. `unknown` means the provider cannot read the status of a build it did not start in this process.
+`FactorySandboxBuild.status` is one of `pending`, `building`, `ready`, `failed` or `unknown`. `unknown` means the provider can't read the status of a build it didn't start in this process.
 
 ## Related
 
