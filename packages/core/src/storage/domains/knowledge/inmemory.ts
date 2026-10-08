@@ -979,6 +979,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     run.status = input.status;
     run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
     run.completedAt = timestamp;
+    this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, binding, input.leaseKey]));
+    if (input.payloadKey) {
+      this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, binding, input.payloadKey]));
+    }
     return this.#cloneImportRun(run);
   }
 
@@ -998,6 +1002,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     run.status = payload ? 'interrupted' : 'failed';
     run.error = payload ? undefined : 'Import failed: durable payload is missing';
     run.completedAt = input.queuedAt ? new Date(input.queuedAt) : new Date();
+    this.#db.knowledgeImportState.delete(JSON.stringify([run.importerId, run.binding, input.leaseKey]));
+    this.#db.knowledgeImportState.delete(JSON.stringify([run.importerId, run.binding, input.payloadKey]));
     if (!payload) return null;
     const replacement: KnowledgeImportRun = {
       id: input.replacementId,
