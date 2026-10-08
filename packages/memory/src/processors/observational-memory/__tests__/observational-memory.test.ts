@@ -17522,6 +17522,138 @@ describe('OM context loading with no prior observations', () => {
     expect(saved.find(m => m.id === 'user-msg-1')).toBeDefined();
     expect(saved.find(m => m.id === 'assistant-msg-1')).toBeDefined();
   });
+
+  it('should persist the final response when durable execution replaces the turn message list', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'durable-message-list-thread';
+    const resourceId = 'durable-message-list-resource';
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+    const sharedState: Record<string, unknown> = {};
+    const memoryProvider = createMemoryProvider(om);
+    const stepMessageList = new MessageList({ threadId, resourceId });
+    stepMessageList.add(
+      {
+        id: 'user-msg-durable',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello from user' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    const inputProcessor = new ObservationalMemoryProcessor(om, memoryProvider);
+    await inputProcessor.processInputStep({
+      messageList: stepMessageList,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    stepMessageList.add(
+      {
+        id: 'rejected-msg-durable',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Rejected response' }] },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    // Durable execution can deserialize a fresh MessageList for finalization while the shared OM
+    // turn still points at the list from the last input step. Earlier output processors may also
+    // remove rejected content from the final list.
+    const finalMessageList = new MessageList({ threadId, resourceId }).deserialize(stepMessageList.serialize());
+    finalMessageList.removeByIds(['rejected-msg-durable']);
+    finalMessageList.add(
+      {
+        id: 'assistant-msg-durable',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Final durable response' }] },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    const persistMessages = vi.spyOn(om, 'persistMessages');
+    const outputProcessor = new ObservationalMemoryProcessor(om, memoryProvider);
+    await outputProcessor.processOutputResult({
+      messageList: finalMessageList,
+      messages: finalMessageList.get.response.db(),
+      requestContext: makeCtx(),
+      state: sharedState,
+      abort,
+      result: {
+        text: 'Final durable response',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      } as any,
+      retryCount: 0,
+    });
+
+    const { messages: saved } = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(saved.map(message => message.id)).toEqual(['user-msg-durable', 'assistant-msg-durable']);
+    expect(persistMessages).toHaveBeenCalledTimes(1);
+    expect(persistMessages.mock.calls[0]?.[0].map(message => message.id)).toEqual([
+      'user-msg-durable',
+      'assistant-msg-durable',
+    ]);
+    expect(sharedState.__omTurn).toBeUndefined();
+  });
 });
 
 describe('Processor stream events: buffering status and activation markers', () => {

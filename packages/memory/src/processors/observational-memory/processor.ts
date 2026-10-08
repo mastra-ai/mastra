@@ -438,7 +438,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const liveTurn = turn && !turn.ended ? turn : undefined;
 
         if (liveTurn) {
-          await liveTurn.end();
+          // Durable finalization may deserialize a new list. Persist the final processor
+          // output rather than the turn's stale step snapshot.
+          await liveTurn.end(messageList);
         }
         this.turn = undefined;
         state.__omTurn = undefined;
