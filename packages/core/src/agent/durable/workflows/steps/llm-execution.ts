@@ -833,6 +833,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 .model()
                 .filter(message => message.role === 'user' && message.content.length > 0).length;
               omContinuationPrompt = inputMessages.filter(message => message.role === 'user')[precedingUserCount];
+              // Keep source identity in supported Mastra metadata so request processors
+              // can clone or reorder messages without changing their prompt shape.
+              if (omContinuationPrompt) {
+                omContinuationPrompt.providerOptions = {
+                  ...omContinuationPrompt.providerOptions,
+                  mastra: { ...omContinuationPrompt.providerOptions?.mastra, messageId: 'om-continuation' },
+                };
+              }
             }
             await persistUnavailableAttachments({
               messageList,
@@ -949,7 +957,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // OM's synthetic continuation is not part of the parent's conversation.
             const delegationMessages = omContinuationPrompt
               ? inputMessages.filter(
-                  message => message !== omContinuationPrompt && message.content !== omContinuationPrompt.content,
+                  message =>
+                    message !== omContinuationPrompt &&
+                    message.providerOptions?.mastra?.messageId !== 'om-continuation',
                 )
               : inputMessages;
             if (registryEntry) {

@@ -223,6 +223,50 @@ describe('DurableAgent delegation hooks', () => {
     expect(prompt.split('Processor-added parent history')).toHaveLength(2);
   });
 
+  it('converts cold-worker history in prompt mode before invoking the tool', async () => {
+    const execute = vi.fn(async (_input: { prompt: string }, _context: ToolExecutionContext) => 'Finished');
+    const tool = createTool({
+      id: 'agent-history',
+      description: 'Inspect forwarded history.',
+      inputSchema: z.object({ prompt: z.string() }),
+      execute,
+    });
+    const messageList = new MessageList();
+    messageList.add({ role: 'user', content: 'Original request' }, 'input');
+    messageList.add(
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Preserve this assistant text' },
+          { type: 'tool-call', toolCallId: 'orphan-call', toolName: 'agent-history', args: { prompt: 'go' } },
+        ],
+      },
+      'response',
+    );
+    const workflow = createWorkflow({ id: 'cold-prompt-workflow', inputSchema: z.any(), outputSchema: z.any() })
+      .then(
+        createStep({
+          id: DurableStepIds.LLM_EXECUTION,
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async () => ({ messageListState: messageList.serialize() }),
+        }),
+      )
+      .map(async () => [{ toolCallId: 'cold-call', toolName: tool.id, args: { prompt: 'go' } }])
+      .foreach(createDurableToolCallStep())
+      .commit();
+    const mastra = new Mastra({ tools: { [tool.id]: tool }, workflows: { workflow } });
+    const runId = 'cold-prompt-context';
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    const run = await mastra.getWorkflow('workflow').createRun();
+    const result = await run.start({ inputData: { runId, agentId: 'missing-supervisor', options: {}, state: {} } });
+    expect(result.status).toBe('success');
+    expect(execute).toHaveBeenCalledTimes(1);
+    const messages = execute.mock.calls[0]?.[1]?.agent?.messages;
+    expect(JSON.stringify(messages)).toContain('Preserve this assistant text');
+    expect(JSON.stringify(messages)).not.toContain('orphan-call');
+  });
+
   it.each(['intact', 'missing-key', 'missing-scope'] as const)(
     'forwards filtered parent conversation to the sub-agent (%s)',
     async scopeState => {
@@ -362,69 +406,94 @@ describe('DurableAgent delegation hooks', () => {
     output.cleanup();
   });
 
-  it.each([false, true])('retains real user messages matching the continuation text (image: %s)', async withImage => {
-    const continuationText = 'Matching continuation text';
-    const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) => messages);
-    const supervisor = new Agent({
-      id: 'supervisor-matching-continuation',
-      name: 'supervisor-matching-continuation',
-      instructions: 'Delegate to worker.',
-      model: makeSupervisorModel('worker', 'go'),
-      agents: { worker: makeSubAgent('worker', 'Finished') },
-      inputProcessors: [
-        {
-          id: 'observational-memory',
-          processInput: ({ messages }) => ({
-            messages: [
-              ...messages,
-              {
-                id: 'om-continuation',
-                role: 'user',
-                content: { format: 2, parts: [{ type: 'text', text: continuationText }] },
-                createdAt: new Date(),
-              },
-            ],
-          }),
-          processLLMRequest: ({ prompt }) => ({ prompt: prompt.map(message => ({ ...message })) }),
-        },
-      ],
-    });
-    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
-    const userMessage: ModelMessage = {
-      role: 'user',
-      content: [
-        { type: 'text', text: continuationText },
-        ...(withImage
-          ? [
-              {
-                type: 'image' as const,
-                image:
-                  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
-                mediaType: 'image/png',
-              },
-            ]
-          : []),
-      ],
-    };
-    const output = await durableAgent.stream([userMessage], { maxSteps: 3, delegation: { messageFilter } });
-    for await (const _chunk of output.fullStream) {
-      // no-op
-    }
-    expect(messageFilter).toHaveBeenCalledTimes(1);
-    const userMessages = messageFilter.mock.calls[0]?.[0].messages.filter(message => message.role === 'user');
-    expect(userMessages).toHaveLength(1);
-    expect(userMessages?.[0]).toEqual(
-      expect.objectContaining({
-        content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: continuationText })]),
-      }),
-    );
-    if (withImage) {
-      expect(userMessages?.[0]?.content).toEqual(
-        expect.arrayContaining([expect.objectContaining({ mediaType: 'image/png', data: expect.any(String) })]),
+  it.each([false, true].flatMap(withImage => ['shallow', 'deep', 'rewrite'].map(copy => ({ withImage, copy }))))(
+    'retains matching user messages after $copy copying (image: $withImage)',
+    async ({ withImage, copy }) => {
+      const continuationText = 'Matching continuation text';
+      const requestPrompts: ModelMessage[][] = [];
+      const model = makeSupervisorModel('worker', 'go');
+      const modelSpy = vi.spyOn(model, 'doStream');
+      const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) => messages);
+      const supervisor = new Agent({
+        id: 'supervisor-matching-continuation',
+        name: 'supervisor-matching-continuation',
+        instructions: 'Delegate to worker.',
+        model,
+        agents: { worker: makeSubAgent('worker', 'Finished') },
+        inputProcessors: [
+          {
+            id: 'observational-memory',
+            processInput: ({ messages, systemMessages }) => ({
+              systemMessages,
+              messages: [
+                ...messages,
+                {
+                  id: 'om-continuation',
+                  role: 'user',
+                  content: { format: 2, parts: [{ type: 'text', text: continuationText }] },
+                  createdAt: new Date(),
+                },
+              ],
+            }),
+            processLLMRequest: ({ prompt }) => {
+              requestPrompts.push(prompt);
+              if (copy === 'shallow') return { prompt: prompt.map(message => ({ ...message })) };
+              const cloned = structuredClone(prompt);
+              if (copy === 'rewrite') {
+                cloned.reverse();
+                const continuation = cloned.find(
+                  message => message.providerOptions?.mastra?.messageId === 'om-continuation',
+                );
+                if (continuation) continuation.content = [{ type: 'text', text: 'Rewritten synthetic continuation' }];
+              }
+              return { prompt: cloned };
+            },
+          },
+        ],
+      });
+      const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+      const userMessage: ModelMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: continuationText },
+          ...(withImage
+            ? [
+                {
+                  type: 'image' as const,
+                  image:
+                    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+                  mediaType: 'image/png',
+                },
+              ]
+            : []),
+        ],
+      };
+      const output = await durableAgent.stream([userMessage], { maxSteps: 3, delegation: { messageFilter } });
+      for await (const _chunk of output.fullStream) {
+        // no-op
+      }
+      expect(messageFilter).toHaveBeenCalledTimes(1);
+      expect(requestPrompts[0]?.filter(message => message.role === 'user')).toHaveLength(2);
+      const modelPrompt = modelSpy.mock.calls[0]?.[0].prompt;
+      expect(modelPrompt?.filter(message => message.role === 'user')).toHaveLength(2);
+      expect(modelPrompt?.some(message => 'id' in message)).toBe(false);
+      expect(modelPrompt?.some(message => message.providerOptions?.mastra?.messageId === 'om-continuation')).toBe(true);
+      if (copy === 'rewrite') expect(JSON.stringify(modelPrompt)).toContain('Rewritten synthetic continuation');
+      const userMessages = messageFilter.mock.calls[0]?.[0].messages.filter(message => message.role === 'user');
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages?.[0]).toEqual(
+        expect.objectContaining({
+          content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: continuationText })]),
+        }),
       );
-    }
-    output.cleanup();
-  });
+      if (withImage) {
+        expect(userMessages?.[0]?.content).toEqual(
+          expect.arrayContaining([expect.objectContaining({ mediaType: 'image/png', data: expect.any(String) })]),
+        );
+      }
+      output.cleanup();
+    },
+  );
 
   it('gives ordinary tools input-only messages, not transient model context', async () => {
     const execute = vi.fn(async (_input: { prompt: string }, _context: ToolExecutionContext) => 'Finished');

@@ -1100,7 +1100,7 @@ export function createDurableToolCallStep() {
           messageList.get.all.db().filter(message => message.id !== 'om-continuation'),
           'input',
         );
-        delegationMessages = delegationList.get.all.aiV5.model();
+        delegationMessages = delegationList.get.all.aiV5.prompt();
       }
 
       const toolOptions = {
