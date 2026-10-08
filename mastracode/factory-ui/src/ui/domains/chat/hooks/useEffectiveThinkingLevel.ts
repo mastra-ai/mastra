@@ -9,16 +9,17 @@ import type { EffectiveThinkingLevel } from '../services/thinkingLevels';
 export function useEffectiveThinkingLevel(
   modelId: string | undefined,
   override: ThinkingLevelSetting | undefined,
-): { effective: EffectiveThinkingLevel | undefined; defaultsError: Error | undefined } {
+): { level: EffectiveThinkingLevel | undefined; loadError: Error | undefined } {
   const { activeModeId } = useChatModes();
   const thinkingConfigQuery = useThinkingConfigQuery();
   const reasoningOptions = useModelReasoningOptions(modelId);
-  const effective = resolveEffectiveThinkingLevel({
+  const level = resolveEffectiveThinkingLevel({
     modelId,
     reasoningOptions,
     override,
     defaults: thinkingConfigQuery.data,
     modeId: activeModeId,
   });
-  return { effective, defaultsError: thinkingConfigQuery.error ?? undefined };
+  const loadError = thinkingConfigQuery.error ?? undefined;
+  return { level, loadError: level ? undefined : loadError };
 }

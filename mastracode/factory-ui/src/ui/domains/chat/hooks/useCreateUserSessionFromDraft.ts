@@ -8,13 +8,15 @@ import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatThinking } from '../context/useChatThinking';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { promptHandoffState } from './useHandoffPrompt';
 
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
   const { activeModeId } = useChatModes();
-  const { activeModelId, defaultModelId, thinkingLevelOverride } = useChatModels();
+  const { activeModelId, defaultModelId } = useChatModels();
+  const { override: thinkingLevelOverride } = useChatThinking();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();

@@ -40,7 +40,7 @@ export interface EffectiveThinkingLevel {
   origin: ThinkingLevelOrigin;
 }
 
-export function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
+export function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | undefined): string {
   return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
 

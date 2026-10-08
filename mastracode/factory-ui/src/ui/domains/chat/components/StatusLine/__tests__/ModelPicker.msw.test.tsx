@@ -15,6 +15,7 @@ import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
 import { ChatModesContext } from '../../../context/ChatModesContext';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
+import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
 import { ModelPicker } from '../ModelPicker';
 
@@ -138,8 +139,10 @@ function renderPicker({
             }}
           >
             <ChatModelsProvider>
-              <ModelPicker />
-              <Toaster position="bottom-right" />
+              <ChatThinkingProvider>
+                <ModelPicker />
+                <Toaster position="bottom-right" />
+              </ChatThinkingProvider>
             </ChatModelsProvider>
           </ChatModesContext.Provider>
         </ChatConnectionContext.Provider>
