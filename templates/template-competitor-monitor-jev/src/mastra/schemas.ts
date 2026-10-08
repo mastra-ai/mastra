@@ -28,7 +28,21 @@ export const sourceSchema = z
     /** Human-readable name shown in reports and sent to Jev as source context. */
     label: z.string().trim().min(1).max(INPUT_LIMITS.maxLabelChars).describe('Human-readable page name.'),
     /** Public HTTP(S) page to fetch; equivalent URLs are deduplicated. */
-    url: z.string().url().max(INPUT_LIMITS.maxUrlChars).describe('Public HTTP(S) page URL to monitor.'),
+    url: z
+      .string()
+      .url()
+      .max(INPUT_LIMITS.maxUrlChars)
+      .superRefine((value, context) => {
+        try {
+          normalizedSourceUrl(value);
+        } catch (error) {
+          context.addIssue({
+            code: 'custom',
+            message: error instanceof TypeError ? 'INVALID_SOURCE_URL' : (error as Error).message,
+          });
+        }
+      })
+      .describe('Public HTTP(S) page URL without embedded credentials.'),
     /** Page category; see sourceKindSchema above for each accepted value. */
     kind: sourceKindSchema,
     /** Collection strategy; see fetchModeSchema above. */
@@ -232,33 +246,58 @@ export const monitorInputSchema = z
       .default({})
       .describe('Optional report presentation settings.'),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    const sourceIds = new Set<string>();
+    const normalizedUrls = new Map<string, MonitorSource>();
+    for (const [index, source] of input.sources.entries()) {
+      if (sourceIds.has(source.id)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['sources', index, 'id'],
+          message: `DUPLICATE_SOURCE_ID:${source.id}`,
+        });
+      }
+      sourceIds.add(source.id);
+      let normalized: string;
+      try {
+        normalized = normalizedSourceUrl(source.url);
+      } catch {
+        // The URL field already reports invalid input; do not throw from cross-field validation.
+        continue;
+      }
+      const previous = normalizedUrls.get(normalized);
+      if (previous) {
+        const sameConfiguration =
+          previous.fetchMode === source.fetchMode &&
+          previous.minContentChars === source.minContentChars &&
+          previous.contentSelector === source.contentSelector &&
+          JSON.stringify(previous.ignoreSelectors) === JSON.stringify(source.ignoreSelectors);
+        if (!sameConfiguration) {
+          context.addIssue({
+            code: 'custom',
+            path: ['sources', index],
+            message: `DUPLICATE_SOURCE_CONFLICT:${source.id}`,
+          });
+        }
+      } else normalizedUrls.set(normalized, source);
+    }
+  })
+  .transform(input => {
+    const seen = new Set<string>();
+    return {
+      ...input,
+      sources: input.sources.filter(source => {
+        const normalized = normalizedSourceUrl(source.url);
+        if (seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+      }),
+    };
+  });
 
 export type MonitorInput = z.infer<typeof monitorInputSchema>;
 
-// Validate cross-source identities after schema parsing and collapse equivalent URLs.
 export function validateMonitorInput(value: unknown): MonitorInput {
-  const input = monitorInputSchema.parse(value);
-  const sourceIds = new Set<string>();
-  const normalizedUrls = new Map<string, MonitorSource>();
-  const sources: MonitorSource[] = [];
-
-  for (const source of input.sources) {
-    if (sourceIds.has(source.id)) throw new Error(`DUPLICATE_SOURCE_ID:${source.id}`);
-    sourceIds.add(source.id);
-    const normalized = normalizedSourceUrl(source.url);
-    const previous = normalizedUrls.get(normalized);
-    if (previous) {
-      const sameConfiguration =
-        previous.fetchMode === source.fetchMode &&
-        previous.minContentChars === source.minContentChars &&
-        previous.contentSelector === source.contentSelector &&
-        JSON.stringify(previous.ignoreSelectors) === JSON.stringify(source.ignoreSelectors);
-      if (!sameConfiguration) throw new Error(`DUPLICATE_SOURCE_CONFLICT:${source.id}`);
-      continue;
-    }
-    normalizedUrls.set(normalized, source);
-    sources.push(source);
-  }
-  return { ...input, sources };
+  return monitorInputSchema.parse(value);
 }

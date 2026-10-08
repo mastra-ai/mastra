@@ -143,13 +143,13 @@ describe('native workflow and durable application store', () => {
       pending.map(item => item.candidateId),
     );
     await expect(store.beginRun('other-monitor')).rejects.toThrow('MONITOR_BUSY');
-    const invalid = await startRegisteredWorkflow(store, config, () => html('$29'), {
-      ...sourceInput(),
-      monitorId: 'other-monitor',
-      sources: [sourceInput().sources[0], sourceInput().sources[0]],
-    });
-    expect(invalid.status).toBe('failed');
-    expect(JSON.stringify(invalid)).toContain('DUPLICATE_SOURCE_ID');
+    await expect(
+      startRegisteredWorkflow(store, config, () => html('$29'), {
+        ...sourceInput(),
+        monitorId: 'other-monitor',
+        sources: [sourceInput().sources[0], sourceInput().sources[0]],
+      }),
+    ).rejects.toThrow('DUPLICATE_SOURCE_ID');
     const busy = await startRegisteredWorkflow(store, config, () => html('$29'), {
       ...sourceInput(),
       monitorId: 'other-monitor',
@@ -674,9 +674,9 @@ describe('native workflow and durable application store', () => {
       [duplicateIds, 'DUPLICATE_SOURCE_ID'],
       [duplicateConflict, 'DUPLICATE_SOURCE_CONFLICT'],
     ] as const) {
-      const failed = (await startRegisteredWorkflow(store, config, () => page, input, validationTransport)) as any;
-      expect(failed.status).toBe('failed');
-      expect(JSON.stringify(failed)).toContain(code);
+      await expect(startRegisteredWorkflow(store, config, () => page, input, validationTransport)).rejects.toThrow(
+        code,
+      );
     }
     expect(validationTransportCalls).toBe(0);
 

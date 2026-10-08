@@ -1,7 +1,7 @@
 import { createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
 
-import { monitorInputSchema, validateMonitorInput } from '../../schemas';
+import { monitorInputSchema } from '../../schemas';
 import { sourceTaskSchema, validateEffectiveLimits, type StepContext } from './workflow-context';
 
 export function createPrepareStep(context: StepContext) {
@@ -13,7 +13,7 @@ export function createPrepareStep(context: StepContext) {
     inputSchema: monitorInputSchema,
     outputSchema: z.array(sourceTaskSchema),
     execute: async ({ inputData, abortSignal, runId }) => {
-      const input = validateMonitorInput(inputData);
+      const input = inputData;
       validateEffectiveLimits(input, dependencies.config);
       const run = await dependencies.store.beginRun(input.monitorId, runId);
       const cleanUpCancellation = () => finishCanceledRun(run.id, run.monitorId);

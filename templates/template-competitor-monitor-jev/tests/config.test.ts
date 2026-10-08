@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { INPUT_LIMITS, JEV_ACCESS, loadConfig } from '../src/mastra/config';
-import { validateMonitorInput } from '../src/mastra/schemas';
+import { monitorInputSchema, sourceSchema, validateMonitorInput } from '../src/mastra/schemas';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -167,4 +167,35 @@ describe('bounded overrides', () => {
       /^Invalid configuration: MAX_SOURCES, SOURCE_CONCURRENCY$/,
     );
   });
+});
+
+it.each(['ftp://example.com/file', 'https://user:secret@example.com/', 'not-a-url'])(
+  'rejects unsafe source URL %s at the schema boundary',
+  url => {
+    const source = { id: 'page', label: 'Page', url, kind: 'pricing' };
+    expect(sourceSchema.safeParse(source).success).toBe(false);
+    expect(
+      monitorInputSchema.safeParse({
+        monitorId: 'm',
+        profile: { name: 'Monitor', interests: ['pricing'] },
+        sources: [source],
+      }).success,
+    ).toBe(false);
+  },
+);
+
+it('validates duplicate identities and collapses equivalent sources in the declared schema', () => {
+  const source = { id: 'page', label: 'Page', url: 'https://example.com/pricing', kind: 'pricing' };
+  const input = { monitorId: 'm', profile: { name: 'Monitor', interests: ['pricing'] }, sources: [source] };
+  expect(() =>
+    monitorInputSchema.parse({ ...input, sources: [source, { ...source, url: 'https://example.com/docs' }] }),
+  ).toThrow('DUPLICATE_SOURCE_ID');
+  const duplicate = { ...source, id: 'alias', url: 'https://EXAMPLE.com/pricing#section' };
+  expect(() => monitorInputSchema.parse({ ...input, sources: [source, { ...duplicate, fetchMode: 'http' }] })).toThrow(
+    'DUPLICATE_SOURCE_CONFLICT',
+  );
+  const parsed = monitorInputSchema.parse({ ...input, sources: [source, duplicate] });
+  expect(parsed.sources).toHaveLength(1);
+  expect(parsed.sources[0]?.id).toBe('page');
+  expect(monitorInputSchema.parse(parsed).sources).toEqual(parsed.sources);
 });
