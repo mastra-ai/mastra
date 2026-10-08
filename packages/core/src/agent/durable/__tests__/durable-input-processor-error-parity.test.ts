@@ -82,6 +82,16 @@ describe('T44 input processors (plain, durable, evented)', () => {
         modelCalls: 0,
         text: null,
       });
+
+      if (engine !== 'plain') {
+        expect(thrown, engine).toMatchObject({
+          id: 'AGENT_INPUT_PROCESSOR_ERROR',
+          cause: {
+            id: 'PROCESSOR_WORKFLOW_FAILED',
+            message: expect.stringContaining('guardrail exploded'),
+          },
+        });
+      }
     }
   });
 });
