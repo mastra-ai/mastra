@@ -216,6 +216,32 @@ describe('KnowledgePage', () => {
     expect(banner).toHaveTextContent(/3 links unresolved/);
   });
 
+  it('finds a node by name and opens its real details with the keyboard', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const user = userEvent.setup();
+    const search = await screen.findByRole('searchbox', { name: 'Find knowledge' });
+    await user.type(search, 'payments');
+    await user.keyboard('{Enter}');
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByRole('heading', { name: 'Payments Service' })).toBeInTheDocument();
+    expect(search).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: 'All knowledge' }));
+    await waitFor(() => expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument());
+  });
+
+  it('allows clearing a search with no matches while preserving the graph', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const user = userEvent.setup();
+    await user.type(await screen.findByRole('searchbox', { name: 'Find knowledge' }), 'unknown service');
+    expect(screen.getByText('No matching nodes.')).toBeInTheDocument();
+    expect(screen.getAllByTestId('knowledge-node')).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(screen.queryByText('No matching nodes.')).not.toBeInTheDocument();
+  });
+
   it('shows the sidebar Knowledge entry (brain icon) under Audit log', async () => {
     stubKnowledgeRoute();
     renderRoute();
