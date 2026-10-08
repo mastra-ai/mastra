@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Validate stream timeout options before wrapping errors
+Preserve the original `TypeError` when plain agents reject invalid `modelSettings.timeout` stream options, matching durable and evented agents
