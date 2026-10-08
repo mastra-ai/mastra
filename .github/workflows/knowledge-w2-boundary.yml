@@ -1,0 +1,40 @@
+name: Knowledge W2 boundary storage (branch-only)
+
+# Runs the service-backed store suites for the closed Knowledge v2 stack.
+# Lives only on ci/knowledge-v21-w2-boundary; never merged.
+on:
+  push:
+    branches: [ci/knowledge-v21-w2-boundary]
+
+permissions: {}
+
+jobs:
+  test:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [libsql, pg]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build ${{ matrix.store }}
+        run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Run ${{ matrix.store }} tests
+        run: pnpm test
+        working-directory: stores/${{ matrix.store }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
