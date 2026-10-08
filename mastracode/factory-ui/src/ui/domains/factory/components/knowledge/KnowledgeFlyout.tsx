@@ -23,7 +23,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
       ) : null}
       <ChevronDown
         size={14}
-        className="text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180"
+        className="text-muted-foreground ml-auto transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
       />
     </CollapsibleTrigger>
   );
@@ -95,7 +95,7 @@ function RecordCard({
       data-testid="knowledge-record"
       data-pinned={record.pinned || undefined}
       className={[
-        'rounded-lg border transition-colors',
+        'rounded-lg border transition-colors motion-reduce:transition-none',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
         record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
@@ -194,7 +194,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform duration-300"
+      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform duration-300 motion-reduce:transition-none"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (

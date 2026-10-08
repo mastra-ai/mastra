@@ -755,6 +755,23 @@ describe('KnowledgePage', () => {
     expect(detail).not.toHaveTextContent('thread-abc-123');
   });
 
+  it('keeps canvas and flyout motion off for users who prefer reduced motion', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    const graphStyles = within(screen.getByTestId('knowledge-graph'))
+      .getByText((_, element) => element?.tagName === 'STYLE')
+      .textContent?.replace(/\s+/g, ' ');
+    const [beforeGuard, guarded] = graphStyles!.split('@media (prefers-reduced-motion: no-preference)');
+    expect(beforeGuard).not.toMatch(/animation|@keyframes/);
+    expect(guarded).toMatch(/@keyframes knowledgeArrive/);
+    expect(nodes[0]!.querySelector('.rounded-full')).toHaveClass('motion-reduce:transition-none');
+
+    fireEvent.click(nodes[0]!);
+    expect(await screen.findByTestId('knowledge-flyout')).toHaveClass('motion-reduce:transition-none');
+  });
+
   it('renders an explicitly selected thread view and returns via the breadcrumb', async () => {
     stubKnowledgeRoute();
     renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=thread-abc-123`);
