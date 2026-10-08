@@ -115,11 +115,19 @@ function ScopeTree({
   selectedScopeId,
   onSelectScope,
   onProjectClick,
+  hasMore,
+  loadingMore,
+  loadMoreFailed,
+  onLoadMore,
 }: {
   tree: KnowledgeScopeTreePayload | undefined;
   selectedScopeId: string | undefined;
   onSelectScope: (scopeId: string) => void;
   onProjectClick: () => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMoreFailed: boolean;
+  onLoadMore: () => void;
 }) {
   return (
     <aside aria-label="Knowledge scopes" className="border-border bg-card w-48 shrink-0 rounded-lg border p-3">
@@ -169,6 +177,16 @@ function ScopeTree({
                 ) : null}
               </button>
             ))}
+            {loadMoreFailed ? (
+              <Txt as="p" variant="caption" tone="muted" className="pl-5">
+                Unable to load more scopes.
+              </Txt>
+            ) : null}
+            {hasMore ? (
+              <Button variant="ghost" size="sm" className="ml-3 self-start" disabled={loadingMore} onClick={onLoadMore}>
+                {loadingMore ? 'Loading scopes…' : 'Load more scopes'}
+              </Button>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -504,7 +522,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   };
 
   let body: React.ReactNode;
-  if (scopeQuery.isError) {
+  // A failed "load more" keeps the loaded tree; the tree reports it inline.
+  if (scopeQuery.isError && !scopeQuery.isFetchNextPageError) {
     if (threadId && scopeQuery.error instanceof RequestError && scopeQuery.error.status === 404) {
       body = <ThreadGone onBack={backToProject} />;
     } else {
@@ -692,6 +711,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           selectedScopeId={selectedScopeId}
           onSelectScope={selectScope}
           onProjectClick={backToProject}
+          hasMore={scopeQuery.hasNextPage}
+          loadingMore={scopeQuery.isFetchingNextPage}
+          loadMoreFailed={scopeQuery.isFetchNextPageError}
+          onLoadMore={() => void scopeQuery.fetchNextPage()}
         />
         {/* Flex column so the graph container's `min-h-0 flex-1` chain connects
             to a sized parent; as a block wrapper it collapses to zero height. */}
