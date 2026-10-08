@@ -156,7 +156,8 @@ export const baseIterationStateSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.any(),
   options: durableOptionsSchema,

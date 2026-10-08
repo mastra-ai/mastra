@@ -1,5 +1,82 @@
 # @mastra/playground-ui
 
+## 62.0.0-alpha.2
+
+### Minor Changes
+
+- Added a **Duration (ms)** filter to the Traces list in Studio. It filters traces by the duration of their root span, so you can show only long or short traces. The filter appears only when your observability storage supports it. ([#26405](https://github.com/mastra-ai/mastra/pull/26405))
+
+  The filter is stored in the URL, so you can share a link to slow traces:
+
+  ```text
+  /traces?filterDurationMs=2000&filterDurationMs.op=gt
+  ```
+
+  The supported operators are `gt`, `gte`, `lt` and `lte`.
+
+- Added `ThinkingLevelUnavailable`, the disabled thinking trigger with a tooltip, for when no level can be picked yet, for example while the level loads. ([#26213](https://github.com/mastra-ai/mastra/pull/26213))
+
+  ```tsx
+  <ThinkingLevelUnavailable options={options} label="Thinking" reason="The thinking level isn't loaded yet." />
+  ```
+
+  Added `origin` and `footer` to `ThinkingLevelPicker`. `origin` says where the shown level comes from and is read with it on the trigger; `footer` sits at the bottom of the popover, for example to offer a way back to an inherited level.
+
+  ```tsx
+  <ThinkingLevelPicker
+    options={options}
+    value={level}
+    label="Thinking"
+    origin="build mode default"
+    footer={<Button onClick={useDefault}>Use default</Button>}
+    onChange={setLevel}
+  />
+  ```
+
+  Fixed the first segment of a `ButtonsGroup` losing its rounded leading corner and border while its `Popover` is open.
+
+### Patch Changes
+
+- Added an `excludeParams` option to `useTraceFilterPersistence`. Listed filters stay in the URL but are never saved or restored, so a filter that only carries navigation context (such as the conversation an agent Traces tab was opened from) does not come back on a later visit. ([#26265](https://github.com/mastra-ai/mastra/pull/26265))
+
+  ```tsx
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: 'mastra:traces:saved-filters:agent:weather-agent',
+    // Keep the thread filter in the URL, but never save or restore it
+    excludeParams: ['filterThreadId'],
+  });
+  ```
+
+- Fixed the "is any of" filter so pressing Enter (or Apply) on a typed value adds it to the list instead of closing the filter. Added values show as checked rows you can click to remove, and Done keeps a value that is still being typed. ([#26409](https://github.com/mastra-ai/mastra/pull/26409))
+
+- Fixed the Traces "Feedback comment" filter silently ignoring text values. Filtering by comment with "is", "matches", or other text operators now narrows the trace list instead of being dropped. ([#26392](https://github.com/mastra-ai/mastra/pull/26392))
+
+- Removed the cross-project color-usage test from Playground UI so color choices in Studio and Factory no longer fail its unit tests. ([#26434](https://github.com/mastra-ai/mastra/pull/26434))
+
+- Moved the trace panel close button to the top-right, next to the previous/next trace arrows, matching the span panel. ([#26382](https://github.com/mastra-ai/mastra/pull/26382))
+
+  Added a `tooltipPosition` prop to `Button` to choose which side its tooltip opens on. The span tree / timeline toggle in the trace panel now shows its tooltips below the buttons, so they no longer cover the other button.
+
+- Added `useTraceQueryRootDurationAvailable`, a hook that reports whether the server can filter traces by root span duration. It returns `enabled: false` when the server does not declare the capability. ([#26405](https://github.com/mastra-ai/mastra/pull/26405))
+
+  ```tsx
+  import { useTraceQueryRootDurationAvailable } from '@mastra/react/hooks/capabilities';
+
+  function DurationFilterToggle() {
+    const { enabled, isLoading } = useTraceQueryRootDurationAvailable();
+    if (isLoading || !enabled) return null;
+    return <button>Filter by duration</button>;
+  }
+  ```
+
+- Fixed Studio filters to use neutral gray accents, including time ranges and metadata fields. ([#26269](https://github.com/mastra-ai/mastra/pull/26269))
+
+- Updated dependencies [[`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`afabd7a`](https://github.com/mastra-ai/mastra/commit/afabd7ac3cc946b78bf25c0800021a6c9d48af2c), [`1211fcf`](https://github.com/mastra-ai/mastra/commit/1211fcf499acbda22ca8d399ae820789c69609f2), [`e995603`](https://github.com/mastra-ai/mastra/commit/e995603f64d4f03d234e7f53cc3ab03d9dfea502), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`afabd7a`](https://github.com/mastra-ai/mastra/commit/afabd7ac3cc946b78bf25c0800021a6c9d48af2c), [`cfaeff3`](https://github.com/mastra-ai/mastra/commit/cfaeff3e03d6743682a8db0c1c30c2dab11b3171)]:
+  - @mastra/core@1.76.0-alpha.2
+  - @mastra/react@1.9.0-alpha.2
+  - @mastra/client-js@1.53.0-alpha.2
+  - @mastra/ai-sdk@1.11.0-alpha.0
+
 ## 62.0.0-alpha.1
 
 ### Patch Changes

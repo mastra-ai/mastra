@@ -39,6 +39,8 @@ export interface SchemaSnapshot {
   columns: Map<string, Set<string>>;
   /** table name -> column name -> Postgres type name (`jsonb`, `text`, ...). */
   columnTypes: Map<string, Map<string, string>>;
+  /** table name -> names of columns declared NOT NULL. */
+  notNullColumns: Map<string, Set<string>>;
   /**
    * Valid index names present in the schema, exactly as the catalog stores them.
    * Invalid indexes (left by an interrupted `CREATE INDEX CONCURRENTLY`) are
@@ -90,8 +92,9 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     client.manyOrNone<{ tablename: string }>(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = $1`, [
       schema,
     ]),
-    client.manyOrNone<{ table_name: string; column_name: string; data_type: string }>(
-      `SELECT c.relname AS table_name, a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type
+    client.manyOrNone<{ table_name: string; column_name: string; data_type: string; not_null: boolean }>(
+      `SELECT c.relname AS table_name, a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type,
+              a.attnotnull AS not_null
          FROM pg_catalog.pg_class c
          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
          JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
@@ -122,6 +125,7 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
 
   const columns = new Map<string, Set<string>>();
   const columnTypes = new Map<string, Map<string, string>>();
+  const notNullColumns = new Map<string, Set<string>>();
   for (const row of columnRows) {
     let set = columns.get(row.table_name);
     if (!set) {
@@ -136,6 +140,15 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
       columnTypes.set(row.table_name, types);
     }
     types.set(row.column_name, row.data_type);
+
+    if (row.not_null) {
+      let notNull = notNullColumns.get(row.table_name);
+      if (!notNull) {
+        notNull = new Set<string>();
+        notNullColumns.set(row.table_name, notNull);
+      }
+      notNull.add(row.column_name);
+    }
   }
 
   const indexes = new Set<string>();
@@ -158,6 +171,7 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     tables: new Set(tableRows.map(r => r.tablename)),
     columns,
     columnTypes,
+    notNullColumns,
     indexes,
     replicaIdentityIndexes,
     primaryKeyIndexes,

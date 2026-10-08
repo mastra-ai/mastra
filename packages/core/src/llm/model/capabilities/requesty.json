@@ -6,6 +6,8 @@
     "claude-fable-5@eu",
     "claude-haiku-4-5",
     "claude-haiku-4-5@eu",
+    "claude-haiku-5-5",
+    "claude-haiku-5-5@eu",
     "claude-opus-4-1",
     "claude-opus-4-5",
     "claude-opus-4-5@eu",
@@ -239,6 +241,8 @@
     "claude-fable-5@eu",
     "claude-haiku-4-5",
     "claude-haiku-4-5@eu",
+    "claude-haiku-5-5",
+    "claude-haiku-5-5@eu",
     "claude-opus-4-1",
     "claude-opus-4-5",
     "claude-opus-4-5@eu",
@@ -421,6 +425,12 @@
       }
     ],
     "gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "claude-haiku-5-5@eu": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -1099,6 +1109,12 @@
       }
     ],
     "o4-mini@eu": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "claude-haiku-5-5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

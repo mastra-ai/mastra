@@ -176,6 +176,7 @@ function FilterBarInputImpl({
     operator,
     query,
     enabled: open && step === 'value',
+    setQuery,
     onCommit: value => {
       if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
@@ -422,7 +423,7 @@ function FilterBarInputImpl({
                   emptyText="No matching operator."
                 />
               )}
-              {step === 'value' && valueStep.hasSuggestions && (
+              {step === 'value' && valueStep.hasOptions && (
                 <FilterBarOptionList<FilterBarOption>
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
@@ -446,7 +447,7 @@ function FilterBarInputImpl({
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitFreeText()}
+                    onClick={() => valueStep.submitFreeText()}
                   >
                     Apply
                     <Kbd size="xs">↵</Kbd>
@@ -459,7 +460,7 @@ function FilterBarInputImpl({
                     size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
+                    onClick={() => valueStep.commitDone()}
                   >
                     Done
                     <Kbd size="xs">{modEnterLabel}</Kbd>

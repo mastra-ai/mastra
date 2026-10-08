@@ -140,12 +140,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     return this.executeWithRetry(
       () =>
@@ -186,7 +188,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
             // Merge the new step result using element-wise array merging
             // (critical for concurrent foreach iteration results)
-            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
             // Upsert the snapshot within the same transaction
             const now = new Date().toISOString();

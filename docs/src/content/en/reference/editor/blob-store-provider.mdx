@@ -62,7 +62,8 @@ new MastraEditor({
 ## Implementing a provider
 
 ```typescript title="src/providers/my-blob-store.ts"
-import type { BlobStore, BlobStoreProvider } from '@mastra/core/editor'
+import type { BlobStoreProvider } from '@mastra/core/editor'
+import type { BlobStore } from '@mastra/core/storage'
 
 export const myBlobStoreProvider: BlobStoreProvider<{ bucket: string; region: string }> = {
   id: 'my-blob-store',
