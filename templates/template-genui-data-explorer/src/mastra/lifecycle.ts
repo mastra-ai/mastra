@@ -16,11 +16,21 @@ export function closeOnShutdown(workspace: Awaited<ReturnType<typeof createWorks
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {
       closing ??= (async () => {
-        await observability.shutdown();
-        await workspace.engine.close();
-        await workspace.storage.close();
-        await traceStorage.close();
-        workspace.telemetry?.close();
+        for (const step of [
+          () => observability.shutdown(),
+          () => workspace.engine.close(),
+          () => workspace.storage.close(),
+          () => traceStorage.close(),
+          () => workspace.telemetry?.close(),
+        ]) {
+          try {
+            await step();
+          } catch {
+            process.emitWarning(
+              "A shutdown cleanup failed; continuing to close remaining resources.",
+            );
+          }
+        }
       })();
     });
 }

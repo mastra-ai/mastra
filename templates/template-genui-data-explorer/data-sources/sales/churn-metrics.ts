@@ -1,3 +1,4 @@
+import { SourceError } from "../source.ts";
 import type { DatabaseSync } from "node:sqlite";
 import { coverageReason, shiftMonths } from "./calendar.ts";
 import { metric, safeInteger, resultInteger, resultText } from "./contracts.ts";
@@ -126,9 +127,12 @@ export function churnSeries(
   metricId: "customerChurn" | "revenueChurn",
 ): ResultTable {
   const reason = coverageReason(metadata, period);
-  if (reason) throw new Error(reason);
+  if (reason) throw new SourceError("invalid-input", reason);
   if (!period.start.endsWith("-01") || !period.end.endsWith("-01"))
-    throw new Error("Monthly churn requires complete calendar months, with first-of-month bounds.");
+    throw new SourceError(
+      "invalid-input",
+      "Monthly churn requires complete calendar months, with first-of-month bounds.",
+    );
   const accounts = subscriptionAccounts(db, period.end);
   const rows: ResultTable["rows"] = [];
   for (let month = period.start; month < period.end; month = shiftMonths(month, 1)) {
@@ -230,7 +234,8 @@ export function customerCohorts(
 ) {
   const reason = coverageReason(metadata, period);
   if (!period.start.endsWith("-01") || !period.end.endsWith("-01"))
-    throw new Error(
+    throw new SourceError(
+      "invalid-input",
       "Customer cohorts require complete calendar months, with first-of-month bounds.",
     );
   const cohorts = new Map<string, Lifecycle[]>();

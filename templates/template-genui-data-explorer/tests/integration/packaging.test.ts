@@ -1,4 +1,8 @@
-import { extractionFingerprint } from "../../scripts/standalone-files.ts";
+import {
+  extractionFingerprint,
+  isWithin,
+  repositoryBoundary,
+} from "../../scripts/standalone-files.ts";
 import { readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { resolve, join } from "node:path";
@@ -6,24 +10,25 @@ import { z } from "zod";
 import { expect, it } from "vitest";
 
 async function extraction() {
+  let fixture: { directory: string; fingerprint: string };
   try {
-    const fixture = z
+    fixture = z
       .object({ directory: z.string(), fingerprint: z.string() })
       .parse(JSON.parse(await readFile(".data/standalone.json", "utf8")));
-    const current = await extractionFingerprint(process.cwd());
-    if (
-      current !== fixture.fingerprint ||
-      (await extractionFingerprint(fixture.directory)) !== current
-    )
-      throw new Error(
-        "Stale standalone extraction. Refresh preparation before running check-only quality tests.",
-      );
-    return fixture.directory;
   } catch {
     throw new Error(
       "Prepare the independent fixture with npm run standalone:prepare before test:quality. This check-only runner never installs dependencies.",
     );
   }
+  const current = await extractionFingerprint(process.cwd());
+  if (
+    current !== fixture.fingerprint ||
+    (await extractionFingerprint(fixture.directory)) !== current
+  )
+    throw new Error(
+      "Stale standalone extraction. Refresh preparation before running check-only quality tests.",
+    );
+  return fixture.directory;
 }
 async function run(directory: string, args: string[]) {
   return new Promise<{ code: number | null; output: string }>((complete, reject) => {
@@ -51,7 +56,7 @@ async function run(directory: string, args: string[]) {
 }
 it("standalone_npm_checks_use_mastra_vitest_and_oxfmt", async () => {
   const directory = await extraction();
-  expect(resolve(directory).startsWith(resolve(process.cwd(), ".."))).toBe(false);
+  expect(isWithin(repositoryBoundary(process.cwd()), resolve(directory))).toBe(false);
   for (const script of ["typecheck", "test:unit", "test:integration", "format:check", "build"]) {
     const result = await run(directory, ["run", script]);
     expect(result.code, `${script}: ${result.output.slice(-3000)}`).toBe(0);

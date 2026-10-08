@@ -35,7 +35,7 @@ export async function runReadProcess<T>(
       ),
     Math.max(1, context.deadline - Date.now()),
   );
-  child.once("error", () =>
+  child.on("error", () =>
     stop(
       new SourceError(
         "source-unavailable",

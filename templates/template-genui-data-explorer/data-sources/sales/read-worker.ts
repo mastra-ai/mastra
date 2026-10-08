@@ -1,5 +1,5 @@
 import { SalesSource } from "./source.ts";
-import { resultRecordCount } from "../source.ts";
+import { SourceError, resultRecordCount } from "../source.ts";
 import type { AnalysisRequest } from "../source.ts";
 
 function reply(message: object) {
@@ -25,13 +25,13 @@ process.once(
         });
       } else reply({ ok: true, result });
     } catch (error) {
+      const invalid = source && error instanceof SourceError && error.code === "invalid-input";
       reply({
         ok: false,
-        code: source ? "invalid-input" : "source-unavailable",
-        message:
-          source && error instanceof Error
-            ? error.message
-            : "The Sales dataset is unavailable. Preserve the data file and check local setup before retrying.",
+        code: invalid ? "invalid-input" : "source-unavailable",
+        message: invalid
+          ? error.message
+          : "The Sales dataset is unavailable. Preserve the data file and check local setup before retrying.",
       });
     } finally {
       source?.close();

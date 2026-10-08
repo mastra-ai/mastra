@@ -235,6 +235,69 @@ it("unsafe_queries_and_unsupported_claims_are_rejected", async () => {
   expect(await readFile(path)).toEqual(original);
 });
 
+it("ordinary select and drop wording reaches the analytical model", async () => {
+  for (const text of ["Select bookings for March", "Show the drop in bookings for March"]) {
+    const { explorer, provider } = explorerFor(new ReferenceSource(), [booking]);
+    expect((await explorer.analyze(question(text))).status).toBe("complete");
+    expect(provider.calls.length).toBeGreaterThan(0);
+  }
+});
+
+it("explicit filters override saved values while unrelated saved filters remain", async () => {
+  const directory = await scratch();
+  const path = join(directory, "facts.sqlite");
+  referenceFixture(path).db.close();
+  const { explorer } = explorerFor(new SalesSource(path), [
+    { ...booking, filters: { segment: "SMB" } },
+  ]);
+  const outcome = await explorer.analyze(question(), {
+    filters: { segment: "Enterprise", region: "Americas" },
+  });
+  expect(outcome.status).toBe("complete");
+  expect(outcome.results[0]?.data.request.filters).toEqual({ segment: "SMB", region: "Americas" });
+  expect(outcome.results[0]?.data.value).toBe(12000);
+});
+
+it("rejected adapter cleanup still emits a terminal outcome and releases the workspace", async () => {
+  const fixture = fixtureSource(async (result, _attempt, context) => {
+    context?.trackCleanup?.(Promise.reject(new Error("Synthetic cleanup failure")));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return result;
+  });
+  const { explorer } = explorerFor(fixture.source, [booking]);
+  for (let run = 0; run < 2; run++) {
+    const { events, outcome } = await eventsOf(
+      explorer,
+      question("March bookings", `cleanup-${run}`),
+    );
+    expect(outcome.status).toBe("complete");
+    expect(events.filter((event) => event.type === "terminal")).toHaveLength(1);
+  }
+});
+
+it("Sales worker distinguishes invalid requests from unreadable result data", async () => {
+  const directory = await scratch();
+  const path = join(directory, "facts.sqlite");
+  const fixture = referenceFixture(path);
+  const source = new SalesSource(path);
+  try {
+    await expect(
+      source.execute({ ...booking, filters: { segment: "Unknown" } }),
+    ).rejects.toMatchObject({ code: "invalid-input" });
+    fixture.db.exec(
+      "ALTER TABLE opportunity_history RENAME COLUMN value_cents TO unavailable_value",
+    );
+    await expect(source.execute(booking)).rejects.toMatchObject({
+      code: "source-unavailable",
+      message:
+        "The Sales dataset is unavailable. Preserve the data file and check local setup before retrying.",
+    });
+  } finally {
+    source.close();
+    fixture.db.close();
+  }
+});
+
 it("analysis_limits_and_dependency_recovery_are_observable", async () => {
   expect(LIMITS).toEqual({
     steps: 8,

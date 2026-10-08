@@ -42,6 +42,10 @@ export function deployment(
     throw new Error(
       "Separate servers require the same WORKSPACE_PROXY_TOKEN (at least 32 characters) on Next.js and Mastra.",
     );
+  if (!loopback(agent) && agent.protocol !== "https:")
+    throw new Error(
+      "A non-loopback MASTRA_SERVER_URL must use https:// so WORKSPACE_PROXY_TOKEN is never sent in cleartext.",
+    );
   const webOrigins = process.env.WEB_ORIGIN
     ? [web.origin]
     : [`http://127.0.0.1:${ports.webPort}`, `http://localhost:${ports.webPort}`];

@@ -463,6 +463,7 @@ test("separate UI and Mastra processes use the authenticated proxy without shari
   const { directory } = locationSchema.parse(
     JSON.parse(await readFile(".data/standalone.json", "utf8")),
   );
+  await mkdir(join(directory, ".data"), { recursive: true });
   const data = await mkdtemp(join(directory, ".data", "separate-servers-"));
   const { referenceFixture } = await import("../fixtures/reference.ts");
   referenceFixture(join(data, "sales.sqlite")).db.close();

@@ -70,8 +70,6 @@ function validatePlan(request: AnalysisRequest, descriptor: SourceDescriptor): v
     throw new SourceError("invalid-input", "This metric does not support the requested fields.");
   if (request.groupBy && !capability.groupings?.some((group) => group.field === request.groupBy))
     throw new SourceError("invalid-input", "This source does not support the requested grouping.");
-  if (request.groupBy && request.records)
-    throw new SourceError("invalid-input", "Choose grouped data or records for one request.");
   if (
     Object.entries(request.filters ?? {}).some(
       ([key, value]) => !validFilterValue(capability, key, value),
@@ -106,7 +104,7 @@ export function analyticalWorkflow() {
       const plan = {
         ...inputData,
         ...(Object.keys(inheritedFilters).length
-          ? { filters: { ...inputData.filters, ...inheritedFilters } }
+          ? { filters: { ...inheritedFilters, ...inputData.filters } }
           : {}),
       };
       try {
@@ -154,7 +152,10 @@ export function analyticalWorkflow() {
         requestId: session.question.requestId,
         queryId,
         traceId: session.traceId,
-        trackCleanup: (promise) => session.cleanups.push(promise),
+        trackCleanup: (promise) => {
+          // Observe rejection immediately, even if the read continues before final cleanup.
+          session.cleanups.push(promise.catch(() => {}));
+        },
       };
       try {
         let raw: unknown;

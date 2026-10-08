@@ -148,7 +148,7 @@ export class DataExplorer {
           "An analysis is already active in this workspace. Cancel it or wait for completion.",
       });
     if (
-      /\b(SELECT|INSERT|DELETE|DROP|ATTACH|PRAGMA|UPDATE\s+\w+\s+SET|sqlite_master|workspace_store|trace_store)\b/i.test(
+      /\b(SELECT\b[\s\S]*?\bFROM|INSERT\s+INTO|DELETE\s+FROM|DROP\s+(?:TABLE|DATABASE|INDEX|VIEW)|ATTACH\s+(?:DATABASE|[\x22\x27][^\x22\x27]+[\x22\x27]\s+AS)|PRAGMA\s+\w+|UPDATE\s+\w+\s+SET|sqlite_master|workspace_store|trace_store)\b/i.test(
         question.question,
       )
     )
@@ -327,8 +327,11 @@ export class DataExplorer {
       options.signal?.removeEventListener("abort", cancel);
       // Native workers register their actual close promises. Uncooperative remote reads
       // may continue remotely, but their late results cannot publish into this run.
-      await Promise.all(session.cleanups);
-      this.#active.delete(question.workspaceId);
+      try {
+        await Promise.allSettled(session.cleanups);
+      } finally {
+        this.#active.delete(question.workspaceId);
+      }
     }
     return finish(outcome);
   }

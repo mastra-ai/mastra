@@ -91,13 +91,19 @@ const analysisRequestFields = {
   groupBy: z.string().trim().min(1).max(80).optional(),
   records: z.boolean().optional(),
 };
-export const analysisRequestSchema = z.strictObject(analysisRequestFields).transform((request) => {
-  // Provider compatibility converts optional nulls to enumerable undefined fields.
-  // Omit only absent known fields after strict validation, before capability checks.
-  return Object.fromEntries(
-    Object.entries(request).filter(([, value]) => value !== undefined),
-  ) as typeof request;
-});
+export const analysisRequestSchema = z
+  .strictObject(analysisRequestFields)
+  .refine(
+    (request) => !(request.groupBy && request.records),
+    "Choose grouped data or records for one request.",
+  )
+  .transform((request) => {
+    // Provider compatibility converts optional nulls to enumerable undefined fields.
+    // Omit only absent known fields after strict validation, before capability checks.
+    return Object.fromEntries(
+      Object.entries(request).filter(([, value]) => value !== undefined),
+    ) as typeof request;
+  });
 
 /** Named filters are expressible in strict provider schemas; open-ended records are not. */
 export function analysisToolSchema(descriptor: SourceDescriptor) {

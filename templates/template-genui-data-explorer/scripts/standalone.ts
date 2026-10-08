@@ -1,4 +1,9 @@
-import { extractionFile, extractionFingerprint } from "./standalone-files.ts";
+import {
+  extractionFile,
+  extractionFingerprint,
+  isWithin,
+  repositoryBoundary,
+} from "./standalone-files.ts";
 import { cp, mkdir, writeFile, mkdtemp } from "node:fs/promises";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -8,7 +13,7 @@ const root = process.cwd();
 const destination = process.argv[2]
   ? resolve(process.argv[2])
   : resolve(await mkdtemp(resolve(tmpdir(), "genui-standalone-")), "template");
-if (destination.startsWith(resolve(root, "..")))
+if (isWithin(repositoryBoundary(root), destination))
   throw new Error("Prepare a new standalone directory outside the repository.");
 const fingerprint = await extractionFingerprint(root);
 await cp(root, destination, {

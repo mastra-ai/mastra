@@ -7,7 +7,16 @@ import {
   resultTableSchema,
   tableColumnSchema,
   sourceDescriptorSchema,
+  analysisRequestSchema,
+  analysisToolSchema,
 } from "../../data-sources/source.ts";
+
+it("request schemas reject grouped records before source execution", () => {
+  const request = { metric: "bookings", groupBy: "month", records: true };
+  expect(analysisRequestSchema.safeParse(request).success).toBe(false);
+  expect(() => analysisToolSchema(new ReferenceSource().describe()).parse(request)).toThrow();
+  expect(analysisRequestSchema.safeParse({ ...request, records: false }).success).toBe(true);
+});
 import { ReferenceSource } from "../fixtures/reference-source.ts";
 import {
   formatValue,

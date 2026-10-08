@@ -2,9 +2,14 @@ import { resolve } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { openDataSource } from "../data-sources/registry.ts";
 import { sources, defaultSourceId } from "../data-sources/sources.ts";
-import { benchmarkBudget, BenchmarkModel, runBenchmark } from "./quality/benchmark.ts";
+import {
+  benchmarkBudget,
+  benchmarkOptions,
+  BenchmarkModel,
+  runBenchmark,
+} from "./quality/benchmark.ts";
 
-const budget = benchmarkBudget({
+const options = benchmarkOptions.parse({
   approved: process.env.BENCHMARK_APPROVED === "true",
   capUsd: Number(process.env.BENCHMARK_CAP_USD),
   inputUsdPerMillion: Number(process.env.BENCHMARK_INPUT_USD_PER_MILLION),
@@ -15,6 +20,7 @@ const budget = benchmarkBudget({
   pricingReference: process.env.BENCHMARK_PRICING_REFERENCE,
   model: process.env.ANALYSIS_MODEL ?? "gpt-4.1-mini",
 });
+const budget = benchmarkBudget(options);
 if (!process.env.OPENAI_API_KEY)
   throw new Error("Set the server model credential before the explicitly approved benchmark.");
 const directory = resolve(process.env.DATA_DIRECTORY ?? ".data");
@@ -23,7 +29,7 @@ const source = await openDataSource(sources, defaultSourceId, {
 });
 try {
   const model = new BenchmarkModel({ providerId: "openai", modelId: budget.model }, budget);
-  const report = await runBenchmark(source, model, budget);
+  const report = await runBenchmark(source, model, options);
   await mkdir(directory, { recursive: true });
   await writeFile(resolve(directory, "live-benchmark.json"), JSON.stringify(report, null, 2));
   console.log(

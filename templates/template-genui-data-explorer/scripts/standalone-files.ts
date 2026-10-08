@@ -1,6 +1,22 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+/** An extracted template may have no repository; in that case protect the template itself. */
+export function repositoryBoundary(directory: string) {
+  const root = resolve(directory);
+  for (let candidate = root; ; candidate = dirname(candidate)) {
+    if (existsSync(join(candidate, ".git"))) return candidate;
+    if (dirname(candidate) === candidate) return root;
+  }
+}
+export function isWithin(directory: string, candidate: string) {
+  const offset = relative(directory, candidate);
+  return (
+    offset === "" || (offset !== ".." && !offset.startsWith(`..${sep}`) && !isAbsolute(offset))
+  );
+}
 
 const generated = new Set([
   "node_modules",
@@ -14,6 +30,7 @@ const generated = new Set([
   ".vscode",
   "next-env.d.ts",
 ]);
+/** Exclude reserved generated names at every depth, including nested test apps. */
 export function extractionFile(path: string) {
   const name = basename(path);
   return (

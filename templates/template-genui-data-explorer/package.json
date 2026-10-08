@@ -22,9 +22,9 @@
     "test:standalone:browser": "playwright test --config tests/standalone.config.ts",
     "diagnostics": "node --env-file-if-exists=.env scripts/diagnostics.ts",
     "build:agent": "tsc -p tsconfig.build.json && node --experimental-strip-types scripts/build-mastra.ts",
-    "build:ui": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "build:ui": "node scripts/next.ts build",
     "start:agent": "node --env-file-if-exists=.env .mastra/output/index.mjs --production",
-    "start:ui": "node --env-file-if-exists=.env node_modules/next/dist/bin/next start"
+    "start:ui": "node --env-file-if-exists=.env scripts/next.ts start"
   },
   "dependencies": {
     "@ag-ui/client": "1.0.1",

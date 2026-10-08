@@ -6,6 +6,27 @@ import { boundedBody } from "../../src/server/http.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 const token = "synthetic-workspace-proxy-token-for-tests";
+
+it("rejects cleartext remote upstreams before forwarding a credential", async () => {
+  configure("http://agent.internal");
+  expect(() => deployment()).toThrow("must use https://");
+  const forwarded = vi.spyOn(globalThis, "fetch");
+  try {
+    expect((await proxyWorkspace(request(), "/workspace")).status).toBe(503);
+    expect(forwarded).not.toHaveBeenCalled();
+  } finally {
+    forwarded.mockRestore();
+  }
+  for (const url of [
+    "http://localhost:4111",
+    "http://127.0.0.1:4111",
+    "http://[::1]:4111",
+    "https://agent.internal",
+  ]) {
+    configure(url);
+    expect(deployment().agentOrigin).toBe(url);
+  }
+});
 function configure(agentOrigin: string) {
   vi.stubEnv("MASTRA_SERVER_URL", agentOrigin);
   vi.stubEnv("WEB_ORIGIN", "https://explorer.example");

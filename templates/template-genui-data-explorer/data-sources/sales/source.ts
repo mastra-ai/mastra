@@ -1,3 +1,4 @@
+import { SourceError } from "../source.ts";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -172,14 +173,15 @@ function requestPeriod(value: unknown, name: string): Period {
     typeof value.start !== "string" ||
     typeof value.end !== "string"
   )
-    throw new Error(`${name} requires UTC start and exclusive end dates.`);
+    throw new SourceError("invalid-input", `${name} requires UTC start and exclusive end dates.`);
   const period = { start: value.start, end: value.end };
   validatePeriod(period);
   return period;
 }
 
 function requestDate(value: unknown): string {
-  if (typeof value !== "string") throw new Error("asOf requires a UTC date.");
+  if (typeof value !== "string")
+    throw new SourceError("invalid-input", "asOf requires a UTC date.");
   return dateOnly(value);
 }
 
@@ -192,21 +194,21 @@ function requestStage(value: unknown): Stage {
     value !== "won" &&
     value !== "lost"
   )
-    throw new Error("Unknown opportunity stage.");
+    throw new SourceError("invalid-input", "Unknown opportunity stage.");
   return value;
 }
 
 function requestFilters(value: unknown): Filters {
   if (value === undefined) return {};
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Filters must be an object.");
+    throw new SourceError("invalid-input", "Filters must be an object.");
   const result: Filters = {};
   for (const [key, field] of Object.entries(value)) {
     if (key === "ownerId" && typeof field === "number") result.ownerId = field;
     else if (key === "segment" && typeof field === "string") result.segment = field;
     else if (key === "region" && typeof field === "string") result.region = field;
     else if (key === "stage") result.stage = requestStage(field);
-    else throw new Error(`Invalid or unsupported Sales filter '${key}'.`);
+    else throw new SourceError("invalid-input", `Invalid or unsupported Sales filter '${key}'.`);
   }
   validateFilters(result);
   return result;
@@ -319,17 +321,21 @@ export class SalesSource implements DataSource {
   /** Worker-only synchronous implementation; never exposed as a model tool. */
   executeRead(request: AnalysisRequest): AnalysisResult {
     if (!request || typeof request !== "object" || Array.isArray(request))
-      throw new Error("An analytical request is required.");
+      throw new SourceError("invalid-input", "An analytical request is required.");
     const capability = capabilities.find((entry) => entry.metric === request.metric);
     if (!capability)
-      throw new Error(
+      throw new SourceError(
+        "invalid-input",
         `Unsupported Sales metric '${request.metric}'. Choose an advertised capability.`,
       );
     const allowed = new Set<string>(["metric", ...capability.fields]);
     if (Object.keys(request).some((key) => !allowed.has(key)))
-      throw new Error(`Unsupported fields for Sales metric '${request.metric}'.`);
+      throw new SourceError(
+        "invalid-input",
+        `Unsupported fields for Sales metric '${request.metric}'.`,
+      );
     if (request.groupBy && !capability.groupings?.some((group) => group.field === request.groupBy))
-      throw new Error("Choose an advertised Sales grouping.");
+      throw new SourceError("invalid-input", "Choose an advertised Sales grouping.");
     const filters = requestFilters(request.filters);
     const operations: SourceOperation[] = [];
     const db = new Proxy(this.#connection.db, {
@@ -445,7 +451,7 @@ export class SalesSource implements DataSource {
         break;
       }
       default:
-        throw new Error("Unsupported Sales metric.");
+        throw new SourceError("invalid-input", "Unsupported Sales metric.");
     }
     table ??=
       result.status === "available" &&
@@ -489,14 +495,18 @@ export class SalesSource implements DataSource {
     const filter = filterClause(filters);
     const where = ` FROM opportunity_history h JOIN opportunities o ON o.id=h.opportunity_id JOIN accounts a ON a.id=o.account_id WHERE h.stage IN ('won','lost') AND h.effective_at >= ? AND h.effective_at < ?${filter.sql}`;
     if (request.records) {
-      if (request.groupBy) throw new Error("Choose grouped data or records, not both.");
+      if (request.groupBy)
+        throw new SourceError("invalid-input", "Choose grouped data or records, not both.");
       const rows = db
         .prepare(
           `SELECT h.opportunity_id AS opportunityId, a.name AS account, h.effective_at AS date, h.stage, h.value_cents AS value${where}${request.metric === "bookings" ? " AND h.stage='won'" : ""} ORDER BY h.effective_at,h.opportunity_id LIMIT 1001`,
         )
         .all(period.start, period.end, ...filter.params);
       if (rows.length > 1000)
-        throw new Error("Record inspection exceeds 1000 rows. Narrow the period or filters.");
+        throw new SourceError(
+          "invalid-input",
+          "Record inspection exceeds 1000 rows. Narrow the period or filters.",
+        );
       return {
         kind: "records",
         omitted: 0,
@@ -524,13 +534,14 @@ export class SalesSource implements DataSource {
       stage: "h.stage",
     };
     const dimension = request.groupBy ? dimensions[request.groupBy] : undefined;
-    if (!dimension) throw new Error("A supported grouping is required.");
+    if (!dimension) throw new SourceError("invalid-input", "A supported grouping is required.");
     const rows = db
       .prepare(
         `SELECT ${dimension} AS label, COALESCE(SUM(CASE WHEN h.stage='won' THEN h.value_cents ELSE 0 END),0) AS amount, COUNT(CASE WHEN h.stage='won' THEN 1 END) AS won, COUNT(*) AS closed${where} GROUP BY ${dimension} ORDER BY ${request.groupBy === "month" ? "label" : request.metric === "conversion" ? "1.0*won/closed DESC,label" : "amount DESC,label"} LIMIT 1001`,
       )
       .all(period.start, period.end, ...filter.params);
-    if (rows.length > 1000) throw new Error("Grouping exceeds the result limit.");
+    if (rows.length > 1000)
+      throw new SourceError("invalid-input", "Grouping exceeds the result limit.");
     const tableRows = rows.map((row) => {
       const numerator = resultInteger(request.metric === "bookings" ? row.amount : row.won);
       const denominator = resultInteger(row.closed);

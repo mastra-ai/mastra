@@ -90,7 +90,7 @@ WORKSPACE_PROXY_TOKEN=<same-random-secret-of-at-least-32-characters>
 ```
 
 `MASTRA_SERVER_URL` and `WEB_ORIGIN` accept HTTP(S) origins, without a path, credentials, query,
-or fragment. Use HTTPS across machines or an equivalent protected private transport.
+or fragment. Non-loopback `MASTRA_SERVER_URL` origins must use HTTPS; plain HTTP is accepted only for loopback connections.
 The Next.js proxy ignores browser-supplied credentials and supplies its own token. Mastra checks
 that token, its configured Host, and any Origin header before handling requests. Redirects are
 not followed. Preserve the configured Host headers through deployment proxies; browser requests

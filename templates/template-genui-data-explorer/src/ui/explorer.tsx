@@ -20,9 +20,13 @@ export function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
   const [dismissedFeedback, setDismissedFeedback] = useState<string>();
   const [theme, setTheme] = useState("light");
   useEffect(() => {
-    const selected =
-      localStorage.getItem("explorer-theme") ??
-      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    let selected = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    try {
+      const saved = localStorage.getItem("explorer-theme");
+      if (saved === "dark" || saved === "light") selected = saved;
+    } catch {
+      /* Use the system theme when browser storage is disabled. */
+    }
     setTheme(selected);
     document.documentElement.dataset.theme = selected;
     document.documentElement.classList.toggle("dark", selected === "dark");
@@ -212,7 +216,11 @@ export function Explorer({ initial }: { initial: WorkspaceSnapshot }) {
               setTheme(selected);
               document.documentElement.dataset.theme = selected;
               document.documentElement.classList.toggle("dark", selected === "dark");
-              localStorage.setItem("explorer-theme", selected);
+              try {
+                localStorage.setItem("explorer-theme", selected);
+              } catch {
+                /* The selected theme still applies for this visit. */
+              }
             }}
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >

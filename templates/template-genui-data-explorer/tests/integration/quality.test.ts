@@ -298,6 +298,23 @@ it("telemetry_reports_domain_outcomes_without_secrets", async () => {
   }
 });
 
+it("invalid diagnostic events do not interrupt callers or subsequent valid events", () => {
+  const telemetry = new LocalTelemetry(":memory:");
+  const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+  const event = { type: "render-ack" as const, workspaceId: "workspace", requestId: "request" };
+  try {
+    expect(() => telemetry.record({ ...event, requestId: "x".repeat(129) })).not.toThrow();
+    expect(() => telemetry.record({ ...event, operation: "x".repeat(4001) })).not.toThrow();
+    expect(() => telemetry.record({ ...event, inputTokens: 1.5 })).not.toThrow();
+    telemetry.record(event);
+    expect(telemetry.events()).toEqual([expect.objectContaining(event)]);
+    expect(warning).toHaveBeenCalledTimes(1);
+  } finally {
+    warning.mockRestore();
+    telemetry.close();
+  }
+});
+
 it("live_benchmark_protocol_is_bounded_separate_and_not_retried", async () => {
   const directory = await scratch();
   const fixture = referenceFixture(join(directory, "sales.sqlite"));

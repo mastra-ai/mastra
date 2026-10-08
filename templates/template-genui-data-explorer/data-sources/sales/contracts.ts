@@ -1,3 +1,4 @@
+import { SourceError } from "../source.ts";
 export const VERSIONS = { schema: 1, generator: "sales-v1", metrics: "saas-v1" } as const;
 export const STAGE_WEIGHTS = {
   qualification: 0.1,
@@ -32,24 +33,24 @@ export interface Filters {
 export function validateFilters(filters: Filters): void {
   const allowed = ["ownerId", "segment", "region", "stage"];
   if (Object.keys(filters).some((key) => !allowed.includes(key)))
-    throw new Error("Unknown Sales filter.");
+    throw new SourceError("invalid-input", "Unknown Sales filter.");
   if (
     filters.ownerId !== undefined &&
     (!Number.isSafeInteger(filters.ownerId) || filters.ownerId < 1)
   )
-    throw new Error("Owner ID must be a positive integer.");
+    throw new SourceError("invalid-input", "Owner ID must be a positive integer.");
   if (
     filters.segment !== undefined &&
     !["SMB", "Mid-market", "Enterprise"].includes(filters.segment)
   )
-    throw new Error("Unknown segment.");
+    throw new SourceError("invalid-input", "Unknown segment.");
   if (filters.region !== undefined && !["Americas", "EMEA", "APAC"].includes(filters.region))
-    throw new Error("Unknown region.");
+    throw new SourceError("invalid-input", "Unknown region.");
   if (
     filters.stage !== undefined &&
     ![...Object.keys(STAGE_WEIGHTS), "won", "lost"].includes(filters.stage)
   )
-    throw new Error("Unknown opportunity stage.");
+    throw new SourceError("invalid-input", "Unknown opportunity stage.");
 }
 export function safeInteger(value: number): number {
   if (!Number.isSafeInteger(value))

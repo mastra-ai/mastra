@@ -152,9 +152,12 @@ test("copilot_workspace_filters_drills_and_compares", async ({ page }, testInfo)
   expect(first.results[0]?.data.value).toBe(42000);
   expect(first.components[0]?.component).toBe("line");
   await expect(page.getByRole("img", { name: /Monthly bookings/ })).toBeVisible();
+  await page.getByRole("group", { name: "Chart points" }).getByRole("button").first().click();
+  await expect(page.locator(".chart-selection")).toBeVisible();
   await showFilters(page);
   await page.getByLabel("Segment filter Monthly bookings").selectOption({ label: "SMB" });
   await revision(page, 2);
+  await expect(page.locator(".chart-selection")).toHaveCount(0);
   const filtered = await saved(page);
   expect(filtered.filters).toEqual({ segment: "SMB" });
   expect(filtered.results[0]?.data.value).toBe(36000);
@@ -413,6 +416,24 @@ test("filter replacement resets table pagination", async ({ page }) => {
   await expect(page.getByRole("table")).toContainText("$60.00");
   await expect(page.getByRole("table")).toContainText("Synthetic account 2");
   await expect(page.locator(".card")).toContainText("Synthetic account 2");
+});
+
+test("theme changes remain usable when browser storage is disabled", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.addInitScript(() => {
+    for (const method of ["getItem", "setItem"])
+      Object.defineProperty(Storage.prototype, method, {
+        value: () => {
+          throw new DOMException("Storage disabled", "SecurityError");
+        },
+      });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "New chat", exact: true })).toBeEnabled();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await ask(page, "Show monthly bookings", 1);
 });
 
 test("workspace_rejects_invalid_views_and_stale_results", async ({ page }) => {

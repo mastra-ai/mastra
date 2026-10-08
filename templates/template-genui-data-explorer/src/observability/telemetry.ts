@@ -70,11 +70,11 @@ export class LocalTelemetry implements TelemetrySink {
     );
   }
   record(input: EventInput) {
-    const event = eventSchema.parse({ ...input, at: Date.now() });
-    const safe = JSON.stringify(event, (_key, value: unknown) =>
-      typeof value === "string" ? redact(value) : value,
-    );
     try {
+      const event = eventSchema.parse({ ...input, at: Date.now() });
+      const safe = JSON.stringify(event, (_key, value: unknown) =>
+        typeof value === "string" ? redact(value) : value,
+      );
       this.#db.prepare("INSERT OR IGNORE INTO diagnostic_events(json) VALUES (?)").run(safe);
     } catch {
       if (!this.#unavailable)

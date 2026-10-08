@@ -1,3 +1,4 @@
+import { SourceError } from "../source.ts";
 import type { DatasetMetadata, Period } from "./contracts.ts";
 
 export function dateOnly(value: string): string {
@@ -6,7 +7,7 @@ export function dateOnly(value: string): string {
     !Number.isFinite(Date.parse(value)) ||
     new Date(value).toISOString().slice(0, 10) !== value
   )
-    throw new Error("Use a valid UTC date (YYYY-MM-DD).");
+    throw new SourceError("invalid-input", "Use a valid UTC date (YYYY-MM-DD).");
   return value;
 }
 export function shiftMonths(value: string, count: number): string {
@@ -27,7 +28,10 @@ export function validatePeriod(period: Period): void {
   dateOnly(period.start);
   dateOnly(period.end);
   if (period.start >= period.end)
-    throw new Error("The period must have a start before its exclusive end.");
+    throw new SourceError(
+      "invalid-input",
+      "The period must have a start before its exclusive end.",
+    );
 }
 export function coverageReason(metadata: DatasetMetadata, period: Period): string | null {
   validatePeriod(period);
