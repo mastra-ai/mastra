@@ -7,6 +7,7 @@ import { MessageList } from '../../../message-list';
 import { DurableAgentDefaults, DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Create the durable isTaskComplete step. Behavior lives in the shared
@@ -34,7 +35,8 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       const state = inputData as {
         runId: string;
         iterationCount: number;
-        messageListState: any;
+        /** Present only on runs that thread the transcript through step payloads. */
+        messageListState?: any;
         accumulatedSteps: Array<{
           text?: string;
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
@@ -60,7 +62,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       const list = () => {
         if (!messageList) {
           messageList = new MessageList();
-          messageList.deserialize(state.messageListState);
+          messageList.deserialize(readMessageListState(params.state, state));
         }
         return messageList;
       };
@@ -114,7 +116,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           isContinued: !outcome.complete,
         };
       }
-      nextState.messageListState = list().serialize();
+      Object.assign(nextState, await storeMessageListState(params, list().serialize()));
       return nextState;
     },
   });

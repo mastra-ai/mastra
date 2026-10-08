@@ -46,7 +46,7 @@
     "@mastra/hono": "latest",
     "@mastra/libsql": "latest",
     "@mastra/observability": "latest",
-    "hono": "4.13.8",
+    "hono": "4.13.11",
     "zod": "4.4.3"
   },
   "devDependencies": {

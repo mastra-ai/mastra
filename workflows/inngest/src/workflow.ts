@@ -666,32 +666,36 @@ export class InngestWorkflow<
                     })) ?? undefined;
                 }
 
+                const finalSnapshot: WorkflowRunState = {
+                  runId,
+                  status: result.status,
+                  value: result.state ?? initialState ?? {},
+                  context: toSnapshotContext(result.steps),
+                  activePaths: [],
+                  activeStepsPath: {},
+                  serializedStepGraph: this.serializedStepGraph,
+                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                  waitingPaths: {},
+                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                  result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
+                  error: result.status === 'failed' ? result.error : undefined,
+                  requestContext: requestContext.toJSON(),
+                  tracingContext: workflowSpanData
+                    ? {
+                        traceId: workflowSpanData.traceId,
+                        spanId: workflowSpanData.id,
+                      }
+                    : undefined,
+                  timestamp: Date.now(),
+                };
+
                 await workflowsStore.persistWorkflowSnapshot({
                   workflowName: this.id,
                   runId,
                   resourceId,
-                  snapshot: {
-                    runId,
-                    status: result.status,
-                    value: result.state ?? initialState ?? {},
-                    context: toSnapshotContext(result.steps),
-                    activePaths: [],
-                    activeStepsPath: {},
-                    serializedStepGraph: this.serializedStepGraph,
-                    suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
-                    waitingPaths: {},
-                    resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
-                    result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
-                    error: result.status === 'failed' ? result.error : undefined,
-                    requestContext: requestContext.toJSON(),
-                    tracingContext: workflowSpanData
-                      ? {
-                          traceId: workflowSpanData.traceId,
-                          spanId: workflowSpanData.id,
-                        }
-                      : undefined,
-                    timestamp: Date.now(),
-                  },
+                  snapshot: this.options.pruneSnapshot
+                    ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
+                    : finalSnapshot,
                 });
               }
             }

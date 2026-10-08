@@ -14,14 +14,20 @@ function linesContaining(view: string, text: string): string[] {
 
 function expectEditorBordersAligned(terminal: McE2eTerminal, columns: number): void {
   const lines = terminal.serialize().view.split('\n');
-  const topBorder = lines.findLastIndex(line => /^╭─+╮$/.test(line));
-  const bottomBorder = lines.findIndex((line, index) => index > topBorder && /^╰─+╯$/.test(line));
-  const editorRows = lines.slice(topBorder + 1, bottomBorder);
+  const topEdge = lines.findLastIndex(line => /^▄+$/.test(line));
+  const bottomEdge = lines.findIndex((line, index) => index > topEdge && /^▀+$/.test(line));
+  const editorRows = lines.slice(topEdge + 1, bottomEdge);
   expect(editorRows.length).toBeGreaterThan(0);
   expect(editorRows.join('\n')).toContain('resize-editor-boundary-');
+  // The prompt panel's half-block edges span the full terminal width, and no row overflows it.
+  for (const edge of [lines[topEdge]!, lines[bottomEdge]!]) {
+    if (edge.length !== columns) {
+      throw new Error(`Expected ${columns}-column prompt edge, got ${JSON.stringify(edge)}`);
+    }
+  }
   for (const line of editorRows) {
-    if (line.length !== columns || !line.endsWith('│')) {
-      throw new Error(`Expected ${columns}-column editor row with aligned right border, got ${JSON.stringify(line)}`);
+    if (line.length > columns) {
+      throw new Error(`Expected editor row within ${columns} columns, got ${JSON.stringify(line)}`);
     }
   }
 }

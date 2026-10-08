@@ -8,11 +8,23 @@ packages:
 
 # Tone consistency scorer
 
-The `createToneScorer()` function evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
+The `createToneScorer()` function evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing the agent output's sentiment against a configured `referenceTone`, or analyzing tone stability across the sentences of the agent output.
 
 ## Parameters
 
-The `createToneScorer()` function doesn't take any options.
+The `createToneScorer()` function accepts an optional config object with the following properties:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'referenceTone',
+    type: 'string',
+    required: false,
+    description:
+      "Reference text whose sentiment the agent output is compared against. When omitted, the scorer measures sentiment stability across the output's sentences instead.",
+  },
+]}
+/>
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
@@ -26,10 +38,10 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
     description: 'The id of the run (optional).',
   },
   {
-    name: 'analyzeStepResult',
+    name: 'preprocessStepResult',
     type: 'object',
     description:
-      'Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)',
+      'Object with tone metrics: { score: number, responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { score: number, avgSentiment: number, sentimentVariance: number } (for stability mode)',
   },
   {
     name: 'score',
@@ -44,7 +56,8 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ```typescript oxfmt:false
 {
   runId: string,
-  analyzeStepResult: {
+  preprocessStepResult: {
+    score: number,
     responseSentiment?: number,
     referenceSentiment?: number,
     difference?: number,
@@ -66,20 +79,20 @@ The scorer evaluates sentiment consistency through tone pattern analysis and mod
    - Computes sentiment scores
    - Measures tone variations
 1. Calculates mode-specific score:
-   **Tone Consistency** (input and output):
-   - Compares sentiment between texts
-   - Calculates sentiment difference
-   - Score = 1 - (sentiment\_difference / max\_difference)
-     **Tone Stability** (single input):
-   - Analyzes sentiment across sentences
+   **Tone Consistency** (`referenceTone` set):
+   - Compares the output's sentiment with the `referenceTone` sentiment
+   - Calculates the absolute sentiment difference
+   - Score = max(0, 1 - sentiment\_difference)
+     **Tone Stability** (no `referenceTone`):
+   - Analyzes sentiment across the output's sentences
    - Calculates sentiment variance
-   - Score = 1 - (sentiment\_variance / max\_variance)
+   - Score = max(0, 1 - sentiment\_variance)
 
-Final score: `mode_specific_score * scale`
+Final score: `mode_specific_score`
 
 ### Score interpretation
 
-(0 to scale, default 0-1)
+(0-1)
 
 - 1.0: Perfect tone consistency/stability
 - 0.7-0.9: Strong consistency with minor variations
@@ -87,37 +100,33 @@ Final score: `mode_specific_score * scale`
 - 0.1-0.3: Poor consistency with major tone changes
 - 0.0: No consistency - completely different tones
 
-### `analyzeStepResult`
+### `preprocessStepResult`
 
 Object with tone metrics:
 
 - **responseSentiment**: Sentiment score for the response (comparison mode).
-- **referenceSentiment**: Sentiment score for the input/reference (comparison mode).
+- **referenceSentiment**: Sentiment score for the `referenceTone` (comparison mode).
 - **difference**: Absolute difference between sentiment scores (comparison mode).
 - **avgSentiment**: Average sentiment across sentences (stability mode).
 - **sentimentVariance**: Variance of sentiment across sentences (stability mode).
 
 ## Example
 
-Evaluate tone consistency between related agent responses:
+Evaluate whether agent responses match a positive reference tone:
 
 ```typescript title="src/example-tone-consistency.ts"
 import { runEvals } from '@mastra/core/evals'
 import { createToneScorer } from '@mastra/evals/scorers/prebuilt'
 import { myAgent } from './agent'
 
-const scorer = createToneScorer()
+const scorer = createToneScorer({
+  referenceTone: 'We are happy to help and glad you had a great experience!',
+})
 
 const result = await runEvals({
   data: [
-    {
-      input: 'How was your experience with our service?',
-      groundTruth: 'The service was excellent and exceeded expectations!',
-    },
-    {
-      input: 'Tell me about the customer support',
-      groundTruth: 'The support team was friendly and very helpful.',
-    },
+    { input: 'How was your experience with our service?' },
+    { input: 'Tell me about the customer support' },
   ],
   scorers: [scorer],
   target: myAgent,

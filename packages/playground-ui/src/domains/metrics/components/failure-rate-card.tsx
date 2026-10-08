@@ -1,40 +1,60 @@
 import { EntityType } from '@mastra/core/observability';
-import { useBucketTracesNav } from '../hooks/use-bucket-traces-nav';
-import { useDrilldown } from '../hooks/use-drilldown';
+import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
+import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { formatPercent } from '../lib/chart-format';
+import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenErrorsInLogsButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { ChartCardError } from './chart-card-error';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
-import { useLinkComponent } from '@/lib/framework';
 
 const SERIES = [{ dataKey: 'failureRate', label: 'Failed runs', color: CHART_COLORS.error }];
 
 const axisPercent = (ratio: number) => `${Math.round(ratio * 100)}%`;
 
 /** Share of agent runs that failed, per bucket; a point opens the failed runs' traces. */
-export function FailureRateCard() {
-  const { Link } = useLinkComponent();
+export type FailureRateCardProps = {
+  /** Called from the "View errors in Logs" button. */
+  onViewErrors?: () => void;
+  /** Called with the time range of the clicked bar or point. */
+  onTimeRangeClick?: (range: TimeRange) => void;
+};
+
+export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateCardProps) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
-  const { getLogsHref } = useDrilldown();
-  const openBucket = useBucketTracesNav()({ rootEntityType: EntityType.AGENT, status: 'error' });
+  const { timestamp } = useMetricsFilters();
+  const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
   const runs = data.reduce((sum, b) => sum + b.completed + b.failed, 0);
   const failed = data.reduce((sum, b) => sum + b.failed, 0);
 
+  const layout = {
+    title: 'Failure rate',
+    description: 'Share of agent runs that failed.',
+    actions: onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />,
+  };
+
+  if (isError) {
+    return (
+      <ChartCard {...layout}>
+        <ChartCardError />
+      </ChartCard>
+    );
+  }
+
   return (
     <ChartCard
-      title="Failure rate"
-      description="Share of agent runs that failed."
-      summary={{ value: formatPercent(runs > 0 ? failed / runs : 0), label: 'failed' }}
-      actions={<OpenErrorsInLogsButton href={getLogsHref({ status: 'error' })} LinkComponent={Link} />}
-      isLoading={isLoading}
+      {...layout}
+      summary={
+        <MetricsCard.Summary value={formatPercent(runs > 0 ? failed / runs : 0)} label="failed" isLoading={isLoading} />
+      }
       isUpdating={isPlaceholderData}
-      isError={isError}
     >
-      <ChartArea isError={isError} isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">
+      <ChartArea isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">
         <MetricsLineChart
           data={data}
           series={SERIES}
@@ -43,7 +63,7 @@ export function FailureRateCard() {
           showYAxis={false}
           valueFormatter={formatPercent}
           axisFormatter={axisPercent}
-          onBucketClick={openBucket}
+          onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}
           {...EDGE_BUCKET_AXIS}
         />

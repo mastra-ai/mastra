@@ -308,7 +308,7 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'messageFilter',
-                    type: '(context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>',
+                    type: '(context: MessageFilterContext) => ModelMessage[] | Promise<ModelMessage[]>',
                     isOptional: true,
                     description:
                       'Callback function called before delegating to a subagent. Use this to filter the messages that are passed to the subagent.',

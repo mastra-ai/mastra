@@ -1421,6 +1421,7 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "memoryConfig",
+      "mode",
       "resourceId",
       "workingMemory"
     ],

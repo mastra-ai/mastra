@@ -232,7 +232,7 @@ export function createClassifierScorer(options: any): MastraScorer<any, any, any
       validateQuestionAndScores(classifier, options.id, options.question, options.scores);
 
       const state = await options.state(context);
-      const result = await classifier.evaluate({
+      const result = await classifier.decide({
         state,
         maxRetries: options.maxRetries,
         providerOptions: options.providerOptions,
