@@ -13,13 +13,24 @@ import type {
   SSOLoginConfig,
   User,
 } from '..';
-import type { AuthorizeUserFn, MastraAuthConfig, MastraAuthRequest } from '../types';
+import type { AuthorizeUserFn, AuthRequestContext, MastraAuthConfig, MastraAuthRequest } from '../types';
 import { getRequestHeader } from '../types';
 
 export interface MastraAuthProviderOptions<TUser = unknown> {
   name?: string;
   authorizeUser?: AuthorizeUserFn<TUser>;
   mapUserToResourceId?(user: TUser): string | undefined | null;
+  /**
+   * Decide whether an authenticated user may act on a resource other than the one
+   * `mapUserToResourceId` maps them to. Only `true` approves; the server then uses the
+   * requested resource. Any other result is denied with a 403. Without this method, the
+   * mapped resource always wins.
+   */
+  authorizeUserResource?(
+    user: TUser,
+    resourceId: string,
+    requestContext: AuthRequestContext,
+  ): Promise<boolean> | boolean;
   /**
    * Protected paths for the auth provider
    */
@@ -66,12 +77,28 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * Map an authenticated user to a memory resource id
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
+  /**
+   * Decide whether an authenticated user may act on a resource other than the one
+   * `mapUserToResourceId` maps them to. Only `true` approves; the server then uses the
+   * requested resource. Any other result is denied with a 403. Without this method, the
+   * mapped resource always wins.
+   */
+  authorizeUserResource?(
+    user: TUser,
+    resourceId: string,
+    requestContext: AuthRequestContext,
+  ): Promise<boolean> | boolean;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
   public protected?: MastraAuthConfig['protected'];
   public public?: MastraAuthConfig['public'];
   public mapUserToResourceId?(user: TUser): string | undefined | null;
+  public authorizeUserResource?(
+    user: TUser,
+    resourceId: string,
+    requestContext: AuthRequestContext,
+  ): Promise<boolean> | boolean;
 
   constructor(options?: MastraAuthProviderOptions<TUser>) {
     super({ component: 'AUTH', name: options?.name });
@@ -83,6 +110,7 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
     this.protected = options?.protected;
     this.public = options?.public;
     this.mapUserToResourceId = options?.mapUserToResourceId;
+    this.authorizeUserResource = options?.authorizeUserResource;
   }
 
   /**
@@ -107,6 +135,9 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
     }
     if (opts?.mapUserToResourceId) {
       this.mapUserToResourceId = opts.mapUserToResourceId;
+    }
+    if (opts?.authorizeUserResource) {
+      this.authorizeUserResource = opts.authorizeUserResource;
     }
     if (opts?.protected) {
       this.protected = opts.protected;
@@ -186,6 +217,17 @@ export class CompositeAuth
     this.providers = providers;
     if (providers.some(provider => typeof provider.mapUserToResourceId === 'function')) {
       this.mapUserToResourceId = user => this.mapAuthenticatedUserToResourceId(user);
+    }
+    const resourcePolicies = providers.filter(provider => typeof provider.authorizeUserResource === 'function');
+    if (resourcePolicies.length > 0) {
+      this.authorizeUserResource = async (user, resourceId, requestContext) => {
+        for (const provider of resourcePolicies) {
+          if ((await provider.authorizeUserResource!(user, resourceId, requestContext)) === true) {
+            return true;
+          }
+        }
+        return false;
+      };
     }
 
     // Null out interface methods when no inner provider supports them.

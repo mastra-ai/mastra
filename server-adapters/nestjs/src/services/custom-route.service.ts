@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import { checkRequestedResource } from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -168,7 +169,39 @@ export class CustomRouteService {
         }
         await next();
       };
-      const handlers: any[] = [authMiddleware, ...middlewares, handler];
+      const resourceMiddleware = async (c: any, next: () => Promise<void>) => {
+        let body: Record<string, unknown> = {};
+        if (
+          mastra.getServer()?.auth?.authorizeUserResource &&
+          c.req.header('content-type')?.includes('application/json')
+        ) {
+          try {
+            const parsed = (await c.req.raw.clone().json()) as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+              body = parsed as Record<string, unknown>;
+          } catch {
+            body = {};
+          }
+        }
+        const pathParams = c.req.param();
+        const searchParams = new URL(c.req.url).searchParams;
+        const queryParams = Object.fromEntries(searchParams.entries());
+        // A repeated key keeps only its last value in queryParams, while c.req.query() returns the first.
+        const repeatedQueryIds = ['resourceId', 'resource_id'].flatMap(key =>
+          searchParams.getAll(key).map(value => ({ [key]: value })),
+        );
+        const resourceError = await checkRequestedResource(
+          mastra,
+          c.get('requestContext'),
+          { ...pathParams, ...queryParams, ...body },
+          [pathParams, queryParams, ...repeatedQueryIds, body],
+        );
+        if (resourceError) {
+          return c.json({ error: resourceError.error, message: resourceError.message }, resourceError.status);
+        }
+        await next();
+      };
+      const handlers: any[] = [authMiddleware, resourceMiddleware, ...middlewares, handler];
       if (route.method === 'ALL') {
         app.all(route.path, handlers[0], ...handlers.slice(1));
       } else {

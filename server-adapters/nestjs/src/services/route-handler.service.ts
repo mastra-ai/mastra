@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { checkRequestedResource, isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
@@ -263,6 +263,11 @@ export class RouteHandlerService {
       ...(typeof validatedBody === 'object' && validatedBody !== null ? this.omitReservedKeys(validatedBody) : {}),
       ...context,
     };
+
+    const resourceError = await checkRequestedResource(this.mastra, params.requestContext, handlerParams);
+    if (resourceError) {
+      throw new ForbiddenException(resourceError.message);
+    }
 
     const data = await route.handler(handlerParams);
 

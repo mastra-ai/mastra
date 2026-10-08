@@ -1,3 +1,13 @@
+/**
+ * The part of the request context an `authorizeUserResource` policy can rely on.
+ * Typed structurally because this package is bundled into several packages, and
+ * each bundled copy of the `RequestContext` class would be a distinct type.
+ */
+export interface AuthRequestContext {
+  // Keep method syntax: typed `RequestContext<Values>` only fits through bivariant method parameters.
+  get(key: string): unknown;
+}
+
 export interface HonoRequestLike {
   raw?: Request;
   headers?: Headers | Record<string, string | string[] | undefined>;
@@ -80,6 +90,16 @@ export type MastraAuthConfig<TUser = unknown, TContext = unknown> = {
    * Maps the authenticated user to a resource ID for memory/thread scoping.
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
+
+  /**
+   * Decide whether an authenticated user may act on a resource other than the one
+   * `mapUserToResourceId` maps them to. Only `true` approves; any other result is a 403.
+   */
+  authorizeUserResource?(
+    user: TUser,
+    resourceId: string,
+    requestContext: AuthRequestContext,
+  ): Promise<boolean> | boolean;
 
   /**
    * Authorization function for the server.

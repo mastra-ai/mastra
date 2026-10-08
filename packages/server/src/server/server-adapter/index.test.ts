@@ -1383,3 +1383,90 @@ describe('getCustomHTTPExceptionResponse', () => {
     expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
   });
 });
+
+describe('checkRouteFGA - authorizeUserResource', () => {
+  const route = {} as any;
+
+  async function run(
+    policy: any,
+    params: Record<string, unknown>,
+    mapped: string | null = 'user-a',
+    sources?: Record<string, unknown>[],
+  ) {
+    const { checkRouteFGA } = await import('./index');
+    const { RequestContext, MASTRA_RESOURCE_ID_KEY } = await import('@mastra/core/request-context');
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'u1' });
+    if (mapped) requestContext.set(MASTRA_RESOURCE_ID_KEY, mapped);
+    const mastra = { getServer: () => ({ auth: policy ? { authorizeUserResource: policy } : {} }) };
+    const result = await checkRouteFGA(mastra, route, requestContext, params, sources);
+    return { result, resourceId: requestContext.get(MASTRA_RESOURCE_ID_KEY) };
+  }
+
+  it('runs an approved caller under the requested resource (async policy)', async () => {
+    const policy = vi.fn(async () => true);
+    const { result, resourceId } = await run(policy, { resourceId: 'session-r' });
+    expect(result).toBeNull();
+    expect(resourceId).toBe('session-r');
+    expect(policy).toHaveBeenCalledWith({ id: 'u1' }, 'session-r', expect.anything());
+  });
+
+  it('denies with 403 for any result other than true', async () => {
+    for (const answer of [false, 'yes', 1, undefined]) {
+      const { result, resourceId } = await run(() => answer, { memory: { resource: 'session-r' } });
+      expect(result).toMatchObject({ status: 403 });
+      expect(result?.message).not.toContain('session-r');
+      expect(resourceId).toBe('user-a');
+    }
+  });
+
+  it('denies conflicting requested resources without asking the policy', async () => {
+    const policy = vi.fn(() => true);
+    const { result } = await run(policy, { resourceId: 'r1', resource_id: 'r2' });
+    expect(result).toMatchObject({ status: 403 });
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('denies when request sources name different resources without asking the policy', async () => {
+    const policy = vi.fn(() => true);
+    const { result } = await run(policy, { resourceId: 'r2' }, 'user-a', [{ resourceId: 'r1' }, { resourceId: 'r2' }]);
+    expect(result).toMatchObject({ status: 403 });
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('asks the policy once when request sources agree or one is empty', async () => {
+    const policy = vi.fn(() => true);
+    const { result, resourceId } = await run(policy, { resourceId: 'r1' }, 'user-a', [
+      { resourceId: 'r1' },
+      { resourceId: '' },
+      { resource_id: 'r1' },
+    ]);
+    expect(result).toBeNull();
+    expect(resourceId).toBe('r1');
+    expect(policy).toHaveBeenCalledOnce();
+  });
+
+  it('skips the policy when the requested resource is the mapped one or nothing is mapped', async () => {
+    const policy = vi.fn(() => false);
+    expect((await run(policy, { resourceId: 'user-a' })).result).toBeNull();
+    expect((await run(policy, { resourceId: 'other' }, null)).result).toBeNull();
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it('keeps the mapped resource when no policy is configured', async () => {
+    const { result, resourceId } = await run(undefined, { resourceId: 'session-r' });
+    expect(result).toBeNull();
+    expect(resourceId).toBe('user-a');
+  });
+
+  it('propagates a policy throw', async () => {
+    await expect(
+      run(
+        () => {
+          throw new Error('boom');
+        },
+        { resourceId: 'session-r' },
+      ),
+    ).rejects.toThrow('boom');
+  });
+});
