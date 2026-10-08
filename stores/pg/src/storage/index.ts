@@ -250,7 +250,10 @@ export class PostgresStore extends MastraCompositeStore {
         workflows: new WorkflowsPG(domainConfig),
         workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
-        knowledge: new KnowledgePG({ ...domainConfig, storageIsolationKey: getPgKnowledgeIsolationKey(config) }),
+        knowledge: new KnowledgePG({
+          ...domainConfig,
+          storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config),
+        }),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),

@@ -95,6 +95,12 @@ export type LibSQLLocalPragmaOptions = {
 export type LibSQLBaseConfig = {
   id: string;
   /**
+   * Identifies the database this store's Knowledge tables live in. `Mastra` rejects two Knowledge
+   * runtimes with the same key. Set it when two stores reach different databases that Mastra
+   * cannot tell apart, or the same database through different connection settings.
+   */
+  storageIsolationKey?: string;
+  /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
    */
@@ -248,7 +254,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const memory = new MemoryLibSQL(domainConfig);
     const knowledge = new KnowledgeLibSQL({
       ...domainConfig,
-      storageIsolationKey: getLibSQLKnowledgeIsolationKey(config, this.client),
+      storageIsolationKey: config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, this.client),
     });
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);

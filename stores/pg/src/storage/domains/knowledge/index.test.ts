@@ -44,6 +44,21 @@ describe('PostgreSQL knowledge SQL normalization', () => {
 const pool = new Pool({ connectionString });
 
 describe('KnowledgePG storage isolation', () => {
+  it('lets PostgresStore callers override the isolation key', () => {
+    const derived = new PostgresStore({ id: 'derived', pool, schemaName: 'shared' });
+    const overridden = new PostgresStore({
+      id: 'overridden',
+      pool,
+      schemaName: 'shared',
+      storageIsolationKey: 'tenant-a',
+    });
+
+    expect(overridden.stores.knowledge!.getStorageIsolationKey()).toBe('tenant-a');
+    expect(derived.stores.knowledge!.getStorageIsolationKey()).toBe(
+      new KnowledgePG({ pool, schemaName: 'shared' }).getStorageIsolationKey(),
+    );
+  });
+
   it('identifies domains using the same pool and schema as one physical backend', () => {
     expect(new KnowledgePG({ pool, schemaName: 'shared' }).getStorageIsolationKey()).toBe(
       new KnowledgePG({ pool, schemaName: 'shared' }).getStorageIsolationKey(),

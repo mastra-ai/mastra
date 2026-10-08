@@ -118,6 +118,16 @@ describe('KnowledgeLibSQL storage isolation', () => {
       new KnowledgeLibSQL({ url: ':memory:' }).getStorageIsolationKey(),
     );
   });
+
+  it('lets LibSQLStore callers override the isolation key', () => {
+    const derived = new LibSQLStore({ id: 'derived', url: 'file:shared.db' });
+    const overridden = new LibSQLStore({ id: 'overridden', url: 'file:shared.db', storageIsolationKey: 'tenant-a' });
+
+    expect(overridden.stores.knowledge!.getStorageIsolationKey()).toBe('tenant-a');
+    expect(derived.stores.knowledge!.getStorageIsolationKey()).toBe(
+      new KnowledgeLibSQL({ url: 'file:shared.db' }).getStorageIsolationKey(),
+    );
+  });
 });
 
 createKnowledgeSchemaResetTests(async () => {
