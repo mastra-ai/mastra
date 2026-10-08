@@ -20,3 +20,6 @@ export function knowledgeActivityLabel(event: KnowledgeActivityEvent): string {
       return event.action.replaceAll('-', ' ');
   }
 }
+
+export const KNOWLEDGE_ACTIVITY_TRUNCATED =
+  'This scope has more members than activity can cover; activity for some members is not shown.';
