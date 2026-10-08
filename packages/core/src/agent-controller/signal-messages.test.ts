@@ -5,6 +5,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentThreadEvent } from '../agent/types';
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
+import { ChunkFrom } from '../stream/types';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
@@ -1022,14 +1023,20 @@ describe('AgentController signal messages', () => {
     });
     const { session } = await createController(storage, agent);
     const abort = vi.fn(() => true);
-    const unsubscribe = vi.fn();
+    const detached = Promise.withResolvers<void>();
+    const unsubscribe = vi.fn(() => detached.resolve());
+    const origin = await session.machinery.buildRequestContext();
 
     vi.spyOn(agent, 'subscribeToThread')
       .mockResolvedValueOnce({
-        stream: (async function* () {})(),
+        stream: (async function* () {
+          yield { type: 'start' as const, runId: 'active-run-id', from: ChunkFrom.AGENT, payload: {} };
+          await detached.promise;
+        })(),
         unsubscribe,
         abort,
         activeRunId: () => 'active-run-id',
+        __getCurrentRunRequestContext: () => origin,
       })
       .mockResolvedValue({
         stream: (async function* () {})(),
@@ -1046,6 +1053,9 @@ describe('AgentController signal messages', () => {
     const signal = session.sendSignal({ content: 'active hello' });
     await signal.accepted;
     expect(session.getCurrentRunId()).toBe('active-run-id');
+    expect(origin.get('controller')).toMatchObject({ session: { id: session.identity.getId() } });
+    await vi.waitFor(() => expect(session.run.getRunId()).toBe('active-run-id'));
+    expect(session.stream.activeRunId()).toBe('active-run-id');
 
     await session.thread.create();
 

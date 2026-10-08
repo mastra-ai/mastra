@@ -846,6 +846,11 @@ export class SessionThread {
       // aborting the parked run so the thread can be resumed after switching back.
       this.#owner.stream.detach();
     } else {
+      // A submitted action may not have produced an observed chunk yet. Cancel
+      // this session's own startup signal, never the thread's unknown active run.
+      if (!this.#owner.run.getRunId() && this.#owner.run.isRunning()) {
+        this.#owner.run.requestAbort();
+      }
       this.#owner.stream.cleanup();
     }
     this.#owner.run.supersedeBinding();
@@ -1416,6 +1421,8 @@ export class SessionStream {
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
 
+  constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
+
   #notifyTeardown(): void {
     const waiters = [...this.#teardownWaiters];
     this.#teardownWaiters.clear();
@@ -1557,13 +1564,17 @@ export class SessionStream {
     this.#notifyTeardown();
   }
 
-  /**
-   * Fully tear down the live subscription: abort, unsubscribe, and clear. This is
-   * a lifecycle teardown, so the abort stays local — the binding is being dropped,
-   * not the run cancelled, and a remote owner's run must survive it.
-   */
+  /** Tear down this binding, cancelling only an execution initiated by this session. */
   cleanup(): void {
-    this.#subscription?.abort({ localOnly: true });
+    const { sessionId, runId } = this.getSessionRun();
+    const origin = this.#subscription?.__getCurrentRunRequestContext?.()?.get('controller') as
+      | AgentControllerRequestContext
+      | undefined;
+    // The subscription exposes the original execution context, not this listener's
+    // reconstructed context. Fence stale readers against a newer action on the thread.
+    if (runId && this.#subscription?.activeRunId() === runId && origin?.session.id === sessionId) {
+      this.#subscription.abort({ localOnly: true });
+    }
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#agent = null;
@@ -3972,7 +3983,10 @@ export class Session<TState = unknown> {
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */
-  readonly stream = new SessionStream();
+  readonly stream = new SessionStream(() => ({
+    sessionId: this.identity.getId(),
+    runId: this.run.getRunId(),
+  }));
   /** Rebuildable resume mirror for suspensions on the active thread. */
   readonly suspensions: SessionSuspensions;
   /** Captured Agent queue scope for this session binding. */
@@ -4957,20 +4971,52 @@ export class Session<TState = unknown> {
       }
       abortedStreamTeardown?.cancel();
 
-      const streamOptions = await this.machinery.buildStreamOptions({
-        requestContext: requestContextInput,
-        tracingContext,
-        tracingOptions,
-        untilIdle,
-      });
+      const startupGeneration = this.run.bindingGeneration();
+      this.run.clearAbortRequested();
+      const startupSignal = this.run.ensureAbortController().signal;
+      const streamOptions = await this.machinery
+        .buildStreamOptions({
+          requestContext: requestContextInput,
+          tracingContext,
+          tracingOptions,
+          untilIdle,
+          threadId,
+          abortSignal: startupSignal,
+        })
+        .catch(error => {
+          if (
+            this.run.bindingGeneration() === startupGeneration &&
+            this.run.getAbortSignal() === startupSignal &&
+            !this.run.getRunId() &&
+            !this.stream.activeRunId()
+          ) {
+            this.run.reset();
+          }
+          throw error;
+        });
 
       assertNotCancelled();
+      if (startupSignal.aborted || this.run.bindingGeneration() !== startupGeneration) {
+        throw new SessionStartupCancelledError();
+      }
       const result = agent.sendSignal(signal, {
         resourceId: this.identity.getResourceId(),
         threadId,
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
+      void result.accepted.then(
+        settled => {
+          if (settled.action !== 'wake') return;
+          const runId = settled.runId;
+          const abort = () => agent.abortRunStream(runId);
+          // Navigation can precede the first observed chunk. Release the accepted
+          // action as well as its model IO, never a run this signal merely joined.
+          if (startupSignal.aborted) abort();
+          else startupSignal.addEventListener('abort', abort, { once: true });
+        },
+        () => {},
+      );
       if (requireDelivery) {
         // Delivery-guaranteed path: surface the real acceptance decision and
         // propagate routing/stream-setup failures to the caller.

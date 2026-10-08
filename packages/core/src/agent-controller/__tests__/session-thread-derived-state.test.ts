@@ -157,6 +157,286 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it('cancels navigation during startup model synchronization without dispatching or arming the successor', async () => {
+    const controller = await createSettingsController(new InMemoryStore(), 'navigation-setup');
+    const session = await controller.createSession({ id: 'navigation-setup' });
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const sync = session.model.syncFromPersisted.bind(session.model);
+    vi.spyOn(session.model, 'syncFromPersisted').mockImplementationOnce(async () => {
+      entered.resolve();
+      await release.promise;
+      return sync();
+    });
+    const dispatch = vi.spyOn(session.machinery.getAgent(), 'sendSignal');
+    const sending = session.sendSignal({ content: 'Start on A' }, { requireDelivery: true });
+    const cancelled = expect(sending.accepted).rejects.toThrow('Session startup cancelled');
+    try {
+      await entered.promise;
+      await session.thread.create({ id: 'navigation-successor' });
+      release.resolve();
+      await cancelled;
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(session.thread.getId()).toBe('navigation-successor');
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.run.getRunId()).toBeNull();
+    } finally {
+      release.resolve();
+      await sending.accepted.catch(() => {});
+      session.stream.detach();
+    }
+  });
+
+  it.each([false, true])('cleans up failed startup without resetting a successor: %s', async navigate => {
+    const storage = new InMemoryStore();
+    const preparing = Promise.withResolvers<void>();
+    const rejectPreparation = Promise.withResolvers<void>();
+    const modelEntered = Promise.withResolvers<void>();
+    const releaseModel = Promise.withResolvers<void>();
+    const agent = new Agent({
+      id: 'failed-startup',
+      name: 'Failed startup',
+      instructions: 'Reply.',
+      memory: new MockMemory({ storage }),
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => {
+          modelEntered.resolve();
+          await releaseModel.promise;
+          return { stream: createTextStream() };
+        },
+      }),
+    });
+    new Mastra({ agents: { agent }, storage, logger: false });
+    const controller = new AgentController({
+      id: 'failed-startup-controller',
+      agent,
+      storage,
+      workspace: createMockWorkspace(),
+      modes: [{ id: 'default', name: 'Default', default: true }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'failed-startup' });
+    vi.spyOn(session.model, 'syncFromPersisted').mockImplementationOnce(async () => {
+      preparing.resolve();
+      await rejectPreparation.promise;
+      throw new Error('startup metadata unavailable');
+    });
+    const dispatch = vi.spyOn(agent, 'sendSignal');
+    const failed = session.sendSignal({ content: 'First attempt' }, { requireDelivery: true });
+    const rejected = expect(failed.accepted).rejects.toThrow('startup metadata unavailable');
+    let next: Promise<void> | undefined;
+    try {
+      await preparing.promise;
+      if (navigate) {
+        await session.thread.create({ id: 'failure-successor' });
+        next = session.sendMessage({ content: 'Successor attempt' });
+        await modelEntered.promise;
+      }
+      const successorSignal = session.run.getAbortSignal();
+      rejectPreparation.resolve();
+      await rejected;
+      if (navigate) {
+        expect(session.run.getAbortSignal()).toBe(successorSignal);
+        expect(successorSignal?.aborted).toBe(false);
+        expect(session.run.isRunning()).toBe(true);
+      } else {
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(session.run.isRunning()).toBe(false);
+        expect(session.run.getRunId()).toBeNull();
+        next = session.sendMessage({ content: 'Retry attempt' });
+        await modelEntered.promise;
+      }
+      releaseModel.resolve();
+      await next;
+      expect(dispatch).toHaveBeenCalledOnce();
+      expect(session.run.isRunning()).toBe(false);
+    } finally {
+      rejectPreparation.resolve();
+      releaseModel.resolve();
+      await failed.accepted.catch(() => {});
+      await next?.catch(() => {});
+      session.stream.detach();
+    }
+  });
+
+  it.each(['observed', 'unobserved', 'delivered', 'raced-delivery'])(
+    'only aborts navigation for the session initiating the %s run',
+    async observation => {
+      const storage = new InMemoryStore();
+      const modelCalls: Array<{ signal: AbortSignal | undefined; close: () => void }> = [];
+      const agent = new Agent({
+        id: 'navigation-initiator',
+        name: 'Navigation initiator',
+        instructions: 'Keep streaming until stopped.',
+        memory: new MockMemory({ storage }),
+        model: new MastraLanguageModelV2Mock({
+          doStream: async options => ({
+            stream: new ReadableStream({
+              start(output) {
+                modelCalls.push({ signal: options.abortSignal, close: () => output.close() });
+                output.enqueue({ type: 'stream-start', warnings: [] });
+                output.enqueue({ type: 'text-start', id: 'text-1' });
+                output.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Working' });
+              },
+            }),
+          }),
+        }),
+      });
+      new Mastra({ agents: { agent }, storage, logger: false });
+      const controller = new AgentController({
+        id: 'navigation-initiator-controller',
+        agent,
+        storage,
+        workspace: createMockWorkspace(),
+        modes: [{ id: 'default', name: 'Default', default: true }],
+      });
+      await controller.init();
+      const first = await controller.createSession({
+        id: 'first',
+        ownerId: 'shared-resource',
+        scope: 'first',
+        createInitialThread: false,
+      });
+      const consumption = Promise.withResolvers<void>();
+      if (observation === 'unobserved') {
+        const consume = first.processSubscribedThreadStream.bind(first);
+        vi.spyOn(first, 'processSubscribedThreadStream').mockImplementationOnce(async subscription => {
+          await consumption.promise;
+          return consume(subscription);
+        });
+      }
+      const threadId = (await first.thread.create()).id;
+      const second = await controller.createSession({
+        id: 'second',
+        ownerId: 'shared-resource',
+        scope: 'second',
+        createInitialThread: false,
+      });
+      expect(second).not.toBe(first);
+      const listenerConsumption = Promise.withResolvers<void>();
+      const deliverySetup = Promise.withResolvers<void>();
+      const releaseDelivery = Promise.withResolvers<void>();
+      if (observation === 'raced-delivery') {
+        const consume = second.processSubscribedThreadStream.bind(second);
+        vi.spyOn(second, 'processSubscribedThreadStream').mockImplementationOnce(async subscription => {
+          await listenerConsumption.promise;
+          return consume(subscription);
+        });
+        const sync = second.model.syncFromPersisted.bind(second.model);
+        vi.spyOn(second.model, 'syncFromPersisted').mockImplementationOnce(async () => {
+          deliverySetup.resolve();
+          await releaseDelivery.promise;
+          return sync();
+        });
+      }
+      const errors: unknown[] = [];
+      second.subscribe(event => {
+        if (event.type === 'error') errors.push(event.error);
+      });
+      await second.thread.switch({ threadId });
+      const racing =
+        observation === 'raced-delivery'
+          ? second.sendSignal({ content: 'Listener prepares before the first action' }, { requireDelivery: true })
+          : undefined;
+      if (racing) await deliverySetup.promise;
+      let sending = first.sendMessage({ content: 'Start the first action' });
+      try {
+        await vi.waitFor(() => {
+          expect(modelCalls).toHaveLength(1);
+          expect(first.stream.activeRunId()).toBeTruthy();
+          expect(first.run.getRunId()).toBe(observation === 'unobserved' ? null : first.stream.activeRunId());
+          expect(second.run.getRunId()).toBe(racing ? null : first.stream.activeRunId());
+        });
+        const firstRunId = first.stream.activeRunId();
+        if (racing) {
+          releaseDelivery.resolve();
+          expect(await racing.accepted).toMatchObject({ action: 'deliver', runId: firstRunId });
+          expect(second.run.getRunId()).toBeNull();
+        }
+        if (observation === 'delivered') {
+          const interjection = second.sendSignal({ content: 'Listener adds input' }, { requireDelivery: true });
+          expect(await interjection.accepted).toMatchObject({ action: 'deliver', runId: firstRunId });
+        }
+        await second.thread.create({ id: 'listener-away' });
+        listenerConsumption.resolve();
+        expect(modelCalls[0]!.signal?.aborted).toBe(false);
+        expect(first.stream.activeRunId()).toBe(firstRunId);
+
+        await second.thread.switch({ threadId });
+        await vi.waitFor(() => expect(second.run.getRunId()).toBe(firstRunId));
+        await first.thread.create({ id: 'initiator-away' });
+        consumption.resolve();
+        await vi.waitFor(() => expect(modelCalls[0]!.signal?.aborted).toBe(true));
+        await sending;
+        await vi.waitFor(() => {
+          expect(second.run.isRunning()).toBe(false);
+          expect(second.stream.activeRunId()).toBeNull();
+        });
+
+        await first.thread.switch({ threadId });
+        sending = second.sendMessage({ content: 'Start the next action from the other session' });
+        void sending.catch(error => errors.push(error));
+        await vi.waitFor(
+          () => {
+            expect(errors).toEqual([]);
+            expect(second.run.getRunId()).toBeTruthy();
+            expect(modelCalls).toHaveLength(2);
+            expect(first.run.getRunId()).toBe(second.run.getRunId());
+            expect(second.run.getRunId()).not.toBe(firstRunId);
+          },
+          { timeout: 5_000 },
+        );
+        await first.thread.switch({ threadId: 'initiator-away' });
+        expect(modelCalls[1]!.signal?.aborted).toBe(false);
+        await second.thread.switch({ threadId: 'listener-away' });
+        await vi.waitFor(() => expect(modelCalls[1]!.signal?.aborted).toBe(true));
+        await sending;
+      } finally {
+        consumption.resolve();
+        listenerConsumption.resolve();
+        releaseDelivery.resolve();
+        await racing?.accepted.catch(() => {});
+        first.abort();
+        second.abort();
+        for (const call of modelCalls) {
+          if (!call.signal?.aborted) call.close();
+        }
+        await sending.catch(() => {});
+        first.stream.detach();
+        second.stream.detach();
+      }
+    },
+  );
+
+  it('does not cancel a successor action while its subscription still describes the previous run', async () => {
+    const controller = await createSettingsController(new InMemoryStore(), 'stale-navigation');
+    const session = await controller.createSession({ id: 'stale-navigation' });
+    const origin = await session.machinery.buildRequestContext();
+    const abort = vi.fn();
+    const unsubscribe = vi.fn();
+    session.stream.detach();
+    session.stream.attach({
+      subscription: {
+        stream: (async function* () {})(),
+        activeRunId: () => 'successor-run',
+        __getCurrentRunRequestContext: () => origin,
+        abort,
+        unsubscribe,
+      },
+      key: 'stale-navigation',
+      threadId: session.thread.requireId(),
+      resourceId: session.identity.getResourceId(),
+    });
+    session.run.setRunId({ runId: 'previous-run' });
+
+    await session.thread.create();
+
+    expect(abort).not.toHaveBeenCalled();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(session.run.getRunId()).toBeNull();
+    session.stream.detach();
+  });
+
   it.each(['subagent', 'observer', 'reflector'] as const)('awaits queued %s model writes', async role => {
     const controller = await createSettingsController(new InMemoryStore(), `queued-${role}`);
     const session = await controller.createSession({ createInitialThread: false });
