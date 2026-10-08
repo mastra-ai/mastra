@@ -110,36 +110,24 @@ const sandbox = new DockerSandbox({
 })
 ```
 
-Every repository lands at `<workingDirectory>/<repo>` and the working directory
-itself becomes the sandbox cwd. Public repositories (entries whose access
-resolves without `authorization`) are built before private ones, keeping the
-caller's order within each group. Each private credential is passed as the
-build secret `GH_TOKEN_<n>` (`n` is the entry's position in `repos`) to that
-repository's clone step only; setup commands never see it. This differs from
-the E2B and platform templates, where every token is a build env that every
-setup command can read.
+Every repository is cloned to `<workingDirectory>/<repo>` and the working
+directory becomes the sandbox cwd. Public repositories are built before
+private ones, keeping the caller's order within each group. Each private
+credential is passed as a build secret to that repository's clone step only,
+so setup commands never see it.
 
 `workspaceSetupCommand` runs at the working directory after every repository
-is set up; a failure fails the build. `continueOnSetupFailure` (default
-`false`) lets a failing per-repository setup command record that repository's
-directory name in `.mastra-sandbox/setup-failed` (one line per repository)
-and continue; clone, pin, workspace and marker steps still fail the build. Both options require `repos` and throw a `TypeError`
-otherwise, as does passing `repos` together with `getRepositoryAccess`. An
-empty `repos` array behaves like no repository at all.
+is set up. `continueOnSetupFailure` (default `false`) lets a failing setup
+command record its repository in `.mastra-sandbox/setup-failed` and continue
+instead of failing the build.
 
-Markers tell a session what the image already ran. The single form writes
-`.mastra-sandbox/setup` inside the checkout only when every setup command
-succeeded. The list form writes `.mastra-sandbox/repos/<repo>` under the
-working directory per repository once every step for it ran, and
-`.mastra-sandbox/workspace-setup` after the workspace commands (even when
-there were none); with `continueOnSetupFailure`, check
-`.mastra-sandbox/setup-failed` first.
+Markers tell a session what the image already ran: `.mastra-sandbox/repos/<repo>`
+per repository and `.mastra-sandbox/workspace-setup` after the workspace
+commands, all under the working directory. With `continueOnSetupFailure`,
+check `.mastra-sandbox/setup-failed` first.
 
-Unlike the E2B and platform templates, which clone unpinned when a head can't
-be resolved, this template rejects the whole resolution when any entry's
-access or head can't be resolved: it clones full history and pins by checkout,
-so there is no unpinned mode. Two entries that would clone into the same
-directory name are rejected.
+If any entry's access or head can't be resolved, the whole resolution rejects
+and the sandbox falls back to its default template.
 
 ## Constructor parameters
 

@@ -411,47 +411,30 @@ const sandbox = new E2BSandbox({
     workspaceSetupCommand: 'touch .workspace-ready',
     continueOnSetupFailure: true,
     workingDirectory: '/home/user/workspace',
-    cpuCount: 4,
-    memoryMB: 8192,
   }),
 })
 ```
 
-Every repository lands at `<workingDirectory>/<repo>`. Public repositories
-(entries whose access resolves without `authorization`) are built before
-private ones, keeping the caller's order within each group, the same layout
-the platform and Docker templates use. Private credentials enter the template
-definition as `GH_TOKEN_<n>` build envs, where `n` is the entry's position in
-`repos`. On E2B every build env is set one step ahead of every clone, so a
-rotated credential still rebuilds every layer, public repositories included.
-Build envs are also visible to every build step, so any repository's setup
-command can read every other repository's token: only list repositories whose
-setup commands you trust together.
+Every repository is cloned to `<workingDirectory>/<repo>`. Public repositories
+are built before private ones, keeping the caller's order within each group.
+Private credentials are build envs visible to every build step, so any
+repository's setup command can read every other repository's token: only list
+repositories whose setup commands you trust together.
 
 `workspaceSetupCommand` runs at the working directory after every repository
-is set up; a failure fails the build. `continueOnSetupFailure` (default
-`false`) lets a failing per-repository setup command record that repository's
-directory name in `.mastra-sandbox/setup-failed` (one line per repository)
-and continue; clone, pin, workspace and marker steps still fail the build. Both options require `repos` and throw
-a `TypeError` otherwise, as does passing `repos` together with
-`getRepositoryAccess`. An empty `repos` array behaves like no repository at
-all.
+is set up. `continueOnSetupFailure` (default `false`) lets a failing setup
+command record its repository in `.mastra-sandbox/setup-failed` and continue
+instead of failing the build.
 
-Markers tell a session what the image already ran. The single form writes
-`.mastra-sandbox/setup` only when every setup command succeeded. The list form
-writes `.mastra-sandbox/repos/<repo>` per repository once every step for it
-ran, and `.mastra-sandbox/workspace-setup` after the workspace commands (even
-when there were none); with `continueOnSetupFailure`, check
-`.mastra-sandbox/setup-failed` first.
+Markers tell a session what the image already ran: `.mastra-sandbox/repos/<repo>`
+per repository and `.mastra-sandbox/workspace-setup` after the workspace
+commands, all under the working directory. With `continueOnSetupFailure`,
+check `.mastra-sandbox/setup-failed` first.
 
-The template name hashes the working directory and every entry's clone URL
-and setup command in list order, so it never collides with the single form of
-its first repository, and the tag is `sha-<hash>` over every repository's
-pinned sha. If any entry's access can't be resolved the whole resolution
-rejects and the sandbox falls back to its default template, as the single
-form does. A repository whose head can't be resolved is cloned unpinned while
-the others keep their pins, and the ref degrades to the `current` tag. Two
-entries that would clone into the same directory name are rejected.
+Changing the repository list starts a new template; changing setup commands or
+credentials doesn't. If any entry's access can't be resolved the sandbox falls
+back to its default template. A repository whose head can't be resolved is
+cloned unpinned while the others keep their pins.
 
 Templates build at E2B's default machine size (2 vCPU, 1024 MB) unless the
 spec asks for more. Pass `cpuCount` and `memoryMB` to size the machine the

@@ -173,7 +173,7 @@ await sandbox.start()
 
 #### Several repositories in one template
 
-Pass `repos` instead of `getRepositoryAccess` to clone several repositories into one sandbox. Each entry carries its own access resolver (so each can request its own short-lived credential) and its own `setupCommand`, which runs inside that repository's clone:
+Pass `repos` instead of `getRepositoryAccess` to clone several repositories into one sandbox, each with its own access resolver and `setupCommand`:
 
 ```typescript
 const template = createRepoTemplate({
@@ -192,18 +192,16 @@ const template = createRepoTemplate({
   workspaceSetupCommand: 'touch .workspace-ready',
   continueOnSetupFailure: true,
   workingDirectory: '/home/user/workspace',
-  cpuCount: 4,
-  memoryMB: 8192,
 })
 ```
 
-Every repository is cloned to `<workingDirectory>/<repo>`. Public repositories (entries whose access resolves without `authorization`) are built before private ones, keeping the caller's order within each group. Private credentials are sent as `MASTRA_REPOSITORY_ACCESS_TOKEN_<n>` ephemeral build envs, where `n` is the entry's position in `repos`. Build envs are visible to every build step, so any repository's setup command can read every other repository's token: only list repositories whose setup commands you trust together.
+Every repository is cloned to `<workingDirectory>/<repo>`. Public repositories are built before private ones, keeping the caller's order within each group. Private credentials are ephemeral build envs visible to every build step, so any repository's setup command can read every other repository's token: only list repositories whose setup commands you trust together.
 
-`workspaceSetupCommand` runs at the working directory after every repository is set up. A failure fails the build. `continueOnSetupFailure` (default `false`) lets a failing per-repository setup command record that repository's directory name in `.mastra-sandbox/setup-failed` (one line per repository) and continue; clone, pin, workspace and marker steps still fail the build. Both options require `repos` and throw a `TypeError` otherwise, as does passing `repos` together with `getRepositoryAccess`. An empty `repos` array behaves like no repository at all: `workspaceSetupCommand` doesn't run and no markers are written.
+`workspaceSetupCommand` runs at the working directory after every repository is set up. `continueOnSetupFailure` (default `false`) lets a failing setup command record its repository in `.mastra-sandbox/setup-failed` and continue instead of failing the build.
 
-Markers are written relative to the working directory. The single-repository form writes `.mastra-sandbox/setup`, which exists only when every setup command succeeded. The list form writes `.mastra-sandbox/repos/<repo>` per repository once every step for it ran, and `.mastra-sandbox/workspace-setup` after the workspace commands (even when there are none). When `continueOnSetupFailure` is on, check `.mastra-sandbox/setup-failed` first.
+Markers tell a session what the image already ran: `.mastra-sandbox/repos/<repo>` per repository and `.mastra-sandbox/workspace-setup` after the workspace commands, all under the working directory. With `continueOnSetupFailure`, check `.mastra-sandbox/setup-failed` first.
 
-If any entry's access can't be resolved, the whole template degrades to resources-only until the next resolve, because a sandbox missing one repository would route work to the wrong place. A repository whose head can't be resolved is cloned unpinned while the others keep their pins. Entries that would clone into the same directory name make the resolver reject. `PlatformSandbox` logs that and boots the provider default. The list form's family key is `repos:<hash>` over the working directory and the ordered clone URLs, so changing the membership starts a new family that boots cold until its first build is ready. Changing setup commands or credentials doesn't.
+Changing the repository list starts a new family that boots cold until its first build is ready; changing setup commands or credentials doesn't. If any entry's access can't be resolved the template degrades to resources-only until the next resolve. A repository whose head can't be resolved is cloned unpinned while the others keep their pins.
 
 `createRepoTemplate()` also attaches a commit-independent `family` key (`repo:<cloneUrl>:<workingDirectory>/<repo>`) to the definition. `family` groups successive builds of the "same thing", so every commit of the same repository belongs to the same family. Platform uses it to find a prior ready build in the same family and boot the new commit on that warm filesystem while the exact commit template builds in the background. For E2B, stale lookup is also partitioned by the effective CPU and memory settings so a fallback can't silently change the requested machine size. Callers using the raw `Template()` builder can attach their own family key with `.withFamily(key)` (any non-empty string up to 200 characters). Omit it to opt out of family fallback. The family key never influences the content-addressed template identity: two definitions that differ only in `family` share the same cache slot.
 
