@@ -53,6 +53,13 @@ describe('DurableAgent observability tracing', () => {
     await pubsub.close();
   });
 
+  function endMockSpanTree(span: any) {
+    span.ended = true;
+    for (const child of createdSpans.filter(candidate => candidate.parent === span)) {
+      endMockSpanTree(child);
+    }
+  }
+
   function createMockSpan(type: string, parentSpan?: any): any {
     spanIdCounter += 1;
     const span: Record<string, any> = {
@@ -66,8 +73,15 @@ describe('DurableAgent observability tracing', () => {
       isValid: true,
       isRootSpan: !parentSpan,
       parent: parentSpan,
-      end: vi.fn(),
-      error: vi.fn(),
+      ended: false,
+      end: vi.fn((opts?: { endTree?: boolean }) => {
+        if (opts?.endTree) endMockSpanTree(span);
+        else span.ended = true;
+      }),
+      error: vi.fn((opts?: { endTree?: boolean }) => {
+        if (opts?.endTree) endMockSpanTree(span);
+        else span.ended = true;
+      }),
       update: vi.fn(),
       exportSpan: vi.fn(() => ({ id: span.id, type })),
       getParentSpanId: vi.fn(() => parentSpan?.id),
@@ -432,7 +446,26 @@ describe('DurableAgent observability tracing', () => {
           }),
           endTree: true,
         });
+
+        const agentTraceSpans = createdSpans.filter(span => {
+          let current = span;
+          while (current) {
+            if (current === agentSpans[0]) return true;
+            current = current.parent;
+          }
+          return false;
+        });
+        expect(
+          agentTraceSpans.map(span => span.type),
+          engine,
+        ).toContain('processor_run');
+        expect(
+          agentTraceSpans.every(span => span.ended),
+          engine,
+        ).toBe(true);
+
         agentSpans.length = 0;
+        createdSpans = [];
       }
     } finally {
       spy.mockRestore();
