@@ -80,7 +80,7 @@ describe('cold durable tool-call resume (#25978)', () => {
         saveQueueManager: { flushMessages } as any,
       });
       vi.mocked(resolveRuntime.toolRequiresApproval).mockResolvedValue(kind === 'approval');
-      const transform = { targets: ['display'], transformToolPayload: () => '[redacted]' };
+      const transform = { targets: ['display', 'transcript'], transformToolPayload: () => '[redacted]' };
       const step = createDurableToolCallStep();
       const result = await (step as any).execute({
         inputData: { toolCallId: 'call-1', toolName: 'save', args, requireApproval: kind === 'approval' },
@@ -103,7 +103,10 @@ describe('cold durable tool-call resume (#25978)', () => {
           },
           listAgents: () =>
             registeredAgent ? { saver: { id: 'saver', getToolPayloadTransform: () => transform } } : {},
-          getToolPayloadTransform: () => ({ targets: ['display'], transformToolPayload: () => '[global-redacted]' }),
+          getToolPayloadTransform: () => ({
+            targets: ['display', 'transcript'],
+            transformToolPayload: () => '[global-redacted]',
+          }),
         },
         [PUBSUB_SYMBOL]: { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() },
       });
@@ -124,6 +127,17 @@ describe('cold durable tool-call resume (#25978)', () => {
         registeredAgent ? '[redacted]' : '[global-redacted]',
       );
       expect(JSON.stringify(ack.metadata?.mastra?.toolPayloadTransform?.display)).not.toContain('secret');
+      const toolResult = chunks.find(chunk => chunk.type === 'tool-result');
+      expect(JSON.stringify(toolResult?.metadata?.mastra?.toolPayloadTransform?.display)).toContain(
+        registeredAgent ? '[redacted]' : '[global-redacted]',
+      );
+      expect(JSON.stringify(toolResult?.metadata?.mastra?.toolPayloadTransform?.display)).not.toContain('secret');
+      expect(JSON.stringify(result.transformMetadata?.mastra?.toolPayloadTransform?.transcript)).toContain(
+        registeredAgent ? '[redacted]' : '[global-redacted]',
+      );
+      expect(JSON.stringify(result.transformMetadata?.mastra?.toolPayloadTransform?.transcript)).not.toContain(
+        'secret',
+      );
     },
   );
 });

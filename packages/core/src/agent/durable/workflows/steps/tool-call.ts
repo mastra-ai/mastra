@@ -603,6 +603,12 @@ export function createDurableToolCallStep() {
       const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
       const memory = registryEntry?.memory ?? rebuiltMemory;
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
+      const toolPayloadTransform =
+        globalRunRegistry.get(runId)?.toolPayloadTransform ??
+        Object.values(mastra?.listAgents?.() ?? {})
+          .find(agent => agent.id === initData.agentId)
+          ?.getToolPayloadTransform?.() ??
+        mastra?.getToolPayloadTransform?.();
       let threadExists = state?.threadExists ?? false;
 
       let messageList = globalRunRegistry.get(runId)?.messageList;
@@ -813,12 +819,7 @@ export function createDurableToolCallStep() {
               metadata: undefined as Record<string, any> | undefined,
             },
             {
-              policy:
-                resumedEntry?.toolPayloadTransform ??
-                Object.values(mastra?.listAgents?.() ?? {})
-                  .find(agent => agent.id === initData.agentId)
-                  ?.getToolPayloadTransform?.() ??
-                mastra?.getToolPayloadTransform?.(),
+              policy: toolPayloadTransform,
               tools: resumedEntry?.tools ?? rebuiltTools,
               logger: logger as any,
             },
@@ -862,7 +863,7 @@ export function createDurableToolCallStep() {
               payload: { toolCallId, toolName, args, resumeSchema: approvalResumeSchema, updatedAt: Date.now() },
             },
             {
-              policy: registryEntry?.toolPayloadTransform,
+              policy: toolPayloadTransform,
               tools: registryEntry?.tools,
               logger: logger as any,
             },
@@ -932,7 +933,7 @@ export function createDurableToolCallStep() {
                   payload: { toolCallId, toolName, args, approval },
                 },
                 {
-                  policy: registryEntry?.toolPayloadTransform,
+                  policy: toolPayloadTransform,
                   tools: registryEntry?.tools,
                   logger: logger as any,
                 },
@@ -1173,7 +1174,7 @@ export function createDurableToolCallStep() {
                   },
                 },
                 {
-                  policy: registryEntry?.toolPayloadTransform,
+                  policy: toolPayloadTransform,
                   tools: registryEntry?.tools,
                   logger: logger as any,
                 },
@@ -1240,7 +1241,7 @@ export function createDurableToolCallStep() {
                   },
                 },
                 {
-                  policy: registryEntry?.toolPayloadTransform,
+                  policy: toolPayloadTransform,
                   tools: registryEntry?.tools,
                   logger: logger as any,
                 },
@@ -1460,13 +1461,9 @@ export function createDurableToolCallStep() {
                 messageList,
                 approvalGrant: approvalGrant as Record<string, unknown> | undefined,
                 baseProviderMetadata: typedInput.providerMetadata as any,
-                // Transcript payload transforms (L22 parity port). The policy and
-                // tool-level transform are resolved at completion time from the
-                // live registry — NOT captured at dispatch — because the entry may
-                // be rebuilt after a process restart. The run-level policy carries
-                // a closure and cannot be rehydrated across restarts (only
-                // tool-level transforms survive via registry re-resolution) — a
-                // limitation shared with the sync tool-call path.
+                // Resolve the tool-level transform from the live registry at
+                // completion, since the entry may have been rebuilt after dispatch.
+                // Use the same resolved run/agent/Mastra policy as the other chunks.
                 transformForTranscript: async result => {
                   const failed = params.status === 'failed';
                   const transformCarrier = await applyToolPayloadTransformToChunk(
@@ -1481,7 +1478,7 @@ export function createDurableToolCallStep() {
                       metadata: {} as Record<string, any>,
                     },
                     {
-                      policy: liveEntry?.toolPayloadTransform,
+                      policy: toolPayloadTransform,
                       toolTransform: (mappingTool as { transform?: any })?.transform,
                       tools: liveEntry?.tools,
                       logger: logger as any,
@@ -1818,7 +1815,7 @@ export function createDurableToolCallStep() {
                 payload: { toolCallId, toolName, args, result, providerExecuted },
               },
               {
-                policy: registryEntry?.toolPayloadTransform,
+                policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
@@ -1888,7 +1885,7 @@ export function createDurableToolCallStep() {
                 payload: { toolCallId, toolName, args, error: toolError },
               },
               {
-                policy: registryEntry?.toolPayloadTransform,
+                policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
