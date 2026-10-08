@@ -14,6 +14,7 @@ import {
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
+import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
@@ -81,6 +82,7 @@ export function SettingsPanel() {
         </SettingsSubsection>
       )}
       {section === 'repositories' && <RepositoriesSection />}
+      {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
       {section === 'models' && (
         <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />

@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BookOpen,
   Bot,
+  Box,
   Brain,
   Building2,
   Cable,
@@ -108,6 +109,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
         searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
+      },
+      {
+        id: 'environment',
+        label: SETTINGS_SECTION_LABELS.environment,
+        icon: Box,
+        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
       },
       {
         id: 'intake',

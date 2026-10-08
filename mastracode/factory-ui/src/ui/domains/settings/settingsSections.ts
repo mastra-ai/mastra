@@ -4,6 +4,7 @@ export type SettingsSection =
   | 'factory'
   | 'connections'
   | 'repositories'
+  | 'environment'
   | 'intake'
   | 'models'
   | 'personal-models'
@@ -18,6 +19,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   factory: 'Manage Factory',
   connections: 'Connections',
   repositories: 'Repositories',
+  environment: 'Environment',
   intake: 'Work Intake',
   models: 'Factory models',
   'personal-models': 'Your models',
