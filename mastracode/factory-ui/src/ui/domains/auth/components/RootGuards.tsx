@@ -5,6 +5,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { AuthSessionGuard } from './AuthSessionGuard';
 
 export const RootGuards = () => {
   return (
@@ -17,23 +18,19 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const { isPending, isError, data } = useFactoryAuth();
-  const location = useLocation();
+  const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
 
   if (isPending) return <AuthPendingSkeleton />;
-  if (isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
 
   const state = data;
   if (!state?.authEnabled) return <AuthNotConfiguredScreen />;
 
-  if (!state.authenticated) {
-    // Router location (not window.location) so memory routers and in-app
-    // navigations produce the correct returnTo.
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
-  }
-
-  return <OnboardingGuard />;
+  return (
+    <AuthSessionGuard authenticated={state.authenticated}>
+      <OnboardingGuard />
+    </AuthSessionGuard>
+  );
 };
 
 const OnboardingGuard = () => {

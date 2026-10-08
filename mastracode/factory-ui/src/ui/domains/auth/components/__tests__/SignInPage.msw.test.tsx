@@ -17,7 +17,10 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import { navigateAfterSignIn, redirectToLogin } from '../../services/auth';
 import type * as AuthService from '../../services/auth';
 import { createAppRoutes } from '../../../../router';
-import { safeReturnTo } from '../../../../pages/SignInPage';
+import { safeReturnTo, SignInPage } from '../../../../pages/SignInPage';
+import { queryKeys } from '../../../../../api/keys';
+import { createQueryClient } from '../../../../../query-client';
+import { signedIn, signedOut } from './fixtures/auth';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helpers are stubbed instead; `fetchAuthState` and
@@ -45,6 +48,72 @@ function renderSignIn(initialEntry = '/signin') {
 }
 
 describe('SignInPage', () => {
+  describe('session revalidation before redirecting', () => {
+    function renderCachedSignIn(cachedAuth?: AuthService.FactoryAuthState) {
+      const client = createQueryClient();
+      if (cachedAuth) client.setQueryData(queryKeys.factoryAuth(), cachedAuth);
+      const router = createMemoryRouter(
+        [
+          { path: '/signin', element: <SignInPage /> },
+          { path: '/factory/board', element: <h1>Work board</h1> },
+        ],
+        { initialEntries: ['/signin?returnTo=%2Ffactory%2Fboard%3Fview%3Dmine%23item-1'] },
+      );
+      renderWithProviders(<RouterProvider router={router} />, client);
+      return router;
+    }
+
+    it('checks a cached signed-in session before redirecting and stays on sign-in when it expired', async () => {
+      let finishCheck = () => {};
+      const checked = new Promise<void>(resolve => {
+        finishCheck = resolve;
+      });
+      const requestSeen = vi.fn();
+      server.use(
+        http.get(AUTH_ME_URL, async ({ request }) => {
+          requestSeen(request.credentials, request.cache);
+          await checked;
+          return HttpResponse.json(signedOut);
+        }),
+      );
+      const router = renderCachedSignIn(signedIn);
+
+      await waitFor(() => expect(requestSeen).toHaveBeenCalledWith('include', 'no-store'));
+      expect(router.state.location.pathname).toBe('/signin');
+      expect(screen.queryByRole('heading', { name: 'Work board' })).not.toBeInTheDocument();
+
+      finishCheck();
+      expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeEnabled();
+      expect(router.state.location.pathname).toBe('/signin');
+    });
+
+    it('returns to the full destination when a fresh check confirms sign-in in another tab', async () => {
+      server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
+      const router = renderCachedSignIn(signedOut);
+
+      await screen.findByRole('heading', { name: 'Work board' });
+      expect(router.state.location.pathname).toBe('/factory/board');
+      expect(router.state.location.search).toBe('?view=mine');
+      expect(router.state.location.hash).toBe('#item-1');
+    });
+
+    it.each([undefined, signedIn])(
+      'stays on sign-in after a failed check and offers a retry (cache: %j)',
+      async cachedAuth => {
+        server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 503 })));
+        const router = renderCachedSignIn(cachedAuth);
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Unable to check your sign-in status');
+        expect(router.state.location.pathname).toBe('/signin');
+
+        server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
+        await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByRole('button', { name: 'Continue with GitHub' })).toBeEnabled();
+        expect(router.state.location.pathname).toBe('/signin');
+      },
+    );
+  });
+
   it('renders the agent factory welcome message without a separate page header', async () => {
     stubAuthMe({ provider: 'workos' });
     renderSignIn();
