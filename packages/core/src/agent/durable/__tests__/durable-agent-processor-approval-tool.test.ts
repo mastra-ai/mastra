@@ -146,7 +146,7 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
     engine === 'durable'
       ? createDurableAgent({ agent, pubsub })
       : engine === 'evented'
-        ? createEventedAgent({ agent })
+        ? createEventedAgent({ agent, pubsub })
         : undefined;
   const host = new Mastra({ agents: { [agent.id]: wrapper ?? agent }, storage: new InMemoryStore(), logger: false });
 

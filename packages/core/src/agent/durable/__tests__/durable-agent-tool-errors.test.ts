@@ -337,16 +337,32 @@ describe('T32 tool errors (plain, durable, evented)', () => {
         // The harness's contract, pinned per engine.
         expect(contractOf(turn, requests)).toEqual(engine === 'plain' ? contracts.plain : contracts.wrapped);
         if (variant === 'throws') {
-          // COR-1390's payload shapes, asserted here because the serialised
-          // stack in the wrapped shape cannot be pinned. Plain's envelope now
-          // carries `message` too (the helper surfaces a live `Error`'s
-          // `message`), so the two shapes differ by the classification fields
-          // and the stack, not by whether the text is present.
-          expect(Object.keys(toolErrorOf(turn)).sort()).toEqual(
+          // The payload's `chunkPayloads` comparison is ignored because the
+          // wrapped engines serialise a `stack` with an absolute checkout path
+          // (see THROWS_DIFFERENCE), so the fields that do not depend on the
+          // process are asserted directly here — a wrapped engine reporting a
+          // different failure or a different call would still fail.
+          const payload = turn.chunkPayloads[turn.chunkTypes.indexOf('tool-error')] as {
+            toolCallId?: string;
+            toolName?: string;
+            args?: unknown;
+          };
+          expect({ toolCallId: payload?.toolCallId, toolName: payload?.toolName, args: payload?.args }).toEqual({
+            toolCallId: TOOL_CALL_ID,
+            toolName: 'misbehave',
+            args: { n: 1 },
+          });
+          // COR-1390's payload shapes. The two engines differ by the
+          // classification fields and the stack, not by the failure's name or
+          // message: plain forwards the live `Error`, the wrappers serialise it.
+          const error = toolErrorOf(turn);
+          expect(Object.keys(error).sort()).toEqual(
             engine === 'plain'
               ? ['category', 'cause', 'details', 'domain', 'message', 'name']
               : ['message', 'name', 'stack'],
           );
+          expect(error.name).toBe('Error');
+          expect(error.message).toBe('T32 tool failure');
         }
       }
     });

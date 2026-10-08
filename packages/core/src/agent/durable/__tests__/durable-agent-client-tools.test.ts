@@ -110,7 +110,16 @@ describe('T33 client tools (plain, durable, evented)', () => {
       expect(turn.finishChunk.reason).toBe('tool-calls');
 
       const parts = await persistedToolParts(engine);
-      expect(parts.map(part => part.toolName)).toEqual(['askClient']);
+      // The whole call the client has to answer, not just the tool name: the
+      // harness only matches the name, but a persisted invocation without the
+      // call id or the arguments could not be answered by the client.
+      expect(parts.map(({ state, toolCallId, toolName, args }) => ({ state, toolCallId, toolName, args }))).toEqual([
+        { state: 'call', toolCallId: 'parity-call-1', toolName: 'askClient', args: { question: 'colour?' } },
+      ]);
+      // The persisted call is the one that was surfaced, not a second call.
+      expect(parts.map(part => ({ toolCallId: part.toolCallId, toolName: part.toolName }))).toEqual(
+        turn.toolCalls.map(call => ({ toolCallId: call.toolCallId, toolName: call.toolName })),
+      );
     }
 
     // Pin the plain reference so it cannot drift unnoticed.

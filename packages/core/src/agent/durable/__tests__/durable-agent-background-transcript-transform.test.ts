@@ -114,7 +114,7 @@ async function drive(engine: ParityEngine): Promise<Contract> {
 
   let wrapper: ReturnType<typeof createDurableAgent> | ReturnType<typeof createEventedAgent> | undefined;
   if (engine === 'durable') wrapper = createDurableAgent({ agent, pubsub });
-  if (engine === 'evented') wrapper = createEventedAgent({ agent });
+  if (engine === 'evented') wrapper = createEventedAgent({ agent, pubsub });
 
   const host = new Mastra({
     logger: false,
@@ -140,48 +140,62 @@ async function drive(engine: ParityEngine): Promise<Contract> {
     persistedLater: [],
   };
 
-  let cleanup = () => {};
-  try {
-    // plain resolves to the output itself; the wrappers resolve to { output, cleanup }.
-    const streamed = (await (wrapper ?? agent).stream('Go.', {
-      memory: { thread, resource },
-      runId: `t64-run-${engine}`,
-      untilIdle: { maxIdleMs: MAX_IDLE_MS },
-      maxSteps: 4,
-    })) as {
-      fullStream: AsyncIterable<{ type?: string }>;
-      output?: { fullStream: AsyncIterable<{ type?: string }> };
-      cleanup?: () => void;
-    };
-    const output = streamed.output ?? streamed;
-    cleanup = streamed.cleanup ?? (() => {});
-
-    for await (const chunk of output.fullStream) {
-      if (chunk.type === 'finish') contract.finishes++;
-      if (chunk.type === 'error' || chunk.type === 'abort' || chunk.type === 'tripwire') contract.errors++;
-      if (chunk.type === 'background-task-completed') contract.backgroundCompleted++;
-    }
-  } catch (error) {
-    contract.threw = String((error as Error)?.message ?? error).slice(0, 200);
-  }
-
-  contract.toModel = requests.flatMap(({ prompt }) =>
-    (prompt as Array<{ role?: string; content?: unknown }>)
-      .filter(message => message.role === 'tool')
-      .flatMap(message => (Array.isArray(message.content) ? message.content : []))
-      .map(part => JSON.stringify((part as { output?: unknown }).output ?? part).replace(TASK_ID, '<id>')),
-  );
-
   const snap = async () => toolParts((await memory.recall({ threadId: thread, resourceId: resource })).messages);
-  contract.persistedAtFinish = await snap();
 
-  cleanup();
-  await host.backgroundTaskManager?.shutdown();
-  await pubsub.close();
+  let cleanup = () => {};
+  let released = false;
+  // The run's resources have to be released before the settled transcript is
+  // read, and again (once) if an assertion fails in between, so a failed parity
+  // test cannot leave the workers running.
+  const release = async () => {
+    if (released) return;
+    released = true;
+    cleanup();
+    await host.backgroundTaskManager?.shutdown();
+    await pubsub.close();
+  };
 
-  contract.persistedLater = await snap();
-  await host.shutdown();
-  return contract;
+  try {
+    try {
+      // plain resolves to the output itself; the wrappers resolve to { output, cleanup }.
+      const streamed = (await (wrapper ?? agent).stream('Go.', {
+        memory: { thread, resource },
+        runId: `t64-run-${engine}`,
+        untilIdle: { maxIdleMs: MAX_IDLE_MS },
+        maxSteps: 4,
+      })) as {
+        fullStream: AsyncIterable<{ type?: string }>;
+        output?: { fullStream: AsyncIterable<{ type?: string }> };
+        cleanup?: () => void;
+      };
+      const output = streamed.output ?? streamed;
+      cleanup = streamed.cleanup ?? (() => {});
+
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'finish') contract.finishes++;
+        if (chunk.type === 'error' || chunk.type === 'abort' || chunk.type === 'tripwire') contract.errors++;
+        if (chunk.type === 'background-task-completed') contract.backgroundCompleted++;
+      }
+    } catch (error) {
+      contract.threw = String((error as Error)?.message ?? error).slice(0, 200);
+    }
+
+    contract.toModel = requests.flatMap(({ prompt }) =>
+      (prompt as Array<{ role?: string; content?: unknown }>)
+        .filter(message => message.role === 'tool')
+        .flatMap(message => (Array.isArray(message.content) ? message.content : []))
+        .map(part => JSON.stringify((part as { output?: unknown }).output ?? part).replace(TASK_ID, '<id>')),
+    );
+
+    contract.persistedAtFinish = await snap();
+    await release();
+
+    contract.persistedLater = await snap();
+    return contract;
+  } finally {
+    await release();
+    await host.shutdown();
+  }
 }
 
 describe('T64 background tool transcript transform (plain, durable, evented)', () => {

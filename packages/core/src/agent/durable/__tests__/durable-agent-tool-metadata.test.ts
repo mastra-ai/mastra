@@ -134,6 +134,31 @@ function payloadOfType(turn: ParitySnapshot, type: string): Record<string, unkno
   return (turn.chunkPayloads[index] ?? {}) as Record<string, unknown>;
 }
 
+/**
+ * The transcript copy an engine recorded for the tool result on a captured
+ * request. `transcript.output` rewrites this copy; the public result the caller
+ * sees stays raw.
+ */
+function transcriptOutputSeenByModel(request: CapturedRequest | undefined): unknown {
+  if (!request) return undefined;
+  const parts = request.prompt
+    .filter(message => message.role === 'tool')
+    .flatMap(message => (Array.isArray(message.content) ? message.content : []))
+    .filter(part => part.type === 'tool-result');
+  return parts
+    .map(
+      part =>
+        (
+          part as {
+            providerOptions?: {
+              mastra?: { toolPayloadTransform?: { transcript?: Record<string, { transformed?: unknown }> } };
+            };
+          }
+        ).providerOptions?.mastra?.toolPayloadTransform?.transcript?.['output-available']?.transformed,
+    )
+    .find(value => value !== undefined);
+}
+
 function toolCallTape(spec: VariantSpec): ModelTape {
   return [
     { type: 'stream-start', warnings: [] },
@@ -229,6 +254,9 @@ describe('T34 tool metadata (plain, durable, evented)', () => {
         if (variant === 'transform') {
           // The harness's check: the public result is the raw output.
           expect(turn.toolResults[0]?.result).toMatchObject({ secret: 'raw' });
+          // The rewrite has to reach the transcript copy too — without this the
+          // variant would still pass if no engine applied `transcript.output`.
+          expect(transcriptOutputSeenByModel(observation.requests[1])).toEqual({ n: 1, secret: 'transcript-redacted' });
         }
 
         // COR-1390: the difference declared above, pinned per engine.
