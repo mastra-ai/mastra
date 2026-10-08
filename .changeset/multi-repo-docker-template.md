@@ -12,10 +12,18 @@ Added a `repos` option to `createDockerRepoTemplate` to build one template from 
 ```ts
 const template = createDockerRepoTemplate({
   repos: [
-    { getRepositoryAccess: getApiAccess, setupCommand: 'pnpm install --frozen-lockfile' },
-    { getRepositoryAccess: getDocsAccess, ref: 'main', setupCommand: 'npm install' },
+    {
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+      setupCommand: 'pnpm install --frozen-lockfile',
+    },
+    {
+      getRepositoryAccess: async () => ({
+        cloneUrl: 'https://github.com/acme/shared-ui.git',
+        authorization: { scheme: 'bearer', token: process.env.GITHUB_TOKEN! },
+      }),
+      setupCommand: 'pnpm install --frozen-lockfile',
+    },
   ],
-  workspaceSetupCommand: 'touch .workspace-ready',
-  continueOnSetupFailure: true,
+  workspaceSetupCommand: 'cd app && pnpm link ../shared-ui',
 });
 ```

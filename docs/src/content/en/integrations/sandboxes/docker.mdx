@@ -104,7 +104,7 @@ const sandbox = new DockerSandbox({
         ref: 'main',
       },
     ],
-    workspaceSetupCommand: 'touch .workspace-ready',
+    workspaceSetupCommand: 'npm install --global @mastra/mcp-docs-server',
     continueOnSetupFailure: true,
     workingDirectory: '/workspace',
   }),

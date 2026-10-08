@@ -189,7 +189,7 @@ const template = createRepoTemplate({
       setupCommand: 'npm install',
     },
   ],
-  workspaceSetupCommand: 'touch .workspace-ready',
+  workspaceSetupCommand: 'npm install --global @mastra/mcp-docs-server',
   continueOnSetupFailure: true,
   workingDirectory: '/home/user/workspace',
 })
