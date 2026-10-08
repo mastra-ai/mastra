@@ -241,7 +241,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       // Placement is additive membership: the identity scope is unchanged.
       expect(node.scope).toEqual(resource);
       expect(node.isScope).toBeUndefined();
-      expect(await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).toEqual([
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).members).toEqual([
         expect.objectContaining({ id: node.id }),
       ]);
 

@@ -130,7 +130,7 @@ describe('Subconscious knowledge write tools', () => {
 
     // Identity scope still comes from the default rung; placement is additive membership.
     expect(result.node.scope).toEqual(['org:acme', 'resource:user-42']);
-    expect(await store.listScopeMembers({ scopeNodeId: scopeIds['features:memory']! })).toEqual([
+    expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features:memory']! })).members).toEqual([
       expect.objectContaining({ id: result.node.id }),
     ]);
   });
