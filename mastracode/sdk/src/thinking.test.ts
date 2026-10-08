@@ -130,6 +130,12 @@ describe('thinking model capabilities', () => {
       effort('none', 'high', 'max'),
       ['high', 'max'],
     ],
+    [
+      'DeepSeek offers only the efforts it runs distinctly',
+      'deepseek/deepseek-v4-pro',
+      [{ type: 'toggle' }, ...effort('low', 'medium', 'high', 'xhigh', 'max')],
+      ['off', 'low', 'high', 'max'],
+    ],
   ])('%s', (_, modelId, reasoningOptions, levels) => {
     expect(getAvailableThinkingLevelsForModel(modelId, reasoningOptions)).toEqual(levels);
   });

@@ -66,9 +66,10 @@ function optionsByLevelFor(
       if (level) optionsByLevel.set(level, effort.toOptions(value));
     }
   }
-  if (toggle && reasoningOptions.some(option => option.type === 'toggle')) optionsByLevel.set('off', toggle(false));
+  const switchableToggle = reasoningOptions.some(option => option.type === 'toggle') ? toggle : undefined;
+  if (switchableToggle) optionsByLevel.set('off', switchableToggle(false));
   const sendsNoThinkingLevel = [...optionsByLevel.keys()].every(level => level === 'off');
-  if (sendsNoThinkingLevel) optionsByLevel.set(TOGGLE_ON_LEVEL, toggle?.(true));
+  if (sendsNoThinkingLevel) optionsByLevel.set(TOGGLE_ON_LEVEL, switchableToggle?.(true));
   return optionsByLevel;
 }
 
