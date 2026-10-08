@@ -105,7 +105,7 @@ export function createDurableLLMMappingStep() {
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(await readMessageListState(params, llmOutput));
+      ).deserialize(readMessageListState(params.state, llmOutput));
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on

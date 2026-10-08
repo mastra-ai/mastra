@@ -42,7 +42,8 @@ export function createStoredMessageLoader(memory: MastraMemory | undefined): Sto
  * processor changed after recall stays inline, so resuming never trades the
  * run's view of a message for the stored one. `hydrate` restores refs, from
  * the rows this instance already verified or else from storage; a row edited
- * since is restored as stored (with a warning), a deleted one is dropped.
+ * since is restored as stored and a deleted one is dropped, both logged at
+ * debug level.
  *
  * One instance serves one run, so verified rows are reused across every
  * transcript the run persists.
@@ -52,8 +53,6 @@ export class MemoryMessageRefs {
   #stored = new Map<string, { canonical: string; fingerprint: string }>();
   /** Recalled ids that storage could not return; not retried on later stores. */
   #unavailable = new Set<string>();
-  /** Ids a successful load did not return: deleted, so later restores skip the lookup. */
-  #deleted = new Set<string>();
   #verifying: Promise<void> = Promise.resolve();
 
   /**
@@ -106,7 +105,7 @@ export class MemoryMessageRefs {
     if (!state?.messages?.some(isMemoryMessageRef)) return state as SerializedMessageListState;
 
     const refs = state.messages.filter(isMemoryMessageRef);
-    const missing = refs.filter(ref => !this.#stored.has(ref.id) && !this.#deleted.has(ref.id)).map(ref => ref.id);
+    const missing = refs.filter(ref => !this.#stored.has(ref.id)).map(ref => ref.id);
     if (missing.length > 0 && !(await this.#load(missing, state.memoryInfo, load))) {
       throw new MastraError({
         id: 'AGENT_MEMORY_MESSAGE_REF_UNRESOLVABLE',
@@ -158,11 +157,7 @@ export class MemoryMessageRefs {
       const canonical = stableStringify(normalized);
       this.#stored.set(row.id, { canonical, fingerprint: fingerprint(canonical) });
       this.#unavailable.delete(row.id);
-      this.#deleted.delete(row.id);
       found.add(row.id);
-    }
-    for (const id of ids) {
-      if (!found.has(id)) this.#deleted.add(id);
     }
     return found;
   }

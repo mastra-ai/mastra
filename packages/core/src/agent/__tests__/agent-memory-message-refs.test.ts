@@ -5,7 +5,7 @@
  */
 import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -62,6 +62,7 @@ async function setup() {
   await memory.saveMessages({ messages: history });
 
   const prompts: string[] = [];
+  const execute = vi.fn(async () => ({ found: true }));
   const agent = new Agent({
     id: 'refs-agent',
     name: 'refs-agent',
@@ -74,14 +75,14 @@ async function setup() {
         description: 'Looks something up',
         inputSchema: z.object({ query: z.string() }),
         requireApproval: true,
-        execute: async () => ({ found: true }),
+        execute,
       }),
     },
   });
   const mastra = new Mastra({ agents: { agent }, storage, logger: false });
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
   const memoryStore = (await storage.getStore('memory'))!;
-  return { agent, prompts, workflows, memoryStore };
+  return { agent, prompts, workflows, memoryStore, execute };
 }
 
 async function drain(stream: { fullStream: AsyncIterable<any> }) {
@@ -149,5 +150,30 @@ describe('memory-recalled messages in suspended agent runs', () => {
     expect(prompts[1]).not.toContain(historyText(1));
     expect(prompts[1]).toContain(historyText(2));
     expect(prompts[1]).toContain(historyText(3));
+  });
+
+  it('keeps the run suspended for a retry when memory storage cannot load the recalled messages', async () => {
+    const { agent, prompts, workflows, memoryStore, execute } = await setup();
+    const memory = { thread: threadId, resource: resourceId };
+
+    const stream = await agent.stream('Look it up', { memory });
+    const { toolCallId } = await drain(stream);
+    await suspendedStreamState(workflows);
+
+    const outage = vi.spyOn(memoryStore, 'listMessagesById').mockRejectedValue(new Error('memory storage down'));
+    await expect(agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId!, memory })).rejects.toThrow(
+      'memory storage down',
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(prompts).toHaveLength(1);
+    const { runs } = await workflows.listWorkflowRuns({});
+    expect(runs.map(run => (run.snapshot as any).status)).toEqual(runs.map(() => 'suspended'));
+    outage.mockRestore();
+
+    const resumed = await drain(await agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId!, memory }));
+    expect(resumed.text).toBe('done');
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(prompts).toHaveLength(2);
+    for (let i = 0; i < 4; i++) expect(prompts[1]).toContain(historyText(i));
   });
 });
