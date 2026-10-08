@@ -51,6 +51,38 @@ describe('rebuildRunToolsFromMastra request context', () => {
     }
   });
 
+  it.each(['persistence-only', 'live-pipeline'] as const)(
+    'keeps runtime resolution failures non-fatal for a %s rebuild',
+    async registryState => {
+      const runId = `resolution-failure-${registryState}`;
+      const agent = makeAgent();
+      agent.getWorkspace.mockRejectedValue(new Error('workspace resolution failed'));
+      const outputProcessors: [] = [];
+      const processorStates = new Map();
+      if (registryState === 'live-pipeline') {
+        globalRunRegistry.set(runId, { tools: {}, outputProcessors, processorStates } as any);
+      }
+
+      try {
+        await expect(
+          rebuildRunToolsFromMastra({
+            mastra: makeMastra(agent),
+            runId,
+            agentId: 'agent-1',
+            state: {} as any,
+            rehydrateProcessors: registryState === 'live-pipeline',
+          }),
+        ).resolves.toBeUndefined();
+        if (registryState === 'live-pipeline') {
+          expect(globalRunRegistry.get(runId)?.outputProcessors).toBe(outputProcessors);
+          expect(globalRunRegistry.get(runId)?.processorStates).toBe(processorStates);
+        }
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    },
+  );
+
   it('falls back to the run-level context when the step input has no snapshot', async () => {
     const agent = makeAgent();
     const requestContext: RequestContext = new RequestContext([['tenantId', 'acme'] as const]);

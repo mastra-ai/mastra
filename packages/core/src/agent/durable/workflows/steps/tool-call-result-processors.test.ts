@@ -216,6 +216,31 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(emittedChunksOfType('tool-result')).toHaveLength(0);
   });
 
+  it.each(['getToolsForExecution', 'getMemory', 'getWorkspace'] as const)(
+    'fails closed when %s fails before restoring a missing processor pipeline',
+    async failingMethod => {
+      const execute = vi.fn().mockResolvedValue(RAW_RESULT);
+      globalRunRegistry.set(RUN_ID, {
+        tools: { [TOOL_NAME]: { execute } },
+        saveQueueManager: {},
+      } as any);
+      const agent = {
+        getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
+        getMemory: vi.fn().mockResolvedValue(undefined),
+        getWorkspace: vi.fn().mockResolvedValue(undefined),
+        listOutputProcessors: vi.fn().mockResolvedValue([{ id: 'redactor' }]),
+      };
+      agent[failingMethod].mockRejectedValue(new Error('runtime resolution failed'));
+
+      await expect(runToolCallStep({ getAgentById: () => agent, getLogger: () => noopLogger })).rejects.toThrow(
+        'runtime resolution failed',
+      );
+      expect(execute).not.toHaveBeenCalled();
+      expect(agent.listOutputProcessors).not.toHaveBeenCalled();
+      expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    },
+  );
+
   it('preserves live output processors and state when rebuilding only the save queue', async () => {
     const processOutputStream = vi.fn(async ({ part }: any) => part);
     const processor = { id: 'live-processor', processOutputStream };

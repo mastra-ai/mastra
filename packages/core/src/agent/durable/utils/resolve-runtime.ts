@@ -528,6 +528,10 @@ export async function rebuildRunToolsFromMastra(options: {
     };
   } catch (error) {
     if (error instanceof DurableProcessorRebuildError) throw error;
+    const entry = globalRunRegistry.get(runId);
+    if (options.rehydrateProcessors && (!entry?.outputProcessors || !entry.processorStates)) {
+      throw new DurableProcessorRebuildError(agentId, error);
+    }
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
     return undefined;
   }
