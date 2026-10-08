@@ -336,6 +336,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const { inputData, engine } = params;
         const state = inputData as IterationState;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+        const { step } = engine as { step: BaseContext<Inngest>['step'] };
 
         const emitStepFinish = async (isContinued: boolean) => {
           if (state.lastStepResult) {
@@ -344,7 +345,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
-            await emitChunkEvent(pubsub, state.runId, deferredChunk);
+            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
+              await emitChunkEvent(pubsub, state.runId, deferredChunk);
+            });
           }
         };
 
@@ -372,7 +375,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // The lookup happens inside a memoized step so Inngest replays reuse the
         // recorded decision (even on a worker without the registry entry) instead
         // of re-invoking (possibly stateful) user predicates.
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
         let stopped: boolean;
         try {
           stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {

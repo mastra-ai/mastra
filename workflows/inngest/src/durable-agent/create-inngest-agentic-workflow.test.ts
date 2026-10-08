@@ -169,7 +169,14 @@ describe('createInngestDurableAgenticWorkflow step-finish emission', () => {
             payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
           },
         },
-        engine: { step: { run: vi.fn().mockRejectedValue(policyError) } },
+        engine: {
+          step: {
+            run: vi.fn(async (id: string, fn: () => Promise<boolean>) => {
+              if (id.startsWith('stop-when-')) throw policyError;
+              return fn();
+            }),
+          },
+        },
         [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
       }),
     ).rejects.toBe(policyError);
