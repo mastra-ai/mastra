@@ -271,3 +271,20 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
     expect(await store.completeSemanticOutbox({ ids: [first!.id], workerId: 'slow' })).toEqual([]);
   });
 });
+
+describe('InMemoryKnowledgeStorage setRecordScopes validation', () => {
+  it('rejects empty record scope lists without changing the record', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    await store.init();
+    await store.createNode({ id: PROJECT_SCOPE_ID, name: 'Project scope', isScope: true, scopeIds: [] });
+    const node = await store.createNode({ name: 'Scoped subject', scopeIds: [PROJECT_SCOPE_ID] });
+    const record = await store.createRecord({ node, text: 'Must stay reachable', scopeIds: [PROJECT_SCOPE_ID] });
+
+    await expect(store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [] })).rejects.toThrow(
+      'Knowledge records require at least one scope.',
+    );
+
+    expect(await store.getRecord({ id: record.id })).toEqual(record);
+    expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
+  });
+});
