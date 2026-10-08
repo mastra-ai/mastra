@@ -54,7 +54,6 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     writer?: { custom: (data: ChunkType) => Promise<void> };
   }): Promise<ChunkType | null> {
     const { part, state, writer } = args;
-    batchStates.add(state);
 
     // Initialize state if not present
     if (!state.batch) {
@@ -194,21 +193,5 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       state.batch = [];
     }
     return this.flushBatch(state);
-  }
-}
-
-const batchStates = new WeakSet<object>();
-
-/** Removes parts of a cancelled model request from a BatchPartsProcessor state, keeping anything buffered before it. */
-export function dropBatchedParts(state: Record<string, any>, parts: unknown[]): void {
-  if (!batchStates.has(state) || !Array.isArray(state.batch)) return;
-  const dropped = new Set(parts);
-  state.batch = state.batch.filter((part: unknown) => !dropped.has(part));
-  if (dropped.has(state.pendingNonText)) delete state.pendingNonText;
-  if (dropped.has(state[REPROCESS_PART_KEY])) delete state[REPROCESS_PART_KEY];
-  if (!state.batch.length) {
-    clearTimeout(state.timeoutId);
-    state.timeoutId = undefined;
-    state.timeoutTriggered = false;
   }
 }

@@ -67,7 +67,7 @@ Once text, tool calls, or other response content starts, signals wait for the ne
 
 Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The next request uses the same logical step, so `maxSteps: 1` still allows a replacement response. Mastra doesn't set a separate interruption limit. Repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
 
-Already-streamed reasoning may remain visible until the client reloads history. Cancelling a model request also doesn't force a custom processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers and clears reasoning held by the built-in `BatchPartsProcessor`, but doesn't undo other processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
+Already-streamed reasoning may remain visible until the client reloads history. Cancelling a model request also doesn't force a custom processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers, but doesn't undo processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
 
 This reasoning interruption applies to the default loop, not the experimental durable or evented agents or the Inngest engine.
 

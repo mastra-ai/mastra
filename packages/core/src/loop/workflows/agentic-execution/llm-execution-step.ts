@@ -36,7 +36,6 @@ import type {
   ProcessorStreamWriter,
 } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
-import { dropBatchedParts } from '../../../processors/processors/batch-parts';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
@@ -2693,11 +2692,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // Discard what this request left behind, then hand the loop an empty, continuing
         // step so it asks again with the queued input. A run abort that raced the
         // interruption still ends the run, without the discarded output.
-        // A combined processor workflow records the parts its inner processors buffer.
-        const dropped = [...(processorStates?.values() ?? [])].flatMap(state =>
-          state.streamParts.splice(processorPartCounts.get(state) ?? 0),
-        );
-        for (const state of processorStates?.values() ?? []) dropBatchedParts(state.customState, dropped);
+        for (const state of processorStates?.values() ?? []) {
+          state.streamParts.splice(processorPartCounts.get(state) ?? 0);
+        }
         for (const message of messageList.get.response.db()) {
           const index = message.content.parts.indexOf(appendedStepBoundary as (typeof message.content.parts)[number]);
           if (index !== -1) message.content.parts.splice(index, 1);
