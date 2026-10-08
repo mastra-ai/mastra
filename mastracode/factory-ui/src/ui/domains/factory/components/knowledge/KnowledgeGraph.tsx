@@ -68,7 +68,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
-        className="knowledge-circle flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
+        className="knowledge-circle shadow-raised flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
         data-selected={selected || undefined}
         style={getKnowledgeNodeStyle(node.rung)}
       >

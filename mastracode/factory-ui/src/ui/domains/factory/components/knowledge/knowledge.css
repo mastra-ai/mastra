@@ -1,7 +1,6 @@
 .knowledge-canvas {
   --xy-minimap-background-color: var(--card);
   --xy-minimap-mask-background-color: var(--scrim);
-  --xy-node-boxshadow-hover-default: var(--shadow-raised);
   --xy-controls-button-background-color: var(--card);
   --xy-controls-button-background-color-hover: var(--fill);
   --xy-controls-button-color: var(--foreground);
@@ -12,7 +11,6 @@
 .knowledge-circle {
   background: color-mix(in oklab, var(--knowledge-color) 22%, var(--card));
   border-color: color-mix(in oklab, var(--knowledge-color) 65%, var(--border));
-  box-shadow: var(--shadow-raised);
   transition: border-color var(--duration-fast) var(--ease-out-custom);
 }
 
