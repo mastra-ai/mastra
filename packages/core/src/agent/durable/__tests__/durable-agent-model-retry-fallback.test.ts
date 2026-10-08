@@ -190,8 +190,11 @@ async function runRetryZeroOnEngine(engine: ParityEngine): Promise<FailedRunCont
   } catch (error) {
     threw = String((error as { message?: string })?.message ?? error).slice(0, 200);
   } finally {
-    await host.shutdown();
-    await pubsub.close();
+    try {
+      await host.shutdown();
+    } finally {
+      await pubsub.close();
+    }
   }
 
   return { attempts: recorded.requests.length, models: served, finish, errors, threw, finalText };
