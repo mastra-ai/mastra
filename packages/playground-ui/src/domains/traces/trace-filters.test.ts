@@ -13,6 +13,7 @@ import {
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
   TRACE_FILTER_BAR_OPERATORS,
+  traceFilterFieldColor,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from './trace-filters';
@@ -91,6 +92,20 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
 });
 
 describe('createTraceFilterBarFields', () => {
+  describe('when built-in and metadata filters are available', () => {
+    it('gives every field a neutral gray accent', () => {
+      const fields = createTraceFilterBarFields({
+        availableRootEntityNames: ['weather-agent'],
+        availableEnvironments: ['prod'],
+        canonicalTraceFields: [{ path: 'tags', operators: ['includes'], valueSuggestions: true }],
+        metadataFields: [{ path: 'metadata.region', suggestions: async () => [] }],
+      });
+
+      expect(fields.map(field => field.id)).toEqual(expect.arrayContaining(['tags', 'metadata.region', 'spans.error']));
+      expect(new Set(fields.map(field => field.color))).toEqual(new Set(['var(--muted-foreground)']));
+    });
+  });
+
   const fields = createTraceFilterBarFields({
     availableRootEntityNames: ['weather-agent'],
     availableEnvironments: ['prod'],
@@ -395,6 +410,17 @@ describe('createTraceFilterBarFields', () => {
     it('ignores paths outside the metadata namespace', () => {
       expect(withMetadata.find(f => f.id === 'notMetadata')).toBeUndefined();
     });
+  });
+});
+
+describe('traceFilterFieldColor', () => {
+  describe('when a time, known, or dynamic field requests an accent', () => {
+    it.each(['timeRange', 'status', 'spans.error', 'metadata.region', 'customField'])(
+      'uses neutral gray for %s',
+      fieldId => {
+        expect(traceFilterFieldColor(fieldId)).toBe('var(--muted-foreground)');
+      },
+    );
   });
 });
 
