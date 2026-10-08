@@ -988,9 +988,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     run.error = input.status === 'failed' ? sanitizeKnowledgeImportError(input.error) : undefined;
     run.transcriptThreadId = input.transcriptThreadId ?? run.transcriptThreadId;
     run.completedAt = timestamp;
-    this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, input.binding, input.leaseKey]));
+    this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, binding, input.leaseKey]));
     if (input.payloadKey) {
-      this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, input.binding, input.payloadKey]));
+      this.#db.knowledgeImportState.delete(JSON.stringify([input.importerId, binding, input.payloadKey]));
     }
     return this.#cloneImportRun(run);
   }
