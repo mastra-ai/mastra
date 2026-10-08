@@ -215,30 +215,51 @@ export type FullOutput<OUTPUT = undefined> = {
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
  */
-function resolveOutputTextSkippingCompletionChecks(
-  messageList: MessageList,
-  {
-    iterationLocal = false,
-    stepBoundarySource = messageList,
-  }: { iterationLocal?: boolean; stepBoundarySource?: MessageList } = {},
-): string | undefined {
+function resolveOutputMessageSkippingCompletionChecks(messageList: MessageList): MastraDBMessage | undefined {
   const responseDbMessages = messageList.get.response.db();
-  const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  const lastRealMessage = hasCompletionCheckMessages
+  return responseDbMessages.some(m => m.content?.metadata?.completionResult)
     ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
     : responseDbMessages[responseDbMessages.length - 1];
+}
+
+function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
+  const lastRealMessage = resolveOutputMessageSkippingCompletionChecks(messageList);
   if (!lastRealMessage) return undefined;
   if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
-    const stepParts = stepBoundarySource.partsSinceStepBoundary(lastRealMessage);
-    if (iterationLocal || stepParts.some(p => p.type === 'tool-invocation')) {
+    const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
+    if (stepParts.some(p => p.type === 'tool-invocation')) {
       return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
     }
   }
+  const hasCompletionCheckMessages = messageList.get.response.db().some(m => m.content?.metadata?.completionResult);
   const converted = hasCompletionCheckMessages
     ? convertMessages([lastRealMessage]).to('AIV4.Core')
     : messageList.get.response.aiV4.core();
   const lastConverted = converted[converted.length - 1];
   return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+}
+
+function findIterationPartOffset(
+  messageList: MessageList,
+  message: MastraDBMessage,
+  stepText: string,
+): number | undefined {
+  const parts = message.content?.parts;
+  if (!parts) return undefined;
+
+  const stepParts = messageList.partsSinceStepBoundary(message);
+  if (stepParts.length < parts.length) return parts.length - stepParts.length;
+  if (!stepText) return parts.length;
+
+  let suffixText = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part?.type === 'text') suffixText = part.text + suffixText;
+    if (suffixText === stepText) return index;
+    if (!stepText.endsWith(suffixText)) return undefined;
+  }
+
+  return undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -1180,10 +1201,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
                   }
 
-                  const stepBoundarySource = self.messageList;
-                  const stepTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList, {
-                    iterationLocal: true,
-                  });
+                  const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
+                  const stepMessageParts = stepMessage?.content?.parts;
+                  const iterationPartOffset = stepMessage
+                    ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
+                    : undefined;
+                  const stepTextBeforeProcessing =
+                    stepMessageParts && iterationPartOffset !== undefined
+                      ? stepMessageParts
+                          .slice(iterationPartOffset)
+                          .map(part => (part.type === 'text' ? part.text : ''))
+                          .join('')
+                      : undefined;
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
@@ -1196,15 +1225,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
-                  const stepText = resolveOutputTextSkippingCompletionChecks(self.messageList, {
-                    iterationLocal: true,
-                    stepBoundarySource,
-                  });
+                  const processedStepMessage = stepMessage
+                    ? self.messageList.get.response.db().find(message => message.id === stepMessage.id)
+                    : undefined;
+                  const processedStepParts = processedStepMessage?.content?.parts;
+                  const stepText =
+                    processedStepParts &&
+                    stepMessageParts &&
+                    processedStepParts.length === stepMessageParts.length &&
+                    iterationPartOffset !== undefined
+                      ? processedStepParts
+                          .slice(iterationPartOffset)
+                          .map(part => (part.type === 'text' ? part.text : ''))
+                          .join('')
+                      : undefined;
 
                   // Only update the last step when result processing changed that iteration's text.
-                  // The full response can contain text accumulated across loop iterations, while
-                  // step.text must remain iteration-local. Compare against undefined, not truthiness,
-                  // so a processor clearing the text to '' still overwrites the original step text.
+                  // The current response message must still exist with the same part structure so an
+                  // earlier response cannot be attributed to the final step. Compare against undefined,
+                  // not truthiness, so a processor clearing the text to '' still overwrites the original.
                   if (
                     self.#status !== 'canceled' &&
                     lastStep &&
