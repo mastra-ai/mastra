@@ -49,7 +49,6 @@ export interface FactoryEnvironmentBuild {
 }
 
 export interface FactoryEnvironmentPayload {
-  sandboxProvider: string | null;
   sandboxWorkdir: string | null;
   sandboxCpuCount: number | null;
   sandboxMemoryMb: number | null;
@@ -77,7 +76,6 @@ export interface FactoryEnvironmentRepositoryPatch {
 }
 
 export interface FactoryEnvironmentPatch {
-  sandboxProvider?: string | null;
   sandboxWorkdir?: string | null;
   sandboxCpuCount?: number | null;
   sandboxMemoryMb?: number | null;

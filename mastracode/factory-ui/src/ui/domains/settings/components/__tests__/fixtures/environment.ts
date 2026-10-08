@@ -26,7 +26,6 @@ export function environmentRepository(
 
 export function environmentPayload(overrides: Partial<FactoryEnvironmentPayload> = {}): FactoryEnvironmentPayload {
   return {
-    sandboxProvider: 'platform',
     sandboxWorkdir: '/workspace',
     sandboxCpuCount: 2,
     sandboxMemoryMb: 4096,
