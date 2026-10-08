@@ -33,7 +33,6 @@ export interface FactoryProject {
   buildOnPushEnabled: boolean;
   buildPushDebounceMinutes: number;
   /** Push-triggered builds per trailing hour; 0 means unlimited (the API reads it back as null). */
-  buildPushMaxPerHour: number;
   /** Outcome of the most recent build attempt (null = never attempted). */
   lastBuildStatus: FactoryProjectBuildStatus | null;
   lastBuildError: string | null;
@@ -46,8 +45,6 @@ export interface FactoryProject {
   /** Most recent push to a base branch; the debounce reads it. */
   lastPushAt: Date | null;
   /** Trailing-hour push-build cap window, persisted so replicas and restarts agree. */
-  buildWindowStartedAt: Date | null;
-  buildWindowCount: number;
   /** Consecutive failed builds since the last `ready`; the retry backoff doubles on it. */
   buildFailureCount: number;
   /** Worker lease on the build; null when no build is running. */
@@ -60,8 +57,6 @@ export type FactoryProjectBuildStatus = 'ready' | 'partial' | 'failed' | 'buildi
 
 export const BUILD_SCHEDULE_HOURS_DEFAULT = 24;
 export const BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT = 10;
-export const BUILD_PUSH_MAX_PER_HOUR_DEFAULT = 4;
-
 export interface CreateFactoryProjectInput {
   name: string;
   description?: string | null;
@@ -86,15 +81,12 @@ export interface UpdateFactoryProjectInput {
   buildScheduleHours?: number;
   buildOnPushEnabled?: boolean;
   buildPushDebounceMinutes?: number;
-  buildPushMaxPerHour?: number;
   lastBuildStatus?: FactoryProjectBuildStatus | null;
   lastBuildError?: string | null;
   lastBuiltAt?: Date | null;
   lastBuildAttemptedAt?: Date | null;
   buildRequestedAt?: Date | null;
   lastPushAt?: Date | null;
-  buildWindowStartedAt?: Date | null;
-  buildWindowCount?: number;
   buildFailureCount?: number;
   buildClaimedAt?: Date | null;
 }
@@ -139,15 +131,12 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_schedule_hours: { type: 'integer', default: BUILD_SCHEDULE_HOURS_DEFAULT },
     build_on_push_enabled: { type: 'boolean', default: true },
     build_push_debounce_minutes: { type: 'integer', default: BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT },
-    build_push_max_per_hour: { type: 'integer', default: BUILD_PUSH_MAX_PER_HOUR_DEFAULT },
     last_build_status: { type: 'text', nullable: true },
     last_build_error: { type: 'text', nullable: true },
     last_built_at: { type: 'timestamp', nullable: true },
     last_build_attempted_at: { type: 'timestamp', nullable: true },
     build_requested_at: { type: 'timestamp', nullable: true },
     last_push_at: { type: 'timestamp', nullable: true },
-    build_window_started_at: { type: 'timestamp', nullable: true },
-    build_window_count: { type: 'integer', default: 0 },
     build_failure_count: { type: 'integer', default: 0 },
     build_claimed_at: { type: 'timestamp', nullable: true },
     /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
@@ -179,15 +168,12 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   build_schedule_hours: number | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
-  build_push_max_per_hour: number | null;
   last_build_status: FactoryProjectBuildStatus | null;
   last_build_error: string | null;
   last_built_at: Date | null;
   last_build_attempted_at: Date | null;
   build_requested_at: Date | null;
   last_push_at: Date | null;
-  build_window_started_at: Date | null;
-  build_window_count: number | null;
   build_failure_count: number | null;
   build_claimed_at: Date | null;
   environment_backfilled_at: Date | null;
@@ -217,15 +203,12 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     buildScheduleHours: row.build_schedule_hours ?? BUILD_SCHEDULE_HOURS_DEFAULT,
     buildOnPushEnabled: row.build_on_push_enabled ?? true,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT,
-    buildPushMaxPerHour: row.build_push_max_per_hour ?? BUILD_PUSH_MAX_PER_HOUR_DEFAULT,
     lastBuildStatus: row.last_build_status ?? null,
     lastBuildError: row.last_build_error ?? null,
     lastBuiltAt: row.last_built_at ?? null,
     lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
     buildRequestedAt: row.build_requested_at ?? null,
     lastPushAt: row.last_push_at ?? null,
-    buildWindowStartedAt: row.build_window_started_at ?? null,
-    buildWindowCount: row.build_window_count ?? 0,
     buildFailureCount: row.build_failure_count ?? 0,
     buildClaimedAt: row.build_claimed_at ?? null,
     createdAt: row.created_at,
@@ -273,8 +256,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       build_schedule_hours: BUILD_SCHEDULE_HOURS_DEFAULT,
       build_on_push_enabled: true,
       build_push_debounce_minutes: BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT,
-      build_push_max_per_hour: BUILD_PUSH_MAX_PER_HOUR_DEFAULT,
-      build_window_count: 0,
       build_failure_count: 0,
       created_at: now,
       updated_at: now,
@@ -341,15 +322,12 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.buildPushDebounceMinutes !== undefined
         ? { build_push_debounce_minutes: input.buildPushDebounceMinutes }
         : {}),
-      ...(input.buildPushMaxPerHour !== undefined ? { build_push_max_per_hour: input.buildPushMaxPerHour } : {}),
       ...(input.lastBuildStatus !== undefined ? { last_build_status: input.lastBuildStatus } : {}),
       ...(input.lastBuildError !== undefined ? { last_build_error: input.lastBuildError } : {}),
       ...(input.lastBuiltAt !== undefined ? { last_built_at: input.lastBuiltAt } : {}),
       ...(input.lastBuildAttemptedAt !== undefined ? { last_build_attempted_at: input.lastBuildAttemptedAt } : {}),
       ...(input.buildRequestedAt !== undefined ? { build_requested_at: input.buildRequestedAt } : {}),
       ...(input.lastPushAt !== undefined ? { last_push_at: input.lastPushAt } : {}),
-      ...(input.buildWindowStartedAt !== undefined ? { build_window_started_at: input.buildWindowStartedAt } : {}),
-      ...(input.buildWindowCount !== undefined ? { build_window_count: input.buildWindowCount } : {}),
       ...(input.buildFailureCount !== undefined ? { build_failure_count: input.buildFailureCount } : {}),
       ...(input.buildClaimedAt !== undefined ? { build_claimed_at: input.buildClaimedAt } : {}),
       updated_at: new Date(),

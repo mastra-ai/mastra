@@ -755,7 +755,7 @@ describe('ProjectRoutes', () => {
         activeTemplateHeads: null,
         buildTriggers: {
           schedule: { enabled: true, hours: 24 },
-          onPush: { enabled: true, debounceMinutes: 10, maxPerHour: 4 },
+          onPush: { enabled: true, debounceMinutes: 10 },
         },
         build: {
           status: null,
@@ -885,8 +885,6 @@ describe('ProjectRoutes', () => {
         { buildTriggers: { schedule: { hours: 169 } } },
         { buildTriggers: { onPush: { debounceMinutes: -1 } } },
         { buildTriggers: { onPush: { debounceMinutes: 1441 } } },
-        { buildTriggers: { onPush: { maxPerHour: 0 } } },
-        { buildTriggers: { onPush: { maxPerHour: 61 } } },
       ];
       for (const body of cases) {
         const response = await patch(app, project.id, body);
@@ -908,7 +906,7 @@ describe('ProjectRoutes', () => {
       const { seed, project, links, app } = await seedEnvironment();
 
       const triggersOnly = await patch(app, project.id, {
-        buildTriggers: { schedule: { enabled: false, hours: 6 }, onPush: { debounceMinutes: 0, maxPerHour: null } },
+        buildTriggers: { schedule: { enabled: false, hours: 6 }, onPush: { debounceMinutes: 0 } },
       });
       expect(triggersOnly.status).toBe(200);
       const afterTriggers = (await triggersOnly.json()) as Record<string, unknown>;
@@ -916,16 +914,14 @@ describe('ProjectRoutes', () => {
       expect(afterTriggers.environment).toMatchObject({
         buildTriggers: {
           schedule: { enabled: false, hours: 6 },
-          onPush: { enabled: true, debounceMinutes: 0, maxPerHour: null },
+          onPush: { enabled: true, debounceMinutes: 0 },
         },
         build: { requestedAt: null },
       });
-      // Unlimited is stored as 0, never as null.
       expect(await seed.projects.getById({ id: project.id })).toMatchObject({
         buildScheduleEnabled: false,
         buildScheduleHours: 6,
         buildPushDebounceMinutes: 0,
-        buildPushMaxPerHour: 0,
         buildRequestedAt: null,
       });
 

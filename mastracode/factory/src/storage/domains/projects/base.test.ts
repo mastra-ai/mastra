@@ -93,15 +93,12 @@ describe('FactoryProjectsStorage', () => {
       buildScheduleHours: 24,
       buildOnPushEnabled: true,
       buildPushDebounceMinutes: 10,
-      buildPushMaxPerHour: 4,
       lastBuildStatus: null,
       lastBuildError: null,
       lastBuiltAt: null,
       lastBuildAttemptedAt: null,
       buildRequestedAt: null,
       lastPushAt: null,
-      buildWindowStartedAt: null,
-      buildWindowCount: 0,
       buildClaimedAt: null,
     };
 
@@ -116,15 +113,12 @@ describe('FactoryProjectsStorage', () => {
         buildScheduleHours: 6,
         buildOnPushEnabled: false,
         buildPushDebounceMinutes: 0,
-        buildPushMaxPerHour: 0,
         lastBuildStatus: 'failed' as const,
         lastBuildError: 'setup exited 1',
         lastBuiltAt: at,
         lastBuildAttemptedAt: at,
         buildRequestedAt: at,
         lastPushAt: at,
-        buildWindowStartedAt: at,
-        buildWindowCount: 3,
         buildClaimedAt: at,
       };
       expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input })).toMatchObject(input);

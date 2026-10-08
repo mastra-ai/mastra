@@ -250,8 +250,6 @@ describe('FactoryEnvironmentBuildWorker', () => {
     await second.instance.stop();
     expect(second.build).toHaveBeenCalledTimes(1);
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
-      buildWindowStartedAt: T0,
-      buildWindowCount: 2,
       activeTemplateId: 'tpl-1',
     });
     vi.unstubAllGlobals();

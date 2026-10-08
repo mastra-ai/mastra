@@ -302,7 +302,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           onPush: {
             enabled: project.buildOnPushEnabled,
             debounceMinutes: project.buildPushDebounceMinutes,
-            maxPerHour: project.buildPushMaxPerHour === 0 ? null : project.buildPushMaxPerHour,
           },
         },
         build: this.#buildPayload(project),
@@ -732,10 +731,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               : {}),
             ...(buildTriggers?.onPush?.debounceMinutes !== undefined
               ? { buildPushDebounceMinutes: buildTriggers.onPush.debounceMinutes }
-              : {}),
-            // Null (unlimited) is stored as 0: the column is never null, so a never-written row keeps its default.
-            ...(buildTriggers?.onPush?.maxPerHour !== undefined
-              ? { buildPushMaxPerHour: buildTriggers.onPush.maxPerHour ?? 0 }
               : {}),
             ...(buildRequested ? { buildRequestedAt: new Date() } : {}),
           };

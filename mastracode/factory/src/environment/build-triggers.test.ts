@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type BuildTriggerProject,
-  capAllows,
-  capWindow,
   pendingTrigger,
   pushPending,
   retryBackoffActive,
@@ -20,13 +18,10 @@ function project(overrides: Partial<BuildTriggerProject> = {}): BuildTriggerProj
     buildScheduleHours: 24,
     buildOnPushEnabled: true,
     buildPushDebounceMinutes: 10,
-    buildPushMaxPerHour: 4,
     lastBuildStatus: null,
     lastBuildAttemptedAt: null,
     buildRequestedAt: null,
     lastPushAt: null,
-    buildWindowStartedAt: null,
-    buildWindowCount: 0,
     buildFailureCount: 0,
     ...overrides,
   };
@@ -43,16 +38,13 @@ function simulate(initial: BuildTriggerProject, events: Array<{ at: Date; push?:
   for (const event of events) {
     if (event.push) row = { ...row, lastPushAt: event.at };
     if (event.tick) {
-      const reason = pendingTrigger(row, event.at);
-      if (!reason) continue;
+      if (!pendingTrigger(row, event.at)) continue;
       builds.push(event.at);
-      const window = capWindow(row, event.at);
       row = {
         ...row,
         lastBuildAttemptedAt: event.at,
         lastBuildStatus: 'ready',
         buildRequestedAt: null,
-        ...(reason === 'push' ? { buildWindowStartedAt: window.startedAt, buildWindowCount: window.count + 1 } : {}),
       };
     }
   }
@@ -132,21 +124,6 @@ describe('pushPending', () => {
   });
 });
 
-describe('capAllows', () => {
-  it('holds at maxPerHour inside the window and resets after an hour', () => {
-    const atCap = project({ buildWindowStartedAt: T0, buildWindowCount: 4 });
-    expect(capAllows(atCap, minutes(30))).toBe(false);
-    expect(capAllows(atCap, minutes(60))).toBe(true);
-    expect(capWindow(atCap, minutes(60))).toEqual({ startedAt: minutes(60), count: 0 });
-  });
-
-  it('is unlimited at 0', () => {
-    expect(capAllows(project({ buildPushMaxPerHour: 0, buildWindowStartedAt: T0, buildWindowCount: 99 }), T0)).toBe(
-      true,
-    );
-  });
-});
-
 describe('pendingTrigger over a timeline', () => {
   const scheduledOff = project({ buildScheduleEnabled: false });
 
@@ -183,20 +160,8 @@ describe('pendingTrigger over a timeline', () => {
     for (let i = 0; i < 30; i++) events.push({ at: minutes(i * 2), push: true as const });
     events.push(...ticksEvery(1, 0, 60));
     events.sort((a, b) => a.at.getTime() - b.at.getTime() || (a.push ? -1 : 1));
-    const { builds } = simulate(project({ buildScheduleEnabled: false, buildPushMaxPerHour: 0 }), events);
+    const { builds } = simulate(scheduledOff, events);
     expect(builds).toEqual([0, 10, 20, 30, 40, 50, 60].map(minutes));
-  });
-
-  it('holds push builds at maxPerHour and resumes when the window rolls over', () => {
-    const events = [];
-    for (let i = 0; i < 8; i++) events.push({ at: minutes(i * 12), push: true as const });
-    events.push(...ticksEvery(1, 0, 150));
-    events.sort((a, b) => a.at.getTime() - b.at.getTime() || (a.push ? -1 : 1));
-    const { builds } = simulate(project({ buildScheduleEnabled: false, buildPushMaxPerHour: 2 }), events);
-    // Pushes every 12 minutes from 0 (debounce 10): builds at 0 and 12 fill
-    // the window opened at 0; the pushes at 24..48 wait for the rollover at
-    // 60, then 60 and 72 fill the next window; the push at 84 waits for 120.
-    expect(builds).toEqual([minutes(0), minutes(12), minutes(60), minutes(72), minutes(120)]);
   });
 
   it('a failed push build is not retried on the next tick; a new push builds once', () => {

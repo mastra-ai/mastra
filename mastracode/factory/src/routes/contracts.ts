@@ -83,7 +83,6 @@ const environmentBuildTriggersSchema = z.object({
     enabled: z.boolean(),
     debounceMinutes: z.number().int(),
     // Null = unlimited.
-    maxPerHour: z.number().int().nullable(),
   }),
 });
 
@@ -127,7 +126,6 @@ const updateEnvironmentBuildTriggersSchema = z.object({
     .object({
       enabled: z.boolean().optional(),
       debounceMinutes: z.number().int().min(0).max(1_440).optional(),
-      maxPerHour: z.number().int().min(1).max(60).nullable().optional(),
     })
     .optional(),
 });

@@ -1,14 +1,13 @@
 /**
  * When an environment should rebuild. Pure functions over the project row:
  * every piece of state they read (`lastBuildAttemptedAt`, `lastPushAt`,
- * `buildWindow*`, `buildFailureCount`, `buildRequestedAt`) lives on
+ * `buildFailureCount`, `buildRequestedAt`) lives on
  * `factory_projects`, so a restart or another replica reaches the same answer.
  */
 
 import type { FactoryProject } from '../storage/domains/projects/base.js';
 
 export const RETRY_BACKOFF_BASE_MS = 30 * 60_000;
-export const CAP_WINDOW_MS = 60 * 60_000;
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
@@ -18,13 +17,10 @@ export type BuildTriggerProject = Pick<
   | 'buildScheduleHours'
   | 'buildOnPushEnabled'
   | 'buildPushDebounceMinutes'
-  | 'buildPushMaxPerHour'
   | 'lastBuildStatus'
   | 'lastBuildAttemptedAt'
   | 'buildRequestedAt'
   | 'lastPushAt'
-  | 'buildWindowStartedAt'
-  | 'buildWindowCount'
   | 'buildFailureCount'
 >;
 
@@ -64,19 +60,6 @@ export function pushPending(project: BuildTriggerProject, now: Date): boolean {
   return now.getTime() - attempted.getTime() >= project.buildPushDebounceMinutes * MINUTE_MS;
 }
 
-/** The trailing-hour window as it stands at `now`: reset when it is an hour old or was never opened. */
-export function capWindow(project: BuildTriggerProject, now: Date): { startedAt: Date; count: number } {
-  const started = project.buildWindowStartedAt;
-  if (!started || now.getTime() - started.getTime() >= CAP_WINDOW_MS) return { startedAt: now, count: 0 };
-  return { startedAt: started, count: project.buildWindowCount };
-}
-
-/** Push-triggered builds in the current window are under the cap (0 = unlimited). */
-export function capAllows(project: BuildTriggerProject, now: Date): boolean {
-  if (project.buildPushMaxPerHour <= 0) return true;
-  return capWindow(project, now).count < project.buildPushMaxPerHour;
-}
-
 export type BuildTriggerReason = 'requested' | 'push' | 'schedule';
 
 /**
@@ -86,7 +69,7 @@ export type BuildTriggerReason = 'requested' | 'push' | 'schedule';
  */
 export function pendingTrigger(project: BuildTriggerProject, now: Date): BuildTriggerReason | null {
   if (project.buildRequestedAt) return 'requested';
-  if (pushPending(project, now) && capAllows(project, now)) return 'push';
+  if (pushPending(project, now)) return 'push';
   if (scheduleDue(project, now) && !retryBackoffActive(project, now)) return 'schedule';
   return null;
 }

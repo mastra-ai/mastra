@@ -1163,24 +1163,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
-                    },
-                    "maxPerHour": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
                     }
                   },
                   "required": [
                     "enabled",
-                    "debounceMinutes",
-                    "maxPerHour"
+                    "debounceMinutes"
                   ]
                 }
               },
@@ -1717,18 +1704,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 1440
-                },
-                "maxPerHour": {
-                  "anyOf": [
-                    {
-                      "type": "integer",
-                      "minimum": 1,
-                      "maximum": 60
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
                 }
               }
             }
@@ -1926,24 +1901,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                       "type": "integer",
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
-                    },
-                    "maxPerHour": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
                     }
                   },
                   "required": [
                     "enabled",
-                    "debounceMinutes",
-                    "maxPerHour"
+                    "debounceMinutes"
                   ]
                 }
               },

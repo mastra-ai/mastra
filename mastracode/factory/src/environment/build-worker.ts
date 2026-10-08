@@ -8,7 +8,7 @@ import type {
 } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { resolveProjectEnvironment } from '../workspace.js';
-import { capWindow, pendingTrigger, type BuildTriggerReason } from './build-triggers.js';
+import { pendingTrigger, type BuildTriggerReason } from './build-triggers.js';
 import { runEnvironmentBuild } from './build.js';
 import { headsChanged, resolveCurrentHeads, type EnvironmentHeads } from './heads.js';
 import { redactCredentials } from './redact.js';
@@ -230,14 +230,6 @@ export class FactoryEnvironmentBuildWorker extends MastraWorker {
       return;
     }
 
-    if (reason === 'push') {
-      const window = capWindow(claimed, now);
-      await this.#options.projects.update({
-        orgId: project.orgId,
-        id: project.id,
-        input: { buildWindowStartedAt: window.startedAt, buildWindowCount: window.count + 1 },
-      });
-    }
     this.deps?.logger.info('environment build starting', { factoryProjectId: project.id, reason });
     const build = runEnvironmentBuild(
       {
