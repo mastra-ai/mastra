@@ -178,9 +178,11 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       nodes.createIndex({ scopeKey: 1, type: 1 }),
       knowledge.createIndex({ node: 1, id: -1 }),
       knowledge.createIndex({ sourceThreadId: 1, id: -1 }),
+      knowledge.createIndex({ scopeKey: 1, id: -1 }),
       mentions.createIndex({ sourceType: 1, sourceId: 1, recordId: 1 }, { unique: true }),
       mentions.createIndex({ recordId: 1, sourceType: 1, sourceId: 1 }),
       activity.createIndex({ id: -1 }),
+      activity.createIndex({ scopeKey: 1, id: -1 }),
       outbox.createIndex({ idempotencyKey: 1 }, { unique: true }),
       outbox.createIndex({ status: 1, availableAt: 1, createdAt: 1 }),
     ]);
