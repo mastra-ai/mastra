@@ -13,27 +13,26 @@ import type {
 import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
 /**
- * The route validates positions as a permutation of 1..n over the rows it is
- * sent, so every repository change ships the whole list, renumbered in display
- * order. Dead links (no repository row behind them) are left out: the factory
- * skips them and they cannot be reordered or configured.
+ * The route validates positions as a permutation of 1..n over every link of
+ * the project, so each repository change ships the whole list, renumbered in
+ * display order. Dead links (no repository row behind them) ride along with
+ * their current values so the count matches; the factory skips them and the
+ * page never edits them.
  */
 export function repositoriesPatch(
   ordered: FactoryEnvironmentRepository[],
   change?: Partial<FactoryEnvironmentRepositoryPatch> & { projectRepositoryId: string },
 ): FactoryEnvironmentRepositoryPatch[] {
-  return ordered
-    .filter(repository => repository.slug !== null)
-    .map((repository, index) => {
-      const patch: FactoryEnvironmentRepositoryPatch = {
-        projectRepositoryId: repository.projectRepositoryId,
-        position: index + 1,
-        inEnvironment: repository.inEnvironment,
-        setupCommand: repository.setupCommand,
-        teardownCommand: repository.teardownCommand,
-      };
-      return change && change.projectRepositoryId === repository.projectRepositoryId ? { ...patch, ...change } : patch;
-    });
+  return ordered.map((repository, index) => {
+    const patch: FactoryEnvironmentRepositoryPatch = {
+      projectRepositoryId: repository.projectRepositoryId,
+      position: index + 1,
+      inEnvironment: repository.inEnvironment,
+      setupCommand: repository.setupCommand,
+      teardownCommand: repository.teardownCommand,
+    };
+    return change && change.projectRepositoryId === repository.projectRepositoryId ? { ...patch, ...change } : patch;
+  });
 }
 
 function move<T>(list: T[], from: number, to: number): T[] {
@@ -69,13 +68,9 @@ export function RepositoriesBlock({
       <ContentBlocks
         items={ordered}
         onChange={next => {
-          // A drop in place, or one that only crosses dead links, changes nothing the route would see.
-          const same = (list: FactoryEnvironmentRepository[]) =>
-            list
-              .filter(r => r.slug !== null)
-              .map(r => r.projectRepositoryId)
-              .join('\n');
-          if (disabled || same(next) === same(ordered)) return;
+          // A drop in place changes nothing the route would see.
+          const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
+          if (disabled || order(next) === order(ordered)) return;
           void save(next);
         }}
         className="flex flex-col gap-2"

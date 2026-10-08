@@ -126,7 +126,7 @@ describe('Environment settings', () => {
     expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
   });
 
-  it('reorders repositories with renumbered positions and leaves dead links out', async () => {
+  it('reorders repositories with renumbered positions and carries dead links along unchanged', async () => {
     useFactory();
     const environment = environmentPayload({
       repositories: [
@@ -155,6 +155,14 @@ describe('Environment settings', () => {
         {
           projectRepositoryId: 'link-web',
           position: 2,
+          inEnvironment: true,
+          setupCommand: null,
+          teardownCommand: null,
+        },
+        // The route counts every link of the project, dead ones included.
+        {
+          projectRepositoryId: 'link-gone',
+          position: 3,
           inEnvironment: true,
           setupCommand: null,
           teardownCommand: null,
