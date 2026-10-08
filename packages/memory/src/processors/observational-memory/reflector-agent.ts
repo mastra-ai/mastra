@@ -73,13 +73,18 @@ Take the existing observations and rewrite them to make it easier to continue in
 
 IMPORTANT: your reflections are THE ENTIRETY of the assistants memory. Any information you do not add to your reflections will be immediately forgotten. Make sure you do not leave out anything. Your reflections must assume the assistant knows nothing - your reflections are the ENTIRE memory system.
 
+The assistant relies on this memory to answer precise questions about what the user said, when they said it, and how things changed over time.
+
 When consolidating observations:
-- Preserve and include dates/times when present (temporal context is critical)
-- Retain the most relevant timestamps (start times, completion times, significant events)
+- Keep every concrete fact: names, places, dates, numbers, amounts, durations, titles, versions, and who said what. Merge duplicates, but never drop specifics
+- Keep every dated statement with its date, and retain the timestamps that matter (start times, completion times, significant events)
+- When the user changed their mind or a fact was updated, keep both the old and new values with their dates and say which is current
+- Keep what the user said they have never done, do not know, or refused, and keep every stated preference, rule, and instruction with its meaning intact
+- Prefer many short factual lines over prose summaries. Do not replace facts with generalities like "discussed travel plans"
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
 - Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
 - Preserve the concrete resolved outcome captured by ✅ markers so the assistant knows what exactly is done
-- Condense older observations more aggressively, retain more detail for recent ones
+- Condense the wording of older observations more than recent ones, but keep their facts
 
 CRITICAL: USER ASSERTIONS vs QUESTIONS
 - "User stated: X" = authoritative assertion (user told us something about themselves)
