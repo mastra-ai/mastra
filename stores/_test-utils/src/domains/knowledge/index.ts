@@ -1168,6 +1168,31 @@ export function createKnowledgeStorageTests(
       ).rejects.toThrow('must encode a [source, scope] tuple');
     });
 
+    it('removes completed semantic outbox entries and keeps the rest', async () => {
+      const node = await store.createNode({ name: 'Outbox prune', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createRecord({ node, text: 'Outbox prune record', scopeIds: [PROJECT_SCOPE_ID] });
+      const before = await store.listSemanticOutbox({ limit: 1000 });
+      expect(before.length).toBeGreaterThan(1);
+
+      const [first] = await store.claimSemanticOutbox({ workerId: 'worker-a', limit: 1 });
+      expect(first).toBeDefined();
+      await store.completeSemanticOutbox({ ids: [first!.id], workerId: 'worker-a' });
+      await store.completeSemanticOutbox({
+        ids: before.filter(e => e.id !== first!.id).map(e => e.id),
+        workerId: 'worker-a',
+      });
+
+      const after = await store.listSemanticOutbox({ limit: 1000 });
+      expect(after.map(entry => entry.id)).not.toContain(first!.id);
+      expect(after.map(entry => entry.id).sort()).toEqual(
+        before
+          .filter(entry => entry.id !== first!.id)
+          .map(entry => entry.id)
+          .sort(),
+      );
+      expect(after.every(entry => entry.status === 'pending')).toBe(true);
+    });
+
     it('clears only canonical Knowledge state', async () => {
       const run = await store.createImportRun({
         importerId: 'clear-test',

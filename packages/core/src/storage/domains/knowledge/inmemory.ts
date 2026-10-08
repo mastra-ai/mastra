@@ -1177,12 +1177,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async completeSemanticOutbox({ ids, workerId }: { ids: string[]; workerId: string }): Promise<void> {
-    const now = new Date();
     for (const id of ids) {
       const entry = this.#db.knowledgeSemanticOutbox.get(id);
       if (entry?.status === 'processing' && entry.claimedBy === workerId) {
-        entry.status = 'completed';
-        entry.completedAt = now;
+        this.#db.knowledgeSemanticOutbox.delete(id);
       }
     }
   }
