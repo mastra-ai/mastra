@@ -30,7 +30,7 @@ function KnowledgeGraphCanvasComponent({
 }) {
   const flow = useReactFlow<KnowledgeFlowNode, KnowledgeFlowEdge>();
   function selectNode(node: KnowledgeFlowNode) {
-    hoverRef.current?.hide();
+    hoverRef.current?.hide(true);
     if (isRecordNode(node)) {
       const record = node.data.record;
       const [source = '', target = source] = record.nodeIds;
@@ -38,7 +38,7 @@ function KnowledgeGraphCanvasComponent({
     } else if (isKnowledgeNode(node)) events.current.onNodeClick(node.data.node);
   }
   function selectEdge(edge: KnowledgeFlowEdge) {
-    hoverRef.current?.hide();
+    hoverRef.current?.hide(true);
     const source = edge.source.startsWith('record:') ? edge.target : edge.source;
     if (!source.startsWith('record:'))
       events.current.onEdgeClick({ source, target: edge.target, recordId: edge.data?.recordId ?? '' });
@@ -96,13 +96,15 @@ function KnowledgeGraphCanvasComponent({
         else if (isKnowledgeNode(node))
           hoverRef.current?.show({ kind: 'node', x: event.clientX, y: event.clientY, node });
       }}
+      onNodeMouseMove={event => hoverRef.current?.move({ x: event.clientX, y: event.clientY })}
       onNodeMouseLeave={() => hoverRef.current?.hide()}
       onEdgeMouseEnter={(event, edge) =>
         hoverRef.current?.show({ kind: 'edge', x: event.clientX, y: event.clientY, edge })
       }
+      onEdgeMouseMove={event => hoverRef.current?.move({ x: event.clientX, y: event.clientY })}
       onEdgeMouseLeave={() => hoverRef.current?.hide()}
-      onNodeDragStart={() => hoverRef.current?.hide()}
-      onMoveStart={() => hoverRef.current?.hide()}
+      onNodeDragStart={() => hoverRef.current?.hide(true)}
+      onMoveStart={() => hoverRef.current?.hide(true)}
     >
       <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
       <MiniMap<KnowledgeFlowNode>

@@ -1,25 +1,37 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { Pin } from 'lucide-react';
-import { useImperativeHandle, useState } from 'react';
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import type { Ref } from 'react';
+import { KnowledgeHoverContent } from './KnowledgeHoverContent';
+import { createKnowledgeHoverFollower } from './knowledgeHoverMotion';
 import type { KnowledgeFlowEdge, NodeFlowNode, RecordFlowNode } from './graphModel';
-import type { KnowledgeGraphNode, KnowledgeRung } from '../../services/knowledge';
-const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
+import type { KnowledgeGraphNode } from '../../services/knowledge';
 
-type HoverCard = { x: number; y: number } & (
+export type KnowledgeHoverTarget =
   | { kind: 'node'; node: NodeFlowNode }
   | { kind: 'edge'; edge: KnowledgeFlowEdge }
-  | { kind: 'record'; record: RecordFlowNode }
-);
+  | { kind: 'record'; record: RecordFlowNode };
 
-export interface KnowledgeHoverHandle {
-  show: (hover: HoverCard) => void;
-  hide: () => void;
+type Point = { x: number; y: number };
+type HoverSnapshot = {
+  current: KnowledgeHoverTarget;
+  sequence: number;
+  outgoing?: { target: KnowledgeHoverTarget; width: number };
+};
+
+function targetId(target: KnowledgeHoverTarget) {
+  if (target.kind === 'node') return `node:${target.node.id}`;
+  if (target.kind === 'record') return `record:${target.record.id}`;
+  return `edge:${target.edge.id}`;
 }
 
-/** Hover updates stay in this small overlay, outside the canvas render path. */
+export interface KnowledgeHoverHandle {
+  show: (hover: KnowledgeHoverTarget & Point) => void;
+  move: (point: Point) => void;
+  hide: (immediate?: boolean) => void;
+}
+
+/** The surface persists across targets. Only content changes render this overlay. */
 export function KnowledgeGraphHover({
   ref,
   nodesById,
@@ -27,95 +39,120 @@ export function KnowledgeGraphHover({
   ref: Ref<KnowledgeHoverHandle>;
   nodesById: Map<string, KnowledgeGraphNode>;
 }) {
-  const [hover, setHover] = useState<HoverCard>();
-  useImperativeHandle(ref, () => ({ show: setHover, hide: () => setHover(undefined) }));
-  if (!hover) return null;
-  return <GraphHoverCard hover={hover} nodesById={nodesById} />;
-}
+  const [snapshot, setSnapshot] = useState<HoverSnapshot>();
+  const positionRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const follower = useRef<ReturnType<typeof createKnowledgeHoverFollower>>(undefined);
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const currentId = useRef<string>(undefined);
+  const sequence = useRef(0);
 
-function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map<string, KnowledgeGraphNode> }) {
-  const style = { left: hover.x + 14, top: hover.y + 14 } as const;
-  if (hover.kind === 'node') {
-    const { node, degree } = hover.node.data;
-    return (
+  useLayoutEffect(() => {
+    if (!positionRef.current) return;
+    const motion = createKnowledgeHoverFollower(positionRef.current);
+    follower.current = motion;
+    return () => {
+      motion.stop();
+      follower.current = undefined;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    const surface = surfaceRef.current;
+    if (!content || !surface) return;
+    function measure() {
+      if (!content || !surface) return;
+      const padding = getComputedStyle(surface);
+      const width = content.offsetWidth + parseFloat(padding.paddingLeft) + parseFloat(padding.paddingRight);
+      const height = content.offsetHeight + parseFloat(padding.paddingTop) + parseFloat(padding.paddingBottom);
+      surface.style.width = `${width}px`;
+      surface.style.height = `${height}px`;
+      follower.current?.resize(width, height);
+    }
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [snapshot?.sequence]);
+
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
+
+  useImperativeHandle(ref, () => ({
+    show(hover) {
+      clearTimeout(hideTimer.current);
+      const position = positionRef.current;
+      if (!position) return;
+      const wasHidden = position.dataset.state !== 'open';
+      position.dataset.state = 'open';
+      position.setAttribute('aria-hidden', 'false');
+      follower.current?.move(hover, wasHidden);
+      const id = targetId(hover);
+      if (currentId.current === id) return;
+      currentId.current = id;
+      const nextSequence = ++sequence.current;
+      const width = contentRef.current?.offsetWidth ?? 0;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      setSnapshot(previous => ({
+        current: hover,
+        sequence: nextSequence,
+        outgoing: previous && !wasHidden && !reducedMotion ? { target: previous.current, width } : undefined,
+      }));
+    },
+    move(point) {
+      if (positionRef.current?.dataset.state === 'open') follower.current?.move(point);
+    },
+    hide(immediate = false) {
+      clearTimeout(hideTimer.current);
+      function close() {
+        positionRef.current?.setAttribute('data-state', 'closed');
+        positionRef.current?.setAttribute('aria-hidden', 'true');
+        follower.current?.stop();
+      }
+      if (immediate) {
+        close();
+        return;
+      }
+      // Adjacent targets share the surface instead of flashing closed between them.
+      hideTimer.current = setTimeout(close, 100);
+    },
+  }));
+
+  return (
+    <div
+      ref={positionRef}
+      role="tooltip"
+      aria-hidden="true"
+      data-testid="knowledge-hover-card"
+      className="knowledge-hover pointer-events-none fixed top-0 left-0 z-50"
+    >
       <div
-        data-testid="knowledge-hover-card"
-        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 min-w-48 rounded-lg p-3`}
-        style={style}
+        ref={surfaceRef}
+        className={cn(overlaySurfaceStyle, 'knowledge-hover-surface relative overflow-hidden rounded-lg p-3')}
       >
-        <div className="mb-1 flex items-center gap-1.5">
-          <Txt as="span" variant="label" tone="ink">
-            {node.name}
-          </Txt>
-        </div>
-        {node.description?.trim() ? (
-          <Txt
-            as="p"
-            variant="body-sm"
-            tone="ink"
-            data-testid="knowledge-hover-description"
-            className="mb-2 line-clamp-3 max-w-72 break-words"
+        {snapshot?.outgoing ? (
+          <div
+            key={`out-${snapshot.sequence}`}
+            className="knowledge-hover-outgoing absolute top-3 left-3"
+            aria-hidden="true"
+            style={{ width: snapshot.outgoing.width }}
+            onAnimationEnd={() => {
+              const completedSequence = snapshot.sequence;
+              setSnapshot(current =>
+                current?.sequence === completedSequence ? { ...current, outgoing: undefined } : current,
+              );
+            }}
           >
-            {node.description}
-          </Txt>
+            <KnowledgeHoverContent hover={snapshot.outgoing.target} nodesById={nodesById} />
+          </div>
         ) : null}
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.kind}</dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{RUNG_LABELS[node.rung]}</dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>{node.recordCount}</dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Links</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-            {degree.incoming} in · {degree.outgoing} out
-          </dd>
-          <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
-          <dd className={textStyle({ variant: 'caption', tone: 'muted' })}>
-            {new Date(node.updatedAt).toLocaleString()}
-          </dd>
-        </dl>
+        {snapshot ? (
+          <div key={snapshot.sequence} ref={contentRef} className="knowledge-hover-content">
+            <KnowledgeHoverContent hover={snapshot.current} nodesById={nodesById} />
+          </div>
+        ) : null}
       </div>
-    );
-  }
-  if (hover.kind === 'record') {
-    const { record } = hover.record.data;
-    return (
-      <div
-        data-testid="knowledge-hover-card"
-        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
-        style={style}
-      >
-        <div className="text-foreground mb-1 flex items-center gap-1.5">
-          <Txt as="span" variant="caption" className="block">
-            Record
-          </Txt>
-          {record.pinned ? <Pin size={11} className="text-badge-amber-indicator" aria-label="Pinned" /> : null}
-        </div>
-        <Txt as="p" variant="body-sm" tone="muted">
-          {record.text}
-        </Txt>
-      </div>
-    );
-  }
-  if (hover.kind === 'edge') {
-    const resolve = (id: string) => nodesById.get(id)?.name;
-    const source = resolve(hover.edge.source);
-    const target = resolve(hover.edge.target);
-    return (
-      <div
-        data-testid="knowledge-hover-card"
-        className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
-        style={style}
-      >
-        <Txt as="p" variant="caption" tone="ink">
-          {source && target ? `${source} → ${target}` : 'Record'}
-        </Txt>
-        <Txt as="p" variant="body-sm" tone="muted" className="mt-0.5">
-          {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
-        </Txt>
-      </div>
-    );
-  }
-  return null;
+    </div>
+  );
 }

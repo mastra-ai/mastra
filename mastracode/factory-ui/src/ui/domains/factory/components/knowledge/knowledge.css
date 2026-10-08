@@ -19,7 +19,10 @@
 .knowledge-circle {
   background: color-mix(in oklab, var(--knowledge-color) 22%, var(--card));
   border-color: color-mix(in oklab, var(--knowledge-color) 65%, var(--border));
-  transition: border-color var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+  transition:
+    background-color var(--duration-slow) var(--ease-out-custom),
+    border-color var(--duration-slow) var(--ease-out-custom),
+    transform var(--duration-slow) var(--ease-out-custom);
 }
 
 .knowledge-canvas [data-testid='knowledge-node'],
@@ -59,8 +62,28 @@
   outline-offset: 5px;
 }
 
+.knowledge-canvas .react-flow__node.draggable {
+  cursor: pointer;
+}
+
+.knowledge-canvas .react-flow__node.draggable.dragging,
+.knowledge-canvas .react-flow__node.draggable.dragging * {
+  cursor: grabbing;
+}
+
 .knowledge-canvas .react-flow__node:hover .knowledge-circle {
+  background: color-mix(in oklab, var(--knowledge-color) 30%, var(--card));
   border-color: var(--knowledge-color);
+  transform: scale(1.04);
+}
+
+.knowledge-canvas .react-flow__node:hover [data-testid='knowledge-node']::after {
+  opacity: 0.4;
+  transform: scale(1);
+}
+
+.knowledge-canvas .react-flow__node:hover [data-testid='knowledge-record-node'] {
+  transform: scale(1.15);
 }
 
 .knowledge-canvas .react-flow__edge-path {
@@ -233,5 +256,107 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Position is driven by one frame loop; the surface and text animate independently. */
+.knowledge-hover {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-slow) var(--ease-out-custom),
+    visibility 0s var(--duration-slow);
+}
+
+.knowledge-hover[data-state='open'] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.knowledge-hover-surface {
+  width: 0;
+  height: 0;
+  transform: translateY(6px) scale(0.97);
+  transform-origin: top left;
+  transition:
+    width calc(var(--resize-dur) * 1.6) var(--resize-ease),
+    height calc(var(--resize-dur) * 1.6) var(--resize-ease),
+    transform var(--duration-slow) var(--ease-out-custom);
+}
+
+.knowledge-hover[data-state='open'] .knowledge-hover-surface {
+  transform: translateY(0) scale(1);
+}
+
+.knowledge-hover-content {
+  width: max-content;
+  min-width: min(10.5rem, calc(100vw - 3rem));
+  max-width: min(18rem, calc(100vw - 3rem));
+  overflow-wrap: anywhere;
+}
+
+.knowledge-hover-content,
+.knowledge-hover-outgoing {
+  max-height: calc(100dvh - 3rem);
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .knowledge-hover-content {
+    animation: knowledge-hover-content-enter calc(var(--duration-slow) * 1.6) var(--ease-out-custom) both;
+  }
+
+  .knowledge-hover-outgoing {
+    animation: knowledge-hover-content-exit var(--duration-fast) var(--ease-out-custom) both;
+  }
+
+  .knowledge-hover:not([data-state='open']) .knowledge-hover-content {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(4px);
+    animation: none;
+    transition:
+      opacity var(--duration-normal) var(--ease-out-custom),
+      filter var(--duration-normal) var(--ease-out-custom),
+      transform var(--duration-normal) var(--ease-out-custom);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-hover-outgoing {
+    display: none;
+  }
+
+  .knowledge-hover-surface,
+  .knowledge-canvas .react-flow__node:hover .knowledge-circle,
+  .knowledge-canvas .react-flow__node:hover [data-testid='knowledge-record-node'] {
+    transform: none;
+  }
+}
+
+@keyframes knowledge-hover-content-enter {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes knowledge-hover-content-exit {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(-4px);
   }
 }
