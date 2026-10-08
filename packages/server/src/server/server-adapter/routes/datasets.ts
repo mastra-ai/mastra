@@ -12,6 +12,7 @@ import {
   PURGE_ITEM_ROUTE,
   LIST_ALL_EXPERIMENTS_ROUTE,
   EXPERIMENT_REVIEW_SUMMARY_ROUTE,
+  GET_ANY_EXPERIMENT_ROUTE,
   DELETE_ANY_EXPERIMENT_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
@@ -59,7 +60,8 @@ export const DATASETS_ROUTES = [
   LIST_ALL_EXPERIMENTS_ROUTE,
   // Experiment review summary (cross-dataset) - MUST come before dataset-scoped experiments
   EXPERIMENT_REVIEW_SUMMARY_ROUTE,
-  // Cross-dataset experiment delete (covers experiments orphaned by dataset deletion)
+  // Cross-dataset experiment get/delete by ID - MUST come after review-summary so it isn't matched as :experimentId
+  GET_ANY_EXPERIMENT_ROUTE,
   DELETE_ANY_EXPERIMENT_ROUTE,
   // Experiment operations (dataset-scoped)
   LIST_EXPERIMENTS_ROUTE,

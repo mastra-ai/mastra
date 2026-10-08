@@ -1,11 +1,16 @@
-import { useExperiments } from '@mastra/react/hooks/datasets';
+import { useExperiment } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 
 const useCurrentExperiment = () => {
   const { experimentId } = useParams<{ experimentId: string }>();
-  const { data } = useExperiments();
-  return { experimentId, experiment: data?.experiments?.find(e => e.id === experimentId) };
+  const { data: experiment } = useExperiment({
+    experimentId: experimentId ?? '',
+    // The page shell remounts the crumb when this query fails (e.g. 404). Retrying on that
+    // mount would reset the query to pending, unmount the crumb, and loop forever.
+    queryOptions: { enabled: Boolean(experimentId), retryOnMount: false },
+  });
+  return { experimentId, experiment };
 };
 
 /**

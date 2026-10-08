@@ -19,6 +19,7 @@ import {
   DELETE_ANY_EXPERIMENT_ROUTE,
   DELETE_DATASET_ROUTE,
   DELETE_EXPERIMENT_ROUTE,
+  GET_ANY_EXPERIMENT_ROUTE,
   GET_DATASET_ROUTE,
   GET_EXPERIMENT_ROUTE,
   GET_ITEM_ROUTE,
@@ -1160,6 +1161,95 @@ describe('Datasets Handlers', () => {
           ...createTestServerContext({ mastra }),
           datasetId: dataset.id,
           experimentId: 'does-not-exist',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('GET_ANY_EXPERIMENT_ROUTE', () => {
+    it('returns the experiment with its datasetId given only the experiment id', async () => {
+      // Given an experiment in a dataset
+      const dataset = await mastra.datasets.create({ name: 'Lookup DS' });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        name: 'lookup',
+      } as any)) as any;
+
+      // When it is fetched without the dataset id
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId: created.experimentId,
+      } as any)) as any;
+
+      // Then the experiment and its dataset are returned
+      expect(result.id).toBe(created.experimentId);
+      expect(result.datasetId).toBe(dataset.id);
+      expect(result.name).toBe('lookup');
+    });
+
+    it('returns an experiment that is not on the first page of the experiments list', async () => {
+      // Given more experiments than GET /experiments returns by default
+      const dataset = await mastra.datasets.create({ name: 'Many Experiments DS' });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const ids: string[] = [];
+      for (let i = 0; i < 11; i++) {
+        const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          start: false,
+        } as any)) as any;
+        ids.push(created.experimentId);
+      }
+      const firstPage = (await LIST_ALL_EXPERIMENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        ...listExperimentsQuerySchema.parse({}),
+      } as any)) as any;
+      const missing = ids.find(id => !firstPage.experiments.some((e: { id: string }) => e.id === id));
+      expect(missing).toBeDefined();
+
+      // When the experiment missing from the first page is fetched by id
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId: missing,
+      } as any)) as any;
+
+      // Then it is found
+      expect(result.id).toBe(missing);
+      expect(result.datasetId).toBe(dataset.id);
+    });
+
+    it('returns 404 for a nonexistent experiment', async () => {
+      await expect(
+        GET_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId: 'does-not-exist',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('returns 404 when organizationId does not match', async () => {
+      // Given an experiment owned by another tenant
+      const dataset = await mastra.datasets.create({
+        name: 'Tenant DS',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      // When it is fetched with a different tenant, then it reads as missing
+      await expect(
+        GET_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId: created.experimentId,
+          organizationId: 'org_b',
         } as any),
       ).rejects.toMatchObject({ status: 404 });
     });

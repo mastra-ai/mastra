@@ -2269,6 +2269,19 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an experiment by ID regardless of dataset association. The response
+   * includes the experiment's `datasetId`, so callers that only know the
+   * experiment ID can use this instead of searching the experiments list.
+   */
+  public getExperiment(
+    experimentId: PathParams<'GET /experiments/:experimentId'>['experimentId'],
+    options?: QueryParams<'GET /experiments/:experimentId'>,
+  ): Promise<SerializedRouteResponse<'GET /experiments/:experimentId'>> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`);
+  }
+
+  /**
    * Lists experiments for a dataset
    */
   public listDatasetExperiments(

@@ -10,7 +10,7 @@ import { useExperimentTrace } from '../../experiments/use-experiment-trace';
 import { useCompareExperiments } from '../use-compare-experiments';
 import { useDatasetItemVersions } from '../use-dataset-item-versions';
 import { useDatasetVersions } from '../use-dataset-versions';
-import { useExperiments } from '../use-experiments';
+import { useExperiment, useExperiments } from '../use-experiments';
 import { useWorkflowSchema } from '../use-workflow-schema';
 
 type ItemHistoryResponse = Awaited<ReturnType<MastraClient['getItemHistory']>>;
@@ -108,6 +108,27 @@ describe('useExperiments', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(url?.searchParams.get('page')).toBe('2');
+    });
+  });
+});
+
+describe('useExperiment', () => {
+  describe('when only the experiment id is known', () => {
+    it('fetches the experiment by id and exposes its datasetId', async () => {
+      let path: string | undefined;
+      server.use(
+        http.get('*/api/experiments/:experimentId', ({ request, params }) => {
+          path = new URL(request.url).pathname;
+          return HttpResponse.json({ id: params.experimentId, datasetId: 'ds-1', name: 'old run' });
+        }),
+      );
+
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useExperiment({ experimentId: 'exp-1' }), { wrapper });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(path).toBe('/api/experiments/exp-1');
+      expect(result.current.data?.datasetId).toBe('ds-1');
     });
   });
 });

@@ -108,6 +108,7 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => HttpResponse.json(experiment)),
     // The meta bar resolves the dataset name; a 404 falls back to the raw id.
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),
@@ -136,6 +137,43 @@ beforeEach(() => {
 });
 
 describe('experiment item sub-route', () => {
+  describe('given an experiment that is not on the first page of the experiments list', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, () =>
+          HttpResponse.json({ experiments: [], pagination: { total: 11, page: 0, perPage: 10, hasMore: true } }),
+        ),
+      );
+    });
+
+    it('when the page loads, then it resolves the dataset by experiment id and renders the results', async () => {
+      renderExperimentRoute();
+
+      await screen.findByText('item-2');
+      expect(screen.queryByText('Experiment not found')).toBeNull();
+    });
+  });
+
+  describe('given an experiment id that does not exist', () => {
+    it('when the page loads, then it renders the not-found state without refetching in a loop', async () => {
+      let lookups = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => {
+          lookups++;
+          return HttpResponse.json({ error: 'Experiment not found' }, { status: 404 });
+        }),
+      );
+
+      renderExperimentRoute();
+
+      expect(await screen.findByText('Experiment not found')).toBeDefined();
+      // Settle, then make sure the not-found state is stable rather than a refetch loop.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      expect(screen.getByText('Experiment not found')).toBeDefined();
+      expect(lookups).toBeLessThanOrEqual(2);
+    });
+  });
+
   describe('when the experiment page renders', () => {
     it('shows results directly with no tabs', async () => {
       renderExperimentRoute();

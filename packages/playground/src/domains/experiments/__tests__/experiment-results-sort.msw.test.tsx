@@ -66,6 +66,7 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => HttpResponse.json(experiment)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),
     ),
