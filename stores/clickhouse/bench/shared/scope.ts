@@ -53,7 +53,20 @@ export function injectProjectScope<T extends CompiledClickHouseTraceQuery>(
   // queryTraces() also seeds the delta index and span existence checks with the tenant's window roots.
   const windows = countOccurrences(compiled.query, 'FROM mastra_trace_roots w\n');
   if (windows > 2) throw new RewriteError(`Expected at most two window-root seeds, found ${windows}`);
-  return addProjectAfterTenant(compiled, projectId, 2 + keyed + windows + relations.length);
+  // A Platform-style delta index filtered by its own tenant columns (QX15) is one more scoped scan.
+  const deltaIndex = countOccurrences(
+    compiled.query,
+    'FROM mastra_trace_roots_delta\n    WHERE /* tenant-scoped delta */',
+  );
+  // A span-name index lookup (QX17) is one more scoped scan per use.
+  const nameIndex = countOccurrences(compiled.query, 'FROM mastra_trace_span_names\n');
+  // A narrow current-roots table (QX19) replaces the seed and the re-read with one scoped scan.
+  const narrow = countOccurrences(compiled.query, 'FROM mastra_trace_current_roots\n') > 0 ? -1 : 0;
+  return addProjectAfterTenant(
+    compiled,
+    projectId,
+    2 + keyed + windows + deltaIndex + nameIndex + narrow + relations.length,
+  );
 }
 
 /** Adds the project to the `queryTraces()` payload lookup, which the compiler already tenant-scopes. */

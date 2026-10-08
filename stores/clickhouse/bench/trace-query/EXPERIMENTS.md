@@ -35,22 +35,23 @@ benchmark; this file tracks what we tried, where, and what it showed. Structure 
 Prod numbers are warm medians; cold is filesystem cache off. I1–I7 are shipped in `trace-query.ts` in an exact
 form: the variants skipped the current-root dedupe, which only held because production has no traces with more than
 one root key (QX00). The compiler keeps the current-root rule (lowest `dedupeKey` per trace); its final shape is I9
-and its numbers are QX14's, not the variants'. I10–I12 need schema changes (lab, §5 of the plan).
+and its numbers are QX14's, not the variants'. I10 is a query change for Platform only (QX15). I11–I13 need schema changes and were measured in the lab (QX16–QX20).
 
-| #   | Improvement                                                                                                                                            | Kind     | Evidence            | Effect                                                                                                             | Status    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------ | --------- |
-| I1  | Keyset: narrow list, then a second scoped query for the winners' `input` / `metadataRaw` (`nh2`)                                                       | compiler | QX03, QX05b         | Removes the blob sort: p99 2.9 GiB → ~200 MiB on its own, every 4 GiB failure succeeds                             | shipped   |
-| I2  | Keyset: find the page boundary from `(startedAt, traceId)` only, then read roots inside it (`topn2`)                                                   | compiler | QX04/05, QX09       | Memory no longer grows with the window: with I1 + I6, p99 35 / 43 MiB, largest 7d 65 / 52; cold faster than base   | shipped   |
-| I3  | Page: `uniqExact` total + boundary page instead of window functions over the window (`pg`)                                                             | compiler | QX06, QX09          | Largest 30d 503 → 92 MiB; p99 38 MiB; cold faster than base                                                        | shipped   |
-| I4  | Delta: limit the delta page first, scoped to the project's roots, then re-read only those traces scoped and time-bounded (`dtop+rs`)                   | compiler | QX06/07, QX08, QX09 | p99 2.9 GiB → 53 MiB; heavy p99 and largest 7d go from ✗ to 55 / 91 MiB; cold faster                               | shipped   |
-| I5  | Groups: distinct threads straight from the window's matching roots (`g2`)                                                                              | compiler | QX08, QX09          | Largest 30d 285 → 29 MiB, cold 26 s → 9 s                                                                          | shipped   |
-| I6  | `filesystem_prefetches_limit = 8` on these queries (`pf8`), at the Tier 1 default of 4 threads                                                         | setting  | QX01, QX09          | Removes most of the ~150 MiB floor without the cold penalty of turning prefetch off or of fewer threads            | shipped   |
-| I7  | Relation filters: no span dedupe for existence checks, spans seeded from window roots and `endedAt`-bounded (`sp`)                                     | compiler | QX08, QX09          | T7/T9/T10 p99 2.7–3.3 GiB (or ✗) → 26–44 MiB                                                                       | shipped   |
-| I8  | Optional: one thread for the keyset lookup only (`t1@2`)                                                                                               | setting  | QX09                | Heavy p99 lookup 54 → 39 MiB, +10 s cold                                                                           | trade-off |
-| I9  | Current root by `min(dedupeKey) OVER (PARTITION BY traceId)` over one read of the seeded traces' roots; keyset / page = keys + total, then rows by key | compiler | QX12–QX14           | One fewer root scan than QX10's shape; cold at or below old in every keyset / page / groups cell (QX14)            | shipped   |
-| I10 | Tenant columns (`organizationId`, `projectId`) on `mastra_trace_roots_delta`                                                                           | schema   | QX14                | Delta could filter its index directly instead of seeding it with the window's roots; the p99 cold gap is that seed | proposed  |
-| I11 | A narrow current-roots table (one row per trace, latest root key, sort columns), maintained at write time                                              | schema   | QX10, QX14          | Removes the first statement's re-derivation of current roots (45–50 MiB to p99, ~180 at the largest)               | proposed  |
-| I12 | A write-time input preview column on root rows                                                                                                         | schema   | QX14                | Rows by key read full `input` only to build a ≤ preview-length string: 37–92 MiB per page to p99                   | proposed  |
+| #   | Improvement                                                                                                                                                       | Kind                     | Evidence            | Effect                                                                                                                         | Status                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| I1  | Keyset: narrow list, then a second scoped query for the winners' `input` / `metadataRaw` (`nh2`)                                                                  | compiler                 | QX03, QX05b         | Removes the blob sort: p99 2.9 GiB → ~200 MiB on its own, every 4 GiB failure succeeds                                         | shipped                |
+| I2  | Keyset: find the page boundary from `(startedAt, traceId)` only, then read roots inside it (`topn2`)                                                              | compiler                 | QX04/05, QX09       | Memory no longer grows with the window: with I1 + I6, p99 35 / 43 MiB, largest 7d 65 / 52; cold faster than base               | shipped                |
+| I3  | Page: `uniqExact` total + boundary page instead of window functions over the window (`pg`)                                                                        | compiler                 | QX06, QX09          | Largest 30d 503 → 92 MiB; p99 38 MiB; cold faster than base                                                                    | shipped                |
+| I4  | Delta: limit the delta page first, scoped to the project's roots, then re-read only those traces scoped and time-bounded (`dtop+rs`)                              | compiler                 | QX06/07, QX08, QX09 | p99 2.9 GiB → 53 MiB; heavy p99 and largest 7d go from ✗ to 55 / 91 MiB; cold faster                                           | shipped                |
+| I5  | Groups: distinct threads straight from the window's matching roots (`g2`)                                                                                         | compiler                 | QX08, QX09          | Largest 30d 285 → 29 MiB, cold 26 s → 9 s                                                                                      | shipped                |
+| I6  | `filesystem_prefetches_limit = 8` on these queries (`pf8`), at the Tier 1 default of 4 threads                                                                    | setting                  | QX01, QX09          | Removes most of the ~150 MiB floor without the cold penalty of turning prefetch off or of fewer threads                        | shipped                |
+| I7  | Relation filters: no span dedupe for existence checks, spans seeded from window roots and `endedAt`-bounded (`sp`)                                                | compiler                 | QX08, QX09          | T7/T9/T10 p99 2.7–3.3 GiB (or ✗) → 26–44 MiB                                                                                   | shipped                |
+| I8  | Optional: one thread for the keyset lookup only (`t1@2`)                                                                                                          | setting                  | QX09                | Heavy p99 lookup 54 → 39 MiB, +10 s cold                                                                                       | trade-off              |
+| I9  | Current root by `min(dedupeKey) OVER (PARTITION BY traceId)` over one read of the seeded traces' roots; keyset / page = keys + total, then rows by key            | compiler                 | QX12–QX14           | One fewer root scan than QX10's shape; cold at or below old in every keyset / page / groups cell (QX14)                        | shipped                |
+| I10 | Delta filters its index by its own tenant columns (Platform's `mastra_trace_roots_delta` already has `organizationId` / `projectId` / `resourceId`; OSS has none) | compiler (Platform only) | QX15                | p99 cold 24–27 → 9–12 s (old 22–24); largest 7d ✗ → 13–15 s, 208 → 113 MiB. No schema change on Platform                       | proven, not shipped    |
+| I11 | A narrow current-roots table (current root per trace, no `input`), maintained at write time                                                                       | schema                   | QX19, QX20          | Keys statement ×0.36–0.73 in the lab (p99 34 → 20 MiB, groups → 8–10); needs a write path that replaces a trace's current root | proposed (upper bound) |
+| I12 | A write-time input-preview column on root rows                                                                                                                    | schema                   | QX18, QX20          | Rows by key read ×0.06–0.2 bytes, ×0.68–0.88 memory in the lab (heavy p99 15 → 10 MiB)                                         | proposed               |
+| I13 | Span existence by name from a `(organizationId, projectId, name, traceId)` index table                                                                            | schema                   | QX17, QX20          | T7 keys statement bytes ×0.11–0.33, memory ×0.65–0.72; T10 ×0.78–0.88                                                          | proposed               |
 
 ## Experiment register
 
@@ -72,6 +73,12 @@ and its numbers are QX14's, not the variants'. I10–I12 need schema changes (la
 | QX12  | prod | Keys + total, then rows by exact key (no list bound)                | 56 equivalent; keyset at or below old cold; page ~5 s slower cold than QX10; largest T0 206 MiB                                     | superseded        |
 | QX13  | prod | QX12 with the current root picked by a window function              | 62 equivalent; cold at or below old for keyset / page / groups; groups largest 174 → 108 MiB                                        | done → I9         |
 | QX14  | prod | I9 ported to the compiler vs the old one (+ delta at a live anchor) | 90 / 90 lists, 0 payload differences; cold no worse except delta p99 (+10–20 %) and T7 (old ✗ too)                                  | done              |
+| QX15  | prod | Delta filters its index by its tenant columns (Platform)            | 8 / 8 equivalent (2 old-side OOM); cold p99 9–12 s vs old 22–24, largest 7d ✗ → 13–15 s                                             | done → I10        |
+| QX16  | lab  | Lab baseline: old vs current compiler                               | Same shape as prod with a ~7 MiB floor instead of ~14; current compiler ≈ 0.7× prod's numbers                                       | done              |
+| QX17  | lab  | Span-name index for span filters                                    | 16 / 16 equivalent; T7 keys statement bytes ×0.11–0.33, memory ×0.65–0.72                                                           | done → I13        |
+| QX18  | lab  | Stored input preview                                                | Rows by key bytes ×0.06–0.2, memory ×0.68–0.88; keys statement unchanged                                                            | done → I12        |
+| QX19  | lab  | Narrow current-roots table (upper bound)                            | 32 / 32 equivalent; keys statement ×0.36–0.73; groups 22–64 → 8–10 MiB                                                              | done → I11        |
+| QX20  | lab  | I11 + I12 + I13 together                                            | 15 / 15 lists equivalent; every statement ≤ 23 MiB to p99, ≤ 83 at largest 7d (current: 48 / 165)                                   | done              |
 
 ## Entries
 
@@ -598,3 +605,117 @@ selection anchor returned no rows on either side). QX14c ran QX10's delta (`curr
   (196–209 MiB, ~1.0×). Old was 2.9 GiB / ✗ in most of these cells.
 - What closes the rest is schema, not query shape: I11 (a narrow current-roots table) removes the keys statement's
   re-derivation, I12 (a stored input preview) bounds rows by key, I10 fixes delta's seed.
+
+### QX15: delta filters its index by tenant columns (2026-10-08, prod)
+
+QX14 traced delta's p99 cold gap to seeding the delta index with the tenant's window roots, assuming the index had no
+tenant columns (true in OSS's DDL). Platform's `mastra_trace_roots_delta` / `mastra_trace_branches_delta` do have
+`organizationId`, `resourceId`, `projectId` (checked on the replica's `system.columns`; sort key `cursorId` only). The
+variant filters the index rows by those columns instead of `traceId IN (window roots)`. Exact: tenant columns are
+per trace, so the same traces' rows survive and `max(cursorId)` is unchanged; `root_scope` still applies the window.
+
+Anchor 2026-10-08 17:00; old = the original compiler, new = I9, variant = I9 + this. Equivalence: 8 / 8 lists, payloads
+6 equal + 2 old-side OOM. Warm MiB / cold s (main statement):
+
+| Target     | old          | new (I9)        | variant      |
+| ---------- | ------------ | --------------- | ------------ |
+| small 30d  | 162 / 16–17  | 32 / 12–13      | 28 / 0.3–0.8 |
+| p99 30d    | 2837 / 22–24 | 76 / 24–27      | 62 / 9–12    |
+| heavy p99  | ✗ memory     | 101 / 25–26     | 87 / 9       |
+| largest 1d | 307 / 15     | 34 / 16–17      | 67 / 9–10    |
+| largest 7d | ✗ memory     | 208 / ✗ timeout | 113 / 13–15  |
+
+Cold is now 2× faster than old at p99 and the largest 7d finishes. Memory falls except at largest 1d, where the
+variant reads the whole two-day index (the `cursorId` sort key can't prune by tenant) while the 1d window seed was
+small. Payload statements are unchanged (24–48 MiB). Applies to Platform only; OSS's delta index has no tenant columns.
+
+### QX16: lab baseline (2026-10-08, lab)
+
+The lab is the aggregate track's container (`aqa-bench-lab`, ClickHouse 26.4, no object storage) with our own copy of
+the pulled data in `tq_lab` (roots, spans, span-name index), taken under a lock file. Same project hashes as prod, lab
+identifiers. `--lab` points the harness at it; cold isn't meaningful there. Warm MiB, current compiler (I9):
+
+| Case | small | p99     | heavy p99 | largest 7d |
+| ---- | ----- | ------- | --------- | ---------- |
+| T0   | 8 / 8 | 34 / 27 | 34 / 15   | 125 / 11   |
+| P0   | 8 / 8 | 34 / 9  | 34 / 9    | 122 / 9    |
+| G0   | 7     | 22      | 25        | 64–68      |
+| T7   | 9     | 33 / 23 | 37 / 15   | 99 / 15    |
+
+(keys / rows by key. QX16 stopped at the largest after old failed there, so the largest 7d cells other than T0
+are the current arm of QX17–QX20.) Prod's numbers are ~1.4× these (floor ~14 MiB with prefetch limit 8 vs ~7 here, larger real
+blobs). The old compiler shows the same blow-up (0.9–1.2 GiB at p99) and fails at the largest. Compare variants within
+the lab, not against prod absolutes.
+
+### QX17: span-name index (2026-10-08, lab)
+
+`spans.some(name eq X)` / `none` answered from `mastra_trace_span_names` (`ORDER BY (organizationId, projectId, name,
+traceId)`, the aggregate track's table) instead of `current_spans`. Exact under QX00's census: span copies never differ
+in name, and existence needs no dedupe. Equivalence 16 / 16 (T7, T10; small to heavy p99; 1d, 30d).
+
+| Case / target  | keys statement current → variant | MB read  |
+| -------------- | -------------------------------- | -------- |
+| T7 p99         | 33 → 23 MiB                      | 64 → 22  |
+| T7 heavy p99   | 37 → 26                          | 131 → 26 |
+| T7 largest 7d  | 99 → 65                          | 212 → 44 |
+| T10 p99        | 46 → 36                          | 64 → 22  |
+| T10 largest 7d | 165 → 145                        | 212 → 44 |
+
+Bytes read drop 3–6×. T7's cold timeouts on prod come from reading spans; this is the change most likely to fix them,
+but cold can only be confirmed on prod once the table exists there. `spans.none(status eq error)` (T9) doesn't use
+names and is unchanged.
+
+### QX18: stored input preview (2026-10-08, lab)
+
+`inputPreview String` materialised on `tq_lab.mastra_trace_roots` (approximated by the first 100 characters of
+`input`: 233 MiB uncompressed vs 13.2 GiB for `input`); rows by key and the payload lookup read it instead of `input`.
+Payload contents differ by construction, so only memory is compared. Rows-by-key statement:
+
+| Case / target | current → variant MiB | MB read   |
+| ------------- | --------------------- | --------- |
+| T0 p99        | 27 → 21               | 3.3 → 0.4 |
+| T0 heavy p99  | 15 → 10               | 6.9 → 1.2 |
+| T7 p99        | 23 → 21               | 3.2 → 0.4 |
+| T7 largest 7d | 15 → 11               | 7.4 → 0.6 |
+
+The lab's regenerated blobs average 6 KiB; prod's rows-by-key statement was 52–92 MiB at p99 (QX14), so the gain there
+should be larger. A real column needs `buildInputPreview()` at write time (it parses `input` as messages).
+
+### QX19: narrow current-roots table (2026-10-08, lab, upper bound)
+
+`tq_lab.mastra_trace_current_roots`: every root column except `input`, only rows whose key is the trace's lowest
+(built once, per project). `root_scope` reads it within the window. This is an upper bound: it assumes a write path
+that replaces a trace's current root when a lower key arrives, which ReplacingMergeTree can't express by itself.
+Equivalence 32 / 32 (T0, T1, T3, O2, P0, P1, G0, T7; small to heavy p99; 30d).
+
+| Case    | p99 current → variant | heavy p99 | largest 7d |
+| ------- | --------------------- | --------- | ---------- |
+| T0 keys | 34 → 21               | 34 → 20   | 122 → 89   |
+| P0 keys | 34 → 22               | 34 → 20   | 122 → 80   |
+| G0      | 22 → 8                | 25 → 9    | 64 → 10    |
+| T7 keys | 33 → 16               | 37 → 18   | 100 → 46   |
+
+The largest 7d keys statement stays at 80–89 MiB: it sorts ~430k traces' keys for the page and the total.
+
+### QX20: I11 + I12 + I13 together (2026-10-08, lab)
+
+15 / 15 lists equivalent (payloads differ by construction, QX18). Warm MiB, keys / rows by key:
+
+| Case | p99 current → combined | heavy p99         | largest 1d        | largest 7d         |
+| ---- | ---------------------- | ----------------- | ----------------- | ------------------ |
+| T0   | 34 / 27 → 21 / 19      | 34 / 15 → 20 / 10 | 16 / 11 → 13 / 10 | 122 / 11 → 80 / 10 |
+| P0   | 34 / 9 → 22 / 8        | 34 / 9 → 22 / 8   | 16 / 9 → 13 / 8   | 122 / 9 → 83 / 8   |
+| G0   | 22 → 8                 | 25 → 9            | 15 → 8            | 64 → 10            |
+| T7   | 33 / 23 → 11 / 21      | 37 / 15 → 14 / 10 | 20 / 15 → 11 / 10 | 100 / 15 → 14 / 10 |
+| T10  | 46 / 27 → 22 / 19      | 49 / 15 → 23 / 10 | 22 / 11 → 15 / 10 | 165 / 11 → 83 / 10 |
+
+**Findings**
+
+- With all three, every statement is ≤ 23 MiB to p99 and ≤ 83 MiB at the largest 7d in the lab. Scaling by QX16's
+  ~1.4× lab-to-prod ratio puts prod at ~30 MiB to p99: inside the 40 MB target, which query changes alone (QX14: 47–92)
+  didn't reach.
+- By value per change: I13 (span-name index) fixes the worst remaining case (T7, which times out cold) and is the
+  smallest schema change (an index table the aggregate track also proposes). I12 (preview column) bounds every page's
+  payload read. I11 (narrow current roots) gives the largest memory cut on the first statement but needs the most
+  write-path work and should come last.
+- I10 (QX15) needs no schema change on Platform and fixes delta's cold gap; it's the first thing to implement.

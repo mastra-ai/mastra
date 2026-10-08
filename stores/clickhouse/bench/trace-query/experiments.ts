@@ -17,7 +17,8 @@
  * Every command first notes any other bench process running against the replica.
  */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -70,8 +71,26 @@ export interface ExpRecord {
   /** equiv: aggregate-only comparison; census: aggregate counts. */
   data?: Record<string, unknown>;
   note?: string;
+  /** Set to `lab` for runs against the local lab copy (`--lab`); absent means the prod replica. */
+  env?: 'lab';
   ts: string;
 }
+
+/** The local lab: our own `tq_lab` database inside the aggregate track's container, used only while we hold its lock. */
+const LAB = {
+  origin: 'http://localhost:18123',
+  username: 'default',
+  password: 'lab',
+  database: 'tq_lab',
+  lock: '/tmp/aqa-bench-lab.lock',
+  owner: 'trace-query-bench',
+  // The aggregate track's pulled-project selection (same project hashes as ours, lab identifiers). Read-only.
+  selection: resolve(
+    homedir(),
+    '.herdr/worktrees/mastra2/daniel-obs-539-aggregate-benchmark/stores/clickhouse/bench/aggregate-traces/results/lab-selection.json',
+  ),
+};
+let labRun = false;
 
 interface Ctx {
   client: BenchClient;
@@ -85,7 +104,7 @@ interface Ctx {
 }
 
 function append(record: ExpRecord): void {
-  appendFileSync(EXPERIMENTS_FILE, `${JSON.stringify(record)}\n`);
+  appendFileSync(EXPERIMENTS_FILE, `${JSON.stringify(labRun ? { ...record, env: 'lab' } : record)}\n`);
 }
 
 async function exec<Row = never>(
@@ -615,6 +634,7 @@ async function main() {
       cold: { type: 'boolean', default: false },
       'cold-reps': { type: 'string', default: '1' },
       'allow-shared': { type: 'boolean', default: false },
+      lab: { type: 'boolean', default: false },
     },
   });
   const command = positionals[0];
@@ -630,11 +650,20 @@ async function main() {
       `note: ${others.length} other bench process(es) running against the replica; latency comparisons stay within our own ABAB pairs`,
     );
   }
-  const selection = loadSelection();
+  labRun = values.lab!;
+  if (labRun) {
+    if (!existsSync(LAB.lock) || !readFileSync(LAB.lock, 'utf8').includes(LAB.owner)) {
+      throw new Error(`The lab is not ours to use: ${LAB.lock} is missing or held by someone else`);
+    }
+    // The lab has no object storage or filesystem cache, so "cold" means nothing there.
+    if (values.cold) throw new Error('--cold is not meaningful in the lab');
+  }
+  const selection = labRun ? readJson<Selection>(LAB.selection) : loadSelection();
   if (!selection) throw new Error('No selection; run the aggregate profile first');
-  const sidecar = loadSidecar();
-  const pre = readJson<Preflight>(files(RESULTS_DIR).preflight);
-  const client = connect(loadCredentials(), pre.database);
+  const sidecar = labRun ? undefined : loadSidecar();
+  const client = labRun
+    ? connect({ origin: LAB.origin, username: LAB.username, password: LAB.password }, LAB.database)
+    : connect(loadCredentials(), readJson<Preflight>(files(RESULTS_DIR).preflight).database);
   const runId = `${values.exp}-${new Date()
     .toISOString()
     .replace(/[-:.TZ]/g, '')
