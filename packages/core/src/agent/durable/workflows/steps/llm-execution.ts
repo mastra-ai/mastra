@@ -523,11 +523,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           }) => {
             if (!deferredStepFinishChunk) return undefined;
 
-            const stepContent: Array<{ type: string; [key: string]: unknown }> = [];
-            const currentText = textDeltas.join('');
-            if (currentText) {
-              stepContent.push({ type: 'text', text: currentText });
-            }
             deferredStepFinishChunk = {
               ...deferredStepFinishChunk,
               payload: {
@@ -538,7 +533,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   isContinued,
                 },
                 ...(tripwire ? { output: { ...deferredStepFinishChunk.payload?.output, steps: [{ tripwire }] } } : {}),
-                _durableStepContent: stepContent,
               },
             };
             return deferredStepFinishChunk;

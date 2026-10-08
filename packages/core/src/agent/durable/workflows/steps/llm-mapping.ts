@@ -333,51 +333,22 @@ export function createDurableLLMMappingStep() {
         requestContext.set('__mastra_delegationBailed', false);
       }
 
-      // 4. Enrich the deferred step-finish after tool-result chunks have been
-      // emitted. The loop predicate emits it after resolving continuation policy.
+      // 4. Carry the deferred step-finish after tool-result chunks have been
+      // emitted. The loop predicate adds step content and emits it after resolving
+      // continuation policy, avoiding duplicate tool results in persisted snapshots.
       const deferredChunk = llmOutput.deferredStepFinishChunk as any;
-      let deferredStepFinishChunk: unknown;
-      if (deferredChunk) {
-        // Build step content directly from this iteration's data. Each durable
-        // step deserializes a fresh MessageList, so the MastraModelOutput's
-        // reference may be stale.
-        const stepContent: unknown[] = [];
-        if (llmOutput.text) {
-          stepContent.push({ type: 'text', text: llmOutput.text });
-        }
-        for (const tc of llmOutput.toolCalls ?? []) {
-          stepContent.push({
-            type: 'tool-call',
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            args: tc.args,
-          });
-        }
-        for (const tr of toolResults ?? []) {
-          // Public step content must not show a completed result for a call the client
-          // has not answered yet.
-          if (isPendingClientCall(tr)) continue;
-          stepContent.push({
-            type: 'tool-result',
-            toolCallId: tr.toolCallId,
-            toolName: tr.toolName,
-            result: tr.error ? tr.error.message : tr.result,
-            ...(tr.error ? { isError: true } : {}),
-          });
-        }
-
-        deferredStepFinishChunk = {
-          ...deferredChunk,
-          payload: {
-            ...deferredChunk.payload,
-            stepResult: {
-              ...deferredChunk.payload?.stepResult,
-              isContinued,
+      const deferredStepFinishChunk = deferredChunk
+        ? {
+            ...deferredChunk,
+            payload: {
+              ...deferredChunk.payload,
+              stepResult: {
+                ...deferredChunk.payload?.stepResult,
+                isContinued,
+              },
             },
-            _durableStepContent: stepContent,
-          },
-        };
-      }
+          }
+        : undefined;
 
       // 5. Build the output
       const output: DurableAgenticExecutionOutput = {

@@ -158,6 +158,44 @@ type SatisfiesLoopIterationState<T extends LoopIterationState> = T;
 
 type IterationState = SatisfiesLoopIterationState<z.infer<typeof iterationStateSchema>>;
 
+function buildDurableStepContent(state: IterationState): unknown[] {
+  const step = state.accumulatedSteps.at(-1) as any;
+  if (!step) return [];
+
+  const content: unknown[] = [];
+  if (step.text) {
+    content.push({ type: 'text', text: step.text });
+  }
+  for (const toolCall of step.toolCalls ?? []) {
+    content.push({
+      type: 'tool-call',
+      toolCallId: toolCall.toolCallId,
+      toolName: toolCall.toolName,
+      args: toolCall.args,
+    });
+  }
+  for (const toolResult of step.toolResults ?? []) {
+    const isDeniedApproval = toolResult.approval?.approved === false;
+    const isPendingClientCall =
+      toolResult.result === undefined &&
+      !toolResult.error &&
+      !toolResult.aborted &&
+      !toolResult.resultBlocked &&
+      !toolResult.providerExecuted &&
+      !isDeniedApproval;
+    if (isPendingClientCall) continue;
+
+    content.push({
+      type: 'tool-result',
+      toolCallId: toolResult.toolCallId,
+      toolName: toolResult.toolName,
+      result: toolResult.error ? toolResult.error.message : toolResult.result,
+      ...(toolResult.error ? { isError: true } : {}),
+    });
+  }
+  return content;
+}
+
 /**
  * Durable resolution of the shared {@link LoopRuntime} contract. Live handles
  * (abort signal, `stopWhen`/`onIterationComplete` closures, the pre-bound
@@ -587,6 +625,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 ...(state.lastStepResult?.reason ? { reason: state.lastStepResult.reason } : {}),
                 isContinued,
               },
+              _durableStepContent: buildDurableStepContent(state),
             },
           });
         } catch (error) {
