@@ -83,6 +83,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
+        data-knowledge-circle
         className={[
           'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200 motion-reduce:transition-none',
           border,
@@ -540,13 +541,13 @@ function KnowledgeGraphInner({
       data-testid="knowledge-graph"
     >
       <style>{`
-        .knowledge-arrive [data-testid='knowledge-node'] {
+        .knowledge-arrive [data-knowledge-circle] {
           box-shadow: 0 0 0 2px var(--chart-purple) !important;
         }
         .react-flow__edge.knowledge-arrive path {
           stroke: var(--chart-purple) !important;
         }
-        .react-flow__node:focus-visible [data-testid='knowledge-node'],
+        .react-flow__node:focus-visible [data-knowledge-circle],
         .react-flow__node:focus-visible [data-testid='knowledge-record-node'] {
           outline: 2px solid var(--chart-purple);
           outline-offset: 2px;
