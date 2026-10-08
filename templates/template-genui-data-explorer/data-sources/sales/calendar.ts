@@ -1,12 +1,8 @@
-import { SourceError } from "../source.ts";
+import { SourceError, dateSchema, dateRangeSchema } from "../source.ts";
 import type { DatasetMetadata, Period } from "./contracts.ts";
 
 export function dateOnly(value: string): string {
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    !Number.isFinite(Date.parse(value)) ||
-    new Date(value).toISOString().slice(0, 10) !== value
-  )
+  if (!dateSchema.safeParse(value).success)
     throw new SourceError("invalid-input", "Use a valid UTC date (YYYY-MM-DD).");
   return value;
 }
@@ -25,13 +21,9 @@ export function shiftDays(value: string, count: number): string {
   return date.toISOString().slice(0, 10);
 }
 export function validatePeriod(period: Period): void {
-  dateOnly(period.start);
-  dateOnly(period.end);
-  if (period.start >= period.end)
-    throw new SourceError(
-      "invalid-input",
-      "The period must have a start before its exclusive end.",
-    );
+  const parsed = dateRangeSchema.safeParse(period);
+  if (!parsed.success)
+    throw new SourceError("invalid-input", parsed.error.issues[0]?.message ?? "Invalid period.");
 }
 export function coverageReason(metadata: DatasetMetadata, period: Period): string | null {
   validatePeriod(period);

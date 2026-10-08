@@ -11,9 +11,9 @@ import type {
   SourceDescriptor,
   ResultTable,
 } from "../source.ts";
-import type { DatasetMetadata, Filters, MetricResult, Period, Stage } from "./contracts.ts";
-import { resultInteger, resultText, validateFilters } from "./contracts.ts";
-import { dateOnly, samplePrompts, shiftMonths, validatePeriod } from "./calendar.ts";
+import type { DatasetMetadata, Filters, MetricResult, SalesRequest } from "./contracts.ts";
+import { resultInteger, resultText, salesRequestSchemaFor } from "./contracts.ts";
+import { samplePrompts, shiftMonths } from "./calendar.ts";
 import { openSales } from "./database.ts";
 import {
   bookings,
@@ -162,57 +162,7 @@ const capabilities: SourceDescriptor["capabilities"] = (
   ...(capability.filters.length ? { filterControls } : {}),
 }));
 
-function requestPeriod(value: unknown, name: string): Period {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.keys(value).some((key) => key !== "start" && key !== "end") ||
-    !("start" in value) ||
-    !("end" in value) ||
-    typeof value.start !== "string" ||
-    typeof value.end !== "string"
-  )
-    throw new SourceError("invalid-input", `${name} requires UTC start and exclusive end dates.`);
-  const period = { start: value.start, end: value.end };
-  validatePeriod(period);
-  return period;
-}
-
-function requestDate(value: unknown): string {
-  if (typeof value !== "string")
-    throw new SourceError("invalid-input", "asOf requires a UTC date.");
-  return dateOnly(value);
-}
-
-function requestStage(value: unknown): Stage {
-  if (
-    value !== "qualification" &&
-    value !== "discovery" &&
-    value !== "proposal" &&
-    value !== "negotiation" &&
-    value !== "won" &&
-    value !== "lost"
-  )
-    throw new SourceError("invalid-input", "Unknown opportunity stage.");
-  return value;
-}
-
-function requestFilters(value: unknown): Filters {
-  if (value === undefined) return {};
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new SourceError("invalid-input", "Filters must be an object.");
-  const result: Filters = {};
-  for (const [key, field] of Object.entries(value)) {
-    if (key === "ownerId" && typeof field === "number") result.ownerId = field;
-    else if (key === "segment" && typeof field === "string") result.segment = field;
-    else if (key === "region" && typeof field === "string") result.region = field;
-    else if (key === "stage") result.stage = requestStage(field);
-    else throw new SourceError("invalid-input", `Invalid or unsupported Sales filter '${key}'.`);
-  }
-  validateFilters(result);
-  return result;
-}
+export const salesRequestSchema = salesRequestSchemaFor(capabilities);
 
 export class SalesSource implements DataSource {
   readonly #path: string;
@@ -318,25 +268,9 @@ export class SalesSource implements DataSource {
     );
   }
 
-  /** Worker-only synchronous implementation; never exposed as a model tool. */
-  executeRead(request: AnalysisRequest): AnalysisResult {
-    if (!request || typeof request !== "object" || Array.isArray(request))
-      throw new SourceError("invalid-input", "An analytical request is required.");
-    const capability = capabilities.find((entry) => entry.metric === request.metric);
-    if (!capability)
-      throw new SourceError(
-        "invalid-input",
-        `Unsupported Sales metric '${request.metric}'. Choose an advertised capability.`,
-      );
-    const allowed = new Set<string>(["metric", ...capability.fields]);
-    if (Object.keys(request).some((key) => !allowed.has(key)))
-      throw new SourceError(
-        "invalid-input",
-        `Unsupported fields for Sales metric '${request.metric}'.`,
-      );
-    if (request.groupBy && !capability.groupings?.some((group) => group.field === request.groupBy))
-      throw new SourceError("invalid-input", "Choose an advertised Sales grouping.");
-    const filters = requestFilters(request.filters);
+  /** Worker-only dispatch of schema-validated requests; required fields are guaranteed per metric. */
+  executeRead(request: SalesRequest): AnalysisResult {
+    const filters = request.filters ?? {};
     const operations: SourceOperation[] = [];
     const db = new Proxy(this.#connection.db, {
       get(target, key) {
@@ -372,16 +306,13 @@ export class SalesSource implements DataSource {
     let table: ResultTable | undefined;
     switch (request.metric) {
       case "bookings":
-        result = bookings(db, metadata, requestPeriod(request.period, "period"), filters);
+        result = bookings(db, metadata, request.period!, filters);
         break;
       case "conversion":
-        result = conversion(db, metadata, requestPeriod(request.period, "period"), filters);
+        result = conversion(db, metadata, request.period!, filters);
         break;
       case "growth": {
-        const comparison = requestPeriod(request.period, "period");
-        const baseline =
-          request.baseline === undefined ? undefined : requestPeriod(request.baseline, "baseline");
-        const growth = salesGrowth(db, metadata, comparison, baseline, filters);
+        const growth = salesGrowth(db, metadata, request.period!, request.baseline, filters);
         result = growth;
         details = {
           comparisonBookings: growth.comparisonBookings,
@@ -391,19 +322,13 @@ export class SalesSource implements DataSource {
         break;
       }
       case "pipeline": {
-        const open = pipeline(db, metadata, requestDate(request.asOf), filters);
+        const open = pipeline(db, metadata, request.asOf!, filters);
         result = open;
         details = { rows: open.rows.map((row) => ({ ...row })) };
         break;
       }
       case "forecast": {
-        const scenario = forecast(
-          db,
-          metadata,
-          requestDate(request.asOf),
-          requestPeriod(request.horizon, "horizon"),
-          filters,
-        );
+        const scenario = forecast(db, metadata, request.asOf!, request.horizon!, filters);
         result = scenario;
         details = {
           weightedOpenCents: scenario.weightedOpenCents,
@@ -416,19 +341,14 @@ export class SalesSource implements DataSource {
       }
       case "cohortRetention":
       case "cohortChurn": {
-        const cohorts = customerCohorts(
-          db,
-          metadata,
-          requestPeriod(request.period, "period"),
-          request.metric,
-        );
+        const cohorts = customerCohorts(db, metadata, request.period!, request.metric);
         result = cohorts;
         if (request.groupBy) table = cohorts.table;
         details = { convention: cohorts.convention, cohortCount: cohorts.cohortCount };
         break;
       }
       case "customerChurn": {
-        const churn = customerChurn(db, metadata, requestPeriod(request.period, "period"));
+        const churn = customerChurn(db, metadata, request.period!);
         result = churn;
         if (request.groupBy && (result.status === "available" || result.denominator === 0))
           table = churnSeries(db, metadata, result.period, "customerChurn");
@@ -439,7 +359,7 @@ export class SalesSource implements DataSource {
         break;
       }
       case "revenueChurn": {
-        const churn = revenueChurn(db, metadata, requestPeriod(request.period, "period"));
+        const churn = revenueChurn(db, metadata, request.period!);
         result = churn;
         if (request.groupBy && (result.status === "available" || result.denominator === 0))
           table = churnSeries(db, metadata, result.period, "revenueChurn");
@@ -488,15 +408,13 @@ export class SalesSource implements DataSource {
 
   private closedTable(
     db: import("node:sqlite").DatabaseSync,
-    request: AnalysisRequest,
+    request: SalesRequest,
     filters: Filters,
   ): ResultTable {
-    const period = requestPeriod(request.period, "period");
+    const period = request.period!;
     const filter = filterClause(filters);
     const where = ` FROM opportunity_history h JOIN opportunities o ON o.id=h.opportunity_id JOIN accounts a ON a.id=o.account_id WHERE h.stage IN ('won','lost') AND h.effective_at >= ? AND h.effective_at < ?${filter.sql}`;
     if (request.records) {
-      if (request.groupBy)
-        throw new SourceError("invalid-input", "Choose grouped data or records, not both.");
       const rows = db
         .prepare(
           `SELECT h.opportunity_id AS opportunityId, a.name AS account, h.effective_at AS date, h.stage, h.value_cents AS value${where}${request.metric === "bookings" ? " AND h.stage='won'" : ""} ORDER BY h.effective_at,h.opportunity_id LIMIT 1001`,
@@ -533,8 +451,7 @@ export class SalesSource implements DataSource {
       ownerId: "CAST(h.owner_id AS TEXT)",
       stage: "h.stage",
     };
-    const dimension = request.groupBy ? dimensions[request.groupBy] : undefined;
-    if (!dimension) throw new SourceError("invalid-input", "A supported grouping is required.");
+    const dimension = dimensions[request.groupBy!]!;
     const rows = db
       .prepare(
         `SELECT ${dimension} AS label, COALESCE(SUM(CASE WHEN h.stage='won' THEN h.value_cents ELSE 0 END),0) AS amount, COUNT(CASE WHEN h.stage='won' THEN 1 END) AS won, COUNT(*) AS closed${where} GROUP BY ${dimension} ORDER BY ${request.groupBy === "month" ? "label" : request.metric === "conversion" ? "1.0*won/closed DESC,label" : "amount DESC,label"} LIMIT 1001`,

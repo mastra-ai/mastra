@@ -1,6 +1,5 @@
-import { SalesSource } from "./source.ts";
+import { SalesSource, salesRequestSchema } from "./source.ts";
 import { SourceError, resultRecordCount } from "../source.ts";
-import type { AnalysisRequest } from "../source.ts";
 
 function reply(message: object) {
   process.send?.(message, () => process.exit(0));
@@ -8,11 +7,20 @@ function reply(message: object) {
 
 process.once(
   "message",
-  (input: { path: string; request: AnalysisRequest; maxRows: number; maxBytes: number }) => {
+  (input: { path: string; request: unknown; maxRows: number; maxBytes: number }) => {
     let source: SalesSource | undefined;
     try {
+      const request = salesRequestSchema.safeParse(input.request);
+      if (!request.success) {
+        reply({
+          ok: false,
+          code: "invalid-input",
+          message: request.error.issues[0]?.message ?? "Invalid Sales request.",
+        });
+        return;
+      }
       source = new SalesSource(input.path);
-      const result = source.executeRead(input.request);
+      const result = source.executeRead(request.data);
       if (
         resultRecordCount(result) > input.maxRows ||
         Buffer.byteLength(JSON.stringify(result)) > input.maxBytes

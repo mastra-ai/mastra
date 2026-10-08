@@ -71,7 +71,7 @@ export class SourceError extends Error {
   }
 }
 export const scalarSchema = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
-const dateSchema = z
+export const dateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((value) => {
@@ -81,7 +81,7 @@ const dateSchema = z
 export const dateRangeSchema = z
   .strictObject({ start: dateSchema, end: dateSchema })
   .refine((value) => value.start < value.end, "Start must precede exclusive end.");
-const analysisRequestFields = {
+export const analysisRequestFields = {
   metric: z.string().min(1).max(80),
   period: dateRangeSchema.optional(),
   baseline: dateRangeSchema.optional(),

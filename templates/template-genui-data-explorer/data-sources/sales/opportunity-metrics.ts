@@ -3,7 +3,7 @@ import { coverageReason, dateOnly, shiftDays, shiftMonths, validatePeriod } from
 import {
   metric,
   STAGE_WEIGHTS,
-  validateFilters,
+  salesFiltersSchema,
   safeInteger,
   resultInteger,
   resultText,
@@ -12,7 +12,7 @@ import {
 import type { DatasetMetadata, Filters, MetricResult, OpenStage, Period } from "./contracts.ts";
 
 export function filterClause(filters: Filters): { sql: string; params: SQLInputValue[] } {
-  validateFilters(filters);
+  const parsed = salesFiltersSchema.parse(filters);
   const parts: string[] = [];
   const params: SQLInputValue[] = [];
   for (const [key, column] of Object.entries({
@@ -21,7 +21,7 @@ export function filterClause(filters: Filters): { sql: string; params: SQLInputV
     region: "a.region",
     stage: "h.stage",
   })) {
-    const value = filters[key as keyof Filters];
+    const value = parsed[key as keyof Filters];
     if (value !== undefined) {
       parts.push(`${column} = ?`);
       params.push(value);

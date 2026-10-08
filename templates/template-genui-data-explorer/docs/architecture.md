@@ -48,6 +48,15 @@ Do not replace it with an unguarded agent route: that would bypass the accepted-
 The catalog is a controlled, application-owned GenUI contract. It is not an A2UI catalog:
 the Mastra `compose` tool selects registered views and the server validates their bindings.
 
+## Sales request validation
+
+The Sales worker parses the shared analysis contract and its capability-derived Sales schema
+before opening the dataset. The schema owns supported fields and groupings, required dates,
+closed filter values, and complete-month bounds for monthly churn series and customer cohorts.
+Ungrouped churn and opportunity metrics still accept partial periods. Validation failures return
+`invalid-input`; database failures return `source-unavailable`. Dataset coverage and result-size
+checks remain runtime checks. Sales-specific rules stay in the adapter's contracts.
+
 ## Execution limits
 
 Each question has separate budgets of eight model rounds and eight tool calls. Both `analyze`

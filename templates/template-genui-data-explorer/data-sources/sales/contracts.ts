@@ -1,4 +1,6 @@
-import { SourceError } from "../source.ts";
+import { z } from "zod";
+import { analysisRequestFields, analysisRequestSchema, dateRangeSchema } from "../source.ts";
+import type { SourceCapability } from "../source.ts";
 export const VERSIONS = { schema: 1, generator: "sales-v1", metrics: "saas-v1" } as const;
 export const STAGE_WEIGHTS = {
   qualification: 0.1,
@@ -24,34 +26,105 @@ export interface DatasetMetadata {
   asOf: string;
   complete: true;
 }
-export interface Filters {
-  ownerId?: number;
-  segment?: string;
-  region?: string;
-  stage?: Stage;
+/** Sales filters are closed contracts; values are never coerced into SQL parameters. */
+const salesFilterFields = z.strictObject({
+  ownerId: z
+    .number()
+    .int({ error: "Owner ID must be a positive integer." })
+    .positive({ error: "Owner ID must be a positive integer." })
+    .optional(),
+  segment: z.enum(["SMB", "Mid-market", "Enterprise"], { error: "Unknown segment." }).optional(),
+  region: z.enum(["Americas", "EMEA", "APAC"], { error: "Unknown region." }).optional(),
+  stage: z
+    .enum(["qualification", "discovery", "proposal", "negotiation", "won", "lost"])
+    .optional(),
+});
+export type Filters = {
+  [Field in keyof z.infer<typeof salesFilterFields>]?: Exclude<
+    z.infer<typeof salesFilterFields>[Field],
+    undefined
+  >;
+};
+export const salesFiltersSchema = salesFilterFields.transform(
+  (filters): Filters =>
+    Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== undefined),
+    ) as Filters,
+);
+export const monthlyPeriodSchema = dateRangeSchema.refine(
+  (period) => period.start.endsWith("-01") && period.end.endsWith("-01"),
+  "Monthly churn and customer cohorts require complete calendar months, with first-of-month bounds.",
+);
+
+/** Bind Sales inputs to advertised capabilities before opening the worker's database. */
+export function salesRequestSchemaFor(capabilities: readonly SourceCapability[]) {
+  const fields = z
+    .strictObject({ ...analysisRequestFields, filters: salesFiltersSchema.optional() })
+    .superRefine((request, context) => {
+      const capability = capabilities.find((entry) => entry.metric === request.metric);
+      if (!capability) {
+        context.addIssue({
+          code: "custom",
+          path: ["metric"],
+          message: "Unsupported Sales metric. Choose an advertised capability.",
+        });
+        return;
+      }
+      for (const field of Object.keys(request)) {
+        if (field !== "metric" && !capability.fields.includes(field as never))
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: `Unsupported fields for Sales metric '${request.metric}'.`,
+          });
+      }
+      for (const field of ["period", "asOf", "horizon"] as const) {
+        if (capability.fields.includes(field) && request[field] === undefined)
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: `${field} requires ${field === "asOf" ? "a UTC date" : "UTC start and exclusive end dates"}.`,
+          });
+      }
+      if (
+        request.groupBy &&
+        !capability.groupings?.some((group) => group.field === request.groupBy)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["groupBy"],
+          message: "Choose an advertised Sales grouping.",
+        });
+      for (const field of Object.keys(request.filters ?? {})) {
+        if (!capability.filters.includes(field))
+          context.addIssue({
+            code: "custom",
+            path: ["filters", field],
+            message: "Choose an advertised Sales filter.",
+          });
+      }
+      const monthly =
+        request.metric === "cohortRetention" ||
+        request.metric === "cohortChurn" ||
+        ((request.metric === "customerChurn" || request.metric === "revenueChurn") &&
+          request.groupBy === "month");
+      if (monthly && request.period) {
+        const period = monthlyPeriodSchema.safeParse(request.period);
+        if (!period.success)
+          for (const issue of period.error.issues)
+            context.addIssue({ ...issue, path: ["period", ...issue.path] });
+      }
+    });
+  return analysisRequestSchema.transform((request, context) => {
+    const parsed = fields.safeParse(request);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) context.addIssue({ ...issue });
+      return z.NEVER;
+    }
+    return parsed.data;
+  });
 }
-export function validateFilters(filters: Filters): void {
-  const allowed = ["ownerId", "segment", "region", "stage"];
-  if (Object.keys(filters).some((key) => !allowed.includes(key)))
-    throw new SourceError("invalid-input", "Unknown Sales filter.");
-  if (
-    filters.ownerId !== undefined &&
-    (!Number.isSafeInteger(filters.ownerId) || filters.ownerId < 1)
-  )
-    throw new SourceError("invalid-input", "Owner ID must be a positive integer.");
-  if (
-    filters.segment !== undefined &&
-    !["SMB", "Mid-market", "Enterprise"].includes(filters.segment)
-  )
-    throw new SourceError("invalid-input", "Unknown segment.");
-  if (filters.region !== undefined && !["Americas", "EMEA", "APAC"].includes(filters.region))
-    throw new SourceError("invalid-input", "Unknown region.");
-  if (
-    filters.stage !== undefined &&
-    ![...Object.keys(STAGE_WEIGHTS), "won", "lost"].includes(filters.stage)
-  )
-    throw new SourceError("invalid-input", "Unknown opportunity stage.");
-}
+export type SalesRequest = z.infer<ReturnType<typeof salesRequestSchemaFor>>;
 export function safeInteger(value: number): number {
   if (!Number.isSafeInteger(value))
     throw new Error("The analytical total exceeds the safe integer range.");

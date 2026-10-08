@@ -166,7 +166,7 @@ it("rejects invalid filters and unsafe monetary totals", () => {
     expect(() => pipeline(db, metadata, "2025-02-01", { ownerId: 1.5 })).toThrow(
       "positive integer",
     );
-    expect(() => pipeline(db, metadata, "2025-02-01", { segment: "unknown" })).toThrow(
+    expect(() => pipeline(db, metadata, "2025-02-01", { segment: "unknown" } as never)).toThrow(
       "Unknown segment",
     );
     expect(() => safeInteger(Number.MAX_SAFE_INTEGER + 1)).toThrow("safe integer");

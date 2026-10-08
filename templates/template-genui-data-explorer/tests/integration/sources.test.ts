@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { openDataSource } from "../../data-sources/registry.ts";
 import { inspectSource } from "../../data-sources/inspect.ts";
-import { SalesSource } from "../../data-sources/sales/source.ts";
+import { SalesSource, salesRequestSchema } from "../../data-sources/sales/source.ts";
 import { prepareSource, sources } from "../../scripts/sources.ts";
 import { ReferenceSource } from "../fixtures/reference-source.ts";
 import { referenceFixture, cohortFixture } from "../fixtures/reference.ts";
@@ -13,6 +13,7 @@ import {
   analysisToolSchema,
   hasAvailableData,
 } from "../../data-sources/source.ts";
+import { runReadProcess } from "../../data-sources/read-process.ts";
 import { verifySourceResult } from "../../src/analysis/verification.ts";
 
 const directories: string[] = [];
@@ -242,7 +243,7 @@ it("Sales adapter preserves independent values, provenance and historical reques
     ).rejects.toThrow("Unsupported fields");
     await expect(
       sales.execute({ metric: "pipeline", asOf: "2025-02-01", filters: { segment: true } }),
-    ).rejects.toThrow("Invalid or unsupported");
+    ).rejects.toMatchObject({ code: "invalid-input" });
     await expect(sales.execute({ metric: "conversion" })).rejects.toThrow("period requires");
   } finally {
     await sales.close();
@@ -325,6 +326,104 @@ it("cohort matrices reconcile period-end populations and reject missing, future 
     });
     expect(uncovered.status).toBe("unavailable");
     expect(uncovered).not.toHaveProperty("table");
+  } finally {
+    source.close();
+  }
+});
+
+it("Sales request schemas reject malformed and metric-specific inputs before opening the database", async () => {
+  const path = join(await scratch(), "does-not-exist.sqlite");
+  const period = { start: "2025-01-01", end: "2025-04-01" };
+  const booking = { metric: "bookings", period };
+  const invalid: unknown[] = [
+    null,
+    [],
+    { metric: "unknown" },
+    { ...booking, sql: "SELECT 1" },
+    { metric: "bookings" },
+    { metric: "pipeline" },
+    { metric: "forecast", asOf: "2025-01-01" },
+    { ...booking, period: { start: "2025-02-30", end: period.end } },
+    { ...booking, period: { start: period.end, end: period.start } },
+    { ...booking, period: { ...period, extra: true } },
+    { ...booking, filters: { ownerId: 0 } },
+    { ...booking, filters: { ownerId: 1.5 } },
+    { ...booking, filters: { ownerId: Number.MAX_SAFE_INTEGER + 1 } },
+    { ...booking, filters: { ownerId: "1" } },
+    { ...booking, filters: { segment: "unknown" } },
+    { ...booking, filters: { region: "unknown" } },
+    { ...booking, filters: { stage: "unknown" } },
+    { ...booking, filters: { hidden: true } },
+    { ...booking, filters: null },
+    { ...booking, groupBy: "month", records: true },
+    { ...booking, groupBy: "unknown" },
+    { ...booking, records: "true" },
+    { ...booking, asOf: "2025-01-01" },
+    { metric: "customerChurn", period, filters: {} },
+    { metric: "growth", period, groupBy: "month" },
+    { metric: "pipeline", asOf: "2025-02-30" },
+    { metric: "forecast", asOf: "2025-01-01", horizon: { start: period.end, end: period.start } },
+  ];
+  for (const metric of ["customerChurn", "revenueChurn", "cohortRetention", "cohortChurn"]) {
+    for (const partial of [
+      { start: "2025-01-02", end: period.end },
+      { start: period.start, end: "2025-03-31" },
+    ]) {
+      invalid.push({
+        metric,
+        period: partial,
+        groupBy: metric.startsWith("cohort") ? "cohort" : "month",
+      });
+      if (metric.startsWith("cohort")) invalid.push({ metric, period: partial });
+    }
+  }
+  for (const request of invalid) {
+    expect(salesRequestSchema.safeParse(request).success, JSON.stringify(request)).toBe(false);
+    await expect(
+      runReadProcess(
+        new URL("../../data-sources/sales/read-worker.ts", import.meta.url),
+        { path, request, maxRows: 1000, maxBytes: 1048576 },
+        {
+          signal: new AbortController().signal,
+          deadline: Date.now() + 5000,
+          maxRows: 1000,
+          maxBytes: 1048576,
+          requestId: "schema",
+          queryId: "schema",
+          traceId: "schema",
+        },
+      ),
+    ).rejects.toMatchObject({ code: "invalid-input" });
+  }
+  await expect(access(path)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("Sales schemas preserve partial-period totals, valid filters and runtime coverage checks", async () => {
+  const path = join(await scratch(), "schema-valid.sqlite");
+  referenceFixture(path).db.close();
+  const source = new SalesSource(path);
+  try {
+    const period = { start: "2025-01-02", end: "2025-03-31" };
+    for (const metric of ["bookings", "conversion", "customerChurn", "revenueChurn"]) {
+      const request = { metric, period };
+      expect(salesRequestSchema.safeParse(request).success).toBe(true);
+      expect((await source.execute(request)).status).toBe("available");
+    }
+    const request = {
+      metric: "bookings",
+      period: { start: "2025-03-01", end: "2025-04-01" },
+      filters: { ownerId: 1, segment: "SMB", region: "Americas", stage: "won" },
+    };
+    expect((await source.execute(request)).value).toBe(12000);
+    for (const metric of ["customerChurn", "revenueChurn", "cohortRetention", "cohortChurn"]) {
+      const uncovered = {
+        metric,
+        period: { start: "2020-01-01", end: "2020-04-01" },
+        groupBy: metric.startsWith("cohort") ? "cohort" : "month",
+      };
+      expect(salesRequestSchema.safeParse(uncovered).success).toBe(true);
+      expect((await source.execute(uncovered)).status).toBe("unavailable");
+    }
   } finally {
     source.close();
   }
