@@ -11,6 +11,8 @@ interface KnowledgeScopeFlyoutProps {
   scope: KnowledgeScopeNode;
   childScopeCount: number;
   contentNodeCount: number;
+  /** True when the counts come from a truncated window and are lower bounds. */
+  countsTruncated: boolean;
   threadId?: string;
   onSelectActivity: (event: KnowledgeActivityEvent) => void;
   onClose: () => void;
@@ -23,10 +25,12 @@ export function KnowledgeScopeFlyout({
   scope,
   childScopeCount,
   contentNodeCount,
+  countsTruncated,
   threadId,
   onSelectActivity,
   onClose,
 }: KnowledgeScopeFlyoutProps) {
+  const count = (value: number) => (countsTruncated ? `${value}+` : String(value));
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
   const displayAddress =
@@ -62,11 +66,11 @@ export function KnowledgeScopeFlyout({
           <dt>Kind</dt>
           <dd className="text-foreground text-right">{scope.kind ?? 'scope'}</dd>
           <dt>Content nodes</dt>
-          <dd className="text-foreground text-right">{contentNodeCount}</dd>
+          <dd className="text-foreground text-right">{count(contentNodeCount)}</dd>
           <dt>Child scopes</dt>
-          <dd className="text-foreground text-right">{childScopeCount}</dd>
+          <dd className="text-foreground text-right">{count(childScopeCount)}</dd>
           <dt>Direct members</dt>
-          <dd className="text-foreground text-right">{contentNodeCount + childScopeCount}</dd>
+          <dd className="text-foreground text-right">{count(contentNodeCount + childScopeCount)}</dd>
         </dl>
 
         <section aria-labelledby="scope-recent-activity">
