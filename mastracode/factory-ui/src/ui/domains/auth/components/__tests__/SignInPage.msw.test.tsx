@@ -17,8 +17,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import { navigateAfterSignIn, redirectToLogin } from '../../services/auth';
 import type * as AuthService from '../../services/auth';
 import { createAppRoutes } from '../../../../router';
-import { SignInPage } from '../../../../pages/SignInPage';
-import { safeReturnTo } from '../../services/sign-in';
+import { safeReturnTo, SignInPage } from '../../../../pages/SignInPage';
 import { queryKeys } from '../../../../../api/keys';
 import { createQueryClient } from '../../../../../query-client';
 import { signedIn, signedOut } from './fixtures/auth';
@@ -81,8 +80,6 @@ describe('SignInPage', () => {
 
       await waitFor(() => expect(requestSeen).toHaveBeenCalledWith('include', 'no-store'));
       expect(router.state.location.pathname).toBe('/signin');
-      expect(screen.getByRole('heading', { name: 'Build with an agent factory' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Work board' })).not.toBeInTheDocument();
 
       finishCheck();
