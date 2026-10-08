@@ -360,3 +360,30 @@ describe('InMemoryKnowledgeStorage setRecordScopes validation', () => {
     expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
   });
 });
+
+describe('InMemoryKnowledgeStorage deleteNodeByAddress keep path', () => {
+  it('keeps the address when a non-source record prevents node deletion', async () => {
+    const store = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    await store.init();
+    await store.createNode({ id: PROJECT_SCOPE_ID, name: 'Project scope', isScope: true, scopeIds: [] });
+    const node = await store.createNodeWithAddress({
+      source: 'github',
+      address: 'issue:kept',
+      node: { name: 'Kept issue', scopeIds: [PROJECT_SCOPE_ID] },
+    });
+    await store.createRecord({ node, text: 'Manual note', scopeIds: [PROJECT_SCOPE_ID] });
+
+    const result = await store.deleteNodeByAddress({
+      source: 'github',
+      address: 'issue:kept',
+      scopeId: PROJECT_SCOPE_ID,
+    });
+
+    expect(result.deleted).toBe(false);
+    expect(await store.getNodeAddress({ source: 'github', address: 'issue:kept' })).toEqual({
+      source: 'github',
+      address: 'issue:kept',
+      nodeId: node.id,
+    });
+  });
+});
