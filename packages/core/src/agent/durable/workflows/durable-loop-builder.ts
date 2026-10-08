@@ -446,6 +446,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentId: state.agentId,
               agentName: state.agentName,
               messageListState: state.messageListState,
+              initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
               toolsMetadata: state.toolsMetadata,
               modelConfig: state.modelConfig,
               modelList: state.modelList,
@@ -825,10 +826,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       })
         // Initialize iteration state from input
         .map(
-          async ({ inputData }) => {
+          async ({ inputData, mastra }) => {
             const input = inputData as DurableAgenticWorkflowInput;
+            const initialMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+              input.messageListState,
+            );
             const iterationState: IterationState = {
               ...input,
+              initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
               iterationCount: 0,
               accumulatedSteps: [],
               accumulatedUsage: {
