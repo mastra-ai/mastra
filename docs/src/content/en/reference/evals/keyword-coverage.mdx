@@ -33,7 +33,7 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
   {
     name: 'analyzeStepResult',
     type: 'object',
-    description: 'Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }',
+    description: 'Object with keyword coverage: { totalKeywordsLength: number, matchedKeywordsLength: number }',
   },
   {
     name: 'score',
@@ -48,13 +48,13 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 ```typescript oxfmt:false
 {
   runId: string,
-  extractStepResult: {
+  preprocessStepResult: {
     referenceKeywords: Set<string>,
     responseKeywords: Set<string>
   },
   analyzeStepResult: {
-    totalKeywords: number,
-    matchedKeywords: number
+    totalKeywordsLength: number,
+    matchedKeywordsLength: number
   },
   score: number
 }

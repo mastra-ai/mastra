@@ -38,6 +38,7 @@ import {
   filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
   TRACE_FILTER_BAR_OPERATORS,
+  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
@@ -80,6 +81,9 @@ type TracesPageProps = {
 const TRACES_SORT_KEYS = ['startedAt'] as const;
 const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
 const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
+// The agent Chat tab opens its Traces tab filtered to the open conversation. That filter is
+// navigation context, so it must not be restored on a later visit.
+const SCOPED_UNSAVED_FILTER_PARAMS = [TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId];
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
@@ -111,6 +115,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
     storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+    excludeParams: isScoped ? SCOPED_UNSAVED_FILTER_PARAMS : undefined,
   });
   const querySearchParams = new URLSearchParams(searchParams);
   querySearchParams.delete('listMode');
