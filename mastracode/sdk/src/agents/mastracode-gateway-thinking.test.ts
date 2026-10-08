@@ -106,10 +106,7 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('off', 'groq', 'openai/gpt-oss-20b'))).reasoning_effort).toBe('low');
   });
 
-  it('passes the listed effort to OpenAI-compatible providers and Perplexity', async () => {
-    expect((await requestBody(resolve('max', 'togetherai', 'deepseek-ai/DeepSeek-V4-Pro-0813'))).reasoning_effort).toBe(
-      'max',
-    );
+  it('passes Perplexity the listed effort', async () => {
     expect((await requestBody(resolve('max', 'perplexity', 'sonar-reasoning-pro'))).reasoning_effort).toBe('high');
   });
 
@@ -123,10 +120,11 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('off', providerId, modelId))).reasoning).toEqual({ enabled: false });
   });
 
-  it("caps DeepInfra's effort at the levels its API documents", async () => {
-    expect((await requestBody(resolve('max', 'deepinfra', 'deepseek-ai/DeepSeek-V4.1-Flash'))).reasoning_effort).toBe(
-      'high',
-    );
+  it.each([
+    ['deepinfra', 'deepseek-ai/DeepSeek-V4.1-Flash'],
+    ['togetherai', 'thinkingmachines/Inkling'],
+  ])("caps %s's effort at the levels its API documents", async (providerId, modelId) => {
+    expect((await requestBody(resolve('max', providerId, modelId))).reasoning_effort).toBe('high');
   });
 
   it('switches Alibaba thinking on and off', async () => {

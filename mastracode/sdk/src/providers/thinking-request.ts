@@ -60,7 +60,11 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
     optionsKey: 'xai',
     effort: { acceptedLevels: ['off', 'low', 'medium', 'high'], toOptions: sendReasoningEffort },
   },
-  togetherai: { optionsKey: 'togetherai', effort: { toOptions: sendReasoningEffort }, toggle: switchReasoning },
+  togetherai: {
+    optionsKey: 'togetherai',
+    effort: { acceptedLevels: ['off', 'low', 'medium', 'high'], toOptions: sendReasoningEffort },
+    toggle: switchReasoning,
+  },
   deepinfra: {
     optionsKey: 'deepinfra',
     effort: { acceptedLevels: ['off', 'low', 'medium', 'high'], toOptions: sendReasoningEffort },
