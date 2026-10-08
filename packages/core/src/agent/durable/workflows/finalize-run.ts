@@ -124,6 +124,16 @@ export async function runDurableFinishSideEffects({
   }
 
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  // The request-context snapshot never carries MastraMemory, so a cross-process
+  // worker has none here. Rebuild it from run state (as recovery does) so memory
+  // output processors such as MessageHistory still honor memoryConfig.readOnly.
+  if (durableState?.threadId && durableState.resourceId && !effectiveRequestContext.get('MastraMemory')) {
+    effectiveRequestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
   // would leave the stream reporting pre-processor messages.
