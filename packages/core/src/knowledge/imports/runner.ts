@@ -405,7 +405,7 @@ export class KnowledgeImporterRunner {
   async #logForeignLeaseWait(run: KnowledgeImportRun, blocker: KnowledgeImportRun): Promise<void> {
     const logger = this.#getLogger();
     if (!logger) return;
-    const lease = await this.#knowledge.getImportState({
+    const lease = await this.#knowledge.getImportStateInternal({
       importerId: run.importerId,
       binding: run.binding,
       key: `${LEASE_KEY_PREFIX}${blocker.id}`,
