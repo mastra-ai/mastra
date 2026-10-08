@@ -1022,7 +1022,7 @@ A standalone `MCPServer` with no `mastra` instance produces no spans.
 
 ### Linking to the caller's trace
 
-A request that carries a W3C `traceparent` keeps its own trace and links to the caller's span. The request span records the caller's trace ID and span ID in its `links`, so you can follow a tool call from the caller's trace to the request it started. The two traces aren't merged: each keeps its own root span and trace summary.
+A request that carries a W3C `traceparent` keeps its own trace and links to the caller's span. The request span records the caller's trace ID and span ID in its `links`, so you can follow a tool call from the caller's trace to the request it started. Neither trace is merged into the other, and each keeps its own root span and trace summary.
 
 The server reads `traceparent` from two places, in this order:
 
