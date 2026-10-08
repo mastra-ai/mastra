@@ -3505,6 +3505,7 @@ type Shared_Type_62 = {
       } | null)
     | undefined;
   inputPreview?: (string | null) | undefined;
+  outputPreview?: (string | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3593,6 +3594,7 @@ type Shared_Type_64 = {
     [key: string]: unknown;
   } | null;
   inputPreview: string | null;
+  outputPreview: string | null;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;

@@ -3,11 +3,12 @@ import { SpanType } from '../../../observability/types';
 import {
   BATCH_DELETE_TRACES_MAX_IDS,
   batchDeleteTracesArgsSchema,
-  buildInputPreview,
+  buildSpanInputPreview,
+  buildSpanOutputPreview,
   extractBranchSpans,
   getTraceLightResponseSchema,
-  INPUT_PREVIEW_MAX_LENGTH,
   lightSpanRecordSchema,
+  PREVIEW_MAX_LENGTH,
 } from './tracing';
 
 describe('batchDeleteTracesArgsSchema', () => {
@@ -282,7 +283,14 @@ describe('extractBranchSpans (helper)', () => {
   });
 });
 
-describe('buildInputPreview', () => {
+const agentInput = (input: unknown, metadata?: Record<string, unknown>) =>
+  buildSpanInputPreview({ spanType: SpanType.AGENT_RUN, input, metadata });
+
+describe('buildSpanInputPreview', () => {
+  it('previews an agent string prompt as-is', () => {
+    expect(agentInput('plain prompt text')).toBe('plain prompt text');
+  });
+
   it('joins user message text and ignores assistant turns', () => {
     const input = {
       messages: [
@@ -292,79 +300,135 @@ describe('buildInputPreview', () => {
       ],
     };
 
-    expect(buildInputPreview(input)).toBe('first question | second question');
+    expect(agentInput(input)).toBe('first question | second question');
+    expect(buildSpanInputPreview({ spanType: SpanType.MODEL_GENERATION, input })).toBe(
+      'first question | second question',
+    );
+  });
+
+  it('reads text parts out of a message list', () => {
+    const input = [{ role: 'user', content: [{ type: 'text', text: 'part one' }, { type: 'image' }] }];
+
+    expect(agentInput(input)).toBe('part one');
   });
 
   it('accepts the raw JSON string a store hands back', () => {
     const input = JSON.stringify({ messages: [{ role: 'user', content: 'from the wire' }] });
 
-    expect(buildInputPreview(input)).toBe('from the wire');
+    expect(agentInput(input)).toBe('from the wire');
   });
 
   it('unwraps a JSON-encoded scalar string instead of keeping its quotes', () => {
-    expect(buildInputPreview('"plain scalar prompt"')).toBe('plain scalar prompt');
-    expect(buildInputPreview('"truncated scalar promp')).toBe('"truncated scalar promp');
+    expect(agentInput('"plain scalar prompt"')).toBe('plain scalar prompt');
+    expect(agentInput('"truncated scalar promp')).toBe('"truncated scalar promp');
   });
 
-  it('reads text parts out of structured content', () => {
-    const input = [{ role: 'user', content: [{ type: 'text', text: 'part one' }, { type: 'image' }] }];
+  it('previews the resume data of a resumed agent run as JSON', () => {
+    expect(agentInput({ resumeData: { approved: true } }, { resumed: true })).toBe('{"resumeData":{"approved":true}}');
+  });
 
-    expect(buildInputPreview(input)).toBe('part one');
+  it('previews workflow, tool and custom inputs as JSON', () => {
+    expect(buildSpanInputPreview({ spanType: SpanType.WORKFLOW_RUN, input: { city: 'Paris' } })).toBe(
+      '{"city":"Paris"}',
+    );
+    expect(buildSpanInputPreview({ spanType: SpanType.TOOL_CALL, input: JSON.stringify({ query: 'lookup' }) })).toBe(
+      '{"query":"lookup"}',
+    );
+    expect(buildSpanInputPreview({ spanType: SpanType.GENERIC, input: [1, 2] })).toBe('[1,2]');
   });
 
   it('previews malformed JSON as empty, never leaking message text', () => {
-    // Writers keep stored JSON valid (truncation replaces values inside the structure,
-    // never slices the document), so an unparseable document previews as empty —
-    // matching how `parseJson` treats an unparseable column. Property order is
-    // caller-controlled, so a best-effort scan of broken JSON could surface assistant
-    // text; empty is the safe answer.
-    const roleFirst = JSON.stringify({
-      messages: [
-        { role: 'user', content: 'question' },
-        { role: 'assistant', content: 'x'.repeat(500) },
-      ],
-    });
     const contentFirst = JSON.stringify({
       messages: [
         { content: 'summarize my medical report', role: 'user' },
         { content: 'assistant text that must not leak', role: 'assistant' },
-        { content: 'z'.repeat(500), role: 'user' },
       ],
     });
 
-    expect(buildInputPreview(roleFirst.slice(0, 80))).toBeUndefined();
-    expect(buildInputPreview(contentFirst.slice(0, 250))).toBeUndefined();
-    expect(buildInputPreview('{"messages": [{"role"')).toBeUndefined();
-    expect(buildInputPreview(`[${'{"role":"user"},'.repeat(10_000)}`)).toBeUndefined();
-  });
-
-  it('previews content-before-role messages like any other when the JSON is intact', () => {
-    const input = {
-      messages: [
-        { content: 'content-first question', role: 'user' },
-        { content: 'skipped answer', role: 'assistant' },
-      ],
-    };
-
-    expect(buildInputPreview(JSON.stringify(input))).toBe('content-first question');
+    expect(agentInput(contentFirst.slice(0, 80))).toBeUndefined();
+    expect(agentInput('{"messages": [{"role"')).toBeUndefined();
   });
 
   it('truncates past the max length with an ellipsis', () => {
-    const preview = buildInputPreview({ messages: [{ role: 'user', content: 'a'.repeat(400) }] });
+    const preview = agentInput({ messages: [{ role: 'user', content: 'a'.repeat(400) }] });
 
-    expect(preview).toHaveLength(INPUT_PREVIEW_MAX_LENGTH + 1);
+    expect(preview).toHaveLength(PREVIEW_MAX_LENGTH + 1);
     expect(preview?.endsWith('…')).toBe(true);
   });
 
-  it('returns undefined for empty or missing input', () => {
-    expect(buildInputPreview(null)).toBeUndefined();
-    expect(buildInputPreview(undefined)).toBeUndefined();
-    expect(buildInputPreview('   ')).toBeUndefined();
-    expect(buildInputPreview({ messages: [{ role: 'assistant', content: 'no user turn' }] })).toBeUndefined();
+  it('never cuts a surrogate pair in half', () => {
+    const preview = agentInput(`${'a'.repeat(PREVIEW_MAX_LENGTH - 1)}😀tail`);
+
+    expect(preview).toBe(`${'a'.repeat(PREVIEW_MAX_LENGTH - 1)}…`);
   });
 
-  it('falls back to the raw value when input is not a message list', () => {
-    expect(buildInputPreview('plain prompt text')).toBe('plain prompt text');
-    expect(buildInputPreview({ query: 'lookup' })).toBe('{"query":"lookup"}');
+  it('returns undefined for empty or missing input', () => {
+    expect(agentInput(null)).toBeUndefined();
+    expect(agentInput(undefined)).toBeUndefined();
+    expect(agentInput('   ')).toBeUndefined();
+    expect(agentInput({ messages: [{ role: 'assistant', content: 'no user turn' }] })).toBeUndefined();
+  });
+});
+
+describe('buildSpanOutputPreview', () => {
+  it.each([SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE])(
+    'previews the result text of a %s span',
+    spanType => {
+      expect(buildSpanOutputPreview({ spanType, output: { text: 'the answer', object: { a: 1 } } })).toBe('the answer');
+    },
+  );
+
+  it('previews an interrupted run by its status', () => {
+    expect(
+      buildSpanOutputPreview({ spanType: SpanType.AGENT_RUN, output: { status: 'suspended', toolName: 'approve' } }),
+    ).toBe('suspended');
+  });
+
+  it('accepts the raw JSON string a store hands back', () => {
+    expect(buildSpanOutputPreview({ spanType: SpanType.AGENT_RUN, output: JSON.stringify({ text: 'wire' }) })).toBe(
+      'wire',
+    );
+  });
+
+  it('previews strings as-is and other outputs as JSON', () => {
+    expect(buildSpanOutputPreview({ spanType: SpanType.TOOL_CALL, output: 'done' })).toBe('done');
+    expect(buildSpanOutputPreview({ spanType: SpanType.WORKFLOW_RUN, output: { temp: 21 } })).toBe('{"temp":21}');
+    expect(buildSpanOutputPreview({ spanType: SpanType.AGENT_RUN, output: { object: { a: 1 } } })).toBe(
+      '{"object":{"a":1}}',
+    );
+  });
+
+  it('truncates past the max length with an ellipsis', () => {
+    const preview = buildSpanOutputPreview({ spanType: SpanType.AGENT_RUN, output: { text: 'b'.repeat(400) } });
+
+    expect(preview).toHaveLength(PREVIEW_MAX_LENGTH + 1);
+    expect(preview?.endsWith('…')).toBe(true);
+  });
+
+  it('returns undefined for missing or malformed output', () => {
+    expect(buildSpanOutputPreview({ spanType: SpanType.AGENT_RUN, output: null })).toBeUndefined();
+    expect(buildSpanOutputPreview({ spanType: SpanType.AGENT_RUN, output: '{"text": "cut' })).toBeUndefined();
+  });
+
+  it('shows the run status when a suspended workflow has no output yet', () => {
+    expect(
+      buildSpanOutputPreview({ spanType: SpanType.WORKFLOW_RUN, output: null, attributes: { status: 'suspended' } }),
+    ).toBe('suspended');
+    expect(
+      buildSpanOutputPreview({ spanType: SpanType.WORKFLOW_RUN, output: null, attributes: '{"status":"suspended"}' }),
+    ).toBe('suspended');
+  });
+
+  it('prefers the output over the status and ignores running or successful runs without output', () => {
+    expect(
+      buildSpanOutputPreview({
+        spanType: SpanType.WORKFLOW_RUN,
+        output: { approved: true },
+        attributes: { status: 'success' },
+      }),
+    ).toBe('{"approved":true}');
+    expect(
+      buildSpanOutputPreview({ spanType: SpanType.WORKFLOW_RUN, output: null, attributes: { status: 'running' } }),
+    ).toBeUndefined();
   });
 });

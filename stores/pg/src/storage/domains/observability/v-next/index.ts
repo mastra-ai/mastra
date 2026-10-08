@@ -112,7 +112,7 @@ import type {
   TableRetentionPolicy,
   TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
-  TraceQueryResponse,
+  TraceQueryRowsResponse,
   TrustedThreadQueryPlan,
   TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -482,7 +482,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
-  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  protected override async queryTraceRows(plan: TrustedTraceQueryPlan): Promise<TraceQueryRowsResponse> {
     return this.#run('QUERY_TRACES', () =>
       traceQueryOps.queryTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );

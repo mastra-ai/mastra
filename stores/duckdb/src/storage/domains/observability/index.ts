@@ -16,7 +16,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesLightResponse,
+  ListTraceRootRowsResponse,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -88,7 +88,7 @@ import type {
   TableRetentionPolicy,
   TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
-  TraceQueryResponse,
+  TraceQueryRowsResponse,
   TrustedThreadQueryPlan,
   TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -330,7 +330,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     return spanQueryOps.querySpans(this.db, plan);
   }
 
-  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  protected override async queryTraceRows(plan: TrustedTraceQueryPlan): Promise<TraceQueryRowsResponse> {
     return traceQueryOps.queryTraces(this.db, plan);
   }
   override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
@@ -347,11 +347,11 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
     return traceQueryOps.queryThreads(this.db, plan);
   }
-  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+  protected override async listTraceRootRows(args: ListTracesArgs): Promise<ListTraceRootRowsResponse> {
     if (args.mode === 'delta') {
-      return super.listTracesLight(args);
+      return super.listTraceRootRows(args);
     }
-    return tracingOps.listTracesLight(this.db, args);
+    return tracingOps.listTraceRootRows(this.db, args);
   }
   async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     return tracingOps.listBranches(this.db, args);

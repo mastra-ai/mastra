@@ -11,13 +11,13 @@ import type {
   GetRootSpanArgs,
   GetRootSpanResponse,
   ListTracesArgs,
-  ListTracesLightResponse,
+  ListTraceRootRowsResponse,
   ListTracesResponse,
 } from '@mastra/core/storage';
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
 import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
-import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
+import { CH_SETTINGS, rowToLightTraceRootRow, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
@@ -63,9 +63,8 @@ type TraceRootProjection = {
 };
 
 /**
- * Columns a trace list renders. `input` is selected only so the row mapper can
- * derive a short `inputPreview` at read time (see `rowToLightSpanRecord`); the
- * raw blob itself never leaves the store.
+ * Columns a trace list renders. `input` and `output` are returned raw so the core
+ * can derive short previews from them; the blobs themselves never leave the server.
  */
 const LIGHT_TRACE_ROOT_FIELDS = [
   'traceId',
@@ -84,6 +83,8 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'error',
   'metadataRaw',
   'input',
+  'output',
+  'attributes',
 ];
 
 const FULL_PROJECTION: TraceRootProjection = {
@@ -263,16 +264,15 @@ export async function listTraces(
 }
 
 /**
- * List traces projecting only the columns a trace list renders.
- * Skips the attributes/output blobs and reduces `input` to a short preview in
- * the mapper, so the response payload stays flat as traces grow.
+ * List trace roots projecting only the columns a trace list renders, plus the raw
+ * `input`/`output`/`attributes` payloads the core turns into previews.
  */
-export async function listTracesLight(
+export async function listTraceRootRows(
   client: ClickHouseClient,
   args: ListTracesArgs,
   strategy: ClickHouseDeltaCursorStrategy | null,
-): Promise<ListTracesLightResponse> {
-  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, rows => rows.map(rowToLightSpanRecord));
+): Promise<ListTraceRootRowsResponse> {
+  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, rows => rows.map(rowToLightTraceRootRow));
 }
 
 type TraceDeltaRow = Record<string, any> & {

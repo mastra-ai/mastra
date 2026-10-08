@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import type { SpanType } from '../../../observability/types';
 import { StorageDomain } from '../base';
 import type {
   GetEntityTypesArgs,
@@ -73,11 +74,14 @@ import type {
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
+  TraceQueryRowsResponse,
+  TraceQueryTraceRow,
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
 } from './trace-query';
+import { traceQueryResponseSchema } from './trace-query';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -99,10 +103,17 @@ import type {
   ListBranchesResponse,
   ListTracesArgs,
   ListTracesLightResponse,
+  ListTraceRootRowsResponse,
   ListTracesResponse,
   UpdateSpanArgs,
 } from './tracing';
-import { extractBranchSpans, getBranchArgsSchema, toLightSpanRecord } from './tracing';
+import {
+  buildSpanInputPreview,
+  buildSpanOutputPreview,
+  extractBranchSpans,
+  getBranchArgsSchema,
+  toLightTraceRecord,
+} from './tracing';
 import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './types';
 
 /**
@@ -384,15 +395,22 @@ export class ObservabilityStorage extends StorageDomain {
   /**
    * Retrieves a lightweight list of traces with optional filtering.
    *
-   * Defaults to {@link listTraces} with each row projected down, so every backend
-   * serves the same response shape whether or not it has a dedicated implementation.
-   * Backends that can push the projection into the query should override this --
-   * that is what actually keeps the blob columns off the read path -- but the
-   * fallback stays correct, just not cheaper than `listTraces`.
+   * Reads raw root rows through the {@link listTraceRootRows} port and turns their
+   * `input`/`output` into previews. Backends implement the port, not this method,
+   * so the preview rule lives in one place and the payloads never leave the server.
    */
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
-    const { spans, ...rest } = await this.listTraces(args);
-    return { ...rest, spans: spans.map(toLightSpanRecord) };
+    const { spans, ...rest } = await this.listTraceRootRows(args);
+    return { ...rest, spans: spans.map(toLightTraceRecord) };
+  }
+
+  /**
+   * Storage port behind {@link listTracesLight}: returns root rows with their raw
+   * `input`/`output` payloads. Defaults to {@link listTraces}; backends that can
+   * project the light columns inside the query should override this.
+   */
+  protected async listTraceRootRows(args: ListTracesArgs): Promise<ListTraceRootRowsResponse> {
+    return this.listTraces(args);
   }
 
   /** Executes a validated span-row query; unsupported stores fail explicitly. */
@@ -407,8 +425,18 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Executes a validated advanced trace-query plan.
+   *
+   * Reads raw rows through the {@link queryTraceRows} port and turns their
+   * `input`/`output` into previews.
    */
-  async queryTraces(_plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    const response = await this.queryTraceRows(plan);
+    if (!('traces' in response)) return traceQueryResponseSchema.parse(response);
+    return traceQueryResponseSchema.parse({ ...response, traces: response.traces.map(toTraceQueryTrace) });
+  }
+
+  /** Storage port behind {@link queryTraces}: returns trace rows with raw `input`/`output` payloads. */
+  protected async queryTraceRows(_plan: TrustedTraceQueryPlan): Promise<TraceQueryRowsResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_QUERY_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -908,4 +936,19 @@ export class ObservabilityStorage extends StorageDomain {
       text: 'This storage provider does not support deleting feedback',
     });
   }
+}
+
+function toTraceQueryTrace({ spanType, input, output, attributes, ...trace }: TraceQueryTraceRow) {
+  const source = {
+    spanType: spanType as SpanType,
+    metadata: trace.metadata ?? undefined,
+    attributes,
+    input,
+    output,
+  };
+  return {
+    ...trace,
+    inputPreview: buildSpanInputPreview(source) ?? null,
+    outputPreview: buildSpanOutputPreview(source) ?? null,
+  };
 }

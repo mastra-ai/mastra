@@ -7,7 +7,7 @@
  */
 
 import type {
-  LightSpanRecord,
+  LightTraceRootRow,
   SpanRecord,
   CreateSpanRecord,
   LogRecord,
@@ -19,7 +19,7 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType } from '@mastra/core/storage';
 import { coerceFeedbackReviewStatus } from './review-status';
 
 // ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ export function rowsToSpanRecords(rows: Record<string, any>[]): SpanRecord[] {
   return rows.map(rowToSpanRecord);
 }
 
-export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord {
+export function rowToLightTraceRootRow(row: Record<string, any>): LightTraceRootRow {
   const startedAt = toDate(row.startedAt);
   const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
   const error = parseJson(row.error) ?? undefined;
@@ -224,9 +224,10 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     error,
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
-    // Derived at read time from the raw `input` column; buildInputPreview parses
-    // internally and previews an unparseable document as empty.
-    inputPreview: buildInputPreview(row.input ?? null),
+    // Raw payloads; the core turns them into previews.
+    input: row.input ?? null,
+    output: row.output ?? null,
+    attributes: row.attributes ?? null,
     createdAt: startedAt,
     updatedAt: null,
   };

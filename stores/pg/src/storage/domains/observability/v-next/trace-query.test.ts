@@ -607,16 +607,35 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
+      spanType: 'agent_run',
+      input: { messages: [{ role: 'user', content: 'Help with my order' }] },
+      output: { text: 'Your order shipped' },
+    });
+    expect(response.traces[0]).not.toHaveProperty('inputPreview');
+  });
+
+  it('returns typed previews and no raw payloads through the public storage wrapper', async () => {
+    const any = vi.fn().mockResolvedValue([traceRow('trace-a', '2026-01-01T12:00:00.000Z')]);
+    const tx = vi.fn(async callback => callback({ query: vi.fn(), any }));
+    const storage = new ObservabilityStoragePostgresVNext({ client: { tx } as unknown as DbClient });
+
+    const response = await storage.queryTraces(plan());
+    if (!('traces' in response)) throw new Error('Expected traces');
+
+    expect(response.traces[0]).toMatchObject({
       inputPreview: 'Help with my order',
+      outputPreview: 'Your order shipped',
     });
     expect(response.traces[0]).not.toHaveProperty('input');
+    expect(response.traces[0]).not.toHaveProperty('output');
+    expect(response.traces[0]).not.toHaveProperty('spanType');
   });
 
   it('returns null for absent optional root span details', async () => {
@@ -625,6 +644,7 @@ describe('Postgres advanced trace query', () => {
       entityId: null,
       metadata: null,
       input: null,
+      output: null,
     };
     const any = vi.fn().mockResolvedValue([row]);
     const query = vi.fn();
@@ -636,7 +656,8 @@ describe('Postgres advanced trace query', () => {
       entityId: null,
       parentSpanId: null,
       metadata: null,
-      inputPreview: null,
+      input: null,
+      output: null,
     });
     expect(response.page.next).toBeNull();
   });
@@ -714,7 +735,9 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: { customer: { id: 'customer-1' }, count: 2 },
+    spanType: 'agent_run',
     input: { messages: [{ role: 'user', content: 'Help with my order' }] },
+    output: { text: 'Your order shipped' },
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),

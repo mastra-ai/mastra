@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
+import { describeSpanInput, describeSpanOutput } from '../../../observability/span-record';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
@@ -457,16 +458,24 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum length of the rendered `inputPreview` text. */
-export const INPUT_PREVIEW_MAX_LENGTH = 100;
+/** Maximum length of the rendered `inputPreview` / `outputPreview` text. */
+export const PREVIEW_MAX_LENGTH = 100;
 
 const inputPreviewField = z.string().describe('Short text preview of the span input');
+const outputPreviewField = z.string().describe('Short text preview of the span output');
 
 type PreviewMessage = { role?: string; content?: unknown };
 
+/** The span fields a preview is derived from. Payloads may be parsed values or the JSON strings stores read back. */
+export type SpanPreviewSource = Pick<SpanRecord, 'spanType'> &
+  Partial<Pick<SpanRecord, 'metadata' | 'input' | 'output'>> & { attributes?: unknown };
+
 function truncatePreview(text: string, maxLength: number): string | undefined {
   if (!text) return undefined;
-  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+  if (text.length <= maxLength) return text;
+  const lastCode = text.charCodeAt(maxLength - 1);
+  const end = lastCode >= 0xd800 && lastCode <= 0xdbff ? maxLength - 1 : maxLength;
+  return `${text.slice(0, end)}…`;
 }
 
 function previewTextFromContent(content: unknown): string {
@@ -485,91 +494,151 @@ function previewTextFromContent(content: unknown): string {
     .join(' ');
 }
 
-/**
- * Builds the short text shown in a trace list's input column, mirroring what the
- * full-payload list previously derived client-side. Stores call this at read time,
- * from their lightweight list row mappers, so the raw `input` blob never reaches
- * the caller.
- *
- * Accepts a parsed `input` value or its JSON string. An unparseable JSON document
- * previews as empty, mirroring how store read paths treat an unparseable column.
- */
-export function buildInputPreview(input: unknown, maxLength = INPUT_PREVIEW_MAX_LENGTH): string | undefined {
-  if (input == null) return undefined;
+const MALFORMED = Symbol('malformed');
 
-  let value = input;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        value = JSON.parse(trimmed);
-      } catch {
-        // Malformed JSON previews as empty. Writers keep stored JSON valid (truncation
-        // replaces values inside the structure, never slices the document), and message
-        // property order is caller-controlled — a best-effort scan of broken JSON can
-        // surface assistant text, so empty is the safe answer, matching `parseJson`.
-        return undefined;
-      }
-    } else if (trimmed.startsWith('"')) {
-      // A JSON-encoded scalar string ('"hello"') — unwrap it so the preview drops the
-      // quotes; a truncated one falls through and previews as plain text.
-      try {
-        value = JSON.parse(trimmed);
-      } catch {
-        // Not valid JSON — treat as plain text below.
-      }
+/**
+ * Parses a payload as stores hand it back. JSON documents are parsed; an unparseable
+ * one is reported as malformed so it previews as empty (a best-effort scan of broken
+ * JSON could surface text from the wrong message). A JSON-encoded scalar string is
+ * unwrapped; anything else is plain text.
+ */
+function parsePreviewPayload(payload: unknown): unknown {
+  if (typeof payload !== 'string') return payload;
+  const trimmed = payload.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return MALFORMED;
     }
   }
-
-  const messages = Array.isArray(value)
-    ? value
-    : value && typeof value === 'object' && Array.isArray((value as { messages?: unknown }).messages)
-      ? (value as { messages: unknown[] }).messages
-      : null;
-
-  if (messages) {
-    const text = (messages as PreviewMessage[])
-      .filter(m => m?.role === 'user')
-      .map(m => previewTextFromContent(m.content))
-      .filter(Boolean)
-      .join(' | ');
-    return truncatePreview(text, maxLength);
+  if (trimmed.startsWith('"')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return payload;
+    }
   }
+  return payload;
+}
 
-  if (typeof value === 'string') return truncatePreview(value, maxLength);
-  return truncatePreview(JSON.stringify(value) ?? '', maxLength);
+const jsonPreview = (value: unknown) => JSON.stringify(value) ?? '';
+
+/**
+ * Builds the short text a trace list shows for a span's input, typed by span type:
+ * the user turns of a message list, the prompt string, or JSON for anything else.
+ */
+export function buildSpanInputPreview(span: SpanPreviewSource, maxLength = PREVIEW_MAX_LENGTH): string | undefined {
+  const input = parsePreviewPayload(span.input);
+  if (input === MALFORMED || input == null) return undefined;
+
+  const description = describeSpanInput({
+    ...span,
+    attributes: parsedAttributes(span.attributes),
+    input,
+  } as SpanRecord);
+  if (!description) return undefined;
+
+  switch (description.type) {
+    case 'text':
+      return truncatePreview(description.value, maxLength);
+    case 'messages':
+      return truncatePreview(
+        (description.value as PreviewMessage[])
+          .filter(m => m?.role === 'user')
+          .map(m => previewTextFromContent(m.content))
+          .filter(Boolean)
+          .join(' | '),
+        maxLength,
+      );
+    default:
+      return truncatePreview(jsonPreview(description.value), maxLength);
+  }
 }
 
 /**
- * Projects a full span record down to the lightweight row a trace list renders,
- * deriving `inputPreview` from `input`.
- *
- * This is the read-time fallback. Backends that can project inside the query should
- * do so instead — that is what keeps the blob columns off the read path — but every
- * backend can serve a correct lightweight list through this.
+ * Builds the short text a trace list shows for a span's output, typed by span type:
+ * the result text of agent and model spans, the status of an interrupted run, or
+ * JSON for anything else.
  */
-export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
+function parsedAttributes(attributes: unknown): Record<string, unknown> | undefined {
+  const parsed = parsePreviewPayload(attributes);
+  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+}
+
+/** A run that ended without output (e.g. a suspended workflow) records why in `attributes.status`. */
+function pendingRunStatus(attributes: unknown): string | undefined {
+  const status = parsedAttributes(attributes)?.status;
+  return typeof status === 'string' && status !== 'running' && status !== 'success' ? status : undefined;
+}
+
+export function buildSpanOutputPreview(span: SpanPreviewSource, maxLength = PREVIEW_MAX_LENGTH): string | undefined {
+  const output = parsePreviewPayload(span.output);
+  if (output == null) return truncatePreview(pendingRunStatus(span.attributes) ?? '', maxLength);
+  if (output === MALFORMED) return undefined;
+
+  const description = describeSpanOutput({
+    ...span,
+    attributes: parsedAttributes(span.attributes),
+    output,
+  } as SpanRecord);
+  if (!description) return undefined;
+
+  switch (description.type) {
+    case 'text':
+      return truncatePreview(description.value, maxLength);
+    case 'interrupted':
+      return truncatePreview(description.value.status, maxLength);
+    case 'agent-run-result':
+    case 'model-generation-result':
+    case 'model-step-result': {
+      const text = (description.value as { text?: unknown }).text;
+      return truncatePreview(typeof text === 'string' && text ? text : jsonPreview(description.value), maxLength);
+    }
+    default:
+      return truncatePreview(jsonPreview(description.value), maxLength);
+  }
+}
+
+/**
+ * Raw trace-root row returned by the `listTraceRootRows` storage port: the light
+ * fields plus the raw `input`/`output` payloads (parsed values or JSON strings).
+ * The core turns these into previews; the payloads never leave the server.
+ */
+export type LightTraceRootRow = Omit<LightSpanRecord, 'inputPreview' | 'outputPreview' | 'status'> & {
+  status?: LightSpanRecord['status'];
+  input?: unknown;
+  output?: unknown;
+  attributes?: unknown;
+};
+
+/** Response of the `listTraceRootRows` storage port. */
+export type ListTraceRootRowsResponse = Omit<ListTracesLightResponse, 'spans'> & { spans: LightTraceRootRow[] };
+
+/** Maps a raw trace-root row to the lightweight record a trace list renders. */
+export function toLightTraceRecord(row: LightTraceRootRow): LightSpanRecord {
   return {
-    traceId: span.traceId,
-    spanId: span.spanId,
-    parentSpanId: span.parentSpanId,
-    name: span.name,
-    spanType: span.spanType,
-    isEvent: span.isEvent,
-    startedAt: span.startedAt,
-    endedAt: span.endedAt,
-    error: span.error,
-    status: computeTraceStatus(span),
-    entityType: span.entityType,
-    entityId: span.entityId,
-    entityName: span.entityName,
-    threadId: span.threadId,
-    resourceId: span.resourceId,
-    metadata: span.metadata,
-    inputPreview: buildInputPreview(span.input),
-    createdAt: span.createdAt,
-    updatedAt: span.updatedAt,
+    traceId: row.traceId,
+    spanId: row.spanId,
+    parentSpanId: row.parentSpanId,
+    name: row.name,
+    spanType: row.spanType,
+    isEvent: row.isEvent,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    error: row.error,
+    status: row.status ?? computeTraceStatus(row),
+    entityType: row.entityType,
+    entityId: row.entityId,
+    entityName: row.entityName,
+    threadId: row.threadId,
+    resourceId: row.resourceId,
+    metadata: row.metadata,
+    inputPreview: buildSpanInputPreview(row) ?? null,
+    outputPreview: buildSpanOutputPreview(row) ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -612,9 +681,12 @@ export const lightSpanRecordSchema = z
     metadata: metadataField.nullable().optional(),
 
     // Short text preview of `input`, so trace lists can render their preview column
-    // without transferring the whole prompt. See `buildInputPreview`. Nullable and
+    // without transferring the whole prompt. See `buildSpanInputPreview`. Nullable and
     // optional for rows that predate the field.
     inputPreview: inputPreviewField.nullable().optional(),
+
+    // Short text preview of `output`. See `buildSpanOutputPreview`.
+    outputPreview: outputPreviewField.nullable().optional(),
 
     // Database timestamps
     ...dbTimestamps,

@@ -560,16 +560,19 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
-      inputPreview: 'Help with my order',
+      spanType: 'agent_run',
+      input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+      output: JSON.stringify({ text: 'Your order shipped' }),
     });
-    expect(response.traces[0]).not.toHaveProperty('input');
+    expect(response.traces[0]).not.toHaveProperty('inputPreview');
+    expect(response.traces[0]).not.toHaveProperty('outputPreview');
   });
 
   it('returns null for absent optional root span details', async () => {
@@ -578,6 +581,7 @@ describe('DuckDB advanced trace query', () => {
       entityId: null,
       metadata: null,
       input: null,
+      output: null,
     };
     const query = vi.fn().mockResolvedValue([row]);
     const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
@@ -587,7 +591,8 @@ describe('DuckDB advanced trace query', () => {
       entityId: null,
       parentSpanId: null,
       metadata: null,
-      inputPreview: null,
+      input: null,
+      output: null,
     });
     expect(response.page.next).toBeNull();
   });
@@ -648,7 +653,9 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    spanType: 'agent_run',
     input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    output: JSON.stringify({ text: 'Your order shipped' }),
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),
