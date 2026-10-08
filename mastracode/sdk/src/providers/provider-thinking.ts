@@ -1,32 +1,12 @@
-import { getModelReasoningOptions, ModelRouterLanguageModel } from '@mastra/core/llm';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { JSONValue } from 'ai';
-import { runThinkingLevel } from '../thinking.js';
-import type { ThinkingLevelSetting } from '../thinking.js';
-import { thinkingRequestFor } from './thinking-request.js';
-import type { ThinkingProviderOptions } from './thinking-request.js';
 
 type ProviderOptions = Record<string, Record<string, JSONValue | undefined>>;
 
 export interface ProviderThinkingOptions {
   optionsKey: string;
-  options: ThinkingProviderOptions;
+  options: Record<string, JSONValue>;
   controlKeys: ReadonlySet<string>;
-}
-
-export function providerThinkingOptions(
-  routedModelId: string,
-  level: ThinkingLevelSetting | undefined,
-): ProviderThinkingOptions | undefined {
-  if (!level) return undefined;
-  const reasoningOptions = getModelReasoningOptions(routedModelId);
-  const request = thinkingRequestFor(routedModelId, reasoningOptions);
-  if (!request) return undefined;
-  const options = request.optionsByLevel.get(runThinkingLevel(routedModelId, level, reasoningOptions));
-  if (!options) return undefined;
-  const controlKeys = new Set(
-    [...request.optionsByLevel.values()].flatMap(levelOptions => Object.keys(levelOptions ?? {})),
-  );
-  return { optionsKey: request.optionsKey, options, controlKeys };
 }
 
 function withThinkingOptions<CallOptions extends { providerOptions?: ProviderOptions }>(

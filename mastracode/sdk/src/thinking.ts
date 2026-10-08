@@ -6,8 +6,6 @@ import {
 } from './providers/anthropic-thinking.js';
 import { runGeminiThinkingLevel } from './providers/google-thinking.js';
 import { normalizeAnthropicModelId, stripMastraGatewayPrefix } from './providers/model-ids.js';
-import { thinkingRequestFor, TOGGLE_ON_LEVEL } from './providers/thinking-request.js';
-import type { ThinkingRequest } from './providers/thinking-request.js';
 
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -63,23 +61,20 @@ function offeredEffortLevels(reasoningOptions: readonly ModelReasoningOption[] |
   return ACTIVE_THINKING_LEVELS.filter(level => effortValues.includes(level));
 }
 
+const TOGGLE_ON_LEVEL: ActiveThinkingLevel = 'high';
+
 function onlyTogglesThinking(reasoningOptions: readonly ModelReasoningOption[] | undefined): boolean {
   return !!reasoningOptions?.length && reasoningOptions.every(option => option.type === 'toggle');
 }
 
 function closestOfferedEffort(
-  level: ThinkingLevelSetting,
-  offered: readonly ActiveThinkingLevel[],
+  level: ActiveThinkingLevel,
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ActiveThinkingLevel | undefined {
-  const requestedRank = THINKING_LEVEL_VALUES.indexOf(level);
-  const atOrBelow = offered.filter(candidate => THINKING_LEVEL_VALUES.indexOf(candidate) <= requestedRank);
+  const offered = offeredEffortLevels(reasoningOptions);
+  const requestedRank = ACTIVE_THINKING_LEVELS.indexOf(level);
+  const atOrBelow = offered.filter(candidate => ACTIVE_THINKING_LEVELS.indexOf(candidate) <= requestedRank);
   return atOrBelow.at(-1) ?? offered[0];
-}
-
-function runRequestThinkingLevel(level: ThinkingLevelSetting, request: ThinkingRequest): ThinkingLevelSetting {
-  if (request.optionsByLevel.has(level)) return level;
-  const requestEfforts = ACTIVE_THINKING_LEVELS.filter(effort => request.optionsByLevel.has(effort));
-  return closestOfferedEffort(level, requestEfforts) ?? TOGGLE_ON_LEVEL;
 }
 
 function lowestLevelWithSameBudget(level: ActiveThinkingLevel): ActiveThinkingLevel {
@@ -95,7 +90,7 @@ function runAnthropicThinkingLevel(
   const capability = getAnthropicThinkingCapability(modelId);
   if (capability === 'none') return 'off';
   if (capability === 'budget') return lowestLevelWithSameBudget(level);
-  const offeredEffort = closestOfferedEffort(level, offeredEffortLevels(reasoningOptions));
+  const offeredEffort = closestOfferedEffort(level, reasoningOptions);
   if (offeredEffort) return offeredEffort;
   return level === 'xhigh' && !supportsAnthropicXhighEffort(modelId) ? 'high' : level;
 }
@@ -105,7 +100,7 @@ function runOpenAIThinkingLevel(
   level: ActiveThinkingLevel,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ActiveThinkingLevel {
-  const offeredEffort = closestOfferedEffort(level, offeredEffortLevels(reasoningOptions));
+  const offeredEffort = closestOfferedEffort(level, reasoningOptions);
   if (offeredEffort) return offeredEffort;
   return level === 'max' && !supportsMaxReasoningEffort(modelId) ? 'xhigh' : level;
 }
@@ -115,8 +110,6 @@ export function runThinkingLevel(
   level: ThinkingLevelSetting,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ThinkingLevelSetting {
-  const request = thinkingRequestFor(modelId, reasoningOptions);
-  if (request) return runRequestThinkingLevel(level, request);
   if (level === 'off') return 'off';
   const { provider, bareModelId } = splitProvider(modelId);
   if (provider === 'google') return runGeminiThinkingLevel(bareModelId, level);
@@ -127,7 +120,7 @@ export function runThinkingLevel(
   if (listedWithoutReasoningControls) return 'off';
   if (onlyTogglesThinking(reasoningOptions)) return TOGGLE_ON_LEVEL;
   if (provider === 'openai') return runOpenAIThinkingLevel(bareModelId, level, reasoningOptions);
-  return closestOfferedEffort(level, offeredEffortLevels(reasoningOptions)) ?? level;
+  return closestOfferedEffort(level, reasoningOptions) ?? level;
 }
 
 export function getAvailableThinkingLevelsForModel(

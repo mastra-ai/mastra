@@ -83,24 +83,11 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('xhigh', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('high');
   });
 
-  it('turns DeepSeek thinking off, which DeepSeek leaves on by default', async () => {
-    const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'));
-    expect(body.thinking).toEqual({ type: 'disabled' });
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
-
-  it('leaves a DeepSeek request untouched when no thinking level is set', async () => {
-    const body = await requestBody(resolve(undefined, 'deepseek', 'deepseek-v4-pro'));
-    expect(body).not.toHaveProperty('thinking');
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
-
-  it("keeps the caller's own DeepSeek thinking setting whole instead of mixing it with the level", async () => {
-    const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'), {
+  it("keeps the caller's own DeepSeek effort over the level", async () => {
+    const body = await requestBody(resolve('low', 'deepseek', 'deepseek-v4-pro'), {
       deepseek: { reasoningEffort: 'max' },
     });
     expect(body.reasoning_effort).toBe('max');
-    expect(body).not.toHaveProperty('thinking');
   });
 
   it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {
@@ -108,6 +95,9 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(await requestBody(resolve(level, 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
     const google = await requestBody(resolve(level, 'google', 'gemini-3-flash-preview'));
     expect(google.generationConfig?.thinkingConfig).toBeUndefined();
+    const deepseek = await requestBody(resolve(level, 'deepseek', 'deepseek-v4-pro'));
+    expect(deepseek).not.toHaveProperty('thinking');
+    expect(deepseek).not.toHaveProperty('reasoning_effort');
   });
 
   it('leaves Gemini models without thinking support untouched', async () => {
