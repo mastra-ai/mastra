@@ -1,6 +1,8 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
+import { toStandardSchema } from '@mastra/core/schema';
+import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -275,9 +277,48 @@ describe('Extractor', () => {
     expect(buildThreadMetadataFromExtractedValues([resolved!], result.values)).toEqual({});
   });
 
-  it('replaces JSON working memory from the working memory extractor', async () => {
+  it('uses the configured working-memory schema for structured extraction (no propertyNames)', async () => {
+    const workingMemorySchema = z.object({
+      preferredName: z.string().optional(),
+      reportCurrency: z.string().optional(),
+    });
     const memory = {
-      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: workingMemorySchema } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({
+        format: 'json',
+        content: JSON.stringify({ type: 'object', properties: { preferredName: { type: 'string' } } }),
+      })),
+      getWorkingMemory: vi.fn(async () => null),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(resolved?.mode).toBe('structured');
+    expect(resolved?.schema.parse({ preferredName: 'Priya', reportCurrency: 'USD' })).toEqual({
+      preferredName: 'Priya',
+      reportCurrency: 'USD',
+    });
+    expect(resolved?.schema.parse(null)).toBeNull();
+
+    // Combined extraction schema is what OpenAI receives; z.record emitted propertyNames and 400'd.
+    const combined = z.object({ 'working-memory': resolved!.schema.optional() });
+    const jsonSchema = standardSchemaToJSONSchema(toStandardSchema(combined), { io: 'input' });
+    expect(JSON.stringify(jsonSchema)).not.toContain('propertyNames');
+  });
+
+  it('replaces JSON working memory from the working memory extractor', async () => {
+    const workingMemorySchema = z.object({
+      name: z.string().optional(),
+      likes: z.array(z.string()).optional(),
+      location: z.string().optional(),
+    });
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: workingMemorySchema } })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
       getWorkingMemory: vi.fn(async () => '{"name":"Tyler","likes":["dogs"]}'),
       updateWorkingMemory: vi.fn(async () => undefined),
@@ -316,8 +357,9 @@ describe('Extractor', () => {
   });
 
   it('skips JSON working memory updates when the extractor returns null', async () => {
+    const workingMemorySchema = z.object({ name: z.string().optional() });
     const memory = {
-      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: workingMemorySchema } })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
       getWorkingMemory: vi.fn(async () => '{"name":"Tyler"}'),
       updateWorkingMemory: vi.fn(async () => undefined),
@@ -476,8 +518,11 @@ describe('Extractor', () => {
   });
 
   it('retries schema working-memory extraction when native output is an empty object', async () => {
+    const workingMemorySchema = z.object({
+      preferences: z.object({ responseStyle: z.string().optional() }).optional(),
+    });
     const memory = {
-      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: workingMemorySchema } })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
       getWorkingMemory: vi.fn(async () => '{"preferences":{}}'),
     } as any;
@@ -835,7 +880,7 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(invalid.memory.updateWorkingMemory).not.toHaveBeenCalled();
   });
 
-  it('rejects an invalid document from structured extraction without dropping sibling extractors', async () => {
+  it('does not persist an invalid working-memory document from a shared structured extraction', async () => {
     const memory = createSchemaMemory(colorSchema);
     const extractors = await resolveExtractors(
       [
@@ -859,9 +904,12 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
       memory,
     });
 
-    expect(doStream).toHaveBeenCalledTimes(1);
+    // Configured WM schema is part of the shared structured-output object, so an invalid
+    // working-memory value fails native extraction and the json-prompt-injection fallback.
+    expect(doStream).toHaveBeenCalledTimes(2);
     expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
-    expect(result.values).toEqual({ topic: 'paint' });
-    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('preferredColor') }]);
+    expect(extraction.values).toEqual({});
+    expect(extraction.failures.map(f => f.slug).sort()).toEqual(['topic', 'working-memory']);
+    expect(result.values).toBeUndefined();
   });
 });

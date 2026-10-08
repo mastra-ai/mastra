@@ -1,6 +1,7 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema } from '@mastra/core/schema';
+import { convertSchemaToZod, isZodType } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
@@ -9,11 +10,16 @@ import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
 
 /**
- * The structured-output schema for this extractor stays generic because every structured extractor shares one
- * response object: a strict working-memory schema there would make one invalid document fail every sibling
- * extractor. The configured schema is enforced here instead, with its own validator, before anything is stored.
+ * Derive a Zod schema for native structured extraction from the configured working-memory schema.
+ * Using `z.record` here emits `propertyNames`, which OpenAI strict mode rejects (#25343).
+ * The configured schema is still re-validated in `onExtracted` before anything is stored.
  * Like the working memory tool, nulls in optional fields are treated as "not provided" rather than as invalid.
  */
+function toNullableWorkingMemoryZodSchema(schema: PublicSchema): z.ZodType<Record<string, unknown> | null> {
+  const zodSchema = isZodType(schema) ? schema : convertSchemaToZod(schema as never);
+  return z.union([zodSchema as z.ZodType<Record<string, unknown>>, z.null()]);
+}
+
 async function validateAgainstConfiguredSchema(schema: PublicSchema, value: unknown): Promise<unknown> {
   const standardSchema = toStandardSchema(schema);
   const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' }) as Record<string, unknown>;
@@ -35,6 +41,7 @@ async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promis
   template?: string;
   current?: string | null;
   usesSchema: boolean;
+  schema?: PublicSchema;
 }> {
   const memory = context.memory!;
   const memoryConfig = parseMemoryRequestContext(context.requestContext)?.memoryConfig;
@@ -59,6 +66,7 @@ async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promis
     template: typeof template?.content === 'string' ? template.content : JSON.stringify(template?.content),
     current,
     usesSchema: Boolean(workingMemory.schema),
+    schema: workingMemory.schema,
   };
 }
 
@@ -95,7 +103,10 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
       schema: async context => {
         const details = await getWorkingMemoryDetails(context);
-        return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
+        if (!details.usesSchema || !details.schema) {
+          return undefined;
+        }
+        return toNullableWorkingMemoryZodSchema(details.schema);
       },
       onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
         const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
