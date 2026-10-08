@@ -1788,7 +1788,7 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key IN (?,?)`,
-        args: [input.importerId, input.binding, input.leaseKey, input.payloadKey ?? input.leaseKey],
+        args: [input.importerId, binding, input.leaseKey, input.payloadKey ?? input.leaseKey],
       });
       return {
         ...parseImportRun(current.rows[0]),
