@@ -246,16 +246,25 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
     }
     const thread = await memory.getThreadById({ threadId: context.threadId });
     if (thread?.resourceId !== context.resourceId) return 'rejected';
-    const existing = await notifications.listNotifications({
-      threadId: context.threadId,
-      source: CONNECT_SIGNAL_SOURCE,
-    });
-    if (existing.some(record => record.dedupeKey === event.key && record.deliveredSignalId)) return 'duplicate';
+    const delivered = async () =>
+      (await notifications.listNotifications({ threadId: context.threadId, source: CONNECT_SIGNAL_SOURCE })).some(
+        record => record.dedupeKey === event.key && record.deliveredSignalId,
+      );
+    if (await delivered()) return 'duplicate';
 
     const agent = this.agent;
     if (!agent) throw new Error('The connect signal provider is not connected to an agent.');
     if (agent.getActiveThreadRunId(target)) return 'failed';
-    await Promise.race([this.#host.refresh().catch(() => undefined), sleep(REFRESH_WAIT_MS)]);
+    const refreshed = await Promise.race([
+      this.#host.refresh().then(
+        () => true,
+        () => false,
+      ),
+      sleep(REFRESH_WAIT_MS).then(() => false),
+    ]);
+    if (!refreshed) return 'failed';
+    if (await delivered()) return 'duplicate';
+    if (agent.getActiveThreadRunId(target)) return 'failed';
 
     const outcome = event.type === 'connection.active' ? 'connected' : 'failed';
     const name = displayNameOf(this.#host, context.integration);
