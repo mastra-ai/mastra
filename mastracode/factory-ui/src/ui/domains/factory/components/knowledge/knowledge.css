@@ -14,7 +14,6 @@
   transition: border-color var(--duration-fast) var(--ease-out-custom);
 }
 
-.knowledge-circle[data-selected='true'],
 .knowledge-canvas .react-flow__node:focus-visible .knowledge-circle {
   border-color: var(--knowledge-color);
   outline: 2px solid var(--knowledge-color);
@@ -86,20 +85,11 @@
 
 /* Focus changes presentation, never node positions or mount identity. */
 .knowledge-canvas .react-flow__node,
-.knowledge-canvas .react-flow__edge {
+.knowledge-canvas .react-flow__edge,
+.knowledge-canvas [data-knowledge-edge-id] {
   transition:
     opacity var(--duration-slow) var(--ease-out-custom),
     visibility 0s;
-}
-
-.knowledge-canvas .knowledge-excluded {
-  opacity: 0;
-  /* React Flow sets inline visibility after measuring nodes. */
-  visibility: hidden !important;
-  pointer-events: none !important;
-  transition:
-    opacity var(--duration-slow) var(--ease-out-custom),
-    visibility 0s var(--duration-slow);
 }
 
 @media (prefers-reduced-motion: no-preference) {

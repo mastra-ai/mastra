@@ -223,6 +223,18 @@ describe('KnowledgePage', () => {
     expect(screen.getAllByTestId('knowledge-node')).toEqual(originalNodes);
   });
 
+  it('opens and clears node details from the canvas keyboard without native selection', async () => {
+    stubKnowledgeRoute();
+    renderRoute();
+    const node = (await screen.findAllByTestId('knowledge-node'))[0]!.closest('.react-flow__node');
+    expect(node).not.toBeNull();
+    fireEvent.keyDown(node!, { key: 'Enter' });
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByRole('heading', { name: 'Payments Service' })).toBeVisible();
+    fireEvent.keyDown(node!, { key: 'Escape' });
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+  });
+
   it('dismisses search results with Escape and reports an empty search', async () => {
     stubKnowledgeRoute();
     const user = userEvent.setup();

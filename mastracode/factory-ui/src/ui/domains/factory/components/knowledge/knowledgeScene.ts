@@ -2,7 +2,7 @@ import type { KnowledgeGraphPayload } from '../../services/knowledge';
 import type { Arrivals } from './graphDiff';
 import { deriveRecordElements, egoGraph, filterGraph, recordPairEdges, toFlowGraph, toRecordFlow } from './graphModel';
 import type { KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
-import { isKnowledgeNode, isRecordNode } from './knowledgeStyles';
+import { isRecordNode } from './knowledgeStyles';
 import type { KnowledgeFlowNode } from './knowledgeStyles';
 import { runLayout } from './layout';
 
@@ -93,50 +93,16 @@ export function getVisibleKnowledgeIds(
   return new Set([...visible.nodes.map(node => node.id), ...elements.recordNodes.map(node => node.id)]);
 }
 
-function sceneClassName(visible: boolean, arrived: boolean): string | undefined {
-  if (!visible) return 'knowledge-excluded';
-  if (arrived) return 'knowledge-arrive';
-  return undefined;
-}
-
-export function presentKnowledgeNodes(
-  nodes: KnowledgeFlowNode[],
-  visibleIds: ReadonlySet<string>,
-  selection: { nodeId?: string; recordId?: string },
-  arrivals?: Arrivals,
-): KnowledgeFlowNode[] {
-  return nodes.map(node => {
-    const visible = visibleIds.has(node.id);
-    const focused = isKnowledgeNode(node) ? node.id === selection.nodeId : node.data.record.id === selection.recordId;
-    const className = sceneClassName(visible, arrivals?.nodes.has(node.id) ?? false);
-    if (
-      node.className === className &&
-      Boolean(node.data.focused) === focused &&
-      node.focusable === visible &&
-      node.selected === focused
-    )
-      return node;
-    const presentation = { className, focusable: visible, selectable: visible, selected: focused };
-    if (Boolean(node.data.focused) === focused) return { ...node, ...presentation };
-    if (isKnowledgeNode(node)) return { ...node, ...presentation, data: { ...node.data, focused } };
-    return { ...node, ...presentation, data: { ...node.data, focused } };
-  });
-}
-
-export function presentKnowledgeEdges(
-  edges: KnowledgeFlowEdge[],
-  visibleIds: ReadonlySet<string>,
-  recordId?: string,
-  arrivals?: Arrivals,
-): KnowledgeFlowEdge[] {
-  return edges.map(edge => {
-    const visible = visibleIds.has(edge.source) && visibleIds.has(edge.target);
-    const focused = Boolean(recordId && edge.data?.recordId === recordId);
-    const className = sceneClassName(visible, arrivals?.edges.has(edge.id) ?? false);
-    if (edge.className === className && Boolean(edge.data?.focused) === focused && edge.focusable === visible)
-      return edge;
-    const presentation = { className, focusable: visible, selectable: visible };
-    if (Boolean(edge.data?.focused) === focused) return { ...edge, ...presentation };
-    return { ...edge, ...presentation, data: edge.data ? { ...edge.data, focused } : undefined };
-  });
+/** Arrival styling changes only when the domain payload changes, never on selection. */
+export function getKnowledgeArrivalScene(scene: KnowledgeScene, arrivals?: Arrivals): KnowledgeScene {
+  return {
+    nodes: scene.nodes.map(node => {
+      const className = arrivals?.nodes.has(node.id) ? 'knowledge-arrive' : undefined;
+      return node.className === className ? node : { ...node, className };
+    }),
+    edges: scene.edges.map(edge => {
+      const className = arrivals?.edges.has(edge.id) ? 'knowledge-arrive' : undefined;
+      return edge.className === className ? edge : { ...edge, className };
+    }),
+  };
 }

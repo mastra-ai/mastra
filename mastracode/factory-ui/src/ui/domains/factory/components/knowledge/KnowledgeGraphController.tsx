@@ -6,26 +6,19 @@ import type { Arrivals } from './graphDiff';
 import type { KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
 import type { KnowledgeFlowNode } from './knowledgeStyles';
 import { getKnowledgeFitOptions } from './knowledgeViewport';
-import {
-  createKnowledgeScene,
-  getVisibleKnowledgeIds,
-  presentKnowledgeEdges,
-  presentKnowledgeNodes,
-} from './knowledgeScene';
+import { createKnowledgeScene, getVisibleKnowledgeIds, getKnowledgeArrivalScene } from './knowledgeScene';
 
 export function KnowledgeGraphController({
   payload,
   arrivals,
   filters,
   focusedId,
-  focusedRecordId,
   canvasRef,
 }: {
   payload: KnowledgeGraphPayload;
   arrivals?: Arrivals;
   filters: KnowledgeGraphFilters;
   focusedId?: string;
-  focusedRecordId?: string;
   canvasRef: RefObject<HTMLDivElement | null>;
 }) {
   const flow = useReactFlow<KnowledgeFlowNode, KnowledgeFlowEdge>();
@@ -40,12 +33,10 @@ export function KnowledgeGraphController({
         ? { nodes: currentNodes, edges: flow.getEdges() }
         : createKnowledgeScene(payload, currentNodes);
     previousPayload.current = payload;
-    const visibleIds = getVisibleKnowledgeIds(payload, filters, focusedId);
-    flow.setNodes(
-      presentKnowledgeNodes(scene.nodes, visibleIds, { nodeId: focusedId, recordId: focusedRecordId }, arrivals),
-    );
-    flow.setEdges(presentKnowledgeEdges(scene.edges, visibleIds, focusedRecordId, arrivals));
-  }, [payload, arrivals, filters, focusedId, focusedRecordId, flow]);
+    const arrived = getKnowledgeArrivalScene(scene, arrivals);
+    flow.setNodes(arrived.nodes);
+    flow.setEdges(arrived.edges);
+  }, [payload, arrivals, flow]);
 
   const fitScene = useEffectEvent(() => {
     const canvas = canvasRef.current;

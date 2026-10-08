@@ -12,8 +12,8 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   // the node centers, rather than at fixed handles.
   const pinned = data?.pinned ?? false;
   const hasPinBadge = pinned && !source.startsWith('record:') && !target.startsWith('record:');
-  const sourceNode = useKnowledgeNodeGeometry(source, hasPinBadge);
-  const targetNode = useKnowledgeNodeGeometry(target, hasPinBadge);
+  const sourceNode = useKnowledgeNodeGeometry(source);
+  const targetNode = useKnowledgeNodeGeometry(target);
   if (!sourceNode || !targetNode) return null;
   const sourceSize = sourceNode.size;
   const targetSize = targetNode.size;
@@ -38,18 +38,21 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   const controlY = (startY + endY) / 2 + ux * bow;
   const path = `M ${startX},${startY} Q ${controlX},${controlY} ${endX},${endY}`;
   const edgeStyle = getKnowledgeEdgeStyle({ source, target, data });
-  const excluded = sourceNode.excluded || targetNode.excluded;
   return (
     <>
-      <BaseEdge id={id} path={path} style={edgeStyle} />
+      <BaseEdge
+        id={id}
+        path={path}
+        style={edgeStyle}
+        data-knowledge-record-id={data?.recordId}
+        data-knowledge-pinned={pinned}
+      />
       {hasPinBadge ? (
         <EdgeLabelRenderer>
           <span
+            data-knowledge-edge-id={id}
             // Nodes always render above lines and their badges — no z lift.
-            className={cn(
-              'shadow-raised bg-badge-amber-strong text-badge-amber-foreground absolute rounded-full p-1',
-              excluded && 'knowledge-excluded',
-            )}
+            className={cn('shadow-raised bg-badge-amber-strong text-badge-amber-foreground absolute rounded-full p-1')}
             style={{
               zIndex: 0,
               // Quadratic bezier midpoint: B(0.5) = 0.25·start + 0.5·control + 0.25·end

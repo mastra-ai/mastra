@@ -1,26 +1,19 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Background, BackgroundVariant, MiniMap, ReactFlow, ReactFlowProvider } from '@xyflow/react';
+import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
 import type { Arrivals } from './graphDiff';
 import { NO_FILTERS } from './graphModel';
-import type { KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
-import { getMiniMapNodeColor, isKnowledgeNode, isRecordNode } from './knowledgeStyles';
-import type { KnowledgeFlowNode } from './knowledgeStyles';
-import {
-  createKnowledgeScene,
-  getVisibleKnowledgeIds,
-  presentKnowledgeNodes,
-  presentKnowledgeEdges,
-} from './knowledgeScene';
+import type { KnowledgeGraphFilters } from './graphModel';
+import { KnowledgeGraphCanvas } from './KnowledgeGraphCanvas';
+import { getKnowledgePresentation } from './knowledgePresentation';
+import { createKnowledgeScene, getVisibleKnowledgeIds, getKnowledgeArrivalScene } from './knowledgeScene';
 import { KnowledgeGraphController } from './KnowledgeGraphController';
 import { KnowledgeGraphControls } from './KnowledgeGraphControls';
 import { KnowledgeGraphHover } from './KnowledgeGraphHover';
 import type { KnowledgeHoverHandle } from './KnowledgeGraphHover';
-import { knowledgeEdgeTypes } from './KnowledgeGraphLink';
-import { knowledgeNodeTypes } from './KnowledgeGraphNodes';
 import { KnowledgeGraphToolbar } from './KnowledgeGraphToolbar';
 import './knowledge.css';
 
@@ -73,14 +66,12 @@ function KnowledgeGraphInner({
   children,
 }: KnowledgeGraphProps) {
   const [filters, setFilters] = useState<KnowledgeGraphFilters>(NO_FILTERS);
-  const [initialScene] = useState(() => {
-    const scene = createKnowledgeScene(payload);
-    const ids = getVisibleKnowledgeIds(payload, NO_FILTERS, focusedId);
-    return {
-      nodes: presentKnowledgeNodes(scene.nodes, ids, { nodeId: focusedId, recordId: focusedRecordId }, arrivals),
-      edges: presentKnowledgeEdges(scene.edges, ids, focusedRecordId, arrivals),
-    };
-  });
+  const [initialScene] = useState(() => getKnowledgeArrivalScene(createKnowledgeScene(payload), arrivals));
+  const events = useRef({ onNodeClick, onClearFocus, onEdgeClick });
+  useEffect(() => {
+    events.current = { onNodeClick, onClearFocus, onEdgeClick };
+  }, [onNodeClick, onClearFocus, onEdgeClick]);
+  const scopeId = useId();
   const canvasRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef<KnowledgeHoverHandle>(null);
   const visibleIds = getVisibleKnowledgeIds(payload, filters, focusedId);
@@ -91,70 +82,20 @@ function KnowledgeGraphInner({
       ref={canvasRef}
       className="knowledge-canvas bg-background relative h-full w-full overflow-hidden"
       data-testid="knowledge-graph"
+      data-knowledge-scene={scopeId}
     >
-      <ReactFlow<KnowledgeFlowNode, KnowledgeFlowEdge>
-        defaultNodes={initialScene.nodes}
-        defaultEdges={initialScene.edges}
-        nodeTypes={knowledgeNodeTypes}
-        edgeTypes={knowledgeEdgeTypes}
-        minZoom={0.05}
-        proOptions={{ hideAttribution: true }}
-        nodesConnectable={false}
-        panOnScroll
-        panOnScrollSpeed={1}
-        zoomOnScroll={false}
-        zoomOnPinch
-        onNodeClick={(_, node) => {
-          hoverRef.current?.hide();
-          if (isRecordNode(node)) {
-            const record = node.data.record;
-            const [source = '', target = source] = record.nodeIds;
-            onEdgeClick({ source, target, recordId: record.id });
-          } else if (isKnowledgeNode(node)) onNodeClick(node.data.node);
-        }}
-        onPaneClick={onClearFocus}
-        onEdgeClick={(_, edge) => {
-          hoverRef.current?.hide();
-          const source = edge.source.startsWith('record:') ? edge.target : edge.source;
-          if (source.startsWith('record:')) return;
-          onEdgeClick({ source, target: edge.target, recordId: edge.data?.recordId ?? '' });
-        }}
-        onNodeMouseEnter={(event, node) => {
-          if (isRecordNode(node))
-            hoverRef.current?.show({ kind: 'record', x: event.clientX, y: event.clientY, record: node });
-          else if (isKnowledgeNode(node))
-            hoverRef.current?.show({ kind: 'node', x: event.clientX, y: event.clientY, node });
-        }}
-        onNodeMouseLeave={() => hoverRef.current?.hide()}
-        onEdgeMouseEnter={(event, edge) =>
-          hoverRef.current?.show({ kind: 'edge', x: event.clientX, y: event.clientY, edge })
-        }
-        onEdgeMouseLeave={() => hoverRef.current?.hide()}
-        onNodeDragStart={() => hoverRef.current?.hide()}
-        onMoveStart={() => hoverRef.current?.hide()}
-      >
-        <KnowledgeGraphController
-          payload={payload}
-          arrivals={arrivals}
-          filters={filters}
-          focusedId={focusedId}
-          focusedRecordId={focusedRecordId}
-          canvasRef={canvasRef}
-        />
-        <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
-        <MiniMap<KnowledgeFlowNode>
-          position="bottom-left"
-          pannable
-          zoomable
-          style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}
-          nodeColor={getMiniMapNodeColor}
-          nodeStrokeColor="transparent"
-          nodeStrokeWidth={3}
-          nodeBorderRadius={999}
-          maskColor="var(--scrim)"
-        />
-        <KnowledgeGraphControls canvasRef={canvasRef} visibleIds={visibleIds} focusedId={focusedId} />
-      </ReactFlow>
+      <KnowledgeGraphCanvas scene={initialScene} events={events} hoverRef={hoverRef} />
+      <style>
+        {getKnowledgePresentation(scopeId, payload, filters, { nodeId: focusedId, recordId: focusedRecordId })}
+      </style>
+      <KnowledgeGraphController
+        payload={payload}
+        arrivals={arrivals}
+        filters={filters}
+        focusedId={focusedId}
+        canvasRef={canvasRef}
+      />
+      <KnowledgeGraphControls canvasRef={canvasRef} visibleIds={visibleIds} focusedId={focusedId} />
       <KnowledgeGraphToolbar payload={payload} filters={filters} onFiltersChange={setFilters} onSelect={onNodeClick}>
         {children}
       </KnowledgeGraphToolbar>

@@ -6,21 +6,19 @@ import { Pin } from 'lucide-react';
 import { memo } from 'react';
 import type { NodeFlowNode, RecordFlowNode } from './graphModel';
 import { shouldShowLabel } from './graphModel';
-import { getKnowledgeNodeStyle, getRecordRingClass } from './knowledgeStyles';
+import { getKnowledgeNodeStyle } from './knowledgeStyles';
 
-function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
-  const { node, size, degree, focused } = data;
-  const labeled = focused || shouldShowLabel(degree);
+function NodeNodeComponent({ data }: NodeProps<NodeFlowNode>) {
+  const { node, size, degree } = data;
+  const labeled = shouldShowLabel(degree);
   const large = size >= 88;
   return (
-    // Outer wrapper is unclipped so the pin badge can straddle the rim;
-    // only the inner circle clips (it must, to keep the label inside).
+    // A focused leaf's label extends beyond the circle without resizing it.
     <div data-testid="knowledge-node" data-node-id={node.id} className="relative" style={{ width: size, height: size }}>
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
         className="knowledge-circle shadow-raised flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
-        data-selected={selected || focused || undefined}
         style={getKnowledgeNodeStyle(node.rung)}
       >
         {labeled ? (
@@ -40,6 +38,13 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           </Txt>
         ) : null}
       </div>
+      {!labeled ? (
+        <div className="knowledge-leaf-label bg-card shadow-raised pointer-events-none absolute top-full left-1/2 mt-2 hidden -translate-x-1/2 rounded-md px-2 py-1 whitespace-nowrap">
+          <Txt as="span" variant="label" tone="ink">
+            {node.name}
+          </Txt>
+        </div>
+      ) : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
@@ -54,20 +59,18 @@ const NodeNode = memo(NodeNodeComponent);
  * the chip collision-clear of nodes).
  */
 function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
-  const { record, size, focused } = data;
+  const { record, size } = data;
   return (
     <div
       data-testid="knowledge-record-node"
       data-record-id={record.id}
-      data-focused={focused || undefined}
+      data-pinned={record.pinned}
       className={cn(
         'flex items-center justify-center rounded-full border transition-shadow duration-fast motion-reduce:transition-none',
         // Neutral records stay distinct from scope-colored nodes and amber pins.
         record.pinned
           ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground shadow-raised'
           : 'border-muted-foreground bg-muted-foreground',
-        // The selected record (open in the flyout) glows hard.
-        focused && getRecordRingClass(record.pinned),
       )}
       style={{ width: size, height: size }}
     >
