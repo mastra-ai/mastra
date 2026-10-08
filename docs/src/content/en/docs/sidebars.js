@@ -772,6 +772,7 @@ const sidebars = {
         id: 'mastra-platform/connect/overview',
       },
       customProps: {
+        contextualSidebar: true,
         tags: ['new'],
       },
       items: [

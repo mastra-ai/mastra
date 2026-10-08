@@ -5,6 +5,7 @@
     "claude-fable-5-1",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
+    "claude-haiku-5-5",
     "claude-opus-4-1-20250805",
     "claude-opus-4-5-20251101",
     "claude-opus-4-6",
@@ -330,6 +331,7 @@
   ],
   "structuredOutput": [
     "auto",
+    "claude-haiku-5-5",
     "claude-sonnet-5",
     "codestral-2508",
     "custom",
@@ -1093,7 +1095,7 @@
     "gemini-3.7-flash": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "glm-5.2": [
@@ -1174,6 +1176,12 @@
       }
     ],
     "minimax-m2.5-highspeed": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-haiku-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
