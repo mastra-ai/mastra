@@ -442,15 +442,22 @@ async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState>
     }
   }
   state.requests = requests.length;
-  const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
-  const assistantMessages = messages.filter(message => message.role === 'assistant');
-  state.assistant = JSON.stringify(assistantMessages);
-  state.assistantShape = {
-    messages: assistantMessages.length,
-    partTypes: assistantMessages.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
-  };
-  if (cleanup) await cleanup();
-  await host.shutdown();
+  // Teardown runs even if the recall throws, so this run's host cannot outlive the test.
+  try {
+    const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+    const assistantMessages = messages.filter(message => message.role === 'assistant');
+    state.assistant = JSON.stringify(assistantMessages);
+    state.assistantShape = {
+      messages: assistantMessages.length,
+      partTypes: assistantMessages.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
+    };
+  } finally {
+    try {
+      if (cleanup) await cleanup();
+    } finally {
+      await host.shutdown();
+    }
+  }
   return state;
 }
 

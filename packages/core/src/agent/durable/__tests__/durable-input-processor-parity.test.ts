@@ -370,10 +370,17 @@ async function runT44ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState>
       ? []
       : (requests[0].prompt as Array<{ role?: string }>).filter(m => m.role === 'user'),
   );
-  const { messages } = await memory.recall({ threadId: thread, resourceId: resource });
-  state.memoryUser = JSON.stringify(messages.filter(message => message.role === 'user'));
-  if (cleanup) await cleanup();
-  await host.shutdown();
+  // Teardown runs even if the recall throws, so this run's host cannot outlive the test.
+  try {
+    const { messages } = await memory.recall({ threadId: thread, resourceId: resource });
+    state.memoryUser = JSON.stringify(messages.filter(message => message.role === 'user'));
+  } finally {
+    try {
+      if (cleanup) await cleanup();
+    } finally {
+      await host.shutdown();
+    }
+  }
   return state;
 }
 

@@ -372,8 +372,12 @@ async function runStrictDirect(engine: ParityEngine): Promise<StrictCaseState> {
   }
   state.requests = requests.length;
   state.responseFormat = (requests[0] as { responseFormat?: unknown } | undefined)?.responseFormat ?? null;
-  if (cleanup) await cleanup();
-  await host.shutdown();
+  // Pair the teardown so a throwing cleanup cannot leave this run's host alive.
+  try {
+    if (cleanup) await cleanup();
+  } finally {
+    await host.shutdown();
+  }
   return state;
 }
 
