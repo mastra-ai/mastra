@@ -135,13 +135,5 @@ test('observes an agentic import from queue through transcript', async ({ contex
     fs.mkdirSync(output, { recursive: true });
     await page.screenshot({ path: path.join(output, 'imports-completed.png'), fullPage: true });
     await page.screenshot({ path: path.join(output, 'explore.png'), fullPage: true });
-    fs.writeFileSync(
-      path.join(output, 'results.json'),
-      JSON.stringify(
-        { tests: [{ title: 'observes an agentic import from queue through transcript', status: 'passed' }] },
-        null,
-        2,
-      ),
-    );
   }
 });
