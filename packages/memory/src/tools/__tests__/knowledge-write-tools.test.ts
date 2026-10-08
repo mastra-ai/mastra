@@ -50,7 +50,6 @@ async function structuralFixture() {
     scope,
     sourceThreadId: 'alpha',
     defaultScope: 'resource',
-    maxScope: 'resource',
   });
   return { memory, store, scopeIds, tools };
 }
