@@ -219,3 +219,66 @@ describe('knowledge semantic index lost claims', () => {
     expect(indexed.get(`knowledge:node:${node.id}`)).toBe('Version two');
   });
 });
+
+function createQueryableVector() {
+  const documents = new Map<string, Record<string, unknown>>();
+  const indexes = new Set<string>();
+  return {
+    listIndexes: async () => [...indexes],
+    createIndex: async ({ indexName }: { indexName: string }) => {
+      indexes.add(indexName);
+    },
+    deleteVectors: async ({ ids }: { ids: string[] }) => {
+      for (const id of ids) documents.delete(id);
+    },
+    upsert: async (input: { ids: string[]; metadata: Array<Record<string, unknown>> }) => {
+      input.ids.forEach((id, index) => documents.set(id, input.metadata[index]!));
+    },
+    query: async () => [...documents].map(([id, metadata]) => ({ id, score: 1, metadata })),
+  } as any;
+}
+
+describe('knowledge semantic search visibility', () => {
+  async function mentionFixture() {
+    const store = (await new Memory({ storage: new InMemoryStore() }).storage.getStore('knowledge'))!;
+    const org = await store.createNode({ name: 'Acme', isScope: true, scopeIds: [] });
+    const visible = await store.createNode({ name: 'Visible', isScope: true, scopeIds: [org.id] });
+    const hidden = await store.createNode({ name: 'Hidden', isScope: true, scopeIds: [org.id] });
+    await store.createNode({ name: 'Project Nightjar', kind: 'project', scopeIds: [hidden.id] });
+    const subject = await store.createNode({ name: 'Echidna', kind: 'project', scopeIds: [visible.id, hidden.id] });
+    const record = await store.createRecord({
+      node: subject.id,
+      text: 'Budget tied to [[Project Nightjar]].',
+      scopeIds: [visible.id, hidden.id],
+      resolutionScopeIds: [visible.id, hidden.id],
+    });
+    const { embedder } = createFakes();
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector: createQueryableVector(),
+      embedder,
+    });
+    await coordinator.drain();
+    return { store, org, visible, hidden, record, coordinator };
+  }
+
+  it('hides records whose mentioned node is outside the caller view, matching lexical search', async () => {
+    const { store, org, visible, record, coordinator } = await mentionFixture();
+    const view = [org.id, visible.id];
+
+    const lexical = await store.search({ query: 'budget', scopeIds: view });
+    const semantic = await coordinator.search('budget', view);
+
+    expect(lexical.some(hit => hit.id === record.id)).toBe(false);
+    expect(semantic.some(hit => hit.metadata?.record_id === record.id)).toBe(false);
+    expect(semantic.some(hit => String(hit.metadata?.text ?? '').includes('Nightjar'))).toBe(false);
+  });
+
+  it('still returns the record when the caller can see the mentioned node', async () => {
+    const { org, visible, hidden, record, coordinator } = await mentionFixture();
+
+    const semantic = await coordinator.search('budget', [org.id, visible.id, hidden.id]);
+
+    expect(semantic.some(hit => hit.metadata?.record_id === record.id)).toBe(true);
+  });
+});

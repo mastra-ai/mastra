@@ -4,7 +4,7 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
-import { canonicalizeKnowledgeScopeIds, isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { canonicalizeKnowledgeScopeIds, isKnowledgeNodeVisible, isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -98,9 +98,31 @@ export class KnowledgeSemanticIndexCoordinator {
       const existing = deduped.get(candidate.id);
       if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
     }
-    return [...deduped.values()]
-      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
-      .slice(0, limit);
+    const visible = [];
+    for (const candidate of deduped.values()) {
+      if (await this.#isDocumentVisible(candidate.metadata, scopeIds)) visible.push(candidate);
+    }
+    return visible.sort((left, right) => right.score - left.score || left.id.localeCompare(right.id)).slice(0, limit);
+  }
+
+  // Vector metadata only carries the document scopes; the storage layer also requires the
+  // subject node and every mentioned node to be visible, so confirm hits through it.
+  async #isDocumentVisible(metadata: Record<string, any> | undefined, scopeIds: KnowledgeScopeIds) {
+    const id = metadata?.record_id;
+    if (typeof id !== 'string') return false;
+    if (metadata?.document_type === 'node') {
+      const node = await this.#knowledge.getNode(id);
+      return Boolean(node) && isKnowledgeNodeVisible(node!, await this.#knowledge.getNodeScopeIds(id), scopeIds);
+    }
+    const record = await this.#knowledge.getRecord({ id });
+    if (!record) return false;
+    let after: string | undefined;
+    do {
+      const page = await this.#knowledge.listRecords({ node: record.nodeId, scopeIds, after, limit: 100 });
+      if (page.records.some(entry => entry.id === id)) return true;
+      after = page.nextCursor;
+    } while (after);
+    return false;
   }
 
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
