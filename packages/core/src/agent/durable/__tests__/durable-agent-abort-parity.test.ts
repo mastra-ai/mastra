@@ -35,8 +35,9 @@ import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { globalRunRegistry } from '../run-registry';
+import type { Deferred } from './abort-parity-support';
+import { aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
-  CapturedRequest,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -56,39 +57,6 @@ const MAX_STEPS = 6;
 
 const VARIANTS = ['run', 'signal'] as const;
 type Variant = (typeof VARIANTS)[number];
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>(resolver => {
-    resolve = resolver;
-  });
-  return { promise, resolve };
-}
-
-function aborted(signal?: AbortSignal): Promise<void> {
-  return new Promise<void>(resolve => {
-    if (!signal) return;
-    if (signal.aborted) return resolve();
-    signal.addEventListener('abort', () => resolve(), { once: true });
-  });
-}
-
-/** Number of tool results the model has already been handed. */
-function toolResultCount(request: CapturedRequest): number {
-  let count = 0;
-  for (const message of request.prompt) {
-    if (message.role !== 'tool') continue;
-    for (const part of message.content) {
-      if (part.type === 'tool-result') count += 1;
-    }
-  }
-  return count;
-}
 
 /**
  * The harness's `stepScript(count)`: call `step` with the next number while the
@@ -184,12 +152,12 @@ async function runT14(variant: Variant): Promise<{
         onAbort: () => {
           state.callbacks.push('onAbort');
         },
-        onFinish: () => {
-          state.callbacks.push('onFinish');
-        },
         onIterationComplete: ({ iteration, finishReason, isFinal }) => {
           state.iterations.push({ iteration, finishReason, isFinal });
           return { continue: true };
+        },
+        onFinish: () => {
+          state.callbacks.push('onFinish');
         },
       });
       await state.parked.promise;
@@ -233,12 +201,12 @@ describe('T14 abort parity', () => {
         expect(results[engine]!.requests, `${engine}: no model call after the abort`).toHaveLength(2);
       }
 
+      expectPlainT14Reference(results.plain!);
       expect(states.get('plain')!.iterations).toEqual([
         { iteration: 1, finishReason: 'tool-calls', isFinal: false },
         { iteration: 2, finishReason: 'tool-calls', isFinal: false },
         { iteration: 3, finishReason: 'abort', isFinal: true },
       ]);
-      expectPlainT14Reference(results.plain!);
     });
   }
 });
@@ -247,6 +215,7 @@ describe('T14 abort parity', () => {
  * Literal contract for the plain engine. The helper treats plain as the
  * reference, so pinning its values stops a plain-side change from silently
  * moving that reference and keeping the engines "in parity".
+ *
  */
 function expectPlainT14Reference(result: EngineRunResult): void {
   const snapshot = result.turns.at(-1)!;

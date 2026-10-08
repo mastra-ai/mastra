@@ -383,7 +383,6 @@
     "deepinfra/gemma-4-26b-a4b-it",
     "deepinfra/gemma-4-31b-it",
     "deepinfra/granite-4.2-8b",
-    "deepinfra/hy3",
     "deepinfra/inkling",
     "deepinfra/ling-3.0-flash",
     "deepinfra/ling-3.0-flash-vl",
@@ -698,7 +697,6 @@
     "bytedance/seed-2-0-mini-260428",
     "bytedance/seed-2-0-pro-260328",
     "deepinfra/deepseek-v4.1-flash",
-    "deepinfra/hy3",
     "deepinfra/ling-3.0-flash-vl",
     "deepinfra/mimo-v2.6-flash",
     "deepinfra/mimo-v2.6-pro",
@@ -919,12 +917,6 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
       }
     ],
     "deepinfra/deepseek-v4-pro": [

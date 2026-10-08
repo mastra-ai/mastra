@@ -1,3 +1,5 @@
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -15,13 +17,18 @@ interface PromptHandoff {
   handoffPrompt: string;
   handoffModeId?: string;
   handoffModelId?: string;
+  handoffThinkingLevel?: ThinkingLevelSetting;
 }
 
-export function promptHandoffState(prompt: string, config: { modeId: string; modelId?: string }): PromptHandoff {
+export function promptHandoffState(
+  prompt: string,
+  config: { modeId: string; modelId?: string; thinkingLevel?: ThinkingLevelSetting },
+): PromptHandoff {
   return {
     handoffPrompt: prompt,
     handoffModeId: config.modeId,
     handoffModelId: config.modelId,
+    handoffThinkingLevel: config.thinkingLevel,
   };
 }
 
@@ -82,6 +89,8 @@ export function useHandoffPrompt(): void {
   const prompt = readHandoffField(location.state, 'handoffPrompt');
   const modeId = readHandoffField(location.state, 'handoffModeId');
   const modelId = readHandoffField(location.state, 'handoffModelId');
+  const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
+  const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
 
   useEffect(() => {
     if (!sessionEnabled) return;
@@ -110,7 +119,7 @@ export function useHandoffPrompt(): void {
         );
       }
       if (modelId) {
-        await switchModel(modelId).catch((error: unknown) =>
+        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
           pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
         );
       }
@@ -137,5 +146,6 @@ export function useHandoffPrompt(): void {
     sessionEnabled,
     switchMode,
     switchModel,
+    thinkingLevel,
   ]);
 }

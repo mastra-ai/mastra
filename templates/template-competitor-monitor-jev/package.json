@@ -1,0 +1,58 @@
+{
+  "name": "template-competitor-monitor-jev",
+  "description": "Monitor public competitor pages with native Mastra workflows, Jev classification, and exact change evidence.",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^22.22.0 || >=24.12.0"
+  },
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "format:check": "prettier --check --ignore-path .gitignore .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run tests/config.test.ts tests/provider-spending.test.ts",
+    "test:classification": "vitest run tests/classification-policy.test.ts tests/workflow-persistence.test.ts",
+    "test:integration": "vitest run tests/acquisition-content.test.ts tests/workflow-persistence.test.ts tests/native-auth.test.ts tests/monitor-agent.test.ts",
+    "test:browser": "vitest run --no-file-parallelism tests/browser-boundary.test.ts tests/browser-fallback.test.ts",
+    "test:reports": "vitest run --no-file-parallelism tests/report-schedule.test.ts tests/notification-output.test.ts",
+    "test:evaluation": "vitest run tests/evaluation.test.ts",
+    "test:live-evaluation": "vitest run --no-file-parallelism tests/live-evaluation.test.ts",
+    "test:verification": "vitest run --no-file-parallelism tests/evaluation.test.ts tests/live-evaluation.test.ts",
+    "postbuild": "node scripts/prepare-build-dependencies.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/typesafe-ai": "3.0.9",
+    "@libsql/client": "^0.18.0",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/stagehand": "latest",
+    "cheerio": "^1.2.0",
+    "chrome-launcher": "^1.2.1",
+    "franc-min": "6.2.0",
+    "ipaddr.js": "^2.5.0",
+    "robots-parser": "^3.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@mastra/deployer": "latest",
+    "@mastra/evals": "latest",
+    "@types/node": "^22.20.4",
+    "mastra": "latest",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@browserbasehq/stagehand@^3.2.1": {
+      "@ai-sdk/provider-utils@3": {
+        "undici@^5.29.0": "6.28.1"
+      }
+    }
+  }
+}

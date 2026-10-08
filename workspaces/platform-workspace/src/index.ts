@@ -34,6 +34,7 @@ export {
 export {
   createRepoTemplate,
   type PlatformRepoTemplateOptions,
+  type PlatformRepoTemplateRepository,
   type PlatformRepoTemplateResolver,
 } from './repo-template.js';
 export { platformFilesystemProvider, platformSandboxProvider } from './provider.js';
