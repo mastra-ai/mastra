@@ -161,3 +161,24 @@ export function formatToolDenied(
 
   return `${header} ✗\n✗ Denied${suffix}`;
 }
+
+export const CONNECT_REQUEST_PART = 'data-mastra-connect-request';
+
+export interface ConnectRequestData {
+  reason: string;
+  displayName: string;
+  connectUrl: string;
+}
+
+export function formatConnectRequest(
+  { reason, displayName, connectUrl }: ConnectRequestData,
+  linkButtons: boolean,
+): PostableMessage {
+  const label = `Connect ${displayName}`;
+  if (linkButtons) {
+    return ui().Card({
+      children: [ui().CardText(reason), ui().Actions([ui().LinkButton({ url: connectUrl, label, style: 'primary' })])],
+    });
+  }
+  return `${reason}\n${label}: ${connectUrl}`;
+}
