@@ -57,7 +57,7 @@ describe('Environment settings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Repositories' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Resources' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sandbox' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Workspace setup' })).toBeInTheDocument();
   });
 

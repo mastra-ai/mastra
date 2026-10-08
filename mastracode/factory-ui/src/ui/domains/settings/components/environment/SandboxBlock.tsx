@@ -45,7 +45,7 @@ function schemaProperties(schema: Record<string, unknown>): Array<[string, Setti
  * commits its own PATCH; an empty field means the provider default (the
  * placeholder), never a value factory stores on the user's behalf.
  */
-export function ResourcesBlock({
+export function SandboxBlock({
   environment,
   disabled,
   onSave,
@@ -58,7 +58,7 @@ export function ResourcesBlock({
   return (
     <div className="flex flex-col gap-2">
       <Txt as="h3" variant="label">
-        Resources
+        Sandbox
       </Txt>
       <SettingsContainer>
         <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">

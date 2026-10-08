@@ -9,12 +9,12 @@ import { useFactoryEnvironmentQuery, useSaveFactoryEnvironmentMutation } from '.
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { settingsSectionPath } from '../settingsSections';
 import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
-import { providerLine, ResourcesBlock } from './environment/ResourcesBlock';
+import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from. Resources,
+ * The Factory's environment: what every session's sandbox boots from. The sandbox settings,
  * the ordered repositories with their setup and the workspace setup command
  * all live here.
  */
@@ -99,7 +99,7 @@ function EnvironmentBlocks({
       <Txt as="p" variant="meta" tone="faint">
         {providerLine(environment.sandbox.provider)}
       </Txt>
-      <ResourcesBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
+      <SandboxBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
       <RepositoriesBlock
         repositories={environment.repositories}
         providers={providers}
