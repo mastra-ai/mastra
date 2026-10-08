@@ -3196,7 +3196,10 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
-    expect(ctx).toMatchObject({ cpuCount: 4, memoryMB: 8192, continueOnSetupFailure: true });
+    expect(ctx).toMatchObject({ continueOnSetupFailure: true });
+    // Unset resources leave the provider default, so the keys are absent.
+    expect('cpuCount' in ctx).toBe(false);
+    expect('memoryMB' in ctx).toBe(false);
     expect('workingDirectory' in ctx).toBe(false);
     expect('workspaceSetupCommand' in ctx).toBe(false);
     expect(ctx.repos).toHaveLength(2);
