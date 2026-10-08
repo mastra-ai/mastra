@@ -12,23 +12,29 @@
  *   throws     execute throws
  *   unknown    the model calls a tool that does not exist
  *
- * `undefined`, `throws` and `unknown` diverge from plain on the wrapped
- * engines, so each declares its difference against COR-1390 (durable and
- * evented re-serialise the failed tool call, and for `undefined` they also
- * surface a `tool-result` chunk plain never emits). On durable and evented the
- * `tool-error` chunk carries the raw serialised error
+ * `undefined` and `throws` diverge from plain on the wrapped engines, so each
+ * declares its difference against COR-1390 (durable and evented re-serialise
+ * the failed tool call, and for `undefined` they also surface a `tool-result`
+ * chunk plain never emits). On durable and evented the `tool-error` chunk
+ * carries the raw serialised error
  * (`{ toolCallId, toolName, args, error: { name, message, stack } }`) where
  * plain carries the MastraError envelope
- * (`{ name, cause, domain, category, details }`).
+ * (`{ name, message, cause, domain, category, details }`).
  *
- * Error-message wording inside those payloads is excluded by the harness from
- * its engine comparison, but the `error` object's shape is what a stream
- * consumer sees, so it stays in the comparison here. The harness's engine
- * comparison (chunk sequence, finish payload, usage, getFullOutput and the
- * requests the model saw) is covered by `expectEngineParity`; the contract the
- * harness read off that comparison is asserted on every engine, with plain's
- * values pinned literally and the wrapped engines' own values pinned per
- * variant.
+ * `unknown` used to diverge the same way and no longer does: the helper now
+ * compares a live `Error` as its enumerable fields plus `{ name, message }`
+ * (COR-1417), which is what a failed tool lookup serialises to on the wrapped
+ * engines, so it is asserted as an undeclared plain-vs-wrapped match. `throws`
+ * still differs — the wrapped `error` keeps its serialised `stack`, and the
+ * helper only drops a `stack` from `error` chunks — so the payload cannot be
+ * pinned and the declaration keeps a field-level `ignore`; the two shapes are
+ * asserted directly below.
+ *
+ * The harness's engine comparison (chunk sequence, finish payload, usage,
+ * getFullOutput and the requests the model saw) is covered by
+ * `expectEngineParity`; the contract the harness read off that comparison is
+ * asserted on every engine, with plain's values pinned literally and the
+ * wrapped engines' own values pinned per variant.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -38,7 +44,6 @@ import { Agent } from '../../agent';
 import type {
   CapturedRequest,
   EngineDifference,
-  EngineObservation,
   EngineParityResults,
   ParityEngine,
   ParitySnapshot,
@@ -55,7 +60,7 @@ const VARIANTS = ['non-json', 'bad-args', 'undefined', 'throws', 'unknown'] as c
 type Variant = (typeof VARIANTS)[number];
 
 /** Variants whose difference from plain is declared against COR-1390. */
-const HELD_VARIANTS = ['undefined', 'throws', 'unknown'] as const;
+const HELD_VARIANTS = ['undefined', 'throws'] as const;
 type HeldVariant = (typeof HELD_VARIANTS)[number];
 
 const CALLS: Record<Variant, { name: string; args: Record<string, unknown> }> = {
@@ -122,12 +127,10 @@ const HELD_CONTRACTS: Record<HeldVariant, { plain: Contract; wrapped: Contract }
     },
   },
   throws: { plain: toolErrorContract('misbehave'), wrapped: toolErrorContract('misbehave') },
-  unknown: { plain: toolErrorContract('nonexistent'), wrapped: toolErrorContract('nonexistent') },
 };
 
-/** What durable and evented report for a tool the agent does not have. */
-const UNKNOWN_TOOL_MESSAGE =
-  'Tool "nonexistent" not found. Available tools: misbehave. Call tools by their exact name only — never add prefixes, namespaces, or colons.';
+/** The contract a failed tool lookup settles on, identical on every engine. */
+const UNKNOWN_CONTRACT = toolErrorContract('nonexistent');
 
 /**
  * COR-1390: a tool that returns undefined makes durable and evented emit a
@@ -168,49 +171,25 @@ const UNDEFINED_DIFFERENCE: EngineDifference = {
 /**
  * COR-1390: durable and evented re-emit the thrown error as the raw serialised
  * error (`{ name, message, stack }`) instead of plain's MastraError envelope
- * (`{ name, cause, domain, category, details }`). The serialised stack carries
- * absolute paths from this checkout, so the payload value cannot be pinned;
- * every other field of the turn stays compared, and the difference fails once
- * the two shapes converge. The shape itself is asserted below.
+ * (`{ name, message, cause, domain, category, details }`). The serialised stack
+ * carries absolute paths from this checkout, so the payload value cannot be
+ * pinned; every other field of the turn stays compared, and the difference
+ * fails once the two shapes converge. The shape itself is asserted below.
  */
 const THROWS_DIFFERENCE: EngineDifference = {
   reason:
     "COR-1390: durable and evented re-emit a thrown tool error as the raw serialised error instead of plain's " +
     'MastraError envelope; the serialised stack embeds checkout-specific paths, so the payload cannot be pinned.',
+  // Tried without this `ignore` on the COR-1417 helper: the wrapped payloads
+  // still carry `stack` (an absolute checkout path) and drop plain's
+  // `category`/`cause`/`details`/`domain`, so the comparison still forces it.
   ignore: ['chunkPayloads'],
-};
-
-/**
- * COR-1390: durable and evented keep the failed lookup's `message` on the
- * `tool-error` payload, where plain's envelope carries the same text under
- * `details.errorMessage` and has no `message`.
- */
-const UNKNOWN_DIFFERENCE: EngineDifference = {
-  reason:
-    'COR-1390: durable and evented re-emit a failed tool lookup as the raw serialised error, whose `message` ' +
-    "plain's MastraError envelope does not have (plain keeps the same text under `details.errorMessage`).",
-  expect: plain => withWrappedToolError(plain, { name: 'ToolNotFoundError', message: UNKNOWN_TOOL_MESSAGE }),
 };
 
 const HELD_DIFFERENCES: Record<HeldVariant, EngineDifference> = {
   undefined: UNDEFINED_DIFFERENCE,
   throws: THROWS_DIFFERENCE,
-  unknown: UNKNOWN_DIFFERENCE,
 };
-
-/** The wrapped engines' `tool-error` payload, derived from plain's. */
-function withWrappedToolError(plain: EngineObservation, error: Record<string, unknown>): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => {
-      const index = turn.chunkTypes.indexOf('tool-error');
-      if (index === -1) return turn;
-      const chunkPayloads = [...turn.chunkPayloads];
-      chunkPayloads[index] = { ...(chunkPayloads[index] as Record<string, unknown>), error };
-      return { ...turn, chunkPayloads };
-    }),
-  };
-}
 
 /** The `error` object inside a turn's `tool-error` chunk payload. */
 function toolErrorOf(turn: ParitySnapshot): Record<string, unknown> {
@@ -318,6 +297,26 @@ describe('T32 tool errors (plain, durable, evented)', () => {
     });
   }
 
+  // `unknown` matched plain once the helper began comparing a live `Error` as
+  // its enumerable fields plus `{ name, message }` (COR-1417): a failed tool
+  // lookup serialises to exactly that on the wrapped engines.
+  it('unknown: the tool call is surfaced, the run settles and the model is told', async () => {
+    const results = await runT32('unknown');
+
+    for (const engine of ENGINES) {
+      const { turns, requests } = results[engine]!;
+      const turn = turns[0]!;
+      // The harness's check: the tool call was surfaced publicly.
+      expect(chunksOfType(turn, 'tool-call')).toBe(1);
+      // The harness's check: the failed lookup is reported as an error chunk.
+      expect(chunksOfType(turn, 'tool-error')).toBe(1);
+      // The harness's check: the run settled with a finish chunk.
+      expect(chunksOfType(turn, 'finish')).toBeGreaterThanOrEqual(1);
+      // The harness's contract, identical on all three engines.
+      expect(contractOf(turn, requests)).toEqual(UNKNOWN_CONTRACT);
+    }
+  });
+
   for (const variant of HELD_VARIANTS) {
     it(`${variant}: the tool call is surfaced, the run settles and the model is told`, async () => {
       const difference = HELD_DIFFERENCES[variant];
@@ -335,9 +334,14 @@ describe('T32 tool errors (plain, durable, evented)', () => {
         expect(contractOf(turn, requests)).toEqual(engine === 'plain' ? contracts.plain : contracts.wrapped);
         if (variant === 'throws') {
           // COR-1390's payload shapes, asserted here because the serialised
-          // stack in the wrapped shape cannot be pinned.
+          // stack in the wrapped shape cannot be pinned. Plain's envelope now
+          // carries `message` too (the helper surfaces a live `Error`'s
+          // `message`), so the two shapes differ by the classification fields
+          // and the stack, not by whether the text is present.
           expect(Object.keys(toolErrorOf(turn)).sort()).toEqual(
-            engine === 'plain' ? ['category', 'cause', 'details', 'domain', 'name'] : ['message', 'name', 'stack'],
+            engine === 'plain'
+              ? ['category', 'cause', 'details', 'domain', 'message', 'name']
+              : ['message', 'name', 'stack'],
           );
         }
       }
