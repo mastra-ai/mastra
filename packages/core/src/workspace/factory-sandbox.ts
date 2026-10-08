@@ -126,9 +126,10 @@ export interface FactorySandboxBuilds<TSettings> {
  * should root their `workingDirectory` at a per-session directory.
  *
  * `settings` is authored in any flavor `PublicSchema` accepts (zod, JSON
- * Schema, Standard Schema). Factory normalizes it once at boot and ships JSON
- * Schema on the wire. Every field must be optional: an absent setting means
- * the provider default. `templateFields` names the settings whose change
+ * Schema, or a Standard Schema that can emit JSON Schema). Factory normalizes
+ * it and serves the input-side JSON Schema on the wire. Every field must be
+ * optional: an absent setting means the provider default. Providers may
+ * ignore `ctx.resolveHead` and resolve heads themselves. `templateFields` names the settings whose change
  * produces a different template.
  */
 export interface FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
@@ -190,7 +191,10 @@ export function normalizeFactorySandboxSettings(sandbox: FactorySandbox): Standa
 export function describeFactorySandbox(sandbox: FactorySandbox): FactorySandboxDescription {
   return {
     provider: sandbox.provider,
-    settingsSchema: standardSchemaToJSONSchema(normalizeFactorySandboxSettings(sandbox), { target: 'draft-07' }),
+    settingsSchema: standardSchemaToJSONSchema(normalizeFactorySandboxSettings(sandbox), {
+      target: 'draft-07',
+      io: 'input',
+    }),
     templateFields: [...sandbox.templateFields],
     capabilities: {
       template: typeof sandbox.template === 'function',

@@ -304,7 +304,7 @@ export interface WorkspaceSourceControlProvider {
 }
 
 export interface CreateWorkspaceFactoryOptions {
-  /** Factory sandbox runtime config (session sandbox callback). */
+  /** The normalized factory sandbox constructing one sandbox per session. */
   sandbox?: FactorySandbox;
   /** Defaults to `'lazy'`. */
   sandboxStart?: FactorySandboxStart;

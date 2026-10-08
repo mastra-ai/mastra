@@ -31,7 +31,7 @@ vi.mock('e2b', async importOriginal => {
     }
   }
   class ApiClient {
-    api = { GET: (path: string) => sdk.templatesGet(path) };
+    api = { GET: (path: string, init?: unknown) => sdk.templatesGet(path, init) };
     constructor(readonly config: unknown) {}
   }
   class ConnectionConfig {
@@ -197,42 +197,50 @@ describe('E2BFactorySandbox', () => {
       await expect(sandbox.builds.get(context(), {}, 'no-colon')).rejects.toThrow(/Invalid E2B build id/);
     });
 
-    it('list returns the builds of the resolved template name, newest first', async () => {
+    it('list returns the builds of the resolved template, newest first', async () => {
       const name = ref.slice(0, ref.lastIndexOf(':'));
-      sdk.templatesGet.mockResolvedValue({
-        data: [
-          {
-            templateID: 'tpl_old',
-            buildID: 'bld_old',
-            buildStatus: 'ready',
-            names: [name],
-            aliases: [],
-            createdAt: '2026-10-01T00:00:00Z',
+      sdk.templatesGet.mockImplementation(async (path: string) => {
+        if (path === '/templates') {
+          return {
+            data: [
+              { templateID: 'tpl_other', buildID: 'bld_x', buildStatus: 'ready', names: ['someone-else'], aliases: [] },
+              { templateID: 'tpl_1', buildID: 'bld_new', buildStatus: 'building', names: [], aliases: [name] },
+            ],
+          };
+        }
+        return {
+          data: {
+            templateID: 'tpl_1',
+            builds: [
+              {
+                buildID: 'bld_old',
+                status: 'ready',
+                createdAt: '2026-10-01T00:00:00Z',
+                finishedAt: '2026-10-01T00:05:00Z',
+              },
+              { buildID: 'bld_new', status: 'building', createdAt: '2026-10-02T00:00:00Z' },
+            ],
           },
-          {
-            templateID: 'tpl_other',
-            buildID: 'bld_x',
-            buildStatus: 'ready',
-            names: ['someone-else'],
-            aliases: [],
-            createdAt: '2026-10-03T00:00:00Z',
-          },
-          {
-            templateID: 'tpl_new',
-            buildID: 'bld_new',
-            buildStatus: 'building',
-            names: [],
-            aliases: [name],
-            createdAt: '2026-10-02T00:00:00Z',
-          },
-        ],
+        };
       });
       const builds = await sandbox.builds.list!(context(), {});
-      expect(sdk.templatesGet).toHaveBeenCalledWith('/templates');
+      expect(sdk.templatesGet).toHaveBeenNthCalledWith(1, '/templates', undefined);
+      expect(sdk.templatesGet).toHaveBeenNthCalledWith(2, '/templates/{templateID}', {
+        params: { path: { templateID: 'tpl_1' } },
+      });
       expect(builds).toEqual([
-        { buildId: 'tpl_new:bld_new', templateId: 'tpl_new', status: 'building', startedAt: '2026-10-02T00:00:00Z' },
-        { buildId: 'tpl_old:bld_old', templateId: 'tpl_old', status: 'ready', startedAt: '2026-10-01T00:00:00Z' },
+        { buildId: 'tpl_1:bld_new', templateId: 'tpl_1', status: 'building', startedAt: '2026-10-02T00:00:00Z' },
+        {
+          buildId: 'tpl_1:bld_old',
+          templateId: 'tpl_1',
+          status: 'ready',
+          startedAt: '2026-10-01T00:00:00Z',
+          finishedAt: '2026-10-01T00:05:00Z',
+        },
       ]);
+
+      sdk.templatesGet.mockResolvedValue({ data: [] });
+      expect(await sandbox.builds.list!(context(), {})).toEqual([]);
 
       sdk.templatesGet.mockResolvedValue({ error: { code: 401, message: 'nope' } });
       await expect(sandbox.builds.list!(context(), {})).rejects.toThrow(/E2B template listing failed/);

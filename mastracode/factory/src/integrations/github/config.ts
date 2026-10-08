@@ -45,7 +45,7 @@ export interface GithubFeatureGateOptions {
   appDbConfigured: boolean;
   /** Shared OAuth/install `state` signer, when configured. */
   stateSigner?: StateSigner;
-  /** The deploy's sandbox callback, when sandboxes are configured. */
+  /** The deploy's sandbox, when sandboxes are configured. */
   sandbox?: FactorySandbox;
 }
 

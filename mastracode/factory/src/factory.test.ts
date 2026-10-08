@@ -585,6 +585,19 @@ describe('MastraFactory.prepare', () => {
     expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
   });
 
+  it('rejects an unbranded object even when it carries a create key', async () => {
+    // The fleet-era object form had `create`, so shape cannot stand in for the brand.
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: { machine: {}, create: () => ({ id: 'sb' }) } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).toMatch(/FactorySandbox instance/);
+  });
+
   it('rejects a sandbox config that is neither a callback nor an object', async () => {
     const factory = new MastraFactory({
       secretEncryption,

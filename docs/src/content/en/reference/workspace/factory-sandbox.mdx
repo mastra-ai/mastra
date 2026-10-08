@@ -10,7 +10,7 @@ packages:
 
 A `FactorySandbox` is the one object a host gives `MastraFactory` to describe where sessions run. It owns the session sandbox constructor, the repository template built for a session, the schema of settings a user can tune per project, and optionally the ability to build that template ahead of time.
 
-Factory validates environment settings through the object's schema, stores them as one JSON document per project, and passes them to `create` on every session boot. Factory never knows which provider is behind the object.
+Factory passes the project's settings document to `create` on every session boot (empty until a settings surface stores one) and serves the schema as JSON Schema to clients. Factory never knows which provider is behind the object.
 
 ## Usage
 
@@ -57,7 +57,7 @@ A setting the environment leaves unset is absent from the stored document, so th
 
 ### Deprecated callback
 
-The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps working. Factory wraps it as a `provider: 'custom'` sandbox with no settings, no template and no builds, so the environment page shows nothing to tune.
+The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps working. Factory wraps it as a `provider: 'custom'` sandbox with no settings, no template and no builds, so there is nothing to tune.
 
 ## Interface
 
@@ -84,7 +84,7 @@ interface FactorySandbox<TSettings extends Record<string, unknown> = Record<stri
     name: 'settings',
     type: 'PublicSchema<TSettings>',
     description:
-      'Schema of the settings a user can tune per project: a Zod schema, a JSON Schema or any Standard Schema. Factory normalizes it once at boot and serves JSON Schema to the environment page. Author an object of primitive fields; nested objects are not rendered.',
+      'Schema of the settings a user can tune per project: a Zod schema, a JSON Schema or a Standard Schema that can emit JSON Schema. Factory serves the input side as JSON Schema. Author an object of primitive fields; nested objects are not rendered.',
   },
   {
     name: 'templateFields',
@@ -165,7 +165,7 @@ Everything factory knows about the session, passed to `create`, `template` and t
   {
     name: 'repos',
     type: 'FactorySandboxRepository[]',
-    description: 'Several repositories for one session, each with its own access, ref and setup command.',
+    description: 'Several repositories for one session, each with its own access and setup command.',
     isOptional: true,
   },
   {

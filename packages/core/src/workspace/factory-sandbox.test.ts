@@ -59,6 +59,18 @@ describe('describeFactorySandbox', () => {
     expect(description.capabilities).toEqual({ template: false, builds: { available: false, history: false } });
   });
 
+  it('emits the input side of the schema, so a defaulted field stays optional', () => {
+    class Defaulted extends BaseFactorySandbox<{ region?: string }> {
+      readonly provider = 'defaulted';
+      readonly settings = z.object({ region: z.enum(['us', 'eu']).default('us') });
+      readonly templateFields = [] as const;
+      create = () => new LocalSandbox();
+    }
+    const description = describeFactorySandbox(new Defaulted());
+    expect(description.settingsSchema.required ?? []).not.toContain('region');
+    expect((description.settingsSchema.properties?.region as JSONSchema7).default).toBe('us');
+  });
+
   it('passes a plain JSON Schema settings schema through', () => {
     const jsonSchema: JSONSchema7 = {
       type: 'object',

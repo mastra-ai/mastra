@@ -148,23 +148,38 @@ export class E2BFactorySandbox extends BaseFactorySandbox<E2BFactorySandboxSetti
   }
 
   async #listBuilds(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): Promise<FactorySandboxBuild[]> {
+    // One E2B template carries every sha-tagged build of the family, so the
+    // history is that template's builds, not one row per template.
     const { spec } = await resolveSpecAtHead(this.#templateOptions(ctx, settings));
     const name = templateNameOf(spec.ref);
     const client = new ApiClient(new ConnectionConfig(this.#connection));
-    const { data, error } = await client.api.GET('/templates');
-    if (error || !data) {
-      throw new Error(`E2B template listing failed: ${error ? JSON.stringify(error) : 'empty response'}`);
+    const templates = await client.api.GET('/templates');
+    if (templates.error || !templates.data) {
+      throw new Error(`E2B template listing failed: ${describeApiError(templates.error)}`);
     }
-    return data
-      .filter(template => template.names.includes(name) || template.aliases.includes(name))
+    const template = templates.data.find(t => t.names.includes(name) || t.aliases.includes(name));
+    if (!template) return [];
+    const detail = await client.api.GET('/templates/{templateID}', {
+      params: { path: { templateID: template.templateID } },
+    });
+    if (detail.error || !detail.data) {
+      throw new Error(`E2B template build listing failed: ${describeApiError(detail.error)}`);
+    }
+    return detail.data.builds
+      .slice()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map(template => ({
-        buildId: `${template.templateID}:${template.buildID}`,
+      .map(build => ({
+        buildId: `${template.templateID}:${build.buildID}`,
         templateId: template.templateID,
-        status: mapStatus(template.buildStatus),
-        startedAt: template.createdAt,
+        status: mapStatus(build.status),
+        startedAt: build.createdAt,
+        ...(build.finishedAt ? { finishedAt: build.finishedAt } : {}),
       }));
   }
+}
+
+function describeApiError(error: unknown): string {
+  return error ? JSON.stringify(error) : 'empty response';
 }
 
 /** `<templateId>:<buildId>`, split on the last colon because a template ref itself carries one (`name:sha-<head>`). */

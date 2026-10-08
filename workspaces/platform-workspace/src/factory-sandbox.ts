@@ -45,7 +45,10 @@ const SETTINGS_SCHEMA = {
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
-export interface PlatformFactorySandboxOptions extends Omit<PlatformSandboxOptions, 'id' | 'sandboxId' | 'template'> {
+export interface PlatformFactorySandboxOptions extends Omit<
+  PlatformSandboxOptions,
+  'id' | 'sandboxId' | 'sessionId' | 'template'
+> {
   /** Options for the environment's repo template. */
   template?: {
     /** Build-only environment, excluded from template identity and runtime sandboxes. */
