@@ -393,6 +393,8 @@ Returns: `Promise<AgentControllerThread>`
 
 Switch to an owned stored thread and hydrate its mode, model, and observational memory settings. Pass `requestContext` when memory is a function that reads the signed-in user.
 
+Switching away cancels a running local execution only when this session initiated it. A session listening to another session's run detaches without cancelling that run. This follows the current action's initiator, not ownership of the thread. Parked tool prompts remain available for later resume.
+
 ```typescript
 await session.thread.switch({ threadId: 'thread-8' })
 ```
