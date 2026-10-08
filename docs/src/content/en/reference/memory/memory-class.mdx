@@ -195,14 +195,14 @@ export const agent = new Agent({
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
-import { PgStore, PgVector } from '@mastra/pg'
+import { PostgresStore, PgVector } from '@mastra/pg'
 
 export const agent = new Agent({
   name: 'pg-agent',
   instructions: 'You are an agent with optimized PostgreSQL memory.',
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
-    storage: new PgStore({
+    storage: new PostgresStore({
       id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),

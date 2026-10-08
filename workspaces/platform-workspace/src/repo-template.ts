@@ -1,6 +1,15 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { repoCloneCommand, setupMarkerCommand, setupMarkerContent } from '@internal/workspace';
+import {
+  WORKSPACE_SETUP_MARKER_PATH,
+  guardedSetupCommand,
+  normalizeSetupCommands,
+  repoCloneCommand,
+  repoSetupMarkerPath,
+  setupMarkerCommand,
+  setupMarkerContent,
+} from '@internal/workspace';
 
 import { Template, type SandboxTemplateBuilder } from './template.js';
 
@@ -40,19 +49,71 @@ export interface PlatformRepositoryAccess {
   authorization?: { scheme: 'bearer'; token: string };
 }
 
+/** One repository of a multi-repository template (`repos`). */
+export interface PlatformRepoTemplateRepository {
+  /**
+   * Same contract as the top-level option: clone URL plus, for private
+   * repositories, a short-lived credential. Resolved when the build runs, so
+   * each repository can mint its own installation token.
+   */
+  getRepositoryAccess: () => Promise<PlatformRepositoryAccess | undefined>;
+  /**
+   * Setup command(s) run inside this repository's clone, as separate cached
+   * build steps after the commit pin.
+   */
+  setupCommand?: string | string[];
+}
+
 export interface PlatformRepoTemplateOptions {
   /**
    * Resolves the repository's clone URL and, for private repositories, a
    * short-lived credential. Absent — the session has no repository — makes
    * `createRepoTemplate` return `undefined`, which asks PlatformSandbox for
    * the provider default without a conditional at the call site.
+   *
+   * Single-repository form; mutually exclusive with `repos`.
    */
-  getRepositoryAccess: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
+  getRepositoryAccess?: (() => Promise<PlatformRepositoryAccess | undefined>) | undefined;
   /**
    * Setup command(s) run inside the checkout. Array entries run as separate
    * cached build steps.
    */
   setupCommand?: string | string[];
+  /**
+   * Several repositories in one template. Each lands at
+   * `<workingDirectory>/<repo>` and runs its own `setupCommand` inside its
+   * clone, with the same clone → pin → setup layering as the single form.
+   * Public repositories (no `authorization`) are built before private ones in
+   * caller order within each group. Each repository writes `.mastra-sandbox/repos/<repo>`
+   * (`setupMarkerContent` of its commands) once every step for it ran.
+   *
+   * Every credential is a build env visible to every build step, so any
+   * repository's setup command can read the other repositories' tokens: only
+   * list repositories whose setup commands are trusted together.
+   *
+   * Mutually exclusive with `getRepositoryAccess`. If any entry's access
+   * cannot be resolved the whole template degrades to resources-only: a
+   * sandbox missing one repository is worse than one missing all of them.
+   * Two entries that would clone into the same directory make the resolver
+   * reject (PlatformSandbox then logs and boots the provider default). An
+   * empty array behaves like no repository.
+   */
+  repos?: PlatformRepoTemplateRepository[];
+  /**
+   * Command(s) run once at the working directory after every repository is
+   * set up (`repos` only). Failures fail the build. Writes
+   * `.mastra-sandbox/workspace-setup` afterwards, even for an empty list.
+   */
+  workspaceSetupCommand?: string | string[];
+  /**
+   * `repos` only. When true a failing per-repository setup command records
+   * that repository's directory name in `.mastra-sandbox/setup-failed` (one
+   * line per repository) and the build continues; clone, pin, workspace and
+   * marker steps still fail the build. A per-repository marker then means "every step ran", so
+   * consumers check the failure list first. Default false: any failure fails
+   * the build, as in the single form.
+   */
+  continueOnSetupFailure?: boolean;
   /**
    * vCPU count for the template build and the sandboxes created from it.
    * Identity-bearing: a different count builds a different template, and the
@@ -80,6 +141,19 @@ export interface PlatformRepoTemplateOptions {
 }
 
 export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder | undefined>;
+
+/** One repository after access and head resolution. */
+interface ResolvedRepository {
+  /** Position in the caller's list; names the token env so reordering never renames it. */
+  index: number;
+  cloneUrl: string;
+  repoDir: string;
+  token?: string;
+  tokenEnv?: string;
+  /** Undefined when the head could not be resolved: the clone is left unpinned. */
+  sha?: string;
+  setupCommands: string[];
+}
 
 /** Last default-branch head resolved per clone URL, shared across resolvers in this process. */
 const lastKnownHeads = new Map<string, string>();
@@ -112,93 +186,144 @@ function rememberHead(cloneUrl: string, sha: string): void {
  * requested size, and the caller's runtime setup materializes the checkout.
  */
 export function createRepoTemplate(options: PlatformRepoTemplateOptions): PlatformRepoTemplateResolver | undefined {
-  const getRepositoryAccess = options.getRepositoryAccess;
+  if (options.getRepositoryAccess && options.repos) {
+    throw new TypeError('createRepoTemplate: pass either getRepositoryAccess or repos, not both');
+  }
+  // The guard and the workspace steps have no meaning for one repository, and
+  // the single-form marker must keep meaning "every setup command succeeded".
+  if (!options.repos && (options.workspaceSetupCommand !== undefined || options.continueOnSetupFailure !== undefined)) {
+    throw new TypeError('createRepoTemplate: workspaceSetupCommand and continueOnSetupFailure require repos');
+  }
+  const isList = options.repos !== undefined;
+  const entries: PlatformRepoTemplateRepository[] = options.repos
+    ? options.repos
+    : options.getRepositoryAccess
+      ? [{ getRepositoryAccess: options.getRepositoryAccess, setupCommand: options.setupCommand }]
+      : [];
   const resourcesOnly = () => {
     if (options.cpuCount === undefined && options.memoryMB === undefined) return undefined;
     return withResources(Template(), options);
   };
-  if (!getRepositoryAccess) {
+  if (entries.length === 0) {
     const template = resourcesOnly();
     return template ? async () => template : undefined;
   }
   const resolveHead = options.resolveHead ?? resolveDefaultBranchHead;
+  const continueOnFailure = options.continueOnSetupFailure ?? false;
 
   return async () => {
-    // Warn when the sandbox falls back to the provider default template.
-    let accessError: unknown;
-    const access = await getRepositoryAccess().catch(error => {
-      accessError = error;
-      return undefined;
-    });
-    if (!access?.cloneUrl) {
-      console.warn('[platform-workspace] repo template skipped: repository access unavailable', {
-        error: redactSecrets(accessError),
+    const repos: ResolvedRepository[] = [];
+    for (const [index, entry] of entries.entries()) {
+      // Warn when the sandbox falls back to the provider default template.
+      let accessError: unknown;
+      const access = await entry.getRepositoryAccess().catch(error => {
+        accessError = error;
+        return undefined;
       });
-      return resourcesOnly();
-    }
-    const cloneUrl = normalizeCloneUrl(access.cloneUrl);
-    if (!isValidCloneUrl(cloneUrl)) {
-      console.warn('[platform-workspace] repo template skipped: clone URL failed validation', {
-        cloneUrl: redactSecrets(cloneUrl),
-      });
-      return resourcesOnly();
-    }
-
-    const token = access.authorization?.token;
-    let headError: unknown;
-    const resolved = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
-      headError = error;
-      return undefined;
-    });
-    let sha: string;
-    if (resolved && SHA_PATTERN.test(resolved)) {
-      sha = resolved;
-      rememberHead(cloneUrl, sha);
-    } else {
-      // A transient lookup failure (rate limit, timeout) must not drop the
-      // repo steps: an older pin still boots a warm family image, and the
-      // caller's checkout fetches the current tip regardless of the pin.
-      const lastKnown = lastKnownHeads.get(cloneUrl);
-      if (!lastKnown) {
-        console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
-          cloneUrl,
-          sha: resolved,
-          error: redactSecrets(headError),
+      if (!access?.cloneUrl) {
+        console.warn('[platform-workspace] repo template skipped: repository access unavailable', {
+          ...(isList ? { index } : {}),
+          error: redactSecrets(accessError),
         });
         return resourcesOnly();
       }
-      console.warn('[platform-workspace] repo template pinned to the last known default-branch head', {
-        cloneUrl,
-        sha: lastKnown,
-        resolved,
-        error: redactSecrets(headError),
+      const cloneUrl = normalizeCloneUrl(access.cloneUrl);
+      if (!isValidCloneUrl(cloneUrl)) {
+        console.warn('[platform-workspace] repo template skipped: clone URL failed validation', {
+          ...(isList ? { index } : {}),
+          cloneUrl: redactSecrets(cloneUrl),
+        });
+        return resourcesOnly();
+      }
+
+      const token = access.authorization?.token;
+      let headError: unknown;
+      const resolved = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
+        headError = error;
+        return undefined;
       });
-      sha = lastKnown;
+      let sha: string | undefined;
+      if (resolved && SHA_PATTERN.test(resolved)) {
+        sha = resolved;
+        rememberHead(cloneUrl, sha);
+      } else {
+        // A transient lookup failure (rate limit, timeout) must not drop the
+        // repo steps: an older pin still boots a warm family image, and the
+        // caller's checkout fetches the current tip regardless of the pin.
+        const lastKnown = lastKnownHeads.get(cloneUrl);
+        if (lastKnown) {
+          console.warn('[platform-workspace] repo template pinned to the last known default-branch head', {
+            cloneUrl,
+            sha: lastKnown,
+            resolved,
+            error: redactSecrets(headError),
+          });
+          sha = lastKnown;
+        } else if (isList) {
+          // In a list, dropping one repository would leave a sandbox without
+          // it; clone the default branch unpinned instead and keep the rest.
+          console.warn('[platform-workspace] repo template clones unpinned: could not resolve default-branch head', {
+            cloneUrl,
+            sha: resolved,
+            error: redactSecrets(headError),
+          });
+        } else {
+          console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
+            cloneUrl,
+            sha: resolved,
+            error: redactSecrets(headError),
+          });
+          return resourcesOnly();
+        }
+      }
+
+      // Relative to the build cwd, which `setWorkdir` (or the base image) also
+      // makes the runtime cwd, so the checkout sits at `<cwd>/<repo>` either way.
+      const repoDir = repoDirName(cloneUrl);
+      repos.push({
+        index,
+        cloneUrl,
+        repoDir,
+        token,
+        // The single form keeps its historical env name; list entries are
+        // numbered by caller position so public/private reordering never
+        // renames one.
+        tokenEnv: token ? (isList ? `${BUILD_TOKEN_ENV}_${index}` : BUILD_TOKEN_ENV) : undefined,
+        sha,
+        // Blank commands would produce invalid shell steps.
+        setupCommands: normalizeSetupCommands(entry.setupCommand),
+      });
+    }
+
+    const seenDirs = new Map<string, string>();
+    for (const repo of repos) {
+      const other = seenDirs.get(repo.repoDir);
+      if (other) {
+        throw new Error(
+          `createRepoTemplate: repositories ${other} and ${repo.cloneUrl} would both clone into "${repo.repoDir}"`,
+        );
+      }
+      seenDirs.set(repo.repoDir, repo.cloneUrl);
     }
 
     const workingDirectory =
       options.workingDirectory === undefined
         ? undefined
         : trimTrailingSlashes(assertWorkingDirectory(options.workingDirectory));
-    // Relative to the build cwd, which `setWorkdir` (or the base image) also
-    // makes the runtime cwd, so the checkout sits at `<cwd>/<repo>` either way.
-    const repoDir = repoDirName(cloneUrl);
-    const auth = token ? `${gitAuthFlag()} ` : '';
-    // Blank commands would produce invalid shell steps.
-    const setupCommands = (
-      options.setupCommand === undefined
-        ? []
-        : Array.isArray(options.setupCommand)
-          ? options.setupCommand
-          : [options.setupCommand]
-    ).filter(command => command.trim() !== '');
     // Commit-independent family key that groups every commit of the same
     // repo+layout together. The platform uses it to find a prior build in
     // the same family so new commits boot on a warm filesystem while the
-    // exact template continues to build in the background.
-    const family = `repo:${cloneUrl}:${workingDirectory ?? ''}/${repoDir}`;
+    // exact template continues to build in the background. A list hashes
+    // its members in caller order (the family cap is 200 chars).
+    const family = isList
+      ? `repos:${createHash('sha256')
+          .update(JSON.stringify([workingDirectory ?? '', repos.map(repo => [repo.cloneUrl, repo.repoDir])]))
+          .digest('hex')
+          .slice(0, 32)}`
+      : `repo:${repos[0]!.cloneUrl}:${workingDirectory ?? ''}/${repos[0]!.repoDir}`;
     let template = Template();
-    const buildEnv = { ...options.buildEnv, ...(token ? { [BUILD_TOKEN_ENV]: token } : {}) };
+    const buildEnv: Record<string, string> = { ...options.buildEnv };
+    for (const repo of repos) if (repo.tokenEnv && repo.token) buildEnv[repo.tokenEnv] = repo.token;
     if (Object.keys(buildEnv).length > 0) template = template.setEnvs(buildEnv, { ephemeral: true });
     template = withResources(template, options);
     if (workingDirectory) {
@@ -207,17 +332,41 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
       // shell expansion.
       template = template.runCmd(`mkdir -p "${workingDirectory}"`).setWorkdir(workingDirectory);
     }
-    // Each operation gets its own cached provider build step. Same shallow
-    // clone Factory makes at session start when no image provided one, so
-    // both paths yield the same checkout.
-    template = template
-      .runCmd(repoCloneCommand({ cloneUrl, destination: repoDir, ...(token ? { tokenEnv: BUILD_TOKEN_ENV } : {}) }))
-      .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
-      .runCmd(`git -C "${repoDir}" checkout ${sha}`);
-    // Build steps use fresh shells, so each setup command needs its own `cd`.
-    for (const command of setupCommands) template = template.runCmd(`cd "${repoDir}" && ${command}`);
-    // Last, so it only exists in images where every step above succeeded.
-    template = template.runCmd(setupMarkerCommand(setupMarkerContent(setupCommands)));
+    // Public repositories first so their layers sit below the credential
+    // layer once the platform positions ephemeral envs; caller order within
+    // each group.
+    const ordered = [...repos.filter(repo => !repo.token), ...repos.filter(repo => repo.token)];
+    for (const repo of ordered) {
+      const { repoDir, sha, tokenEnv, setupCommands } = repo;
+      const auth = tokenEnv ? `${gitAuthFlag(tokenEnv)} ` : '';
+      // Each operation gets its own cached provider build step. Same shallow
+      // clone Factory makes at session start when no image provided one, so
+      // both paths yield the same checkout.
+      template = template.runCmd(
+        repoCloneCommand({ cloneUrl: repo.cloneUrl, destination: repoDir, ...(tokenEnv ? { tokenEnv } : {}) }),
+      );
+      if (sha) {
+        template = template
+          .runCmd(`git -C "${repoDir}" ${auth}fetch origin ${sha}`)
+          .runCmd(`git -C "${repoDir}" checkout ${sha}`);
+      }
+      // Build steps use fresh shells, so each setup command needs its own `cd`.
+      for (const command of setupCommands) {
+        template = template.runCmd(guardedSetupCommand({ repoDir, command, continueOnFailure }));
+      }
+      // Last for this repository, so it only exists once every step above ran.
+      const content = setupMarkerContent(setupCommands);
+      template = template.runCmd(
+        isList ? setupMarkerCommand(content, repoSetupMarkerPath(repoDir)) : setupMarkerCommand(content),
+      );
+    }
+    if (isList) {
+      const workspaceCommands = normalizeSetupCommands(options.workspaceSetupCommand);
+      for (const command of workspaceCommands) template = template.runCmd(command);
+      template = template.runCmd(
+        setupMarkerCommand(setupMarkerContent(workspaceCommands), WORKSPACE_SETUP_MARKER_PATH),
+      );
+    }
     return template.withFamily(family);
   };
 }
@@ -301,8 +450,8 @@ export function redactSecrets(value: unknown): string | undefined {
     .replace(/\b(gh[pousr]_|github_pat_)[A-Za-z0-9_]+/g, '$1***');
 }
 
-function gitAuthFlag(): string {
-  return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${BUILD_TOKEN_ENV}" | base64 -w0)"`;
+function gitAuthFlag(tokenEnv: string): string {
+  return `-c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$${tokenEnv}" | base64 -w0)"`;
 }
 
 /**

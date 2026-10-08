@@ -7,5 +7,17 @@
     "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "ZhipuAI/GLM-4.5",
     "ZhipuAI/GLM-4.6"
-  ]
+  ],
+  "reasoning": {
+    "ZhipuAI/GLM-4.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "ZhipuAI/GLM-4.5": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }
