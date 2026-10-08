@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ListKnowledgeScopeNodesInput, ListKnowledgeScopeNodesOutput } from '@internal/core/knowledge-compat';
+import type {
+  ListKnowledgeScopeMembersInput,
+  ListKnowledgeScopeMembersOutput,
+  ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeNodesOutput,
+} from '@internal/core/knowledge-compat';
 import {
+  knowledgeScopeMembersLimit,
   pageKnowledgeScopeNodes,
   parseListKnowledgeScopeNodesInput,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
@@ -888,13 +894,14 @@ export class KnowledgePG extends KnowledgeStorage {
     );
   }
 
-  override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
-    const limit = Math.min(Math.max(input.limit ?? 500, 1), 500);
+  override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
+    const limit = knowledgeScopeMembersLimit(input.limit);
     const result = await this.#readExecutor.execute({
       sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId"=?) AND n."deletedAt" IS NULL AND n."mergedInto" IS NULL ORDER BY n."updatedAt" DESC, n.name ASC, n.id ASC LIMIT ?`,
-      args: [input.scopeNodeId, limit],
+      args: [input.scopeNodeId, limit + 1],
     });
-    return (result.rows as Array<Record<string, unknown>>).map(parseNode);
+    const members = (result.rows as Array<Record<string, unknown>>).map(parseNode);
+    return { members: members.slice(0, limit), hasMore: members.length > limit };
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

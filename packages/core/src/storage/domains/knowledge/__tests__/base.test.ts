@@ -54,15 +54,32 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(Object.values(scopes)).toEqual(expect.arrayContaining([features.id, mastra.id, memory.id]));
 
     // Child scopes are members of their parent, as in the persistent adapters.
-    const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
+    const { members, hasMore } = await store.listScopeMembers({ scopeNodeId: mastra.id });
+    expect(hasMore).toBe(false);
     expect(members).toEqual([
       expect.objectContaining({ id: features.id, type: 'node', name: 'features', kind: 'domain', scope: null }),
     ]);
-    await expect(store.listScopeMembers({ scopeNodeId: features.id })).resolves.toEqual([
-      expect.objectContaining({ id: memory.id, name: 'memory', kind: '', description: 'Memory scope' }),
-    ]);
-    await expect(store.listScopeMembers({ scopeNodeId: memory.id })).resolves.toEqual([]);
-    await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
+    await expect(store.listScopeMembers({ scopeNodeId: features.id })).resolves.toEqual({
+      members: [expect.objectContaining({ id: memory.id, name: 'memory', kind: '', description: 'Memory scope' })],
+      hasMore: false,
+    });
+    await expect(store.listScopeMembers({ scopeNodeId: memory.id })).resolves.toEqual({ members: [], hasMore: false });
+    await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
+      members: [],
+      hasMore: false,
+    });
+
+    // A scope with more members than the limit reports the overflow instead of silently dropping it.
+    await store.reconcileStructure({
+      ...plan,
+      scopes: [...plan.scopes, { address: 'docs', name: 'docs', parentAddresses: ['org:acme'] }],
+    });
+    const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
+    expect(firstPage.members).toHaveLength(1);
+    expect(firstPage.hasMore).toBe(true);
+    await expect(store.listScopeMembers({ scopeNodeId: mastra.id, limit: 2 })).resolves.toMatchObject({
+      hasMore: false,
+    });
   });
 
   it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {

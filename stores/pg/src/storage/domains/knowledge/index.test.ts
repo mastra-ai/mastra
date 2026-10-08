@@ -569,9 +569,17 @@ describe('PostgreSQL knowledge structured reconciliation', () => {
       expect(nodes.find(node => node.name === 'repo:mastra')).toMatchObject({ address: 'repo:mastra' });
       expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
 
-      const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      const { members, hasMore } = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      expect(hasMore).toBe(false);
       expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
-      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
+      expect(members.every(node => node.scope === null)).toBe(true);
+      const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
+      expect(firstPage.members).toHaveLength(1);
+      expect(firstPage.hasMore).toBe(true);
+      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
+        members: [],
+        hasMore: false,
+      });
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
     }

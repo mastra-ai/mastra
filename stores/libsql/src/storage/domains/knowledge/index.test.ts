@@ -536,8 +536,13 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(nodes.find(node => node.name === 'repo:mastra')).toMatchObject({ address: 'repo:mastra' });
       expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
 
-      const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      const { members, hasMore } = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      expect(hasMore).toBe(false);
       expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
+      expect(members.every(node => node.scope === null)).toBe(true);
+      const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
+      expect(firstPage.members).toHaveLength(1);
+      expect(firstPage.hasMore).toBe(true);
 
       // Content nodes never join structural scopes; deletion and unknown ids stay out of the read.
       await client.execute(`UPDATE mastra_knowledge_nodes SET deletedAt=? WHERE id=?`, [
@@ -546,7 +551,10 @@ describe('KnowledgeLibSQL initialization', () => {
       ]);
       const { scopes: afterDelete } = await store.listScopeNodes();
       expect(afterDelete.find(node => node.id === features.id)).toBeUndefined();
-      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
+      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
+        members: [],
+        hasMore: false,
+      });
     } finally {
       client.close();
       rmSync(directory, { recursive: true, force: true });

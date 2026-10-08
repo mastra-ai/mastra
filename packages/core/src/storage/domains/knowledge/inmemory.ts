@@ -5,6 +5,7 @@ import {
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
+  knowledgeScopeMembersLimit,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -30,7 +31,10 @@ import type {
   KnowledgeScopeNodeSummary,
   KnowledgeSemanticDocumentType,
   ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeMembersInput,
+  ListKnowledgeScopeMembersOutput,
   ListKnowledgeScopeNodesOutput,
+  KnowledgeScopeMember,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -270,8 +274,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     return pageKnowledgeScopeNodes(summaries.slice(0, limit + 1), limit, input);
   }
 
-  override async listScopeMembers(input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
-    const limit = Math.min(Math.max(input.limit ?? 500, 1), 500);
+  override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
+    const limit = knowledgeScopeMembersLimit(input.limit);
     const memberIds = new Set<string>();
     for (const edge of this.#structureParents) {
       const [scopeId, parentId] = edge.split('\u0000');
@@ -280,7 +284,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     // Child scopes live in the structure maps, not the node table; return them as scope nodes the way
     // the persistent adapters do (no content scope, empty kind when unset).
     const scopesById = new Map([...this.#structureScopes.values()].map(scope => [scope.id, scope]));
-    const members: KnowledgeNode[] = [];
+    const members: KnowledgeScopeMember[] = [];
     for (const id of memberIds) {
       const node = await this.getNode(id);
       if (node) {
@@ -295,13 +299,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         name: scope.name,
         kind: scope.kind ?? '',
         ...(scope.description ? { description: scope.description } : {}),
-        scope: null as unknown as KnowledgeScope,
+        scope: null,
         version: 1,
         createdAt: scope.createdAt,
         updatedAt: scope.createdAt,
       });
     }
-    return members.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, limit);
+    members.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    return { members: members.slice(0, limit), hasMore: members.length > limit };
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

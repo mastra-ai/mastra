@@ -87,6 +87,42 @@ export function pageKnowledgeScopeNodes(
   return { scopes, nextCursor: rows.length > limit && last ? createKnowledgeScopeNodeCursor(last, input) : null };
 }
 
+/** A node placed inside a structural scope. Child scopes are members too, with `scope: null`. */
+export interface KnowledgeScopeMember {
+  id: string;
+  type: 'node';
+  name: string;
+  kind: string;
+  content?: string;
+  description?: string;
+  scope: string[] | null;
+  version: number;
+  mergedInto?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ListKnowledgeScopeMembersInput {
+  scopeNodeId: string;
+  /** Members to return, 1–500 (default 500). */
+  limit?: number;
+}
+
+export interface ListKnowledgeScopeMembersOutput {
+  /** Newest-first members, at most `limit`. */
+  members: KnowledgeScopeMember[];
+  /** True when the scope has more members than were returned. */
+  hasMore: boolean;
+}
+
+export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
+
+/** Clamps a requested member limit to 1–{@link MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT}. */
+export function knowledgeScopeMembersLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT);
+}
+
 /** A reconciled structural scope node with its containing scope nodes. */
 export interface KnowledgeScopeNodeSummary {
   /** UUID of the `isScope` node. */

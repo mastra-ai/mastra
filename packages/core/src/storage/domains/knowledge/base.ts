@@ -259,6 +259,36 @@ export interface ListKnowledgeScopeNodesInput {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+/**
+ * A node placed inside a structural scope. Child scopes are members too; they have no content scope,
+ * so `scope` is `null` for them.
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export type KnowledgeScopeMember = Omit<KnowledgeNode, 'scope'> & { scope: KnowledgeScope | null };
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeMembersInput {
+  scopeNodeId: string;
+  /** Members to return, 1–500 (default 500). */
+  limit?: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeMembersOutput {
+  /** Newest-first members, at most `limit`. */
+  members: KnowledgeScopeMember[];
+  /** True when the scope has more members than were returned. */
+  hasMore: boolean;
+}
+
+export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
+
+/** Clamps a requested member limit to 1–{@link MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT}. */
+export function knowledgeScopeMembersLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT);
+}
+
 export interface ListKnowledgeScopeNodesOutput {
   /** Scope nodes ordered by name, then id. */
   scopes: KnowledgeScopeNodeSummary[];
@@ -790,7 +820,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
   }
 
   /** Lists the nodes placed inside one structural scope, newest-first (bounded). */
-  async listScopeMembers(_input: { scopeNodeId: string; limit?: number }): Promise<KnowledgeNode[]> {
+  async listScopeMembers(_input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
     throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
   }
 
