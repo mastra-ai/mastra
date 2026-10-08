@@ -71,6 +71,36 @@ describe('KnowledgeLibSQL atomic node and record creation', () => {
   });
 });
 
+describe('KnowledgeLibSQL transaction errors', () => {
+  it('preserves a commit response error after the transaction has closed', async () => {
+    const path = join(tmpdir(), `mastra-knowledge-commit-${randomUUID()}.db`);
+    const client = createClient({ url: `file:${path}` });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const primaryError = new Error('commit response failed');
+      const transaction = client.transaction.bind(client);
+      const transactionSpy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
+        const tx = await transaction(mode);
+        const commit = tx.commit.bind(tx);
+        vi.spyOn(tx, 'commit').mockImplementation(async () => {
+          await commit();
+          throw primaryError;
+        });
+        return tx;
+      });
+
+      await expect(store.createNode({ name: 'Committed anyway', scopeIds: [] })).rejects.toBe(primaryError);
+      transactionSpy.mockRestore();
+      const rows = await client.execute("SELECT id FROM mastra_knowledge_nodes WHERE name='Committed anyway'");
+      expect(rows.rows).toHaveLength(1);
+    } finally {
+      client.close();
+      await rm(path, { force: true });
+    }
+  });
+});
+
 describe('KnowledgeLibSQL bounded node reads', () => {
   it('reads visible nodes in one query instead of loading every same-named node', async () => {
     const client = createClient({ url: ':memory:' });
