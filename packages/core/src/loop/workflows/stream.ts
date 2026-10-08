@@ -14,6 +14,7 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -328,6 +329,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // refcount is owned by the internal-workflow registration above —
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
+        // A scope kept alive across suspension still holds the previous request's step tools,
+        // which close over that request's requestContext. Drop them so a resume runs the tools
+        // built for this call, as a resume in a fresh process does.
+        if (resumeContext) rest.mastra.__getRunScope(runId)?.delete(STEP_TOOLS_KEY);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer
