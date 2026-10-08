@@ -33,6 +33,8 @@ export interface StepAgentOptions {
   /** Park the tool at this step until `release` resolves or the run is aborted. */
   blockAt?: number;
   release?: Promise<void>;
+  /** Text returned after the scripted tool calls complete. */
+  finalText?: string;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
 }
@@ -58,7 +60,16 @@ function chunks(parts: unknown[]): ReadableStream<any> {
   });
 }
 
-export function createStepAgent({ id, steps, blockAt, release, memory, onToolEvent, onModelCall }: StepAgentOptions) {
+export function createStepAgent({
+  id,
+  steps,
+  blockAt,
+  release,
+  finalText = `finished ${steps} steps`,
+  memory,
+  onToolEvent,
+  onModelCall,
+}: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
     doStream: async () => {
@@ -88,7 +99,7 @@ export function createStepAgent({ id, steps, blockAt, release, memory, onToolEve
         stream: chunks([
           ...head,
           { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: `finished ${steps} steps` },
+          { type: 'text-delta', id: 'text-1', delta: finalText },
           { type: 'text-end', id: 'text-1' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
         ]),

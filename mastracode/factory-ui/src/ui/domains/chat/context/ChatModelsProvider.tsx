@@ -59,7 +59,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     defaultModelId: defaultModelQuery.data?.modelId ?? undefined,
     isLoading: false,
     error: undefined,
-    setModel: modelId => switchModel(modelId),
+    setModel: modelId => switchModel({ modelId }),
   };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;

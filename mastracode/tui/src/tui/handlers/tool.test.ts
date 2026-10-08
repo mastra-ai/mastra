@@ -14,6 +14,7 @@ import {
   handleToolInputStart,
   handleShellOutput,
   handleToolStart,
+  handleToolApprovalRequired,
 } from './tool.js';
 import type { EventHandlerContext } from './types.js';
 
@@ -402,5 +403,85 @@ describe('quiet shell description streaming', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('✗');
     expect(output).not.toContain('✓');
+  });
+});
+
+describe('inline tool approval', () => {
+  it('shows the prompt inline in the chat and removes it once answered', () => {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+    (ctx.state as any).pendingApprovalDismiss = null;
+
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
+    handleToolApprovalRequired(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
+
+    const approval = ctx.state.activeInlineApproval;
+    expect(approval).toBeDefined();
+    expect(visibleChildren(ctx)).toContain(approval);
+    // The tool row above already shows the call, so the prompt is just the question and the keys.
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('Allow?');
+
+    approval!.handleInput('y');
+
+    expect(respondToToolApproval).toHaveBeenCalledWith({ decision: 'approve', toolCallId: 'call-1' });
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(visibleChildren(ctx)).not.toContain(approval);
+    expect(ctx.state.pendingApprovalDismiss).toBeNull();
+  });
+
+  it('declines and removes the prompt when dismissed', () => {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+
+    handleToolApprovalRequired(ctx, 'call-2', 'execute_command', { command: 'rm -rf build' });
+    ctx.state.pendingApprovalDismiss?.();
+
+    expect(respondToToolApproval).toHaveBeenCalledWith({
+      decision: 'decline',
+      toolCallId: 'call-2',
+      declineContext: undefined,
+    });
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('Allow');
+  });
+
+  it('names the tool and its arguments when the approval targets a different call than the visible row', () => {
+    const ctx = createToolHandlerContext();
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+
+    // A wrapper tool asks approval for an inner tool under its own call id.
+    handleToolStart(ctx, 'call-3', 'execute_command', { command: 'run-wrapper' });
+    handleToolApprovalRequired(ctx, 'call-3', 'write_file', { path: 'src/auth.ts' });
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow write_file?');
+    expect(output).toContain('path: src/auth.ts');
+  });
+
+  it('names the command in quiet mode, where the row shows a description instead', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+    const args = { command: 'rm -rf build', description: 'Cleaning the build output' };
+
+    handleToolStart(ctx, 'call-5', 'execute_command', args);
+    handleToolApprovalRequired(ctx, 'call-5', 'execute_command', args);
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow execute_command?');
+    expect(output).toContain('command: rm -rf build');
+  });
+
+  it('names the tool when no row shows the call', () => {
+    const ctx = createToolHandlerContext();
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+
+    handleToolApprovalRequired(ctx, 'call-4', 'mcp_search', { query: 'release notes' });
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow mcp_search?');
+    expect(output).toContain('query: release notes');
   });
 });

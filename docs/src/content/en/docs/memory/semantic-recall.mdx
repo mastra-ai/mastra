@@ -441,11 +441,11 @@ PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an
 
 ```typescript {18-23}
 import { Memory } from '@mastra/memory'
-import { PgStore, PgVector } from '@mastra/pg'
+import { PostgresStore, PgVector } from '@mastra/pg'
 
 const agent = new Agent({
   memory: new Memory({
-    storage: new PgStore({
+    storage: new PostgresStore({
       id: 'agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),

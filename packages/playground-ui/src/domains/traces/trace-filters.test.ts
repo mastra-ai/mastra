@@ -13,6 +13,7 @@ import {
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
   TRACE_FILTER_BAR_OPERATORS,
+  traceFilterFieldColor,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from './trace-filters';
@@ -84,11 +85,27 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
       gte: 'at least',
       lt: 'less than',
       lte: 'at most',
+      matches: 'matches',
+      notMatches: 'does not match',
     });
   });
 });
 
 describe('createTraceFilterBarFields', () => {
+  describe('when built-in and metadata filters are available', () => {
+    it('gives every field a neutral gray accent', () => {
+      const fields = createTraceFilterBarFields({
+        availableRootEntityNames: ['weather-agent'],
+        availableEnvironments: ['prod'],
+        canonicalTraceFields: [{ path: 'tags', operators: ['includes'], valueSuggestions: true }],
+        metadataFields: [{ path: 'metadata.region', suggestions: async () => [] }],
+      });
+
+      expect(fields.map(field => field.id)).toEqual(expect.arrayContaining(['tags', 'metadata.region', 'spans.error']));
+      expect(new Set(fields.map(field => field.color))).toEqual(new Set(['var(--muted-foreground)']));
+    });
+  });
+
   const fields = createTraceFilterBarFields({
     availableRootEntityNames: ['weather-agent'],
     availableEnvironments: ['prod'],
@@ -105,6 +122,41 @@ describe('createTraceFilterBarFields', () => {
   it('omits fields the query API cannot filter on', () => {
     expect(byId('runId')).toBeUndefined();
     expect(byId('serviceName')).toBeUndefined();
+  });
+
+  describe('when the server supports root duration predicates', () => {
+    const rootDuration = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      withRootDuration: true,
+    }).find(f => f.id === 'durationMs');
+
+    it('offers a Duration (ms) field', () => {
+      expect(rootDuration?.label).toBe('Duration (ms)');
+    });
+
+    it('treats it as a number field with range operators only', () => {
+      expect(rootDuration?.type).toBe('number');
+      expect(rootDuration?.operators).toEqual(['gt', 'gte', 'lt', 'lte']);
+    });
+  });
+
+  describe('when the server does not support root duration predicates', () => {
+    it('does not offer a Duration (ms) field', () => {
+      expect(byId('durationMs')).toBeUndefined();
+    });
+  });
+
+  describe('when only the legacy list endpoint is available', () => {
+    it('does not offer a Duration (ms) field even if root duration is supported', () => {
+      const legacy = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        withQueryTrace: false,
+        withRootDuration: true,
+      });
+      expect(legacy.find(f => f.id === 'durationMs')).toBeUndefined();
+    });
   });
 
   describe('when the backend has not described the tags field', () => {
@@ -279,7 +331,34 @@ describe('createTraceFilterBarFields', () => {
 
   it('offers only presence operators on presence fields', () => {
     expect(byId('spans.error')?.operators).toEqual(['exists', 'notExists']);
-    expect(byId('feedback.comment')?.operators).toEqual(['exists', 'notExists']);
+  });
+
+  it('offers word matching on human-text fields', () => {
+    const text = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'];
+    expect(byId('feedback.comment')?.operators).toEqual(text);
+    expect(byId('spans.name')?.operators).toEqual(text);
+    expect(byId('spans.model')?.operators).toEqual(['is', 'isNot', 'in', 'notIn', 'exists', 'notExists']);
+  });
+
+  it('marks the text operators as free text so strict fields still accept typed words', () => {
+    const byOperatorId = Object.fromEntries(TRACE_FILTER_BAR_OPERATORS.map(o => [o.id, o]));
+    expect(byOperatorId.matches?.freeText).toBe(true);
+    expect(byOperatorId.notMatches?.freeText).toBe(true);
+    expect(byOperatorId.is?.freeText).toBeUndefined();
+  });
+
+  it('keeps feedback comment free text because the values endpoint rejects it', () => {
+    const fields = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      metadataFields: [],
+      valueSuggestions: () => async () => [],
+      withQueryTrace: true,
+    });
+    const find = (id: string) => fields.find(field => field.id === id);
+    expect(find('feedback.comment')?.strict).toBeUndefined();
+    expect(find('feedback.comment')?.suggestions).toBeUndefined();
+    expect(find('spans.name')?.strict).toBe(true);
   });
 
   it('lists picker fields, then free-text, then span, score and feedback fields, alphabetically', () => {
@@ -366,6 +445,17 @@ describe('createTraceFilterBarFields', () => {
     it('ignores paths outside the metadata namespace', () => {
       expect(withMetadata.find(f => f.id === 'notMetadata')).toBeUndefined();
     });
+  });
+});
+
+describe('traceFilterFieldColor', () => {
+  describe('when a time, known, or dynamic field requests an accent', () => {
+    it.each(['timeRange', 'status', 'spans.error', 'metadata.region', 'customField'])(
+      'uses neutral gray for %s',
+      fieldId => {
+        expect(traceFilterFieldColor(fieldId)).toBe('var(--muted-foreground)');
+      },
+    );
   });
 });
 
@@ -498,21 +588,20 @@ describe('filter group URL params', () => {
 });
 
 describe('presence-only filter URL params', () => {
-  describe('when a hand-edited URL gives the feedback comment a text value', () => {
-    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
-      'drops the token for %s',
-      query => {
-        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
-          { fieldId: 'traceId', value: 'abc' },
-        ]);
-      },
-    );
+  describe('when the URL gives the feedback comment a text value', () => {
+    it('keeps the token so the comment can be matched', () => {
+      expect(
+        getTracePropertyFilterTokens(
+          new URLSearchParams('filterFeedbackComment=wrong&filterFeedbackComment.op=matches'),
+        ),
+      ).toEqual([{ fieldId: 'feedback.comment', value: 'wrong', operatorId: 'matches' }]);
+    });
   });
 
-  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
+  describe('when a hand-edited URL gives a presence-only field a value operator', () => {
     it.each([
-      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
-      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
+      'filterSpanError=boom',
+      'filterSpanError=boom&filterSpanError.op=is',
       'filterSpanError=boom&filterSpanError.op=in',
     ])('drops the token for %s', query => {
       expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
@@ -629,6 +718,26 @@ describe('filter operator URL params', () => {
     });
   });
 
+  describe('when the URL carries a root duration filter', () => {
+    const query = 'filterDurationMs=1000&filterDurationMs.op=gt';
+
+    it('reads it as a durationMs token', () => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams(query))).toEqual([
+        { fieldId: 'durationMs', value: '1000', operatorId: 'gt' },
+      ]);
+    });
+
+    it('writes it back unchanged', () => {
+      const params = new URLSearchParams();
+      applyTracePropertyFilterTokens(params, getTracePropertyFilterTokens(new URLSearchParams(query)));
+      expect(params.toString()).toBe(query);
+    });
+
+    it('counts as an active filter', () => {
+      expect(hasAnyTraceFilterParams(new URLSearchParams(query))).toBe(true);
+    });
+  });
+
   describe('when filters are preserved for storage', () => {
     it('carries .op params along with their value', () => {
       const preserved = getPreservedTraceFilterParams(
@@ -684,11 +793,13 @@ describe('traceTokensToFilterBarItems', () => {
         { fieldId: 'traceId', value: '' },
         { fieldId: 'status', value: 'Any' },
         { fieldId: 'tags', value: [] },
+        { fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' },
       ]),
     ).toEqual([
       { id: 'traceId', fieldId: 'traceId', operatorId: 'is', value: '' },
       { id: 'status', fieldId: 'status', operatorId: 'is', value: '' },
       { id: 'tags', fieldId: 'tags', operatorId: 'in', value: [] },
+      { id: 'feedback.comment', fieldId: 'feedback.comment', operatorId: 'matches', value: 'Any' },
     ]);
   });
 });

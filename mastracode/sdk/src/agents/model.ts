@@ -192,7 +192,24 @@ export function resolveModel(
     throw new Error(`Invalid model id: ${modelId}`);
   }
 
+  // Deployed web registers a per-tenant credential store provider; when the
+  // request carries an authenticated tenant, resolve credentials through the
+  // caller's own store (user > org > env). Undefined = global AuthStorage.
+  const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
+  const baseCredentialStore = tenantCredentialStore ?? getGlobalAuthStorage();
+
   if (providerId === AMAZON_BEDROCK_GATEWAY_ID) {
+    // Bedrock authenticates through the server process's AWS credential chain,
+    // never a tenant credential. A tenant store only lets it through when the
+    // operator opted the deployment in.
+    if (
+      tenantCredentialStore?.allowEnvironmentFallback === false &&
+      !tenantCredentialStore.allowsDeploymentCredentials?.(AMAZON_BEDROCK_GATEWAY_ID)
+    ) {
+      throw new ProviderAuthRequiredError(
+        'Amazon Bedrock is not enabled for this Factory deployment. The operator must provide AWS credentials to the server and set FACTORY_DEPLOYMENT_MODEL_PROVIDERS=amazon-bedrock.',
+      );
+    }
     const bedrockGateway = createAmazonBedrockGateway();
     const routerId = `${AMAZON_BEDROCK_GATEWAY_ID}/${bareModelId}`;
     const auth = bedrockGateway.resolveAuth({
@@ -214,10 +231,6 @@ export function resolveModel(
   const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-  // Deployed web registers a per-tenant credential store provider; when the
-  // request carries an authenticated tenant, resolve credentials through the
-  // caller's own store (user > org > env). Undefined = global AuthStorage.
-  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
   const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),

@@ -38,6 +38,7 @@ const colorMixEffects = [
   'packages/playground-ui/src/ds/components/Activity/activity.css',
   'packages/playground-ui/src/ds/components/Composer/composer-ring.css',
   'packages/playground-ui/src/ds/components/Composer/composer.css',
+  'packages/playground-ui/src/ds/components/GrainFill/grain-fill.css',
   'packages/playground-ui/src/ds/components/Sidebar/footer/sidebar-meter.tsx',
 ];
 

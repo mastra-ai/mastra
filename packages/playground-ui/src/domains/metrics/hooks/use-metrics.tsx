@@ -43,10 +43,6 @@ type MetricsContextValue = {
   dimensionalFilter: MetricsDimensionalFilter;
   /** Stable JSON representation of `dimensionalFilter`, safe for query keys. */
   dimensionalFilterKey: string;
-  /** Base path drilldown links should target for the Traces page. */
-  tracesBasePath: string | undefined;
-  /** Base path drilldown links should target for the Logs page. */
-  logsBasePath: string | undefined;
 };
 
 export const MetricsContext = createContext<MetricsContextValue>({
@@ -60,8 +56,6 @@ export const MetricsContext = createContext<MetricsContextValue>({
   setFilterTokens: () => {},
   dimensionalFilter: {},
   dimensionalFilterKey: '{}',
-  tracesBasePath: undefined,
-  logsBasePath: undefined,
 });
 
 export function useMetrics() {
@@ -110,8 +104,6 @@ export function MetricsProvider({
   onFilterTokensChange,
   customRange,
   onCustomRangeChange,
-  tracesBasePath,
-  logsBasePath,
 }: {
   children: ReactNode;
   preset: DatePreset;
@@ -120,10 +112,6 @@ export function MetricsProvider({
   onFilterTokensChange: (tokens: PropertyFilterToken[]) => void;
   customRange?: DateRange;
   onCustomRangeChange?: (range: DateRange | undefined) => void;
-  /** Base path for drilldown links to the Traces page. Defaults to `/traces` when omitted. */
-  tracesBasePath?: string;
-  /** Base path for drilldown links to the Logs page. Defaults to `/logs` when omitted. */
-  logsBasePath?: string;
 }) {
   // Stable key for memo dependencies — the parent may re-create the tokens
   // array on every render (e.g. from `useMemo(... , [searchParams])`), but the
@@ -154,8 +142,6 @@ export function MetricsProvider({
       setFilterTokens: onFilterTokensChange,
       dimensionalFilter,
       dimensionalFilterKey,
-      tracesBasePath,
-      logsBasePath,
     }),
     [
       preset,
@@ -168,8 +154,6 @@ export function MetricsProvider({
       onFilterTokensChange,
       dimensionalFilter,
       dimensionalFilterKey,
-      tracesBasePath,
-      logsBasePath,
     ],
   );
 

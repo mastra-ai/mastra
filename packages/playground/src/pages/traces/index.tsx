@@ -11,6 +11,7 @@ import {
   useThreadQueryAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
+  useTraceQueryRootDurationAvailable,
 } from '@mastra/playground-ui/domains/capabilities';
 import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
@@ -41,6 +42,7 @@ import {
   filterBarExpressionToTraceFilters,
   filterBarItemsToTraceTokens,
   TRACE_FILTER_BAR_OPERATORS,
+  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
@@ -83,6 +85,10 @@ type TracesPageProps = {
 
 const TRACES_SORT_KEYS = ['startedAt'] as const;
 const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
+const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
+// The agent Chat tab opens its Traces tab filtered to the open conversation. That filter is
+// navigation context, so it must not be restored on a later visit.
+const SCOPED_UNSAVED_FILTER_PARAMS = [TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId];
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
@@ -114,6 +120,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
     storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+    excludeParams: isScoped ? SCOPED_UNSAVED_FILTER_PARAMS : undefined,
   });
   const querySearchParams = new URLSearchParams(searchParams);
   querySearchParams.delete('listMode');
@@ -124,6 +131,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // that has no effect on the list.
   for (const field of TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS) {
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
+  }
+  // Servers without root-duration support reject `durationMs` predicates (shared links, saved filters).
+  // Flat params are dropped here; `filterGroup` conditions are dropped by `buildTraceQueryRequest`.
+  const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
+  if (!withRootDuration) {
+    querySearchParams.delete('filterDurationMs');
+    querySearchParams.delete('filterDurationMs.op');
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
   const { sort, onSortChange } = useUrlSort({
@@ -275,9 +289,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         canonicalTraceFields,
         valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
         withQueryTrace,
+        withRootDuration,
       }),
     ],
     [
+      withRootDuration,
       rootEntityNameSuggestions,
       discoveredEnvironments,
       hiddenFieldIds,
@@ -357,6 +373,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,
         groups: url.filterGroups,
+        excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],

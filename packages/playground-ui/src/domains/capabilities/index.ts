@@ -4,4 +4,5 @@ export {
   useThreadQueryAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
+  useTraceQueryRootDurationAvailable,
 } from '@mastra/react/hooks/capabilities';
