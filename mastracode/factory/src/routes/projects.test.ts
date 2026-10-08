@@ -739,7 +739,7 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify(body),
       });
 
-    it('reads defaults and the ordered repositories, and writes settings, order and membership', async () => {
+    it('reads unset resources as null and the ordered repositories, and writes settings, order and membership', async () => {
       const { seed, project, links, app, github } = await seedEnvironment();
 
       const read = await app.request(`/web/factory/projects/${project.id}/environment`);
