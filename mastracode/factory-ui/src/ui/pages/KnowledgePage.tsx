@@ -18,7 +18,10 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
-import { knowledgeActivityLabel } from '../domains/factory/components/knowledge/activityLabel';
+import {
+  knowledgeActivityLabel,
+  KNOWLEDGE_ACTIVITY_TRUNCATED,
+} from '../domains/factory/components/knowledge/activityLabel';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
@@ -390,15 +393,22 @@ function ActivityPanel({
   const events = activity.data.pages
     .flatMap(page => page.events)
     .filter((event, index, all) => all.findIndex(candidate => candidate.id === event.id) === index);
+  const truncatedNotice = activity.data.pages.some(page => page.truncated) ? (
+    <Notice variant="info">{KNOWLEDGE_ACTIVITY_TRUNCATED}</Notice>
+  ) : null;
   if (events.length === 0) {
     return (
-      <Txt as="p" variant="body" className="text-muted-foreground">
-        No knowledge activity yet.
-      </Txt>
+      <>
+        {truncatedNotice}
+        <Txt as="p" variant="body" className="text-muted-foreground">
+          No knowledge activity yet.
+        </Txt>
+      </>
     );
   }
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+      {truncatedNotice}
       <ol aria-label="Knowledge activity" className="divide-border divide-y">
         {events.map(event => (
           <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">

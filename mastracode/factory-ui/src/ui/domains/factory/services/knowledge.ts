@@ -190,6 +190,8 @@ export interface KnowledgeActivityEvent {
 export interface KnowledgeActivityPayload {
   events: KnowledgeActivityEvent[];
   nextCursor?: string;
+  /** The scope has more members than activity covers; events for the rest are omitted. */
+  truncated?: boolean;
 }
 
 export interface KnowledgeNodePayload {
