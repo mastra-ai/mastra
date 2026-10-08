@@ -585,6 +585,173 @@ describe('checkpoint writes are ordered with the step start writes', () => {
     }
   });
 
+  it.each(['failed', 'suspended'] as const)(
+    'foreach: a start write made while a %s sibling is being reported keeps the finished items',
+    async outcome => {
+      const gate = () => {
+        let release!: () => void;
+        const promise = new Promise<void>(resolve => (release = resolve));
+        return { promise, release };
+      };
+      const item1Work = gate();
+      const item2Startup = gate();
+      const item1Progress = gate();
+      let item2StartupEntered = false;
+      let item1ProgressHeld = false;
+      const state = { restarted: false };
+      const build = () => {
+        const list = step('list', async () => [0, 1, 2]);
+        const execute = vi.fn(async ({ inputData, suspend }: any) => {
+          if (state.restarted) return { charged: inputData };
+          if (inputData === 1) {
+            await item1Work.promise;
+            if (outcome === 'failed') throw new Error('card declined');
+            return suspend({ reason: 'needs approval' });
+          }
+          return inputData === 2 ? never() : { charged: inputData };
+        });
+        const charge = createStep({ id: 'charge', inputSchema: anySchema, outputSchema: anySchema, execute });
+        const workflow = createWorkflow({ id: `order-${outcome}`, inputSchema: anySchema, outputSchema: anySchema })
+          .then(list.step)
+          .foreach(charge, { concurrency: 2 })
+          .commit();
+        return { workflow, fns: { charge: execute } };
+      };
+      const originalStart = DefaultExecutionEngine.prototype.onStepExecutionStart;
+      const startHook = vi
+        .spyOn(DefaultExecutionEngine.prototype, 'onStepExecutionStart')
+        .mockImplementation(async function (this: DefaultExecutionEngine, params: any) {
+          if (params.executionContext.foreachIndex === 2) {
+            item2StartupEntered = true;
+            await item2Startup.promise;
+          }
+          return originalStart.call(this, params);
+        });
+      const originalPublish = EventEmitterPubSub.prototype.publish;
+      const publishHook = vi.spyOn(EventEmitterPubSub.prototype, 'publish').mockImplementation(async function (
+        this: EventEmitterPubSub,
+        ...args: any[]
+      ) {
+        const data = args[1]?.data;
+        if (data?.type === 'workflow-step-progress' && data.payload.currentIndex === 1) {
+          item1ProgressHeld = true;
+          await item1Progress.promise;
+        }
+        return (originalPublish as any).apply(this, args);
+      });
+      try {
+        const { runId, stored } = await runWithInterceptedStore(build, () => {});
+        // item 0 is finished and saved once item 2 is picked up; item 1 then ends but its report is held
+        await vi.waitFor(() => expect(item2StartupEntered).toBe(true));
+        item1Work.release();
+        await vi.waitFor(() => expect(item1ProgressHeld).toBe(true));
+        item2Startup.release();
+        await sleep(300);
+        const snapshot = JSON.parse(JSON.stringify(stored()!)) as WorkflowRunState;
+        item1Progress.release();
+
+        const foreachOutput = (snapshot.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput;
+        expect(foreachOutput?.[0]?.status).toBe('success');
+
+        startHook.mockRestore();
+        publishHook.mockRestore();
+        state.restarted = true;
+        const { restarted: result, fns } = await restartFrom(build, runId, snapshot);
+        expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([1, 2]);
+        expect(result.status).toBe('success');
+      } finally {
+        startHook.mockRestore();
+        publishHook.mockRestore();
+        item1Work.release();
+        item2Startup.release();
+        item1Progress.release();
+      }
+    },
+  );
+
+  it.each(['failed', 'suspended'] as const)(
+    'foreach: a %s item still ends the block that way when a sibling starts while it is reported',
+    async outcome => {
+      let releaseItem1!: () => void;
+      const item1Work = new Promise<void>(resolve => (releaseItem1 = resolve));
+      let releaseProgress!: () => void;
+      const item1Progress = new Promise<void>(resolve => (releaseProgress = resolve));
+      let resumed = false;
+      const execute = vi.fn(async ({ inputData, suspend, resumeData }: any) => {
+        if (inputData === 1) {
+          if (resumeData) return { charged: 1, approved: resumeData.approved };
+          await item1Work;
+          if (outcome === 'failed') throw new Error('card declined');
+          return suspend({ reason: 'needs approval' });
+        }
+        return { charged: inputData };
+      });
+      const charge = createStep({ id: 'charge', inputSchema: anySchema, outputSchema: anySchema, execute });
+      const list = step('list', async () => [0, 1, 2]);
+      const workflow = createWorkflow({ id: `final-${outcome}`, inputSchema: anySchema, outputSchema: anySchema })
+        .then(list.step)
+        .foreach(charge, { concurrency: 2 })
+        .commit();
+      new Mastra({ logger: false, storage: new MockStore(), workflows: { wf: workflow } });
+
+      // item 2 is held at startup until item 1 has ended and its report is held
+      const originalStart = DefaultExecutionEngine.prototype.onStepExecutionStart;
+      const startHook = vi
+        .spyOn(DefaultExecutionEngine.prototype, 'onStepExecutionStart')
+        .mockImplementation(async function (this: DefaultExecutionEngine, params: any) {
+          if (params.executionContext.foreachIndex === 2 && !resumed) {
+            releaseItem1();
+            await vi.waitFor(() => expect(progressHeld).toBe(true));
+            setTimeout(releaseProgress, 50);
+          }
+          return originalStart.call(this, params);
+        });
+      let progressHeld = false;
+      const originalPublish = EventEmitterPubSub.prototype.publish;
+      const publishHook = vi.spyOn(EventEmitterPubSub.prototype, 'publish').mockImplementation(async function (
+        this: EventEmitterPubSub,
+        ...args: any[]
+      ) {
+        const data = args[1]?.data;
+        if (data?.type === 'workflow-step-progress' && data.payload.currentIndex === 1 && !resumed) {
+          progressHeld = true;
+          await item1Progress;
+        }
+        return (originalPublish as any).apply(this, args);
+      });
+      try {
+        const run = await workflow.createRun();
+        const result: any = await run.start({ inputData: {} });
+        const charged = result.steps.charge;
+        const foreachOutput = charged.suspendPayload.__workflow_meta.foreachOutput;
+        expect(result.status).toBe(outcome);
+        expect(charged.status).toBe(outcome);
+        expect(foreachOutput[0].status).toBe('success');
+        expect(foreachOutput[1].status).toBe(outcome);
+        expect(foreachOutput[2].status).toBe('success');
+        if (outcome === 'failed') {
+          expect(charged.error.message).toBe('card declined');
+          return;
+        }
+        expect(charged.suspendPayload.reason).toBe('needs approval');
+        expect(charged.suspendPayload.__workflow_meta.foreachIndex).toBe(1);
+        expect(foreachOutput[1].suspendPayload.reason).toBe('needs approval');
+
+        resumed = true;
+        execute.mockClear();
+        const resumedResult: any = await run.resume({ step: 'charge', resumeData: { approved: true } });
+        expect(execute.mock.calls.map(c => c[0].inputData)).toEqual([1]);
+        expect(resumedResult.status).toBe('success');
+        expect(resumedResult.result).toEqual([{ charged: 0 }, { charged: 1, approved: true }, { charged: 2 }]);
+      } finally {
+        startHook.mockRestore();
+        publishHook.mockRestore();
+        releaseItem1();
+        releaseProgress();
+      }
+    },
+  );
+
   it('parallel: an arm that finishes after the block failed to persist does not write another checkpoint', async () => {
     let releaseA!: () => void;
     const gateA = new Promise<void>(resolve => (releaseA = resolve));

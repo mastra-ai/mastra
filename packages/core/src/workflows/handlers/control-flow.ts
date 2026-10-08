@@ -1248,10 +1248,11 @@ export async function executeForeach(
 
       const result = stepExecResult.result as ForeachStepResult;
 
-      // Put the finished items back right away: the awaits below would otherwise leave this item's
-      // plain result in the shared slot, and a sibling's start checkpoint would drop earlier progress.
-      if (result.status === 'success' && !resumingSuspended) {
-        prevForeachOutput[k] = { ...result, suspendPayload: {} };
+      // Put the finished items back right away, whatever this item's outcome: the awaits below would
+      // otherwise leave its plain result in the shared slot, and a sibling's start checkpoint would
+      // drop earlier progress. A failed or suspended item is reported from its own result, not this slot.
+      if (!resumingSuspended) {
+        if (result.status === 'success') prevForeachOutput[k] = { ...result, suspendPayload: {} };
         restoreProgress();
       }
 
