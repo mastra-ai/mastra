@@ -17,7 +17,6 @@ const settings = z.object({ cpuCount: z.number().int().min(1).optional() });
 class MyFactorySandbox extends FactorySandbox<z.infer<typeof settings>> {
   readonly provider = 'my-provider';
   readonly settings = settings;
-  readonly templateFields = ['cpuCount'] as const;
   create(ctx, settings) {
     return new MySandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId, cpuCount: settings.cpuCount });
   }

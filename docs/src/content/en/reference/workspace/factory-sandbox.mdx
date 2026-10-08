@@ -30,12 +30,12 @@ export const factory = new MastraFactory({
 
 ## Provider classes
 
-| Class | Package | Settings | Template fields | Builds |
+| Class | Package | Settings | Builds | |
 | - | - | - | - | - |
-| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `cpuCount`, `memoryMb` | No |
-| `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `cpuCount`, `memoryMb` | `start`, `get`, `list` |
-| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `baseImage`, `owner` | No |
-| `LocalFactorySandbox` | `@mastra/factory` | None | None | No |
+| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | No | |
+| `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` | |
+| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | No | |
+| `LocalFactorySandbox` | `@mastra/factory` | None | No | |
 
 Each provider class takes the same runtime options as its sandbox class (minus `id`, `sandboxId` and `template`, which the class fills in per session), plus `template` options for the repository template and `defaults` for settings the environment leaves unset.
 
@@ -65,7 +65,6 @@ The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps 
 abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
   readonly provider: string
   readonly settings: PublicSchema<TSettings>
-  readonly templateFields: readonly (keyof TSettings & string)[]
   create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox
   template?(ctx: FactorySandboxContext, settings: TSettings): unknown
   builds?: FactorySandboxBuilds<TSettings>
@@ -84,12 +83,6 @@ abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record
     type: 'PublicSchema<TSettings>',
     description:
       'Schema of the settings a user can tune per project: a Zod schema, a JSON Schema or a Standard Schema that can emit JSON Schema. Factory serves the input side as JSON Schema. Author an object of primitive fields; nested objects are not rendered. Defaults to no settings.',
-  },
-  {
-    name: 'templateFields',
-    type: 'string[]',
-    description:
-      'Settings that change the template identity. Changing one of them makes the next session build a new template. Defaults to none.',
   },
   {
     name: 'create',
@@ -126,7 +119,6 @@ const settings = z.object({ region: z.enum(['us', 'eu']).optional() })
 class MyFactorySandbox extends FactorySandbox<z.infer<typeof settings>> {
   readonly provider = 'my-cloud'
   readonly settings = settings
-  readonly templateFields = ['region'] as const
 
   create(ctx: FactorySandboxContext, { region }: z.infer<typeof settings>) {
     return new MyCloudSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId, region })

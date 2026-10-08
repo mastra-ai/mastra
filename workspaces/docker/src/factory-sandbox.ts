@@ -50,7 +50,6 @@ export interface DockerFactorySandboxOptions extends Omit<DockerSandboxOptions, 
 export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSettings> {
   readonly provider = 'docker';
   readonly settings: PublicSchema<DockerFactorySandboxSettings> = SETTINGS_SCHEMA;
-  readonly templateFields = ['baseImage', 'owner'] as const;
 
   readonly #options: DockerFactorySandboxOptions;
 

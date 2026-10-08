@@ -416,7 +416,6 @@ describe('MastraFactory.prepare', () => {
         properties: { size: { type: 'string', enum: ['s', 'm'] } },
         additionalProperties: false,
       } as const;
-      readonly templateFields = ['size'] as const;
       create = vi.fn(() => ({ id: 'sb' }) as never);
     }
     const sandbox = new StubFactorySandbox();
@@ -426,7 +425,6 @@ describe('MastraFactory.prepare', () => {
     expect(sandbox.create).not.toHaveBeenCalled();
     expect(factory.sandboxDescription).toMatchObject({
       provider: 'stub',
-      templateFields: ['size'],
       capabilities: { template: false, builds: { available: false, history: false } },
     });
     expect(factory.sandboxDescription!.settingsSchema.properties).toHaveProperty('size');
@@ -437,7 +435,6 @@ describe('MastraFactory.prepare', () => {
       [FACTORY_SANDBOX_BRAND]: true,
       provider: 'plain',
       settings: { type: 'object', properties: {}, additionalProperties: false },
-      templateFields: [],
       create: () => ({ id: 'sb' }) as never,
     } as const;
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
@@ -454,7 +451,6 @@ describe('MastraFactory.prepare', () => {
     await factory.prepare();
     expect(factory.sandboxDescription).toMatchObject({
       provider: 'custom',
-      templateFields: [],
       capabilities: { template: false, builds: { available: false, history: false } },
     });
     expect(factory.sandboxDescription!.settingsSchema.properties).toEqual({});

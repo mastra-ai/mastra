@@ -21,7 +21,6 @@ type Settings = z.infer<typeof settingsSchema>;
 class TestSandbox extends FactorySandbox<Settings> {
   readonly provider = 'test';
   readonly settings = settingsSchema;
-  readonly templateFields = ['cpuCount'] as const;
   create(ctx: FactorySandboxContext): MastraSandbox {
     return new LocalSandbox({ id: ctx.sessionId });
   }
@@ -51,7 +50,6 @@ describe('describeFactorySandbox', () => {
   it('emits JSON Schema for a zod settings schema and no capabilities without template or builds', () => {
     const description = describeFactorySandbox(new TestSandbox());
     expect(description.provider).toBe('test');
-    expect(description.templateFields).toEqual(['cpuCount']);
     const cpu = description.settingsSchema.properties?.cpuCount as JSONSchema7;
     expect(cpu.type).toBe('integer');
     expect(cpu.minimum).toBe(1);
@@ -63,7 +61,6 @@ describe('describeFactorySandbox', () => {
     class Defaulted extends FactorySandbox<{ region?: string }> {
       readonly provider = 'defaulted';
       readonly settings = z.object({ region: z.enum(['us', 'eu']).default('us') });
-      readonly templateFields = [] as const;
       create = () => new LocalSandbox();
     }
     const description = describeFactorySandbox(new Defaulted());
@@ -80,7 +77,6 @@ describe('describeFactorySandbox', () => {
       [FACTORY_SANDBOX_BRAND]: true,
       provider: 'json',
       settings: jsonSchema,
-      templateFields: ['baseImage'],
       create: c => new LocalSandbox({ id: c.sessionId }),
     };
     const description = describeFactorySandbox(sandbox);

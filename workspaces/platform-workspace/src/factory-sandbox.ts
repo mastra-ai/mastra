@@ -66,7 +66,6 @@ export interface PlatformFactorySandboxOptions extends Omit<
 export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandboxSettings> {
   readonly provider = 'platform';
   readonly settings: PublicSchema<PlatformFactorySandboxSettings> = SETTINGS_SCHEMA;
-  readonly templateFields = ['cpuCount', 'memoryMb'] as const;
 
   readonly #options: PlatformFactorySandboxOptions;
 

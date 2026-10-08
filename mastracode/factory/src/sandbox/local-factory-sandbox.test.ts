@@ -8,7 +8,6 @@ describe('LocalFactorySandbox', () => {
     const sandbox = new LocalFactorySandbox({ root: '/tmp/mc-sandboxes', env: { PATH: '/usr/bin' } });
     expect(describeFactorySandbox(sandbox)).toMatchObject({
       provider: 'local',
-      templateFields: [],
       capabilities: { template: false, builds: { available: false, history: false } },
     });
     const created = sandbox.create({ sessionId: 'sess-1', getRepositoryAccess: undefined }, {});

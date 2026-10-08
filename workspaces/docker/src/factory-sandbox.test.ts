@@ -44,7 +44,6 @@ describe('DockerFactorySandbox', () => {
     const description = describeFactorySandbox(sandbox);
     expect(description.provider).toBe('docker');
     expect(Object.keys(description.settingsSchema.properties ?? {})).toEqual(['baseImage', 'owner']);
-    expect(description.templateFields).toEqual(['baseImage', 'owner']);
     expect(description.capabilities).toEqual({ template: true, builds: { available: false, history: false } });
     expect(sandbox.builds).toBeUndefined();
   });

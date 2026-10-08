@@ -86,7 +86,6 @@ describe('E2BFactorySandbox', () => {
       'memoryMb',
       'idleTimeoutMinutes',
     ]);
-    expect(description.templateFields).toEqual(['cpuCount', 'memoryMb']);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: true } });
   });
 

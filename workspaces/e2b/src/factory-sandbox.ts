@@ -72,7 +72,6 @@ const EXISTING_BUILD = 'existing';
 export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings> {
   readonly provider = 'e2b';
   readonly settings: PublicSchema<E2BFactorySandboxSettings> = SETTINGS_SCHEMA;
-  readonly templateFields = ['cpuCount', 'memoryMb'] as const;
   readonly builds: FactorySandboxBuilds<E2BFactorySandboxSettings>;
 
   readonly #options: E2BFactorySandboxOptions;

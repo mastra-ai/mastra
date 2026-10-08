@@ -64,7 +64,6 @@ describe('PlatformFactorySandbox', () => {
       'memoryMb',
       'idleTimeoutMinutes',
     ]);
-    expect(description.templateFields).toEqual(['cpuCount', 'memoryMb']);
     expect(description.capabilities).toEqual({ template: true, builds: { available: false, history: false } });
   });
 

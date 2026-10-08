@@ -114,6 +114,9 @@ export interface FactorySandboxBuilds<TSettings> {
   list?(ctx: FactorySandboxContext, settings: TSettings): Promise<FactorySandboxBuild[]>;
 }
 
+/** The settings schema of a provider with nothing to tune. */
+const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: false } as const satisfies PublicSchema;
+
 /**
  * The one object a host hands factory for its sandboxes. Extend it to get the
  * brand. It owns the session sandbox constructor, the repo template factory, the schema of user-tunable
@@ -129,11 +132,8 @@ export interface FactorySandboxBuilds<TSettings> {
  * Schema, or a Standard Schema that can emit JSON Schema). Factory normalizes
  * it and serves the input-side JSON Schema on the wire. Every field must be
  * optional: an absent setting means the provider default. Providers may
- * ignore `ctx.resolveHead` and resolve heads themselves. `templateFields` names the settings whose change
- * produces a different template.
+ * ignore `ctx.resolveHead` and resolve heads themselves.
  */
-/** The settings schema of a provider with nothing to tune. */
-const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: false } as const satisfies PublicSchema;
 
 export abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
   /** Brand factory detects the class by; never test by shape. */
@@ -142,8 +142,6 @@ export abstract class FactorySandbox<TSettings extends Record<string, unknown> =
   abstract readonly provider: string;
   /** Defaults to no settings; override with the provider's schema. */
   readonly settings: PublicSchema<TSettings> = NO_SETTINGS as PublicSchema<TSettings>;
-  /** Defaults to none; override with the settings that change the template identity. */
-  readonly templateFields: ReadonlyArray<keyof TSettings & string> = [];
   abstract create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox;
   /**
    * The environment's repo template for the given context and settings, in
@@ -168,7 +166,6 @@ export function isFactorySandbox(value: unknown): value is FactorySandbox {
 export interface FactorySandboxDescription {
   provider: string;
   settingsSchema: JSONSchema7;
-  templateFields: string[];
   capabilities: {
     template: boolean;
     builds: { available: boolean; history: boolean };
@@ -188,7 +185,6 @@ export function describeFactorySandbox(sandbox: FactorySandbox): FactorySandboxD
       target: 'draft-07',
       io: 'input',
     }),
-    templateFields: [...sandbox.templateFields],
     capabilities: {
       template: typeof sandbox.template === 'function',
       builds: {

@@ -11,7 +11,6 @@ describe('CallbackFactorySandbox', () => {
     expect(describeFactorySandbox(sandbox)).toEqual({
       provider: 'custom',
       settingsSchema: expect.objectContaining({ type: 'object', properties: {}, additionalProperties: false }),
-      templateFields: [],
       capabilities: { template: false, builds: { available: false, history: false } },
     });
     const ctx = { sessionId: 's1', sandboxId: 'vm', getRepositoryAccess: undefined };
