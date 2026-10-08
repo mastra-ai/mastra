@@ -618,7 +618,7 @@ describe('FilterBar', () => {
           />,
         );
         fireEvent.click(screen.getByRole('combobox', { name: 'Value: thread-a' }));
-        const search = (await screen.findByPlaceholderText('Type a value…')) as HTMLInputElement;
+        const search = await screen.findByPlaceholderText<HTMLInputElement>('Type a value…');
         expect(screen.getByRole('option', { name: 'thread-a' })).toBeTruthy();
 
         fireEvent.change(search, { target: { value: 'thread-b' } });

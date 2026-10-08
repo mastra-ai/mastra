@@ -57,14 +57,14 @@ export function useValueStep({
 
   // Selected values the suggestions do not list (typed in, or not matching the current
   // search) are listed too, so every value of a multi-selection can be seen and removed.
+  // Memoized for correctness, not speed: these are the Combobox `items`, and Base UI
+  // re-syncs (and loops on "Maximum update depth exceeded") when it gets a new array each render.
   const options = useMemo(() => {
     if (!isMany) return suggestions.options;
-    const listed = new Set(suggestions.options.map(o => o.value));
-    const extra = selected
-      .filter(v => !listed.has(v) && (!suggestions.hasSuggestions || matchesQuery(v, query)))
-      .map(value => ({ value }));
-    return extra.length > 0 ? [...suggestions.options, ...extra] : suggestions.options;
-  }, [isMany, suggestions.options, suggestions.hasSuggestions, selected, query]);
+    const unlisted = unlistedSelection(selected, suggestions.options, suggestions.hasSuggestions, query);
+    if (unlisted.length === 0) return suggestions.options;
+    return [...suggestions.options, ...unlisted];
+  }, [isMany, selected, suggestions.options, suggestions.hasSuggestions, query]);
 
   const toggle = useCallback((value: string) => {
     setSelected(current => (current.includes(value) ? current.filter(v => v !== value) : [...current, value]));
@@ -101,13 +101,13 @@ export function useValueStep({
   );
 
   /** Many arity: adds the typed text to the selection and clears the query, keeping the editor open. */
-  const addFreeText = useCallback(() => {
+  function addFreeText() {
     const text = query.trim();
     if (!canCommitFreeText(text)) return false;
     setSelected(current => (current.includes(text) ? current : [...current, text]));
     setQuery('');
     return true;
-  }, [canCommitFreeText, query, setQuery]);
+  }
 
   const commitFreeText = useCallback(() => {
     const text = query.trim();
@@ -117,40 +117,35 @@ export function useValueStep({
   }, [canCommitFreeText, query, isMany, selected, commit]);
 
   /** Enter on free text (or Apply): commits a single value, adds to a multi-selection. */
-  const submitFreeText = useCallback(
-    () => (isMany ? addFreeText() : commitFreeText()),
-    [isMany, addFreeText, commitFreeText],
-  );
+  function submitFreeText() {
+    if (isMany) return addFreeText();
+    return commitFreeText();
+  }
 
-  /**
-   * Done (or Ctrl/Meta+Enter) on a multi-selection. Without suggestions the query can only be
-   * a value being typed, so it joins the selection instead of being dropped.
-   */
-  const commitDone = useCallback(
-    () => (suggestions.hasSuggestions ? commitSelection() || commitFreeText() : commitFreeText() || commitSelection()),
-    [suggestions.hasSuggestions, commitSelection, commitFreeText],
-  );
+  /** Done (or Ctrl/Meta+Enter) on a multi-selection. */
+  function commitDone() {
+    // Without suggestions the query can only be a value being typed: it joins the selection.
+    if (!suggestions.hasSuggestions) return commitFreeText() || commitSelection();
+    return commitSelection() || commitFreeText();
+  }
 
   /**
    * Enter handling that Base UI does not cover: Ctrl/Meta+Enter commits a
    * multi-selection; plain Enter with nothing highlighted submits free text.
    * Returns `true` when the event was consumed.
    */
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent, highlighted: FilterBarOption | null): boolean => {
-      if (event.key !== 'Enter') return false;
-      if (isMany && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        return commitDone();
-      }
-      if (highlighted === null) {
-        event.preventDefault();
-        return submitFreeText();
-      }
-      return false;
-    },
-    [isMany, commitDone, submitFreeText],
-  );
+  function handleKeyDown(event: KeyboardEvent, highlighted: FilterBarOption | null): boolean {
+    if (event.key !== 'Enter') return false;
+    if (isMany && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      return commitDone();
+    }
+    if (highlighted === null) {
+      event.preventDefault();
+      return submitFreeText();
+    }
+    return false;
+  }
 
   return {
     isMany,
@@ -170,4 +165,16 @@ export function useValueStep({
     submitFreeText,
     commitDone,
   };
+}
+
+/** Selected values missing from `options`; with suggestions, only those matching the search. */
+function unlistedSelection(
+  selected: string[],
+  options: FilterBarOption[],
+  hasSuggestions: boolean,
+  query: string,
+): FilterBarOption[] {
+  const listed = new Set(options.map(option => option.value));
+  const isShown = (value: string) => !hasSuggestions || matchesQuery(value, query);
+  return selected.filter(value => !listed.has(value) && isShown(value)).map(value => ({ value }));
 }
