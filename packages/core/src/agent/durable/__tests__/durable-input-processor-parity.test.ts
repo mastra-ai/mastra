@@ -21,7 +21,8 @@
  * helper, as the task's known limit requires. There is no comparable pair to compare: the failing
  * engine has no chunks, no finish chunk, no text, no steps and no requests while the running engines
  * have all of them, so any declaration would have to ignore nearly every compared field — a vacuous
- * comparison. Both engines' recorded values are pinned literally below, so when COR-1413 lands and the
+ * comparison. (COR-1429 covers letting a scenario run past a built-in difference that does not
+ * apply.) Both engines' recorded values are pinned literally below, so when COR-1413 lands and the
  * wrapped engines also fail closed, this test goes stale rather than passing over the change.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -263,7 +264,7 @@ interface ThrowCaseState {
 /**
  * Drives one engine through the `throws` shape, mirroring what the parity helper does per engine
  * (wrapper, host, one streamed turn), because the plain engine fails the run where the wrapped ones
- * run to completion, so there is no comparable pair for the helper to check.
+ * run to completion, so there is no comparable pair for the helper to check (COR-1429).
  */
 async function runT44ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
   const requests: Array<{ prompt?: unknown }> = [];
