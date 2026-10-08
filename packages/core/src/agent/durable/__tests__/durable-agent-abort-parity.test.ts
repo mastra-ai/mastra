@@ -126,6 +126,7 @@ interface EngineCaseState {
   release: Deferred<void>;
   toolLog: number[];
   callbacks: string[];
+  iterations: Array<{ iteration: number; finishReason: string; isFinal: boolean }>;
   accepted?: boolean;
   snapshot?: ParitySnapshot;
 }
@@ -159,7 +160,7 @@ async function runT14(variant: Variant): Promise<{
           return { done: n };
         },
       });
-      states.set(engine, { memory, parked, release, toolLog, callbacks: [] });
+      states.set(engine, { memory, parked, release, toolLog, callbacks: [], iterations: [] });
       return new Agent({
         id: AGENT_ID,
         name: AGENT_ID,
@@ -185,6 +186,10 @@ async function runT14(variant: Variant): Promise<{
         },
         onFinish: () => {
           state.callbacks.push('onFinish');
+        },
+        onIterationComplete: ({ iteration, finishReason, isFinal }) => {
+          state.iterations.push({ iteration, finishReason, isFinal });
+          return { continue: true };
         },
       });
       await state.parked.promise;
@@ -228,6 +233,11 @@ describe('T14 abort parity', () => {
         expect(results[engine]!.requests, `${engine}: no model call after the abort`).toHaveLength(2);
       }
 
+      expect(states.get('plain')!.iterations).toEqual([
+        { iteration: 1, finishReason: 'tool-calls', isFinal: false },
+        { iteration: 2, finishReason: 'tool-calls', isFinal: false },
+        { iteration: 3, finishReason: 'abort', isFinal: true },
+      ]);
       expectPlainT14Reference(results.plain!);
     });
   }

@@ -535,8 +535,39 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
+      const buildIterationContext = (isFinal: boolean, iteration = state.accumulatedSteps.length) => ({
+        iteration,
+        maxIterations: rt.maxSteps,
+        text: typedInputData.output.text || '',
+        toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
+          id: tc.toolCallId || tc.id || '',
+          name: tc.toolName || tc.name || '',
+          args: (tc.args || {}) as Record<string, unknown>,
+        })),
+        toolResults: toolResultParts.map(tr => ({
+          id: tr.toolCallId,
+          name: tr.toolName,
+          result: normalizeToolOutput(tr.output).output,
+        })),
+        isFinal,
+        finishReason: typedInputData.stepResult?.reason || 'unknown',
+        runId,
+        threadId: rt.threadId,
+        resourceId: rt.resourceId,
+        agentId: rt.agentId,
+        agentName: rt.agentName || rt.agentId,
+        messages: messageList.get.all.db(),
+      });
+
       if (typedInputData.stepResult?.reason === 'abort') {
         typedInputData.stepResult.isContinued = false;
+        if (rt.onIterationComplete && !typedInputData.backgroundTaskPending) {
+          try {
+            await rt.onIterationComplete(buildIterationContext(true, state.accumulatedSteps.length + 1));
+          } catch (error) {
+            rt.logger?.error('Error in onIterationComplete hook:', error);
+          }
+        }
         return false;
       }
 
@@ -572,29 +603,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         },
         backgroundTaskPending: typedInputData.backgroundTaskPending,
         onIterationComplete: rt.onIterationComplete,
-        buildIterationContext: isFinal => ({
-          iteration: state.accumulatedSteps.length,
-          maxIterations: rt.maxSteps,
-          text: typedInputData.output.text || '',
-          toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
-            id: tc.toolCallId || tc.id || '',
-            name: tc.toolName || tc.name || '',
-            args: (tc.args || {}) as Record<string, unknown>,
-          })),
-          toolResults: toolResultParts.map(tr => ({
-            id: tr.toolCallId,
-            name: tr.toolName,
-            result: normalizeToolOutput(tr.output).output,
-          })),
-          isFinal,
-          finishReason: typedInputData.stepResult?.reason || 'unknown',
-          runId: runId,
-          threadId: rt.threadId,
-          resourceId: rt.resourceId,
-          agentId: rt.agentId,
-          agentName: rt.agentName || rt.agentId,
-          messages: messageList.get.all.db(),
-        }),
+        buildIterationContext,
         injectFeedback: feedback => {
           messageList.add(
             {
