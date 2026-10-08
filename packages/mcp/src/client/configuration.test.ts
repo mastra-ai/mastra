@@ -647,4 +647,16 @@ describe('MCPClient clientInfo identity', () => {
     expect((internal as any).client._clientInfo.name).toBe('app-b');
     await Promise.all([a.disconnect(), b.disconnect()]);
   });
+
+  it('does not let a replaced client evict its replacement on disconnect', async () => {
+    const servers = { weather: { url: new URL('http://localhost:4322/mcp') } };
+    const id = `client-info-identity-${++clientId}`;
+    const a = new MCPClient({ id, servers, clientInfo: { name: 'app-a' } });
+    const b = new MCPClient({ id, servers, clientInfo: { name: 'app-b' } });
+    await a.disconnect();
+    await a.disconnect();
+    const again = new MCPClient({ id, servers, clientInfo: { name: 'app-b' } });
+    expect(again).toBe(b);
+    await b.disconnect();
+  });
 });

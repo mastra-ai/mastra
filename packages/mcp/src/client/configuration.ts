@@ -666,7 +666,9 @@ To fix this you have three different options:
 
     this.disconnectPromise = (async () => {
       try {
-        mcpClientInstances.delete(this.id);
+        if (mcpClientInstances.get(this.id) === this) {
+          mcpClientInstances.delete(this.id);
+        }
 
         // Tear down any in-flight authorization: each callback server owns a live
         // loopback HTTP port, and closing it rejects the flow's waitForCode. Await
