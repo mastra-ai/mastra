@@ -369,6 +369,34 @@ describe('Extractor', () => {
     expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
   });
 
+  it('does not overwrite JSON working memory when validation strips every field to an empty object', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({
+        workingMemory: { enabled: true, schema: z.object({ profile: z.string().optional() }) },
+      })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"profile":"Tyler"}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': { profile: null } },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+  });
+
   it('returns extractor failures when the structured extraction call fails', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const profile = new Extractor({
@@ -560,6 +588,30 @@ describe('Extractor', () => {
     expect(result.values).toEqual({ 'working-memory': { name: 'Tyler', city: 'Lisbon' } });
     expect(stream).toHaveBeenCalledTimes(2);
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('keeps valid first-response values when the empty-object retry fails', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const profile = new Extractor({
+      name: 'Profile',
+      instructions: 'Extract profile.',
+      schema: z.record(z.string(), z.unknown()),
+      retryStructuredExtractionOnEmptyObject: true,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ priority: 'high', profile: {} }) })
+      .mockRejectedValueOnce(new Error('retry failed'));
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [priority, profile],
+    });
+
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(result.values.priority).toBe('high');
+    expect(result.failures).toEqual([{ slug: 'profile', error: 'retry failed' }]);
   });
 
   it('falls back to system json prompt injection when inline support is not advertised', async () => {

@@ -110,6 +110,10 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
             return undefined;
           }
           document = await validateAgainstConfiguredSchema(configuredSchema, current);
+          // Validation strips optional nulls, so e.g. `{"profile": null}` can become `{}`.
+          if (document === null || (typeof document === 'object' && Object.keys(document).length === 0)) {
+            return undefined;
+          }
         }
 
         const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');

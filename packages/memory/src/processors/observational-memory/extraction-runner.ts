@@ -142,11 +142,14 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
         throw fallbackError;
       }
 
+      // Keep the first response's values; only the empty extractors failed.
       const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-      return {
-        values,
-        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
-      };
+      for (const extractor of structuredExtractors) {
+        if (shouldRetryEmptyStructuredObject(object, [extractor])) {
+          failures.push({ slug: extractor.slug, error: message });
+          delete object[extractor.slug];
+        }
+      }
     }
   }
 
