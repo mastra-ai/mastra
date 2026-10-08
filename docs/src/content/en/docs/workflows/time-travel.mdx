@@ -226,7 +226,7 @@ try {
 }
 ```
 
-The error also lists the step IDs recorded in the run's snapshot, and confirms that the stored snapshot wasn't modified. If the run has no recorded step results, the error reads `Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path.` instead.
+The error also lists up to 10 of the step IDs recorded in the run's snapshot (with a count of any remaining IDs), and confirms that the stored snapshot wasn't modified. If the run has no recorded step results, the error reads `Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path.` instead.
 
 ### Invalid input data
 

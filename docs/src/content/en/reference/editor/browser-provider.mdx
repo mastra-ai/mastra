@@ -55,7 +55,7 @@ new MastraEditor({
     name: 'createBrowser',
     type: '(config: TConfig) => MastraBrowser | Promise<MastraBrowser>',
     description:
-      'Create a runtime `MastraBrowser` instance from the stored config. For a static browser config, it is called once per agent hydration and the resulting instance is cached alongside the agent. For a conditional browser config, the matching variant is resolved and `createBrowser` is called at request time.',
+      'Create a runtime `MastraBrowser` instance from the stored config. For a static browser config, it is called once per agent hydration and the resulting instance is cached alongside the agent.',
   },
 ]}
 />

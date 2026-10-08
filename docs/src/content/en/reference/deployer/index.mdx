@@ -75,7 +75,7 @@ class CustomDeployer extends Deployer {
     name: 'getEnvFiles',
     type: '() => Promise<string[]>',
     description:
-      "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
+      "Returns the environment files to be used during deployment. By default, it returns every existing file among '.env', '.env.local', and '.env.production', in that order (lowest to highest precedence).",
   },
   {
     name: 'deploy',
@@ -132,16 +132,10 @@ The Deployer class includes built-in support for environment file management thr
 
 ```typescript oxfmt:false
 getEnvFiles(): Promise<string[]> {
-  const possibleFiles = ['.env.production', '.env.local', '.env'];
+  const possibleFiles = ['.env', '.env.local', '.env.production'];
+  const fileService = new FileService();
 
-  try {
-    const fileService = new FileService();
-    const envFile = fileService.getFirstExistingFile(possibleFiles);
-
-    return Promise.resolve([envFile]);
-  } catch {}
-
-  return Promise.resolve([]);
+  return Promise.resolve(fileService.getExistingFiles(possibleFiles));
 }
 ```
 
