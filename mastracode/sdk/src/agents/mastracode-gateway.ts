@@ -561,9 +561,10 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
+    const routedModelId: `${string}/${string}` = `${args.providerId}/${args.modelId}`;
     return new ModelRouterLanguageModelWithProviderOptions(
-      { id: `${args.providerId}/${args.modelId}`, apiKey: args.apiKey, headers: args.headers },
-      providerThinkingOptions(args.providerId, args.modelId, this.#thinkingLevel),
+      { id: routedModelId, apiKey: args.apiKey, headers: args.headers },
+      providerThinkingOptions(routedModelId, this.#thinkingLevel),
     ) as unknown as GatewayLanguageModel;
   }
 

@@ -1,28 +1,21 @@
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import { getModelReasoningOptions, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { JSONValue } from 'ai';
-import { runCatalogThinkingLevel } from '../thinking-catalog.js';
+import { runThinkingLevel } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
+import { thinkingRequestFor } from './thinking-request.js';
 
-type ThinkingProviderOptions = Record<string, JSONValue>;
 type ProviderOptions = Record<string, Record<string, JSONValue | undefined>>;
 
-function deepSeekThinkingOptions(runLevel: ThinkingLevelSetting): ThinkingProviderOptions {
-  if (runLevel === 'off') return { thinking: { type: 'disabled' } };
-  return { reasoningEffort: runLevel };
-}
-
-const THINKING_OPTIONS_BY_PROVIDER: Record<string, (runLevel: ThinkingLevelSetting) => ThinkingProviderOptions> = {
-  deepseek: deepSeekThinkingOptions,
-};
-
 export function providerThinkingOptions(
-  providerId: string,
-  modelId: string,
+  routedModelId: string,
   level: ThinkingLevelSetting | undefined,
 ): ProviderOptions | undefined {
-  const thinkingOptionsFor = THINKING_OPTIONS_BY_PROVIDER[providerId];
-  if (!thinkingOptionsFor || !level) return undefined;
-  return { [providerId]: thinkingOptionsFor(runCatalogThinkingLevel(`${providerId}/${modelId}`, level)) };
+  if (!level) return undefined;
+  const reasoningOptions = getModelReasoningOptions(routedModelId);
+  const request = thinkingRequestFor(routedModelId, reasoningOptions);
+  if (!request) return undefined;
+  const options = request.optionsByLevel.get(runThinkingLevel(routedModelId, level, reasoningOptions));
+  return options && { [request.optionsKey]: options };
 }
 
 function withDefaultProviderOptions<CallOptions extends { providerOptions?: ProviderOptions }>(
