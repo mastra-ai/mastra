@@ -8,7 +8,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
@@ -97,6 +97,8 @@ export interface FactoryApiRoutesDeps {
   stateSigner?: StateSigner;
   /** Sandbox surface (enablement, provider label, create callback). */
   sandbox?: FactorySandbox;
+  /** Push hand-off for environment builds, present when the sandbox can build templates. */
+  onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -414,6 +416,7 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
+    onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry;
     factoryReady: boolean;
@@ -461,7 +464,14 @@ export function buildIntegrationContext(
           runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
         }
       : {}),
-    ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
+    ...(deps.emitAudit || deps.onRepositoryPush
+      ? {
+          hooks: {
+            ...(deps.emitAudit ? { emitAudit: deps.emitAudit } : {}),
+            ...(deps.onRepositoryPush ? { onRepositoryPush: deps.onRepositoryPush } : {}),
+          },
+        }
+      : {}),
   };
 }
 

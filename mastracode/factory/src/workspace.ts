@@ -47,7 +47,7 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-import type { SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -55,7 +55,7 @@ import {
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
-import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
@@ -429,18 +429,29 @@ async function resolveSessionEnvironment(
   if (!projects || !session.factoryProjectId) return undefined;
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
-  const links = (
-    await storage.projectRepositories.listByProject({ orgId: session.orgId, factoryProjectId: project.id })
-  )
+  return resolveProjectEnvironment(storage, project);
+}
+
+/**
+ * The project's environment as a session (or an environment build) sees it:
+ * every `inEnvironment` link under this source-control integration in
+ * position order, plus the project's settings, setup command and workdir.
+ */
+export async function resolveProjectEnvironment(
+  storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>,
+  project: FactoryProject,
+): Promise<SessionEnvironment> {
+  const orgId = project.orgId;
+  const links = (await storage.projectRepositories.listByProject({ orgId, factoryProjectId: project.id }))
     .filter(link => link.inEnvironment)
     .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
   const repos: SessionEnvironmentRepo[] = [];
   const directories = new Set<string>();
   for (const link of links) {
-    const repository = await storage.repositories.get({ orgId: session.orgId, id: link.repositoryId });
+    const repository = await storage.repositories.get({ orgId, id: link.repositoryId });
     if (!repository) {
       console.warn('[Mastra Factory] Environment repository link has no repository row; skipping it', {
-        orgId: session.orgId,
+        orgId,
         factoryProjectId: project.id,
         projectRepositoryId: link.id,
       });
@@ -454,7 +465,7 @@ async function resolveSessionEnvironment(
       console.warn(
         '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
         {
-          orgId: session.orgId,
+          orgId,
           factoryProjectId: project.id,
           projectRepositoryId: link.id,
           slug: repository.slug,
@@ -480,6 +491,37 @@ async function resolveSessionEnvironment(
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
     settings: project.sandboxSettings ?? {},
+  };
+}
+
+/**
+ * The context fields the list form of the repo templates needs: one entry per
+ * environment repository, each minting its own token at build time, with
+ * `getRepositoryAccess` present but undefined (the two are mutually exclusive
+ * for the template). Shared by session boot and environment builds so both
+ * resolve the same template identity; `resolveHead` is only set when given.
+ */
+export function environmentSandboxContext(
+  environment: SessionEnvironment,
+  options: {
+    orgId: string;
+    getRepositoryAccess: (args: { orgId: string; repositoryId: string }) => Promise<RepositoryAccess>;
+    resolveHead?: FactorySandboxContext['resolveHead'];
+  },
+): Omit<FactorySandboxContext, 'sessionId'> {
+  return {
+    setupCommand: undefined,
+    getRepositoryAccess: undefined,
+    repos: environment.repos.map(repo => ({
+      getRepositoryAccess: () => options.getRepositoryAccess({ orgId: options.orgId, repositoryId: repo.repositoryId }),
+      ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+    })),
+    ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
+    // A repository whose setup fails still lands in the image; the boot hook
+    // re-runs that setup from `setup-failed`.
+    continueOnSetupFailure: true,
+    ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
+    ...(options.resolveHead ? { resolveHead: options.resolveHead } : {}),
   };
 }
 
@@ -746,29 +788,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             sandboxId: session.sandboxId ?? undefined,
             repoFullName,
             ...(environment
-              ? {
-                  // The list form of the repo templates: one entry per
-                  // environment repository, each minting its own token at build
-                  // time; `getRepositoryAccess` stays present but undefined, the
-                  // two being mutually exclusive for the template.
-                  setupCommand: undefined,
-                  getRepositoryAccess: undefined,
-                  repos: environment.repos.map(repo => ({
-                    getRepositoryAccess: () =>
-                      sourceControl.versionControl.getRepositoryAccess({
-                        orgId: session.orgId,
-                        repositoryId: repo.repositoryId,
-                      }),
-                    ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
-                  })),
-                  ...(environment.workspaceSetupCommand
-                    ? { workspaceSetupCommand: environment.workspaceSetupCommand }
-                    : {}),
-                  // A repository whose setup fails still lands in the image;
-                  // the boot hook re-runs that setup from `setup-failed`.
-                  continueOnSetupFailure: true,
-                  ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
-                }
+              ? environmentSandboxContext(environment, {
+                  orgId: session.orgId,
+                  getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                })
               : {
                   // Stored nullable; the context speaks `undefined` for absent.
                   setupCommand: projectRepository.setupCommand ?? undefined,

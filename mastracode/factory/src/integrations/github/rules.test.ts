@@ -3949,3 +3949,76 @@ describe('createGithubPullRequestReconciler', () => {
     });
   });
 });
+
+describe('GithubRules push hand-off', () => {
+  function push(ref: string, repositoryId = 10) {
+    return {
+      event: 'push',
+      deliveryId: `push-${ref}`,
+      payload: {
+        ref,
+        after: 'c'.repeat(40),
+        installation: { id: 7 },
+        repository: { id: repositoryId, full_name: 'acme/repo', default_branch: 'main' },
+        sender: { login: 'maintainer' },
+      },
+    };
+  }
+
+  it('hands a push to a linked repository to the hook once per project and never to the rules', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('write');
+    const onRepositoryPush = vi.fn();
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+      onRepositoryPush,
+    });
+
+    await expect(service.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+
+    expect(onRepositoryPush).toHaveBeenCalledTimes(1);
+    expect(onRepositoryPush).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepository: { id: projectRepository.id, inEnvironment: true, branch: null },
+      ref: 'refs/heads/main',
+      defaultBranch: 'main',
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('ignores pushes to repositories no project links and runs without a hook', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects } = await setup('write');
+    const onRepositoryPush = vi.fn();
+    const withHook = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+      onRepositoryPush,
+    });
+    await expect(withHook.ingest(push('refs/heads/main', 99))).resolves.toEqual({ status: 'ignored' });
+    expect(onRepositoryPush).not.toHaveBeenCalled();
+
+    const withoutHook = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+    });
+    await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+  });
+});

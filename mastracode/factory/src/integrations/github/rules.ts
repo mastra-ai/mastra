@@ -23,7 +23,7 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
-import type { IntegrationContext } from '../base.js';
+import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -277,6 +277,8 @@ export interface GithubRulesOptions {
   boards: BoardRegistry;
   /** Label routes decide which installed board a labelled issue lands on. Absent means Work. */
   intake?: Pick<IntakeStorage, 'listLabelRoutes'>;
+  /** Hands a push to a linked repository off for an environment build. */
+  onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
 }
 
 /** Identity under which label-driven relocations are recorded. */
@@ -404,6 +406,10 @@ export class GithubRules {
     const repositoryId = number(repository?.id);
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
+    if (parsed.event === 'push' && installationId && repositoryId) {
+      await this.#handOffPush(parsed, installationId, repositoryId);
+      return { status: 'ignored' };
+    }
     if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
       return { status: 'ignored' };
     }
@@ -424,6 +430,35 @@ export class GithubRules {
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
+  }
+
+  /**
+   * A push is not a work-item event; it only reaches the environment build
+   * hand-off, once per project the repository is linked to. The hook decides
+   * whether the project builds on push.
+   */
+  async #handOffPush(parsed: ParsedGithubWebhook, installationId: number, repositoryId: number): Promise<void> {
+    const onRepositoryPush = this.options.onRepositoryPush;
+    const ref = string(parsed.payload.ref);
+    const defaultBranch = string(object(parsed.payload.repository)?.default_branch);
+    if (!onRepositoryPush || !ref || !defaultBranch) return;
+    const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
+      installationExternalId: String(installationId),
+      repositoryExternalId: String(repositoryId),
+    });
+    for (const project of projects) {
+      onRepositoryPush({
+        orgId: project.orgId,
+        factoryProjectId: project.factoryProjectId,
+        projectRepository: {
+          id: project.projectRepository.id,
+          inEnvironment: project.projectRepository.inEnvironment,
+          branch: project.projectRepository.branch,
+        },
+        ref,
+        defaultBranch,
+      });
+    }
   }
 
   async #ingestProject(
@@ -1466,6 +1501,7 @@ export function githubRulesOptions(
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
     intake: context.storage.intake,
+    ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };
 }
 

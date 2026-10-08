@@ -5,6 +5,7 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type {
   FactoryProject,
@@ -191,6 +192,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   controller?: ModelApplyController;
   /** The factory's normalized sandbox; describes and validates the environment settings. */
   sandbox?: FactorySandbox;
+  /** Environment builds, present only when the sandbox has a `builds` capability. */
+  environmentBuilds?: EnvironmentBuildRunner;
 }
 
 /** What the environment reports when the factory has no sandbox configured. */

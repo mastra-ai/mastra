@@ -44,9 +44,22 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
+/** A push to a repository linked to a project, as a version-control integration reports it. */
+export interface RepositoryPushEvent {
+  orgId: string;
+  factoryProjectId: string;
+  projectRepository: { id: string; inEnvironment: boolean; branch: string | null };
+  /** The pushed git ref, for example `refs/heads/main`. */
+  ref: string;
+  /** The repository's default branch as the provider reports it. */
+  defaultBranch: string;
+}
+
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  /** Hand a push off for an environment build; never blocks the webhook and never throws. */
+  onRepositoryPush?: (event: RepositoryPushEvent) => void;
 }
 
 /**

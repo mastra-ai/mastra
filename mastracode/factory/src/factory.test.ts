@@ -430,6 +430,33 @@ describe('MastraFactory.prepare', () => {
     expect(factory.sandboxDescription!.settingsSchema.properties).toHaveProperty('size');
   });
 
+  it('registers the environment build workflow only when the sandbox can build', async () => {
+    class PlainSandbox extends FactorySandbox {
+      readonly provider = 'plain';
+      create = vi.fn(() => ({ id: 'sb' }) as never);
+    }
+    class BuildingSandbox extends PlainSandbox {
+      readonly builds = {
+        start: vi.fn(async () => ({ buildId: 'b', status: 'building' as const })),
+        get: vi.fn(async () => ({ buildId: 'b', status: 'ready' as const })),
+      };
+    }
+    const plain = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: new PlainSandbox(),
+    }).prepare();
+    expect(plain).not.toHaveProperty('workflows');
+
+    const building = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: new BuildingSandbox(),
+    }).prepare();
+    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build']);
+    expect(building.workflows?.['factory-environment-build']?.id).toBe('factory-environment-build');
+  });
+
   it('accepts a branded plain object as a FactorySandbox', async () => {
     const sandbox = {
       [FACTORY_SANDBOX_BRAND]: true,
