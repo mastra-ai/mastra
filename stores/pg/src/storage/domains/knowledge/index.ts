@@ -738,7 +738,7 @@ export class KnowledgePG extends KnowledgeStorage {
         const existingId = await resolveAddress(scope.address);
         if (existingId) continue;
         const id = randomUUID();
-        const now = new Date();
+        const now = new Date().toISOString();
         await tx.execute({
           sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",kind,description,"isScope",metadata,version,"createdAt","updatedAt") VALUES (?,'node',?,?,?,?,TRUE,?,1,?,?)`,
           args: [
@@ -778,8 +778,14 @@ export class KnowledgePG extends KnowledgeStorage {
             if (existing?.rows.length) continue;
             throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
           }
+          const edge = await tx.execute({
+            sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE "nodeId"=? AND "scopeNodeId"=?`,
+            args: [scopeNodeId, parentId],
+          });
+          if (edge.rows.length) continue;
+          // Only scope children can collide by name; content nodes placed under the parent share its edges table.
           const sibling = await tx.execute({
-            sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns."nodeId" WHERE ns."scopeNodeId"=? AND n."canonicalName"=? AND n."deletedAt" IS NULL AND n.id<>? LIMIT 1`,
+            sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns."nodeId" WHERE ns."scopeNodeId"=? AND n."isScope" AND n."canonicalName"=? AND n."deletedAt" IS NULL AND n.id<>? LIMIT 1`,
             args: [parentId, canonicalName(scope.name), scopeNodeId],
           });
           if (sibling.rows.length) {
@@ -787,7 +793,7 @@ export class KnowledgePG extends KnowledgeStorage {
           }
           const inserted = await tx.execute({
             sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" ("nodeId","scopeNodeId","addedAt") VALUES (?,?,?) ON CONFLICT DO NOTHING`,
-            args: [scopeNodeId, parentId, new Date()],
+            args: [scopeNodeId, parentId, new Date().toISOString()],
           });
           structureChanged ||= inserted.rowsAffected > 0;
         }

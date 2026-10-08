@@ -546,8 +546,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
               if (existing?.rows.length) continue;
               throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
             }
+            const edge = await tx.execute({
+              sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
+              args: [scopeNodeId, parentId],
+            });
+            if (edge.rows.length) continue;
+            // Only scope children can collide by name; content nodes placed under the parent share its edges table.
             const sibling = await tx.execute({
-              sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns.nodeId WHERE ns.scopeNodeId=? AND n.canonicalName=? AND n.deletedAt IS NULL AND n.id<>? LIMIT 1`,
+              sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns.nodeId WHERE ns.scopeNodeId=? AND n.isScope AND n.canonicalName=? AND n.deletedAt IS NULL AND n.id<>? LIMIT 1`,
               args: [parentId, canonicalName(scope.name), scopeNodeId],
             });
             if (sibling.rows.length) {

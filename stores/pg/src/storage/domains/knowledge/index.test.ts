@@ -383,6 +383,25 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
 });
 
 describe('PostgreSQL knowledge structured reconciliation', () => {
+  it('stores reconciled scope timestamps in UTC when the process is not', async () => {
+    const schemaName = `knowledge_reconcile_tz_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const tz = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const before = Date.now();
+      const { scopes } = await store.reconcileStructure({ scopes: [{ address: 'org:acme', name: 'Acme' }] });
+      const node = await store.getNode(scopes['org:acme']!);
+      expect(Math.abs(node!.createdAt.getTime() - before)).toBeLessThan(60_000);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+      await pool.query(`DROP SCHEMA "${schemaName}" CASCADE`);
+    }
+  });
+
   it('creates a plan once and preserves existing scope fields on replay', async () => {
     const schemaName = `knowledge_reconcile_${Date.now()}`;
     await pool.query(`CREATE SCHEMA "${schemaName}"`);

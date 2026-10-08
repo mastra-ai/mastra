@@ -77,6 +77,7 @@ describe('InMemoryKnowledgeStorage', () => {
       [ids['team:a'], ids['team:b']].sort(),
     );
 
+    expect(await store.listScopeNodes({ withinAddress: 'org:acme', limit: Number.NaN })).toEqual(within);
     const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
     expect(first.scopes).toHaveLength(3);
     expect(first.nextCursor).toEqual(expect.any(String));
