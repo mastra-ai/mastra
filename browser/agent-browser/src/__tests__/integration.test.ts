@@ -1,21 +1,26 @@
 /**
  * Integration tests for AgentBrowser with a real browser.
  *
- * These tests launch headless Chrome via the agent-browser CLI and exercise
- * actual browser methods against a local data: URI or public test page.
+ * These tests launch headless Chrome through Playwright and exercise actual
+ * browser methods against local data: URIs.
  *
- * Skip when no Chrome is available.
+ * Skip only when no Chrome executable is available.
  */
+import { readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { platform } from 'node:os';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgentBrowser } from '../agent-browser';
+import { BrowserManager, CHROME_NOT_FOUND_MESSAGE } from '../browser-manager';
+import { getBrowserPid } from '../utils';
 
 // Check if we can actually launch a browser with AgentBrowser
-// Only skip for known environment/setup failures, not regressions
+// Only skip for a missing browser executable, not for launch regressions
 let canLaunchBrowser = true;
 const testBrowser = new AgentBrowser({ headless: true, scope: 'shared' });
 try {
-  // Quick probe — if agent-browser isn't installed or Chromium is missing, skip
   await testBrowser.ensureReady();
   await testBrowser.close();
 } catch (error) {
@@ -27,22 +32,38 @@ try {
   }
 
   const errorMessage = error instanceof Error ? error.message : String(error);
-  // Only skip for known environment issues (missing browser, playwright not installed)
-  const isEnvironmentError =
+  const isMissingBrowser =
+    errorMessage.includes(CHROME_NOT_FOUND_MESSAGE) ||
     errorMessage.includes("Executable doesn't exist") ||
-    errorMessage.includes('browserType.launch') ||
-    errorMessage.includes('Cannot find module') ||
-    errorMessage.includes('ENOENT') ||
-    errorMessage.includes('Chrome not found') ||
-    errorMessage.includes('No Chrome binary found') ||
-    errorMessage.includes('Failed to launch Chrome');
+    errorMessage.includes('Cannot find module');
 
-  if (isEnvironmentError) {
+  if (isMissingBrowser) {
     canLaunchBrowser = false;
-    // skipReason available for debugging: errorMessage
   } else {
     // Re-throw actual regressions so tests fail properly
     throw error;
+  }
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() =>
+        typeof address === 'object' && address ? resolve(address.port) : reject(new Error('no port')),
+      );
+    });
+  });
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -84,7 +105,6 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     expect(result.snapshot).toBeDefined();
     expect(result.snapshot.length).toBeGreaterThan(0);
     // Should contain refs like @e1, @e2
-    // Refs can be in format [ref=e1] or @e1 depending on agent-browser version
     expect(result.snapshot).toMatch(/(?:\[ref=e\d+\]|@e\d+)/);
     // Should contain the button text
     expect(result.snapshot).toContain('Click me');
@@ -220,6 +240,30 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     }
   }, 30_000);
 
+  it('resolves refs inside iframes', async () => {
+    const inner = encodeURIComponent(
+      `<button onclick="document.body.dataset.clicked='yes'">Inner</button>`.replace(/"/g, '&quot;'),
+    );
+    await browser.goto({
+      url: `data:text/html,<html><body><button>Outer</button><iframe srcdoc="${inner}"></iframe></body></html>`,
+      waitUntil: 'load',
+    });
+
+    const snapshotResult = await browser.snapshot({ interactiveOnly: true });
+    if (!snapshotResult.success) throw new Error(JSON.stringify(snapshotResult));
+    const innerRef = /button "Inner" @(f\d+e\d+)/.exec(snapshotResult.snapshot)?.[1];
+    expect(innerRef, snapshotResult.snapshot).toBeDefined();
+    // Frame refs count toward elementCount like page refs
+    expect(snapshotResult.elementCount).toBe(2);
+
+    const result = await browser.click({ ref: `@${innerRef}` });
+    expect(result.success).toBe(true);
+
+    const page = await (browser as any).getPage();
+    const frame = page.frames().find((f: any) => f !== page.mainFrame());
+    expect(await frame.evaluate('document.body.dataset.clicked')).toBe('yes');
+  }, 30_000);
+
   it('closes the browser via close method', async () => {
     const tempBrowser = new AgentBrowser({ headless: true });
     await tempBrowser.ensureReady();
@@ -229,5 +273,84 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser integration', () => {
     await tempBrowser.close();
 
     expect(tempBrowser.status).toBe('closed');
+  }, 30_000);
+});
+
+describe.skipIf(!canLaunchBrowser)('BrowserManager with real Chrome', () => {
+  it('runs Chrome as a child of this process and stops it on close()', async () => {
+    const manager = new BrowserManager();
+    await manager.launch({ headless: true });
+    const pid = await getBrowserPid(manager);
+    expect(pid).toBeDefined();
+    if (platform() === 'linux') {
+      const ppid = /PPid:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))?.[1];
+      expect(Number(ppid)).toBe(process.pid);
+    }
+
+    await manager.close();
+    expect(manager.isLaunched()).toBe(false);
+    await expect.poll(() => isAlive(pid!), { timeout: 10_000 }).toBe(false);
+  }, 30_000);
+
+  it('only disconnects from a cdpUrl browser on close()', async () => {
+    const port = await freePort();
+    const owner = new BrowserManager();
+    await owner.launch({ headless: true, args: [`--remote-debugging-port=${port}`] });
+    try {
+      await owner.getPage().goto('data:text/html,<title>Remote</title>');
+
+      const attached = new BrowserManager();
+      await attached.launch({ cdpUrl: String(port) });
+      expect(attached.getPages().some(p => p.url().startsWith('data:'))).toBe(true);
+      await attached.close();
+      expect(attached.isLaunched()).toBe(false);
+
+      // The remote browser and its page are untouched.
+      expect(owner.getBrowser()?.isConnected()).toBe(true);
+      expect(await owner.getPage().title()).toBe('Remote');
+      const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+      expect(res.ok).toBe(true);
+    } finally {
+      await owner.close();
+    }
+  }, 30_000);
+
+  it('rejects a bad cdpUrl and leaves nothing behind', async () => {
+    const port = await freePort();
+    const manager = new BrowserManager();
+    await expect(manager.launch({ cdpUrl: `http://127.0.0.1:${port}` })).rejects.toThrow(/Failed to connect via CDP/);
+    expect(manager.isLaunched()).toBe(false);
+  }, 90_000);
+
+  it('resolves iframe refs and only shows refs it can resolve', async () => {
+    const manager = new BrowserManager();
+    await manager.launch({ headless: true });
+    try {
+      await manager
+        .getPage()
+        .setContent(
+          `<button>Outer</button><iframe srcdoc="<button onclick=&quot;document.title='hit'&quot;>Inner</button><a href='#'>Link</a>"></iframe>`,
+        );
+      await manager.getPage().frames()[1]?.waitForLoadState();
+
+      for (const options of [{ interactive: true }, { compact: true }, {}]) {
+        const snapshot = await manager.getSnapshot(options);
+        const shown = [...snapshot.tree.matchAll(/\[ref=([a-z0-9]+)\]/g)].map(m => m[1]!);
+        expect(shown.some(ref => ref.startsWith('f'))).toBe(true);
+        for (const ref of shown) {
+          const locator = manager.getLocatorFromRef(`@${ref}`);
+          expect(locator, `${ref} in ${JSON.stringify(options)}`).not.toBeNull();
+          expect(await locator!.count(), ref).toBe(1);
+        }
+      }
+
+      const snapshot = await manager.getSnapshot({ interactive: true });
+      const innerRef = Object.entries(snapshot.refs).find(([, r]) => r.name === 'Inner')?.[0];
+      expect(innerRef).toMatch(/^f\d+e\d+$/);
+      await manager.getLocatorFromRef(innerRef!)!.click();
+      expect(await manager.getPage().frames()[1]!.title()).toBe('hit');
+    } finally {
+      await manager.close();
+    }
   }, 30_000);
 });
