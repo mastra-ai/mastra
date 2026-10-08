@@ -1308,6 +1308,62 @@ describe('Traces page filter bar', () => {
   });
 });
 
+describe('Agent traces page opened from a conversation', () => {
+  const SAVED_FILTERS_KEY = 'mastra:traces:saved-filters:agent:weather-agent';
+
+  const renderFromConversation = async () => {
+    setTracePageHandlers(metricsCapableCapabilities);
+    const result = renderPage('/agents/weather-agent/traces?filterThreadId=thread-1', {
+      scopedEntityId: 'weather-agent',
+      scopedEntityType: EntityType.AGENT,
+    });
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(result.queryClient.isFetching()).toBe(0);
+    });
+    return result;
+  };
+
+  describe('when the agent has saved filters', () => {
+    it('shows only the conversation filter as a removable chip', async () => {
+      window.localStorage.setItem(SAVED_FILTERS_KEY, 'status=error');
+      await renderFromConversation();
+
+      const chips = [...getFilterChips()].slice(1);
+      expect(chips.map(chip => chip.textContent)).toEqual(['Thread IDisthread-1']);
+      expect(within(chips[0]!).getByRole('button', { name: /remove/i })).toBeTruthy();
+      expect(screen.getByTestId('location').textContent).not.toContain('status=');
+    });
+  });
+
+  describe('when the user removes the conversation filter', () => {
+    it('lists all of the agent traces', async () => {
+      await renderFromConversation();
+
+      fireEvent.click(within([...getFilterChips()][1]!).getByRole('button', { name: /remove/i }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterThreadId'));
+      expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
+    });
+  });
+
+  describe('when the user changes another filter', () => {
+    it('does not remember the conversation for the next visit', async () => {
+      await renderFromConversation();
+
+      fireEvent.click(within([...getFilterChips()][0]!).getByRole('button', { name: 'Value: Last 7 days' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
+      const saved = window.localStorage.getItem(SAVED_FILTERS_KEY) ?? '';
+      expect(saved).toContain('datePreset=last-24h');
+      expect(saved).not.toContain('filterThreadId');
+      expect(screen.getByTestId('location').textContent).toContain('filterThreadId=thread-1');
+    });
+  });
+});
+
 describe('Traces page metadata filter discovery', () => {
   describe('when field discovery is still pending', () => {
     it('shows the page skeleton instead of the filter bar and list', async () => {
