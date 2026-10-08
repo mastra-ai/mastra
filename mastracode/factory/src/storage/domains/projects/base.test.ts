@@ -52,7 +52,6 @@ describe('FactoryProjectsStorage', () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
     expect(project).toMatchObject({
-      sandboxProvider: null,
       sandboxWorkdir: null,
       sandboxCpuCount: null,
       sandboxMemoryMb: null,
@@ -63,7 +62,6 @@ describe('FactoryProjectsStorage', () => {
     });
 
     const environment = {
-      sandboxProvider: 'platform',
       sandboxWorkdir: '/home/user/workspace',
       sandboxCpuCount: 8,
       sandboxMemoryMb: 16384,
@@ -78,7 +76,6 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject(environment);
 
     const cleared = {
-      sandboxProvider: null,
       sandboxWorkdir: null,
       sandboxCpuCount: null,
       sandboxMemoryMb: null,

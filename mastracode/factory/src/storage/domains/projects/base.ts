@@ -16,7 +16,6 @@ export interface FactoryProject {
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans: boolean;
   /** Sandbox provider for the Factory's environment (null = never configured). */
-  sandboxProvider: string | null;
   /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
   sandboxWorkdir: string | null;
   sandboxCpuCount: number | null;
@@ -45,7 +44,6 @@ export interface UpdateFactoryProjectInput {
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
-  sandboxProvider?: string | null;
   sandboxWorkdir?: string | null;
   sandboxCpuCount?: number | null;
   sandboxMemoryMb?: number | null;
@@ -67,7 +65,6 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
-    sandbox_provider: { type: 'text', nullable: true },
     sandbox_workdir: { type: 'text', nullable: true },
     sandbox_cpu_count: { type: 'integer', nullable: true },
     sandbox_memory_mb: { type: 'integer', nullable: true },
@@ -91,7 +88,6 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
-  sandbox_provider: string | null;
   sandbox_workdir: string | null;
   sandbox_cpu_count: number | null;
   sandbox_memory_mb: number | null;
@@ -114,7 +110,6 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
-    sandboxProvider: row.sandbox_provider ?? null,
     sandboxWorkdir: row.sandbox_workdir ?? null,
     sandboxCpuCount: row.sandbox_cpu_count ?? null,
     sandboxMemoryMb: row.sandbox_memory_mb ?? null,
@@ -213,7 +208,6 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
       ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),
-      ...(input.sandboxProvider !== undefined ? { sandbox_provider: input.sandboxProvider } : {}),
       ...(input.sandboxWorkdir !== undefined ? { sandbox_workdir: input.sandboxWorkdir } : {}),
       ...(input.sandboxCpuCount !== undefined ? { sandbox_cpu_count: input.sandboxCpuCount } : {}),
       ...(input.sandboxMemoryMb !== undefined ? { sandbox_memory_mb: input.sandboxMemoryMb } : {}),

@@ -274,7 +274,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     }
     return {
       environment: {
-        sandboxProvider: project.sandboxProvider,
         sandboxWorkdir: project.sandboxWorkdir,
         sandboxCpuCount: project.sandboxCpuCount ?? DEFAULT_SANDBOX_CPU_COUNT,
         sandboxMemoryMb: project.sandboxMemoryMb ?? DEFAULT_SANDBOX_MEMORY_MB,
