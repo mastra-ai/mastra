@@ -1289,7 +1289,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const node = await store.getNode(nodeId);
           // getNode is a bare id lookup with no scope predicate. This explicit
           // visibility check prevents an IDOR.
-          if (!node || !isKnowledgeScopeVisible(node.scope, scope)) {
+          // Structural scope nodes carry no identity scope; they are read through /scopes.
+          if (!node?.scope || !isKnowledgeScopeVisible(node.scope, scope)) {
             return c.json({ error: 'node_not_found' }, 404);
           }
 
@@ -1378,7 +1379,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           }
           const cursor = loose(c).req.query('cursor');
           if (cursor && cursor.length > 128) return c.json({ error: 'invalid_activity_cursor' }, 400);
-          const activity = await this.#visibleActivity(view, memberIds, cursor, ACTIVITY_PAGE_SIZE + 1);
+          const { items: activity, scanCursor } = await this.#visibleActivity(
+            view,
+            memberIds,
+            cursor,
+            ACTIVITY_PAGE_SIZE + 1,
+          );
           const visiblePage = activity.slice(0, ACTIVITY_PAGE_SIZE);
           const lastVisible = visiblePage.at(-1);
           const payload: KnowledgeActivityPayload = {
@@ -1401,7 +1407,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 createdAt: event.createdAt.toISOString(),
               };
             }),
-            ...(activity.length > ACTIVITY_PAGE_SIZE && lastVisible ? { nextCursor: lastVisible.event.id } : {}),
+            ...(activity.length > ACTIVITY_PAGE_SIZE && lastVisible
+              ? { nextCursor: lastVisible.event.id }
+              : scanCursor
+                ? { nextCursor: scanCursor }
+                : {}),
           };
           return c.json(payload);
         },
@@ -1414,19 +1424,25 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
    * visible in the view. Visibility is decided BEFORE window shaping: hidden
    * rows are skipped entirely (no action/type/id/time metadata leaks) and a
    * hidden backlog can never displace visible events from the window.
+   * When the scan cap stops the walk before the stream ends, `scanCursor` is
+   * the last scanned event so the caller can continue past hidden rows.
    */
   async #visibleActivity(
     view: ResolvedView,
     memberIds: Set<string> | undefined,
     cursor: string | undefined,
     limit: number,
-  ): Promise<VisibleKnowledgeActivity[]> {
+  ): Promise<{ items: VisibleKnowledgeActivity[]; scanCursor?: string }> {
     const out: VisibleKnowledgeActivity[] = [];
     let after = cursor;
     let scanned = 0;
+    let exhausted = false;
     while (out.length < limit && scanned < ACTIVITY_SCAN_CAP) {
       const batch = await view.store.listActivity({ scope: view.scope, after, limit: ACTIVITY_BATCH });
-      if (batch.length === 0) break;
+      if (batch.length === 0) {
+        exhausted = true;
+        break;
+      }
       for (const event of batch) {
         after = event.id;
         scanned += 1;
@@ -1439,7 +1455,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (record && !isKnowledgeScopeVisible(record.scope, view.scope)) targetNode = null;
         }
         if (
-          targetNode &&
+          targetNode?.scope &&
           isKnowledgeScopeVisible(targetNode.scope, view.scope) &&
           (memberIds === undefined || memberIds.has(targetNode.id))
         ) {
@@ -1448,6 +1464,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         if (out.length >= limit || scanned >= ACTIVITY_SCAN_CAP) break;
       }
     }
-    return out;
+    const stoppedAtCap = !exhausted && out.length < limit && scanned >= ACTIVITY_SCAN_CAP;
+    return { items: out, ...(stoppedAtCap && after ? { scanCursor: after } : {}) };
   }
 }
