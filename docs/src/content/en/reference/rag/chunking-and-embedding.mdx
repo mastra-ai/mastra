@@ -47,7 +47,7 @@ const chunks = await doc.chunk({
   overlap: 50,
   separators: ['\n'],
   extract: {
-    metadata: true, // Optionally extract metadata
+    title: true, // Optionally extract a title for each chunk
   },
 })
 ```

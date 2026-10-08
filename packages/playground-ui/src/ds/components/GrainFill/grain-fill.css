@@ -53,9 +53,9 @@
   background-repeat: no-repeat;
   mask-image: radial-gradient(
     ellipse 120% 160% at -20% 65%,
-    var(--color-white) 0%,
-    color-mix(in srgb, var(--color-white) 60%, transparent) 28%,
-    color-mix(in srgb, var(--color-white) 13%, transparent) 60%,
+    white 0%,
+    color-mix(in srgb, white 60%, transparent) 28%,
+    color-mix(in srgb, white 13%, transparent) 60%,
     transparent 85%
   );
   mask-size: var(--grain-width) max(var(--grain-height), 100%);

@@ -498,7 +498,7 @@ describe('expectEngineParity', () => {
     ]);
   });
 
-  it('flags the resumed-tool-call difference once it stops reproducing', async () => {
+  it('preserves the approved tool call in every engine’s resumed output', async () => {
     const results = await expectEngineParity(
       approvalScenario({
         model: { tapes: [toolCallTape('gate', {}), textOnlyTape('Done.')] },
@@ -515,20 +515,14 @@ describe('expectEngineParity', () => {
     const approvalPayload = (r: EngineObservation) =>
       r.turns[0]!.chunkPayloads[r.turns[0]!.chunkTypes.indexOf('tool-call-approval')] as Record<string, unknown>;
 
-    // Every engine publishes the same approval schema, and the only difference
-    // left to declare in this scenario is the resumed output's missing tool call.
-    expect(approvalPayload(observe(results.durable!)).resumeSchema).toBe(
-      approvalPayload(observe(results.plain!)).resumeSchema,
-    );
-    expect(staleKnownDifferences('durable', observe(results.plain!), observe(results.durable!))).toEqual([]);
-
-    // The wrapped engine keeps the suspended tool call in its resumed output.
-    const callsFixed = observe(results.durable!);
-    callsFixed.turns[0]!.toolCalls = observe(results.plain!).turns[0]!.toolCalls;
-    expect(staleKnownDifferences('durable', observe(results.plain!), callsFixed)).toEqual([
-      'durable: the declared toolCalls difference no longer reproduces; ' +
-        'remove it from KNOWN_TURN_DIFFERENCES (COR-1398)',
-    ]);
+    for (const engine of ['durable', 'evented'] as const) {
+      expect(approvalPayload(observe(results[engine]!)).resumeSchema).toBe(
+        approvalPayload(observe(results.plain!)).resumeSchema,
+      );
+      expect(results[engine]!.turns[0]!.toolCalls).toEqual(results.plain!.turns[0]!.toolCalls);
+      expect(results[engine]!.turns[0]!.toolCalls).toHaveLength(1);
+      expect(staleKnownDifferences(engine, observe(results.plain!), observe(results[engine]!))).toEqual([]);
+    }
   });
 
   it('fails when part of a declared expectation no longer differs from plain', async () => {

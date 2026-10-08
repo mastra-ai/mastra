@@ -205,6 +205,7 @@ export type ScenarioName =
   | 'task-patch-tools'
   | 'task-progress-events'
   | 'terminal-resize-reflow'
+  | 'think-picker-per-model'
   | 'task-prompt-context-next-turn'
   | 'resume-locked-thread'
   | 'resume-missing-thread'

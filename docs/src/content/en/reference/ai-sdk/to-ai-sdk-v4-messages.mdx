@@ -15,7 +15,7 @@ Converts messages from input formats to AI SDK V4 UI message format. This functi
 ## Usage example
 
 ```typescript title="app/chat/page.tsx" oxfmt:false
-import { toAISdkV4Messages } from '@mastra/ai-sdk'
+import { toAISdkV4Messages } from '@mastra/ai-sdk/ui'
 import { useChat } from 'ai/react' // AI SDK V4
 
 // Stored messages from your database, memory or API
@@ -112,7 +112,7 @@ Returns an array of AI SDK V4 `UIMessage` objects with the following structure:
 ### Converting text messages
 
 ```typescript
-import { toAISdkV4Messages } from '@mastra/ai-sdk'
+import { toAISdkV4Messages } from '@mastra/ai-sdk/ui'
 
 const messages = toAISdkV4Messages(['Hello', 'How can I help you today?'])
 // Returns array of UIMessage objects with user role and content string
@@ -122,7 +122,7 @@ const messages = toAISdkV4Messages(['Hello', 'How can I help you today?'])
 
 ```typescript
 import { MastraClient } from '@mastra/client-js'
-import { toAISdkV4Messages } from '@mastra/ai-sdk'
+import { toAISdkV4Messages } from '@mastra/ai-sdk/ui'
 
 const client = new MastraClient()
 

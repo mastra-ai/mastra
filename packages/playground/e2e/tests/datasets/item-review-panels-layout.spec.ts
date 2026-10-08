@@ -158,7 +158,7 @@ test.describe('Item and review panel layout', () => {
       // The span column has no close button: clicking the selected span again toggles it off.
       await trace.getByText('Experiment tool call', { exact: true }).click();
       await expect(trace.getByRole('heading', { name: /span-child/ })).toBeHidden();
-      await trace.getByRole('button', { name: 'Close Panel', exact: true }).click();
+      await trace.getByRole('button', { name: 'Close trace', exact: true }).click();
       await expect(trace).toBeHidden();
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
     });
