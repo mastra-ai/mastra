@@ -2288,7 +2288,6 @@ export interface UpdateWorkflowStateOptions {
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
   activePaths?: Array<number>;
   activeStepsPath?: Record<string, number[]>;
-  sleepTimers?: WorkflowRunState['sleepTimers'];
   /**
    * Tracing context for span continuity during suspend/resume.
    * Persisted when workflow suspends to enable linking resumed spans

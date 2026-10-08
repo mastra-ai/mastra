@@ -701,7 +701,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
-        sleepTimers: {},
         activeStepsPath: restart?.activeStepsPath ?? {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
@@ -1366,15 +1365,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
+          workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
           step,
-          workflowsStore: (await this.mastra.getStorage()?.getStore('workflows'))!,
-          onError: (error: unknown) =>
-            this.mastra.getLogger()?.warn('Failed to continue persisted workflow sleep', {
-              workflowId,
-              runId,
-              timerId: `${(step as Extract<StepFlowEntry, { type: 'sleep' }>).id}:${executionPath.join('.')}`,
-              error,
-            }),
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -1401,15 +1393,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
+          workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
           step,
-          workflowsStore: (await this.mastra.getStorage()?.getStore('workflows'))!,
-          onError: (error: unknown) =>
-            this.mastra.getLogger()?.warn('Failed to continue persisted workflow sleep', {
-              workflowId,
-              runId,
-              timerId: `${(step as Extract<StepFlowEntry, { type: 'sleepUntil' }>).id}:${executionPath.join('.')}`,
-              error,
-            }),
         },
       );
     } else if (step?.type === 'foreach' && executionPath.length === 1) {
