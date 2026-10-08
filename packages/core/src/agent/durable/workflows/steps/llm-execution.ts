@@ -99,6 +99,7 @@ const durableLLMInputSchema = z.object({
   agentId: z.string(),
   agentName: z.string().optional(),
   messageListState: z.any(), // SerializedMessageListState
+  initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.object({
     provider: z.string(),
@@ -224,7 +225,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
-      const typedInput = inputData as DurableAgenticWorkflowInput;
+      const typedInput = inputData as DurableAgenticWorkflowInput & z.infer<typeof durableLLMInputSchema>;
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const logger = mastra?.getLogger?.();
@@ -596,6 +597,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
+
+            // Match the plain loop: per-step system-message overrides are scoped
+            // to one model attempt, while tagged processor-owned buckets remain.
+            messageList.replaceAllSystemMessages(
+              typedInput.initialUntaggedSystemMessages ?? messageList.getSystemMessages(),
+            );
+
             if (needsTrailingAssistantGuard(currentModel, stepInputProcessors)) {
               const inputStepWriter = pubsub
                 ? {

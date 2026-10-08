@@ -450,6 +450,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentId: state.agentId,
               agentName: state.agentName,
               messageListState: state.messageListState,
+              initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
               toolsMetadata: state.toolsMetadata,
               modelConfig: state.modelConfig,
               modelList: state.modelList,
@@ -834,14 +835,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       })
         // Initialize iteration state from input
         .map(
-          async ({ inputData, state, setState }) => {
+          async ({ inputData, state, setState, mastra }) => {
             const { messageListState, ...input } = inputData as DurableAgenticWorkflowInput;
+            const initialMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+              messageListState,
+            );
             // The transcript rides in workflow state from here on: each
             // persisted snapshot then holds one copy (in `value`) rather than
             // one per step payload. Steps read and update it there.
             await setState({ ...(state as object), messageListState });
             const iterationState: IterationState = {
               ...input,
+              initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
               iterationCount: 0,
               accumulatedSteps: [],
               accumulatedUsage: {
