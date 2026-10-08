@@ -12,17 +12,17 @@ export const planApprovalHandoffScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.submit('/mode plan');
-    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bplan · /i, terminal, 8_000);
 
     terminal.submit('Create a concise implementation plan for the plan approval e2e test.');
     await runtime.waitForScreenText(/Plan: E2E Approval Plan/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Approve\s+— switch to Build mode and implement/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Approve\s+switch to Build mode and implement/i, terminal, 10_000);
     await runtime.waitForScreenText(/Use as \/goal/i, terminal, 10_000);
     await runtime.waitForScreenText(/Confirm the build-mode acknowledgement renders/i, terminal, 10_000);
 
     terminal.write('\r');
     await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
-    await runtime.waitForScreenText(/▐build▌/i, terminal, 10_000);
+    await runtime.waitForScreenText(/\bbuild · /i, terminal, 10_000);
     await runtime.waitForScreenText(/Build handoff e2e acknowledged\./i, terminal, 10_000);
 
     terminal.keyCtrlC();

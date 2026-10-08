@@ -3,19 +3,13 @@
  * syntax highlighting, and smart summarization.
  */
 
-import { Box, Container, Text, Spacer } from '@earendil-works/pi-tui';
+import { Container, Text, Spacer, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { CollapsibleComponent } from './collapsible.js';
+import { card } from './surface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
-
-/** A single-width box-drawing border sized to `width`, truncating from the right when the corners don't fit. */
-function fitBorder(width: number, left: string, right: string, fill = '─'): string {
-  const inner = Math.max(0, width - left.length - right.length);
-  const line = left + fill.repeat(inner) + right;
-  return line.length <= width ? line : line.slice(0, Math.max(0, width));
-}
 
 export interface ErrorInfo {
   message: string;
@@ -163,58 +157,27 @@ export class ErrorDisplayComponent extends WidthAwareContainer {
     this.clear();
     const info = parseErrorInfo(this.error);
 
-    // Wrap everything in a box (borders provide structure, no extra padding)
-    const box = new Box(BOX_INDENT, 0, (text: string) => text);
-    this.addChild(box);
-
-    // Add a visible border around the entire error display, sized to the render width
-    const borderWidth = Math.max(0, width - BOX_INDENT * 2);
-    const borderTop = new Text(theme.fg('error', fitBorder(borderWidth, '╭─ Error ', '╮')), 0, 0);
-    box.addChild(borderTop);
-
-    // Error header container with background
-    const errorContainer = new Container();
-
-    // Add a colored background to the error message
-    const errorBg = (text: string) => theme.bg('errorBg', text);
-
-    // Error type and message with proper formatting
-    if (info.name && info.name !== 'Error') {
-      const typeLine = new Container();
-      typeLine.addChild(new Text('│ ', 0, 0));
-      typeLine.addChild(new Text(errorBg(` ${theme.bold(theme.fg('error', info.name))} `), 0, 0));
-      errorContainer.addChild(typeLine);
-    }
-
-    // Error message
-    const msgLine = new Container();
-    msgLine.addChild(new Text('│ ', 0, 0));
-    msgLine.addChild(new Text(theme.bold(info.message), 0, 0));
-    errorContainer.addChild(msgLine);
-
-    // File location if available
+    // Left-bar card in the error color: the error type, then the message, then where it happened.
+    const room = Math.max(10, width - BOX_INDENT * 2 - 2);
+    const heading = theme.bold(theme.fg('error', info.name && info.name !== 'Error' ? info.name : 'Error'));
+    const lines = [heading, ...wrapTextWithAnsi(theme.fg('text', info.message), room)];
     if (info.file && info.line) {
       const location = `${info.file}:${info.line}${info.column ? `:${info.column}` : ''}`;
-      errorContainer.addChild(new Text(theme.fg('muted', `  at ${location}`), 0, 0));
+      lines.push(theme.fg('muted', `at ${location}`));
     }
-
-    box.addChild(errorContainer);
+    this.addChild(new Text(card(theme.getTheme().error, lines).join('\n'), BOX_INDENT, 0));
 
     // Code context if available
     if (this.options.showContext && info.context) {
-      box.addChild(new Spacer(1));
-      box.addChild(this.createCodeContext(info.context, info.line));
+      this.addChild(new Spacer(1));
+      this.addChild(this.createCodeContext(info.context, info.line));
     }
 
     // Stack trace (collapsible)
     if (this.options.showStack && info.stack) {
-      box.addChild(new Spacer(1));
-      box.addChild(new CollapsibleStackTrace(info.stack, { expanded: this.options.expanded }, this.ui));
+      this.addChild(new Spacer(1));
+      this.addChild(new CollapsibleStackTrace(info.stack, { expanded: this.options.expanded }, this.ui));
     }
-
-    // Add bottom border
-    const borderBottom = new Text(theme.fg('error', fitBorder(borderWidth, '╰', '╯')), 0, 0);
-    box.addChild(borderBottom);
   }
 
   getChatSpacingKind(): ChatSpacingKind {

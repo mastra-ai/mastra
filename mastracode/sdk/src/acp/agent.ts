@@ -21,7 +21,8 @@ import type {
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
 import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
 import { seedProviderOMDefault } from '../onboarding/om-settings.js';
-import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
+import { getCatalogThinkingLevels, runCatalogThinkingLevel } from '../thinking-catalog.js';
+import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { openUrlInBrowser } from '../utils/open-url.js';
 import { getCurrentVersion } from '../utils/update-check.js';
@@ -364,7 +365,7 @@ export class MastraCodeAcpAgent implements Agent {
         type: 'select',
         description: 'Requested reasoning level. The provider may adjust it for the selected model.',
         currentValue: this.thinkingLevel(entry),
-        options: getAvailableThinkingLevelsForModel(modelId).map(value => ({
+        options: getCatalogThinkingLevels(modelId).map(value => ({
           value,
           name: value[0]!.toUpperCase() + value.slice(1),
         })),
@@ -374,8 +375,7 @@ export class MastraCodeAcpAgent implements Agent {
 
   private thinkingLevel(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
     const level = entry.getThinkingLevel?.() ?? 'off';
-    const levels = getAvailableThinkingLevelsForModel(modelId);
-    return levels.includes(level) ? level : 'xhigh';
+    return runCatalogThinkingLevel(modelId, level);
   }
 
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
@@ -391,17 +391,11 @@ export class MastraCodeAcpAgent implements Agent {
         throw RequestError.invalidParams(undefined, 'Unknown session configuration selection');
       }
       if (params.configId === 'model') {
-        const modelId = String(params.value);
-        await entry.session.model.switch(modelId, {
-          ...(entry.getThinkingLevel ? { thinkingLevel: this.thinkingLevel(entry, modelId) } : {}),
-        });
+        await entry.session.model.switch(String(params.value));
       } else if (params.configId === 'mode') {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {
         await entry.session.state.set({ thinkingLevel: params.value });
-      }
-      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevel(entry)) {
-        await entry.session.state.set({ thinkingLevel: this.thinkingLevel(entry) });
       }
       return { configOptions: this.configOptions(entry) };
     });

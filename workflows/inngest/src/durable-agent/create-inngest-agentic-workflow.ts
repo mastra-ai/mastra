@@ -15,6 +15,7 @@ import {
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   globalRunRegistry,
+  pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -156,6 +157,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+      pruneSnapshot: pruneAgentLoopSnapshot,
       evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
       emitStepEvents: false,
@@ -289,6 +291,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+        pruneSnapshot: pruneAgentLoopSnapshot,
         evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
         emitStepEvents: false,

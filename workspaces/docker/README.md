@@ -169,6 +169,8 @@ const sandbox = new DockerSandbox({
 });
 ```
 
+If `baseImage` runs as a non-root `USER`, set `owner` to that user (for example `owner: 'node'` or `owner: '1000:1000'`). The checkout is then copied with `COPY --chown`, so git and setup commands can write to it. Without `owner`, the checkout is owned by root.
+
 ## Documentation
 
 - [Docker Sandbox integration guide](https://mastra.ai/integrations/sandboxes/docker)

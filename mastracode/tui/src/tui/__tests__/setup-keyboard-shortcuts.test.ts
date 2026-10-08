@@ -38,6 +38,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
   Container: class {},
   Spacer: class {},
   Text: class {},
+  visibleWidth: (s: string) => s.length,
 }));
 
 vi.mock('../components/banner.js', () => ({

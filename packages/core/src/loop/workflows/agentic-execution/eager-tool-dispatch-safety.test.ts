@@ -147,6 +147,7 @@ describe('eager tool dispatch — execution context parity', () => {
     // deferred path would silently go missing from the eager one. This pins them
     // together: whatever a tool can see when it runs late, it can see when it runs early.
     const seen: Record<string, string[]> = {};
+    const abortSignals: Record<string, AbortSignal | undefined> = {};
 
     const run = async (eager: boolean) => {
       const { record } = createRecorder();
@@ -166,6 +167,7 @@ describe('eager tool dispatch — execution context parity', () => {
               seen[String(eager)] = Object.keys(options ?? {})
                 .filter(key => (options as Record<string, unknown>)[key] !== undefined)
                 .sort();
+              abortSignals[String(eager)] = options?.abortSignal;
               return { value };
             },
           }),
@@ -182,9 +184,11 @@ describe('eager tool dispatch — execution context parity', () => {
     expect(seen['false']!.length).toBeGreaterThan(3);
     // Nothing the deferred path provides may be missing from the eager one.
     expect(seen['true']).toEqual(expect.arrayContaining(seen['false']!));
-    // The only thing eager adds is the fused abort signal, which is how cancelling an
-    // early start reaches a tool that is already running. Any *other* extra field is drift.
-    expect(seen['true']!.filter(key => !seen['false']!.includes(key))).toEqual(['abortSignal']);
+    // Both paths receive a run abort signal. The eager path fuses it with the signal that
+    // cancels an early start, and must not introduce any other context field.
+    expect(abortSignals['false']).toBeInstanceOf(AbortSignal);
+    expect(abortSignals['true']).toBeInstanceOf(AbortSignal);
+    expect(seen['true']!.filter(key => !seen['false']!.includes(key))).toEqual([]);
   });
 });
 

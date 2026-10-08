@@ -4,6 +4,9 @@ import { join } from 'node:path';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
+import { getModelReasoningOptions } from '@mastra/core/llm';
+import type * as CoreLlm from '@mastra/core/llm';
+import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +15,11 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+
+vi.mock('@mastra/core/llm', async importOriginal => ({
+  ...(await importOriginal<typeof CoreLlm>()),
+  getModelReasoningOptions: vi.fn(),
+}));
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {
   const loggedIn = new Set(opts.loggedIn ?? []);
@@ -525,6 +533,14 @@ describe('provider key routes with a tenant', () => {
 // ── Available models + DB-backed custom providers (tenant mode) ─────────
 
 describe('GET /web/config/models', () => {
+  const fableReasoning: ModelReasoningOption[] = [{ type: 'effort', values: ['low', 'high'] }];
+
+  beforeEach(() => {
+    vi.mocked(getModelReasoningOptions).mockImplementation(modelId =>
+      modelId === 'anthropic/claude-fable-5' ? fableReasoning : undefined,
+    );
+  });
+
   it('returns only credentialed models with their ids', async () => {
     const controller = {
       listAvailableModels: async () => [
@@ -539,7 +555,15 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+      models: [
+        {
+          id: 'anthropic/claude-fable-5',
+          provider: 'anthropic',
+          modelName: 'claude-fable-5',
+          hasApiKey: true,
+          reasoningOptions: fableReasoning,
+        },
+      ],
     });
   });
 
@@ -571,7 +595,15 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true }],
+      models: [
+        {
+          id: 'anthropic/claude-fable-5',
+          provider: 'anthropic',
+          modelName: 'claude-fable-5',
+          hasApiKey: true,
+          reasoningOptions: fableReasoning,
+        },
+      ],
     });
   });
 

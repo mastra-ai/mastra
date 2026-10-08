@@ -36,7 +36,7 @@ describe('PlanApprovalInlineComponent', () => {
     expect(onGoal).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the plan inside a border', () => {
+  it('renders the plan inside a plan-colored left bar, without a box', () => {
     const component = new PlanApprovalInlineComponent(
       {
         toolCallId: 'tc-1',
@@ -49,11 +49,12 @@ describe('PlanApprovalInlineComponent', () => {
       {} as any,
     );
 
-    const rendered = component.render(80).join('\n');
+    const rendered = component.render(80).map(line => line.replace(/\x1b\[[0-9;]*m/g, '').trimEnd());
 
-    expect(rendered).toContain('╭');
-    expect(rendered).toContain('Build the feature');
-    expect(rendered).toContain('╰');
+    expect(rendered[0]).toBe('▎ Plan: Ship it');
+    expect(rendered).toContain('▎ Build the feature');
+    expect(rendered.every(line => line.startsWith('▎'))).toBe(true);
+    expect(rendered.join('\n')).not.toContain('╭');
   });
 
   it('calls onReject directly when "Request changes" is selected (no feedback input)', () => {
