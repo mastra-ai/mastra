@@ -3,6 +3,8 @@ name: Knowledge split E2E (branch-only)
 # The vitest-all stores/workflows/pubsub E2E jobs run every package in one
 # 30-minute job and time out on main too. This runs each E2E project on its own,
 # at the Knowledge final-proof tip and at the W1 base, with the same secrets.
+# DynamoDB reruns on GitHub-hosted runners: the shared self-hosted host had a
+# stale storage-dynamodb-local-1 container that blocked docker compose on both sides.
 # Lives only on ci/knowledge-v21-e2e-split; never merged.
 on:
   push:
@@ -13,7 +15,7 @@ permissions: {}
 jobs:
   e2e:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: starsling-ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
@@ -24,39 +26,7 @@ jobs:
       matrix:
         side: [stack, w1]
         project:
-          - pubsub/google-cloud-pubsub
-          - pubsub/redis-streams
-          - pubsub/valkey-streams
-          - stores/_test-utils
-          - stores/astra
-          - stores/azure-ai-search
-          - stores/chroma
-          - stores/clickhouse
-          - stores/cloudflare
-          - stores/cloudflare-d1
-          - stores/convex
-          - stores/couchbase
-          - stores/duckdb
           - stores/dynamodb
-          - stores/elasticsearch
-          - stores/lance
-          - stores/libsql
-          - stores/mongodb
-          - stores/mssql
-          - stores/mysql
-          - stores/opensearch
-          - stores/oracledb
-          - stores/pg
-          - stores/pinecone
-          - stores/qdrant
-          - stores/s3vectors
-          - stores/spanner
-          - stores/turbopuffer
-          - stores/turso
-          - stores/upstash
-          - stores/vectorize
-          - stores/weaviate
-          - workflows/inngest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
