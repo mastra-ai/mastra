@@ -105,7 +105,7 @@ async function seed(storage: InMemoryMemory, om: ObservationalMemory, ids: Await
 /** Records the order of storage writes and the record each targeted. */
 function recordWrites(storage: InMemoryMemory) {
   const calls: Array<{ method: string; id: string }> = [];
-  const wrap = <K extends 'updateBufferedObservations' | 'createReflectionGeneration' | 'swapBufferedToActive'>(
+  const wrap = <K extends 'appendBufferedObservations' | 'createReflectionGeneration' | 'swapBufferedToActive'>(
     method: K,
   ) => {
     const original = (storage[method] as (...args: any[]) => Promise<unknown>).bind(storage);
@@ -114,7 +114,7 @@ function recordWrites(storage: InMemoryMemory) {
       return original(input);
     }) as any);
   };
-  wrap('updateBufferedObservations');
+  wrap('appendBufferedObservations');
   wrap('createReflectionGeneration');
   wrap('swapBufferedToActive');
   return calls;
@@ -168,7 +168,7 @@ describe('OM commit queue with real ObservationalMemory', () => {
     expect(reflectResult.reflected).toBe(true);
     expect(bufferResult.buffered).toBe(true);
     expect(head.generationCount).toBe(1);
-    expect(calls.map(c => c.method)).toEqual(['createReflectionGeneration', 'updateBufferedObservations']);
+    expect(calls.map(c => c.method)).toEqual(['createReflectionGeneration', 'appendBufferedObservations']);
     expect(calls[1]!.id).toBe(head.id);
     expect(head.bufferedObservationChunks?.map(c => c.observations)).toEqual([`- ${SECRET}`]);
     const retired = (await storage.getObservationalMemoryHistory(ids.threadId, ids.resourceId)).find(
@@ -259,9 +259,9 @@ describe('OM commit queue with real ObservationalMemory', () => {
 
 describe('every OM storage write runs inside a queued op', () => {
   const GUARDED = [
-    'updateBufferedObservations',
+    'appendBufferedObservations',
     'swapBufferedToActive',
-    'updateActiveObservations',
+    'commitActiveObservations',
     'createReflectionGeneration',
     'swapBufferedReflectionToActive',
     'updateBufferedReflection',
