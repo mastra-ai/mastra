@@ -41,10 +41,10 @@ export function BuildTriggersBlock({
         <SettingsRow
           label="On a schedule"
           description={
-            <span className="flex flex-col gap-2">
+            <span className="flex flex-col gap-3">
               <span>Rebuild when the interval has passed and a repository head moved.</span>
               {schedule.enabled && (
-                <Knob text="Every" unit="hours (1 to 168)">
+                <Knob label="Interval" hint="Hours between checks (1 to 168).">
                   <CommittedInput
                     label="Schedule interval in hours"
                     type="number"
@@ -74,7 +74,7 @@ export function BuildTriggersBlock({
         <SettingsRow
           label="On push"
           description={
-            <span className="flex flex-col gap-2">
+            <span className="flex flex-col gap-3">
               <span>Rebuild right after a push to a repository's base branch.</span>
               {pushSignal === 'none' && onPush.enabled && (
                 <span role="alert" className="text-warning-foreground flex items-center gap-1.5">
@@ -85,7 +85,7 @@ export function BuildTriggersBlock({
               )}
               {onPush.enabled && (
                 <>
-                  <Knob text="Then hold further pushes for" unit="minutes before building again (0 to 1440)">
+                  <Knob label="Debounce" hint="Minutes to hold further pushes after a build (0 to 1440).">
                     <CommittedInput
                       label="Push debounce in minutes"
                       type="number"
@@ -101,7 +101,7 @@ export function BuildTriggersBlock({
                       }}
                     />
                   </Knob>
-                  <Knob text="At most" unit="builds per hour (1 to 60). Empty means unlimited.">
+                  <Knob label="Max push builds per hour" hint="1 to 60. Empty means unlimited.">
                     <CommittedInput
                       label="Max push builds per hour"
                       type="number"
@@ -136,13 +136,15 @@ export function BuildTriggersBlock({
   );
 }
 
-/** One inline setting under a trigger: a word, a small number input, a unit. */
-function Knob({ text, unit, children }: { text: string; unit: string; children: React.ReactNode }) {
+/** One sub-setting under a trigger: label and hint on the left, a small input on the right. */
+function Knob({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
   return (
-    <span className="text-foreground flex flex-wrap items-center gap-2">
-      <span>{text}</span>
-      <span className="w-24 [&_input]:text-right">{children}</span>
-      <span>{unit}</span>
+    <span className="border-border flex items-center justify-between gap-4 border-l pl-3">
+      <span className="flex flex-col gap-0.5">
+        <span className="text-foreground">{label}</span>
+        <span>{hint}</span>
+      </span>
+      <span className="w-24 shrink-0">{children}</span>
     </span>
   );
 }
