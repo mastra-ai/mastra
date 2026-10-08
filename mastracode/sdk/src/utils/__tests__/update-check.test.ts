@@ -13,12 +13,31 @@ vi.mock('node:os', () => ({ homedir: homedirMock }));
 
 import {
   fetchChangelog,
+  isNewerVersion,
   locateOwnInstall,
   parseChangelog,
   performUpdate,
   resolveUpdateOutcome,
   runUpdate,
 } from '../update-check.js';
+
+describe('isNewerVersion', () => {
+  it('compares release versions', () => {
+    expect(isNewerVersion('1.0.0', '1.2.0')).toBe(true);
+    expect(isNewerVersion('1.2.0', '1.2.0')).toBe(false);
+    expect(isNewerVersion('2.0.0', '1.9.9')).toBe(false);
+  });
+
+  it('treats a release as newer than its own prerelease', () => {
+    expect(isNewerVersion('1.2.0-alpha.1', '1.2.0')).toBe(true);
+    expect(isNewerVersion('v1.2.0-rc.1', 'v1.2.0')).toBe(true);
+  });
+
+  it('does not treat a prerelease as newer than its release or a lower version', () => {
+    expect(isNewerVersion('1.2.0', '1.2.0-rc.1')).toBe(false);
+    expect(isNewerVersion('1.3.0-alpha.1', '1.2.0')).toBe(false);
+  });
+});
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [

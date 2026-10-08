@@ -142,9 +142,12 @@ export async function fetchLatestVersion(): Promise<string | null> {
   }
 }
 
+const isPrerelease = (v: string) => v.includes('-');
+
 /**
  * Simple semver comparison: returns true if `latest` is newer than `current`.
- * Handles standard x.y.z versions. Ignores pre-release tags.
+ * Handles standard x.y.z versions. Pre-release tags only matter against the
+ * matching release; two pre-releases of the same version compare equal.
  */
 export function isNewerVersion(current: string, latest: string): boolean {
   const parse = (v: string) =>
@@ -160,7 +163,9 @@ export function isNewerVersion(current: string, latest: string): boolean {
   const [lMajor = 0, lMinor = 0, lPatch = 0] = parse(latest);
   if (lMajor !== cMajor) return lMajor > cMajor;
   if (lMinor !== cMinor) return lMinor > cMinor;
-  return lPatch > cPatch;
+  if (lPatch !== cPatch) return lPatch > cPatch;
+  // Same x.y.z: a release is newer than its own prerelease (1.2.0 > 1.2.0-rc.1).
+  return isPrerelease(current) && !isPrerelease(latest);
 }
 
 /** Max entries to show in the changelog summary. */

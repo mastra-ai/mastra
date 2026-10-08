@@ -108,7 +108,7 @@ Piped stdin is added after a plain-text prompt in the same first message, and is
 
 ## Update Mastra Code
 
-Run `mastracode update` to install the latest version with the package manager that installed Mastra Code. It exits with code `1` if the update fails or the running install doesn't change, and prints the command to run manually:
+Run `mastracode update` to install the latest version with the package manager that installed Mastra Code. It exits with code `0` when the update succeeds or Mastra Code is already up to date. It exits with code `1` when the npm registry can't be reached, or when the update fails or leaves the running install unchanged. In the last two cases, it prints the command to run manually:
 
 ```sh
 mastracode update
