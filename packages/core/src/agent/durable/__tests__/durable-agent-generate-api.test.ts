@@ -6,22 +6,32 @@
  * `resumeGenerate()` finishes, and `structuredOutput` parses the model's JSON
  * reply — with the same contract on plain, durable and evented.
  *
- * Why this port drives the engines directly instead of calling
- * `expectEngineParity`: plain's `generate()` resolves through
- * `model.doGenerate` while durable and evented stream, and the frozen helper's
- * recording model deliberately throws on `doGenerate` ("scripts only support
- * doStream"), so the helper cannot drive this case at all. The harness hit the
- * same hazard — its header records the T16 batch 03-56-58 plain cells as
- * INVALID because the script model had no `doGenerate`. The helper also
- * refuses a scenario that produces no streamed turn on plain, and T16 never
- * streams.
+ * The `object` variant drives all three engines through `expectEngineParity` and
+ * `EngineHandle.generate()`, which runs plain's `doGenerate` and the wrapped
+ * engines' workflow path off the same recorded tape — the leaf-by-leaf
+ * comparison the helper performs is strictly stronger than the harness's
+ * `done(contract)` deep equality, so nothing the harness checks is dropped.
  *
- * The port therefore builds one script model that implements BOTH
- * `doGenerate` and `doStream`, drives the same scenario on all three engines,
- * asserts every harness `evaluate()` check on every engine, and then compares
- * the harness's `done(contract)` object across engines — the same deep
- * equality the harness itself performs when both cells pass (see `pair()` in
- * harness/case-runner.mjs). Nothing the harness checks is dropped.
+ * Two legs stay directly driven, each for a reason the helper cannot remove:
+ *
+ *  - `suspend`: `EngineHandle.generate()` has no resume counterpart, so
+ *    `resumeGenerate()` is not expressible — and its signature genuinely differs
+ *    (plain takes `resumeData` first, durable and evented take the run id first).
+ *  - `steps`: the helper also compares the model requests, and plain's
+ *    `generate()` path replays the assistant tool-call part into the next
+ *    request without `providerExecuted`, where the streaming path (plain's own
+ *    `stream()`, and durable/evented, which always stream) sends
+ *    `providerExecuted: false`. That difference is real, unrelated to the
+ *    tickets this port may cite, and reported on COR-1406 for a ticket
+ *    decision; until it is covered, driving this leg through the helper would
+ *    mean declaring a difference no ticket owns.
+ *
+ * Both direct legs still assert every harness `evaluate()` check on every
+ * engine, compare the harness's `done(contract)` object across engines, and pin
+ * that plain's `generate()` resolved through `doGenerate` — the entry point the
+ * harness required T16's script model to implement (its header records the plain
+ * cells as INVALID without it) and the one thing the helper cannot observe,
+ * since its recording model answers both entry points from the same tape.
  */
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -36,18 +46,19 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import type { DurableAgent } from '../durable-agent';
-import type { ParityEngine } from './parity-harness';
+import type { EngineParityScenario, ModelScript, ParityEngine, ParityStreamOptions } from './parity-harness';
+import { expectEngineParity, textOnlyTape } from './parity-harness';
 
 const AGENT_ID = 't16-agent';
 const MAX_STEPS = 5;
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const T16_USAGE = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+const MEMORY = { thread: 't16-thread', resource: 't16-resource' };
+const OBJECT_SCHEMA = z.object({ amount: z.number(), currency: z.string() });
+const PARSED_OBJECT = { amount: 42, currency: 'EUR' };
 
-type Variant = 'steps' | 'suspend' | 'object';
-
-// ---------------------------------------------------------------------------
-// Script model — implements both entry points
-// ---------------------------------------------------------------------------
+/** Direct-driven variants: the ones the helper cannot express yet. */
+type DirectVariant = 'steps' | 'suspend';
 
 type PromptPart = { type?: string; text?: string; toolName?: string; toolCallId?: string };
 type PromptMessage = { role: string; content: unknown };
@@ -59,12 +70,62 @@ function promptParts(message: PromptMessage): PromptPart[] {
 }
 
 /** Tool results already in the prompt, oldest first (the harness's `toolResults`). */
-function toolResults(prompt: PromptMessage[]): PromptPart[] {
+function toolResults(prompt: ReadonlyArray<PromptMessage>): PromptPart[] {
   return prompt
     .filter(message => message.role === 'tool')
     .flatMap(promptParts)
     .filter(part => part.type === 'tool-result');
 }
+
+// ---------------------------------------------------------------------------
+// Tools
+// ---------------------------------------------------------------------------
+
+type ToolLog = Array<{ tool: string; event: string }>;
+
+function createStepTool(log: ToolLog) {
+  return createTool({
+    id: 'step',
+    description: 'Perform numbered step n. Slow.',
+    inputSchema: z.object({ n: z.number() }),
+    execute: async ({ n }) => {
+      log.push({ tool: 'step', event: 'commit' });
+      return { done: n };
+    },
+  });
+}
+
+function createConfirmTool(log: ToolLog) {
+  return createTool({
+    id: 'confirm',
+    description: 'Ask the user to confirm a payment. Suspends until they answer.',
+    inputSchema: z.object({ amount: z.number() }),
+    suspendSchema: z.object({ prompt: z.string() }),
+    resumeSchema: z.object({ confirmed: z.boolean() }),
+    execute: async ({ amount }, context) => {
+      const resumeData = context?.agent?.resumeData;
+      log.push({ tool: 'confirm', event: resumeData ? 'resumed' : 'start' });
+      if (!resumeData) return context?.agent?.suspend?.({ prompt: `Pay ${amount}?` });
+      if (resumeData.confirmed) log.push({ tool: 'confirm', event: 'commit' });
+      return { confirmed: resumeData.confirmed, amount };
+    },
+  });
+}
+
+function t16Agent(model: LanguageModelV2, tools: Record<string, unknown>) {
+  return new Agent<string, any, any>({
+    id: AGENT_ID,
+    name: 't16-agent',
+    instructions: 'Follow the script.',
+    model,
+    memory: new MockMemory(),
+    tools,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Script model — implements both entry points, so one script drives every engine
+// ---------------------------------------------------------------------------
 
 function generateContent(step: ScriptStep, offset: number) {
   if ('text' in step) return [{ type: 'text' as const, text: step.text }];
@@ -132,50 +193,31 @@ function createScriptModel(script: Script) {
   return { model: model as unknown as LanguageModelV2, calls };
 }
 
-// ---------------------------------------------------------------------------
-// Tools
-// ---------------------------------------------------------------------------
-
-type ToolLog = Array<{ tool: string; event: string }>;
-
-function createStepTool(log: ToolLog) {
-  return createTool({
-    id: 'step',
-    description: 'Perform numbered step n. Slow.',
-    inputSchema: z.object({ n: z.number() }),
-    execute: async ({ n }) => {
-      log.push({ tool: 'step', event: 'commit' });
-      return { done: n };
-    },
-  });
-}
-
-function createConfirmTool(log: ToolLog) {
-  return createTool({
-    id: 'confirm',
-    description: 'Ask the user to confirm a payment. Suspends until they answer.',
-    inputSchema: z.object({ amount: z.number() }),
-    suspendSchema: z.object({ prompt: z.string() }),
-    resumeSchema: z.object({ confirmed: z.boolean() }),
-    execute: async ({ amount }, context) => {
-      const resumeData = context?.agent?.resumeData;
-      log.push({ tool: 'confirm', event: resumeData ? 'resumed' : 'start' });
-      if (!resumeData) return context?.agent?.suspend?.({ prompt: `Pay ${amount}?` });
-      if (resumeData.confirmed) log.push({ tool: 'confirm', event: 'commit' });
-      return { confirmed: resumeData.confirmed, amount };
-    },
-  });
+/**
+ * Two tool steps, then text: `finished 2 steps` after two tool results. The
+ * `suspend` script asks for `confirm` until it has one result, then echoes it.
+ */
+function scriptFor(variant: DirectVariant): Script {
+  if (variant === 'steps') {
+    return prompt => {
+      const done = toolResults(prompt).length;
+      return done < 2 ? { tools: [{ name: 'step', args: { n: done + 1 } }] } : { text: `finished ${done} steps` };
+    };
+  }
+  return prompt =>
+    toolResults(prompt).length
+      ? { text: `answered ${JSON.stringify(toolResults(prompt).at(-1))}` }
+      : { tools: [{ name: 'confirm', args: { amount: 42 } }] };
 }
 
 // ---------------------------------------------------------------------------
-// Scenario
+// Direct drive: steps (blocked above) and suspend (no helper resume)
 // ---------------------------------------------------------------------------
 
 type T16Options = {
   memory?: { thread: string; resource: string };
   runId?: string;
   maxSteps?: number;
-  structuredOutput?: { schema: unknown };
   toolCallId?: string;
 };
 
@@ -224,52 +266,27 @@ function summarize(output: T16Output | undefined): Summary | undefined {
   };
 }
 
-type EngineRun = {
-  engine: ParityEngine;
-  first: Summary | undefined;
-  resumed: Summary | undefined;
-  toolLog: ToolLog;
-  /** Model calls the engine made, in order — diagnostics only, never compared. */
-  calls: Array<'generate' | 'stream'>;
-};
-
-function scriptFor(variant: Variant): Script {
-  if (variant === 'steps') {
-    // Two tool steps, then text: `finished 2 steps` after two tool results.
-    return prompt => {
-      const done = toolResults(prompt).length;
-      return done < 2 ? { tools: [{ name: 'step', args: { n: done + 1 } }] } : { text: `finished ${done} steps` };
-    };
-  }
-  if (variant === 'suspend') {
-    return prompt =>
-      toolResults(prompt).length
-        ? { text: `answered ${JSON.stringify(toolResults(prompt).at(-1))}` }
-        : { tools: [{ name: 'confirm', args: { amount: 42 } }] };
-  }
-  return () => ({ text: '{"amount":42,"currency":"EUR"}' });
-}
-
 function lastToolCallId(output: T16Output): string {
   const last = output.toolCalls?.at(-1);
   return last?.payload?.toolCallId ?? last?.toolCallId ?? 'call-1';
 }
 
-async function runOnEngine(variant: Variant, engine: ParityEngine): Promise<EngineRun> {
+type EngineRun = {
+  engine: ParityEngine;
+  first: Summary | undefined;
+  resumed: Summary | undefined;
+  toolLog: ToolLog;
+  /** Model calls the engine made, in order — plain must resolve through `doGenerate`. */
+  calls: Array<'generate' | 'stream'>;
+};
+
+async function runOnEngine(variant: DirectVariant, engine: ParityEngine): Promise<EngineRun> {
   const toolLog: ToolLog = [];
   const { model, calls } = createScriptModel(scriptFor(variant));
-  const agent: Agent<string, any, any> = new Agent({
-    id: AGENT_ID,
-    name: 't16-agent',
-    instructions: 'Follow the script.',
+  const agent = t16Agent(
     model,
-    memory: new MockMemory(),
-    ...(variant === 'steps'
-      ? { tools: { step: createStepTool(toolLog) } }
-      : variant === 'suspend'
-        ? { tools: { confirm: createConfirmTool(toolLog) } }
-        : {}),
-  });
+    variant === 'steps' ? { step: createStepTool(toolLog) } : { confirm: createConfirmTool(toolLog) },
+  );
 
   let wrapper: DurableAgent<string, any, any> | undefined;
   let pubsub: EventEmitterPubSub | undefined;
@@ -296,11 +313,9 @@ async function runOnEngine(variant: Variant, engine: ParityEngine): Promise<Engi
   }
 
   const runner = (wrapper ?? agent) as unknown as T16Runner;
-  const memory = { thread: `t16-thread-${engine}`, resource: `t16-resource-${engine}` };
-  const runId = `t16-run-${engine}`;
+  const memory = { thread: `t16-thread-${variant}-${engine}`, resource: `t16-resource-${engine}` };
+  const runId = `t16-run-${variant}-${engine}`;
   const options: T16Options = { memory, runId, maxSteps: MAX_STEPS };
-  if (variant === 'object')
-    options.structuredOutput = { schema: z.object({ amount: z.number(), currency: z.string() }) };
 
   try {
     const first = await runner.generate('Go.', options);
@@ -323,7 +338,7 @@ async function runOnEngine(variant: Variant, engine: ParityEngine): Promise<Engi
 }
 
 /** The harness's `done(contract)`, rebuilt per engine. */
-function contractOf(run: EngineRun, variant: Variant) {
+function contractOf(run: EngineRun, variant: DirectVariant) {
   const first = run.first;
   if (variant === 'suspend') {
     return {
@@ -334,49 +349,98 @@ function contractOf(run: EngineRun, variant: Variant) {
   return { text: first?.text, finishReason: first?.finishReason, steps: first?.steps, object: first?.object };
 }
 
+async function runDirectOnEveryEngine(variant: DirectVariant): Promise<Map<ParityEngine, EngineRun>> {
+  const runs = new Map<ParityEngine, EngineRun>();
+  for (const engine of ENGINES) runs.set(engine, await runOnEngine(variant, engine));
+  return runs;
+}
+
+/** The `steps` leg's checks either side of the harness's cross-engine contract equality. */
+function expectOrdinaryChecks(runs: Map<ParityEngine, EngineRun>) {
+  for (const engine of ENGINES) {
+    const first = runs.get(engine)!.first;
+    expect(first, `${engine} returned no output`).toBeDefined();
+    expect(first?.error, `${engine} generate() returned an error`).toBeUndefined();
+    expect(first?.text, `${engine} final text`).toBe('finished 2 steps');
+    expect(first?.finishReason, `${engine} finish reason`).toBe('stop');
+    expect(first?.steps, `${engine} steps recorded`).toBe(3);
+  }
+}
+
 describe('T16 generate API: generate() / resumeGenerate() / structured output (plain, durable, evented)', () => {
-  it.each(['steps', 'suspend', 'object'] as const)(
-    '%s: every engine returns the same FullOutput contract',
-    async variant => {
-      const runs = new Map<ParityEngine, EngineRun>();
-      for (const engine of ENGINES) {
-        runs.set(engine, await runOnEngine(variant, engine));
-      }
+  it('object: every engine parses the same structured output', async () => {
+    // `ParityStreamOptions` deliberately omits `structuredOutput` (it types
+    // differently on plain and on the wrapped agents), so the option is widened
+    // here and passed through to whichever `generate()` the engine owns.
+    const options: ParityStreamOptions & { structuredOutput?: unknown } = {
+      memory: MEMORY,
+      maxSteps: MAX_STEPS,
+      structuredOutput: { schema: OBJECT_SCHEMA },
+    };
+    const scenario: EngineParityScenario = {
+      model: { respond: () => textOnlyTape(JSON.stringify(PARSED_OBJECT), T16_USAGE) } satisfies ModelScript,
+      buildAgent: ({ model }) => t16Agent(model, {}),
+      run: async handle => {
+        await handle.generate('Go.', options);
+      },
+    };
 
-      for (const engine of ENGINES) {
-        const run = runs.get(engine)!;
-        const first = run.first;
-        expect(first, `${engine} returned no output`).toBeDefined();
-        expect(first?.error, `${engine} generate() returned an error`).toBeUndefined();
+    const results = await expectEngineParity(scenario);
 
-        if (variant === 'steps') {
-          expect(first?.text, `${engine} final text`).toBe('finished 2 steps');
-          expect(first?.finishReason, `${engine} finish reason`).toBe('stop');
-          expect(first?.steps, `${engine} steps recorded`).toBe(3);
-        } else if (variant === 'object') {
-          expect(first?.object, `${engine} structured object`).toEqual({ amount: 42, currency: 'EUR' });
-        } else {
-          expect(first?.suspended, `${engine} reported the suspension`).toBe(true);
-          expect(run.resumed?.error, `${engine} resumeGenerate() returned an error`).toBeUndefined();
-          expect(run.resumed?.finishReason, `${engine} resumed finish reason`).toBe('stop');
-          expect(run.resumed?.text, `${engine} resumed text`).toMatch(/"confirmed":true/);
-          expect(
-            run.toolLog.filter(entry => entry.tool === 'confirm' && entry.event === 'commit'),
-            `${engine} confirm commits`,
-          ).toHaveLength(1);
-        }
-      }
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(turn.generate, `${engine} drove the turn through generate()`).toBe(true);
+      expect(turn.chunks, `${engine} streamed chunks`).toHaveLength(0);
+      expect(turn.error, `${engine} generate() returned an error`).toBeUndefined();
+      expect(turn.fullOutput.object, `${engine} structured object`).toEqual(PARSED_OBJECT);
+      expect(results[engine]!.requests, `${engine} model calls`).toHaveLength(1);
+    }
+  });
 
-      // The plain engine resolves `generate()` through `doGenerate`; durable and evented stream
-      // internally. Pin plain's first call so the generate path itself is exercised — the helper's
-      // recording model throws on `doGenerate`, so this case is driven directly.
-      expect(runs.get('plain')!.calls[0], 'plain generate() used the doGenerate path').toBe('generate');
+  it('steps: every engine returns the same FullOutput contract', async () => {
+    const variant = 'steps' as const;
+    const runs = await runDirectOnEveryEngine(variant);
 
-      // The harness compares both cells' contracts with a deep equality check.
-      const plain = contractOf(runs.get('plain')!, variant);
-      for (const engine of ['durable', 'evented'] as const) {
-        expect(contractOf(runs.get(engine)!, variant), `${engine} contract vs plain`).toEqual(plain);
-      }
-    },
-  );
+    expectOrdinaryChecks(runs);
+
+    // The plain engine resolves `generate()` through `doGenerate`; durable and
+    // evented stream internally, which is why this leg is driven directly (see
+    // the header: the helper's request comparison surfaces a real, unticketed
+    // `providerExecuted` difference on this path).
+    expect(runs.get('plain')!.calls[0], 'plain generate() used the doGenerate path').toBe('generate');
+
+    // The harness compares both cells' contracts with a deep equality check.
+    const plain = contractOf(runs.get('plain')!, variant);
+    for (const engine of ['durable', 'evented'] as const) {
+      expect(contractOf(runs.get(engine)!, variant), `${engine} contract vs plain`).toEqual(plain);
+    }
+  });
+
+  it('suspend: a suspended generate() resumes with the same contract on every engine', async () => {
+    const variant = 'suspend' as const;
+    const runs = await runDirectOnEveryEngine(variant);
+
+    for (const engine of ENGINES) {
+      const run = runs.get(engine)!;
+      expect(run.first, `${engine} returned no output`).toBeDefined();
+      expect(run.first?.error, `${engine} generate() returned an error`).toBeUndefined();
+      expect(run.first?.suspended, `${engine} reported the suspension`).toBe(true);
+      expect(run.resumed?.error, `${engine} resumeGenerate() returned an error`).toBeUndefined();
+      expect(run.resumed?.finishReason, `${engine} resumed finish reason`).toBe('stop');
+      expect(run.resumed?.text, `${engine} resumed text`).toMatch(/"confirmed":true/);
+      expect(
+        run.toolLog.filter(entry => entry.tool === 'confirm' && entry.event === 'commit'),
+        `${engine} confirm commits`,
+      ).toHaveLength(1);
+    }
+
+    // `resumeGenerate()` is the reason this leg is direct; the plain call that
+    // precedes it must still have used `doGenerate`.
+    expect(runs.get('plain')!.calls[0], 'plain generate() used the doGenerate path').toBe('generate');
+
+    const plain = contractOf(runs.get('plain')!, variant);
+    for (const engine of ['durable', 'evented'] as const) {
+      expect(contractOf(runs.get(engine)!, variant), `${engine} contract vs plain`).toEqual(plain);
+    }
+  });
 });

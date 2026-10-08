@@ -6,22 +6,20 @@
  * the timeout the caller asked for. `valid` is the control: a sane timeout
  * changes nothing, the run completes normally with a single model call.
  *
- * The rejection happens before the plain engine streams anything, so the
- * harness's invalid variant has no stream to compare and cannot run through
- * `expectEngineParity` (the helper requires at least one plain turn). It is
- * therefore asserted per engine by driving `stream()` directly, exactly as the
- * harness does, while the valid variant goes through the parity helper.
+ * Both variants drive `expectEngineParity`. The invalid variant rejects before
+ * streaming, which the helper records as a failed run (`snapshot.error`) rather
+ * than as `turn()` throwing, so it is compared like any other turn. The one
+ * difference left is the failure's class: plain rejects with the plain `Error`
+ * the argument validation raises, durable and evented with a `TypeError` for the
+ * same input and message. That is COR-1419, declared per engine and pinned
+ * below; the negative check at the end proves the declaration is still needed.
  */
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import type { ParityEngine } from './parity-harness';
-import { chunksOfType, createRecordingModel, expectEngineParity, textOnlyTape } from './parity-harness';
+import type { EngineParityScenario, ParityEngine } from './parity-harness';
+import { chunksOfType, expectEngineParity, textOnlyTape } from './parity-harness';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 
@@ -33,92 +31,67 @@ const VALID_TIMEOUT = { totalMs: 60_000, stepMs: 30_000 };
 /** Matches the harness check `/modelSettings\.timeout/` on either surface. */
 const TIMEOUT_ERROR = /modelSettings\.timeout/;
 
-interface StreamChunkLike {
-  type?: string;
-  payload?: { error?: { message?: string } };
-}
+const COR_1419_REASON =
+  'COR-1419: pre-stream rejection, same message, but plain reports `Error` where the wrapped engines report `TypeError`';
 
-/**
- * Drives the invalid variant on one engine. Reproduces the helper's host setup
- * (the evented agent only runs when registered with storage) but keeps the
- * assertions outside the parity comparison, because plain produces no turn.
- */
-async function runInvalidOnEngine(engine: ParityEngine) {
-  const recorded = createRecordingModel({ respond: () => textOnlyTape('ok') });
-  const base = new Agent({
-    id: `t17-agent-${engine}`,
+function t17Agent({ model }: { model: LanguageModelV2 }) {
+  return new Agent({
+    id: 't17-agent',
     name: 't17',
     instructions: 'Follow the script.',
-    model: recorded.model,
+    model,
     memory: new MockMemory(),
   });
-
-  const pubsub = new EventEmitterPubSub();
-  const wrapper =
-    engine === 'durable'
-      ? createDurableAgent({ agent: base, pubsub })
-      : engine === 'evented'
-        ? createEventedAgent({ agent: base, pubsub })
-        : undefined;
-  const host = new Mastra({ agents: { [base.id]: wrapper ?? base }, storage: new InMemoryStore(), logger: false });
-
-  const runner = (wrapper ?? base) as unknown as {
-    stream: (input: string, options: Record<string, unknown>) => Promise<unknown>;
-  };
-
-  let thrown: string | undefined;
-  const errorMessages: string[] = [];
-  try {
-    const result = await runner.stream('Go.', {
-      maxSteps: 2,
-      memory: { thread: `t17-thread-${engine}`, resource: 't17-resource' },
-      modelSettings: { timeout: INVALID_TIMEOUT },
-    });
-    const output = (
-      wrapper && result && typeof result === 'object' && 'output' in result
-        ? (result as { output: unknown }).output
-        : result
-    ) as AsyncIterable<StreamChunkLike>;
-    for await (const chunk of output) {
-      if (chunk?.type === 'error') errorMessages.push(String(chunk.payload?.error?.message ?? ''));
-    }
-  } catch (error) {
-    thrown = String((error as Error)?.message ?? error);
-  } finally {
-    await host.shutdown();
-    await pubsub.close();
-  }
-
-  return { thrown, errorMessages, modelCalls: recorded.requests.length };
 }
 
-describe('T17 modelSettings.timeout validation (plain, durable, evented)', () => {
-  it.each(ENGINES)('%s: rejects an invalid timeout before calling the model', async engine => {
-    const { thrown, errorMessages, modelCalls } = await runInvalidOnEngine(engine);
+const MEMORY = { thread: 't17-thread', resource: 't17-resource' };
 
-    // 'invalid timeout rejected (throw or error chunk)'
-    expect(thrown ?? errorMessages.join(' ')).toMatch(TIMEOUT_ERROR);
-    // 'model never called with the invalid settings'
-    expect(modelCalls).toBe(0);
+describe('T17 modelSettings.timeout validation (plain, durable, evented)', () => {
+  it('rejects an invalid timeout before calling the model on every engine', async () => {
+    const scenario: EngineParityScenario = {
+      model: { respond: () => textOnlyTape('ok') },
+      buildAgent: t17Agent,
+      run: async handle => {
+        await handle.turn('Go.', { maxSteps: 2, memory: MEMORY, modelSettings: { timeout: INVALID_TIMEOUT } });
+      },
+    };
+
+    const results = await expectEngineParity({
+      ...scenario,
+      differences: {
+        durable: { reason: COR_1419_REASON, ignore: ['error'] },
+        evented: { reason: COR_1419_REASON, ignore: ['error'] },
+      },
+    });
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+
+      // 'invalid timeout rejected (throw or error chunk)': the run produced no
+      // chunks at all, and the failure carries the settings-validation message.
+      expect(turn.chunks, `${engine}: no chunks before the rejection`).toEqual([]);
+      expect(turn.error?.message, `${engine}: rejection message`).toMatch(TIMEOUT_ERROR);
+      // Same message on every engine; only the class differs. Asserted per
+      // engine so the declaration above cannot hide a drifting message or class.
+      expect(turn.error).toStrictEqual({
+        name: engine === 'plain' ? 'Error' : 'TypeError',
+        message: results.plain!.turns[0]!.error?.message,
+      });
+      // 'model never called with the invalid settings'
+      expect(results[engine]!.requests, `${engine}: model calls`).toHaveLength(0);
+    }
+
+    // The declaration is load-bearing: without it the differing class fails the
+    // comparison. (The helper's own self-test covers the same contract.)
+    await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
   });
 
   it('valid timeout: the run completes normally on every engine', async () => {
     const results = await expectEngineParity({
       model: { respond: () => textOnlyTape('ok') },
-      buildAgent: ({ model }) =>
-        new Agent({
-          id: 't17-agent',
-          name: 't17',
-          instructions: 'Follow the script.',
-          model,
-          memory: new MockMemory(),
-        }),
+      buildAgent: t17Agent,
       run: async handle => {
-        await handle.turn('Go.', {
-          maxSteps: 2,
-          memory: { thread: 't17-thread', resource: 't17-resource' },
-          modelSettings: { timeout: VALID_TIMEOUT },
-        });
+        await handle.turn('Go.', { maxSteps: 2, memory: MEMORY, modelSettings: { timeout: VALID_TIMEOUT } });
       },
     });
 
