@@ -5,6 +5,8 @@ import {
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
 } from '@mastra/core/storage';
+import { Knowledge } from '@mastra/core/knowledge';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -1194,6 +1196,56 @@ export function createKnowledgeStorageTests(
         changed: true,
         accessEpoch: 1,
       });
+    });
+  });
+
+  describe('static importer record idempotency', () => {
+    async function createImporter(records: Array<{ id: string; text: string; metadata?: Record<string, unknown> }>) {
+      const domain = await createStore();
+      const knowledge = new Knowledge({
+        storage: new MastraCompositeStore({ id: 'static-import-idempotency', domains: { knowledge: domain } }),
+        structure: { scopes: [{ address: 'project:one', name: 'One' }] },
+        importers: [
+          {
+            id: 'calendar',
+            access: { 'project:$projectId': 'edit' },
+            handler: async ctx => {
+              const importer = await ctx.importer();
+              const node = await importer.upsertNode('event:42', { name: 'Planning' });
+              for (const record of records) await node.appendKnowledge(record);
+            },
+          },
+        ],
+      });
+      await knowledge.reconcile();
+      const run = () => knowledge.getImporter('calendar')!.run({ source: 'calendar:primary', scope: 'project:one' });
+      return { knowledge, run };
+    }
+
+    it('re-runs a deterministic import with stable record ids without duplicating records', async () => {
+      const records = [{ id: 'event-42-time', text: '10:00-11:00', metadata: { tz: 'UTC' } }];
+      const { knowledge, run } = await createImporter(records);
+
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+      const first = await knowledge.getRecord({ id: 'event-42-time' });
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+    });
+
+    it('fails a re-run that emits different content for an existing record id', async () => {
+      const records = [{ id: 'event-42-time', text: '10:00-11:00' }];
+      const { knowledge, run } = await createImporter(records);
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+      const first = await knowledge.getRecord({ id: 'event-42-time' });
+
+      records[0] = { id: 'event-42-time', text: '14:00-15:00' };
+      const rerun = await run();
+
+      expect(rerun).toMatchObject({ status: 'failed' });
+      expect(JSON.stringify(rerun)).toContain('event-42-time');
+      expect(JSON.stringify(rerun)).not.toMatch(/UNIQUE constraint|duplicate key/);
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
     });
   });
 }

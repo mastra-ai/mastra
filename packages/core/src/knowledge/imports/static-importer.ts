@@ -140,6 +140,23 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async appendKnowledge(input: StaticKnowledgeRecordInput): Promise<KnowledgeRecord> {
     await this.#assertMutationAllowed();
+    if (input.id !== undefined) {
+      const storage = await this.#knowledge.getStorage();
+      const existing = await storage.getRecord({ id: input.id, includeDeleted: true });
+      if (existing) {
+        const reemitted =
+          !existing.deletedAt &&
+          existing.nodeId === this.node.id &&
+          existing.source === this.#importer.source &&
+          existing.text === input.text &&
+          JSON.stringify(existing.metadata) === JSON.stringify(input.metadata) &&
+          isExactScope(await storage.getRecordScopeIds(existing.id), this.#importer.scopeId);
+        if (reemitted) return existing;
+        throw new Error(
+          `Knowledge record ${input.id} already exists with different content; importer ${this.#importer.importerId} will not overwrite it`,
+        );
+      }
+    }
     const record = await this.#knowledge.createRecord({
       ...input,
       node: this.node.id,
