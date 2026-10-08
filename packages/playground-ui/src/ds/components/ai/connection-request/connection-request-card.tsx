@@ -22,11 +22,16 @@ export interface ConnectionRequestCardProps extends Omit<ComponentProps<'div'>, 
 
 type OutcomeStatus = Exclude<ConnectionRequestStatus, 'request'>;
 
+function connectedLabel(_displayName: string, accountLabel?: string) {
+  if (!accountLabel) return 'Connected';
+  return `Connected as ${accountLabel}`;
+}
+
 const outcomes = {
   waiting: { tone: 'progress', label: displayName => `Waiting for ${displayName}` },
   connected: {
     tone: 'success',
-    label: (_displayName, accountLabel) => (accountLabel ? `Connected as ${accountLabel}` : 'Connected'),
+    label: connectedLabel,
   },
   failed: { tone: 'error', label: displayName => `Couldn’t connect ${displayName}` },
   declined: { tone: 'neutral', glyph: 'ring', label: () => 'Not now' },
@@ -48,6 +53,53 @@ function OutcomeStatusLine({
   const { label, ...look } = outcomes[status];
   const text = label(displayName, accountLabel);
   return <Status role="status" presentation={{ ...look, label: text, description: text }} />;
+}
+
+function RequestActions({ onConnect, onDecline }: Pick<ConnectionRequestCardProps, 'onConnect' | 'onDecline'>) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {onConnect && (
+        <Button type="button" variant="primary" size="sm" onClick={onConnect}>
+          Connect
+        </Button>
+      )}
+      {onDecline && (
+        <Button type="button" size="sm" onClick={onDecline}>
+          Not now
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function OutcomeRow({
+  status,
+  displayName,
+  accountLabel,
+  onRetry,
+}: { status: OutcomeStatus } & Pick<ConnectionRequestCardProps, 'displayName' | 'accountLabel' | 'onRetry'>) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-body-sm text-muted-foreground">
+      <OutcomeStatusLine status={status} displayName={displayName} accountLabel={accountLabel} />
+      {status === 'expired' && onRetry && (
+        <Button type="button" size="sm" onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ConnectionRequestFooter({
+  status,
+  displayName,
+  accountLabel,
+  onConnect,
+  onDecline,
+  onRetry,
+}: Omit<ConnectionRequestCardProps, 'children' | 'logoUrl'>) {
+  if (status === 'request') return <RequestActions onConnect={onConnect} onDecline={onDecline} />;
+  return <OutcomeRow status={status} displayName={displayName} accountLabel={accountLabel} onRetry={onRetry} />;
 }
 
 export function ConnectionRequestCard({
@@ -77,29 +129,14 @@ export function ConnectionRequestCard({
       <Txt as="p" variant="body" tone="muted">
         {children}
       </Txt>
-      {status === 'request' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {onConnect && (
-            <Button type="button" variant="primary" size="sm" onClick={onConnect}>
-              Connect
-            </Button>
-          )}
-          {onDecline && (
-            <Button type="button" size="sm" onClick={onDecline}>
-              Not now
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-3 text-body-sm text-muted-foreground">
-          <OutcomeStatusLine status={status} displayName={displayName} accountLabel={accountLabel} />
-          {status === 'expired' && onRetry && (
-            <Button type="button" size="sm" onClick={onRetry}>
-              Try again
-            </Button>
-          )}
-        </div>
-      )}
+      <ConnectionRequestFooter
+        status={status}
+        displayName={displayName}
+        accountLabel={accountLabel}
+        onConnect={onConnect}
+        onDecline={onDecline}
+        onRetry={onRetry}
+      />
     </div>
   );
 }
