@@ -1,0 +1,269 @@
+name: Knowledge adapter proof (branch-only)
+
+# Runs the service-backed store suites for the closed Knowledge v2 stack.
+# Lives only on ci/knowledge-v21-adapter-proof; never merged.
+on:
+  push:
+    branches: [ci/knowledge-v21-adapter-proof]
+
+permissions: {}
+
+jobs:
+  test:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [libsql, pg, mysql, mongodb]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build ${{ matrix.store }}
+        run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Run ${{ matrix.store }} tests
+        run: pnpm test
+        working-directory: stores/${{ matrix.store }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+
+  service-e2e:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    name: service-e2e (${{ matrix.pkg }}${{ matrix.ref && ' @ main' || '' }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: workflows/inngest
+            services: docker compose up -d --wait
+          - pkg: workflows/inngest
+            ref: main
+            services: docker compose up -d --wait
+          - pkg: workflows/temporal
+            services: docker compose up -d && for i in $(seq 1 60); do nc -z localhost 7233 && break; sleep 2; done && sleep 15
+          - pkg: pubsub/redis-streams
+            services: 'true'
+          - pkg: pubsub/redis-streams
+            ref: main
+            services: 'true'
+          - pkg: pubsub/redis-streams
+            ref: feat/knowledge-v2-w1-shipyard-proof
+            services: 'true'
+          - pkg: pubsub/valkey-streams
+            services: 'true'
+          - pkg: pubsub/google-cloud-pubsub
+            test: pnpm exec vitest run
+            services: docker compose -f ../../.dev/docker-compose.yaml up -d --wait pubsub-emulator && for i in $(seq 1 60); do nc -z localhost 8085 && break; sleep 2; done
+          - pkg: pubsub/google-cloud-pubsub
+            ref: main
+            test: pnpm exec vitest run
+            services: docker compose -f ../../.dev/docker-compose.yaml up -d --wait pubsub-emulator && for i in $(seq 1 60); do nc -z localhost 8085 && break; sleep 2; done
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+          ref: ${{ matrix.ref || github.sha }}
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build ${{ matrix.pkg }}
+        run: pnpm turbo --filter "./${{ matrix.pkg }}..." build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Start services
+        run: ${{ matrix.services }}
+        working-directory: ${{ matrix.pkg }}
+      - name: Run ${{ matrix.pkg }} tests
+        run: ${{ matrix.test || 'pnpm test' }}
+        working-directory: ${{ matrix.pkg }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+          PUBSUB_EMULATOR_HOST: localhost:8085
+
+  knowledge-playwright:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build Factory UI dependencies
+        run: pnpm turbo --filter "@internal/factory-ui^..." --filter "@mastra/factory^..." build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: mastracode/factory-ui
+      - name: Run Knowledge journeys in proof mode
+        run: npx playwright test -c e2e/playwright.config.ts e2e/knowledge
+        working-directory: mastracode/factory-ui
+        env:
+          KNOWLEDGE_PROOF_OUTPUT: ${{ runner.temp }}/knowledge-proof
+      - name: Checksum proof artifacts
+        if: always()
+        run: cd "$RUNNER_TEMP/knowledge-proof" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: knowledge-playwright-proof
+          path: ${{ runner.temp }}/knowledge-proof
+          include-hidden-files: true
+          retention-days: 14
+
+  # Wave 2 proofs at the W2 top head: calendar delta/replay/concurrency on
+  # LibSQL and PostgreSQL, plus the real GitHub window + agentic distillation.
+  w2-proof:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    name: w2-proof (${{ matrix.proof }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - proof: calendar-libsql
+            adapter: libsql
+            file: calendar-linked-workspace.test.ts
+          - proof: calendar-pg
+            adapter: pg
+            file: calendar-linked-workspace.test.ts
+          - proof: shipyard-github
+            adapter: libsql
+            file: shipyard-github.test.ts
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+          ref: feat/knowledge-v2-w2-shipyard-proof
+      - name: Record proof head
+        run: git rev-parse HEAD | tee "$RUNNER_TEMP/proof-head.txt"
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build linked packages
+        run: pnpm turbo --filter "@mastra/core" --filter "@mastra/libsql" --filter "@mastra/pg" --filter "@mastra/memory" build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Start PostgreSQL
+        if: ${{ matrix.adapter == 'pg' }}
+        run: docker compose up -d --wait
+        working-directory: stores/pg
+      - name: Run ${{ matrix.proof }} proof
+        run: pnpm exec vitest run src/knowledge/imports/__tests__/proof/${{ matrix.file }} 2>&1 | tee "$RUNNER_TEMP/${{ matrix.proof }}.log"; exit ${PIPESTATUS[0]}
+        shell: bash
+        working-directory: packages/core
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+          KNOWLEDGE_ADAPTER: ${{ matrix.adapter }}
+          RUN_SHIPYARD_GITHUB_PROOF: ${{ matrix.proof == 'shipyard-github' && '1' || '' }}
+          GITHUB_TOKEN: ${{ matrix.proof == 'shipyard-github' && secrets.GITHUB_TOKEN || '' }}
+          OPENAI_API_KEY: ${{ matrix.proof == 'shipyard-github' && secrets.OPENAI_API_KEY || '' }}
+      - name: Upload proof log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: w2-proof-${{ matrix.proof }}
+          path: |
+            ${{ runner.temp }}/proof-head.txt
+            ${{ runner.temp }}/${{ matrix.proof }}.log
+          retention-days: 14
+
+  official-skill-install:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SKILL_SHA: 0e6df181592a
+      DISABLE_TELEMETRY: '1'
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          repository: mastra-ai/skills
+          ref: feat/knowledge-reference
+          path: skills-src
+          persist-credentials: false
+      - uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
+        with:
+          node-version: 22
+      - name: Install and update the companion skill in isolated homes
+        run: |
+          set -euo pipefail
+          src=$PWD/skills-src
+          case "$(git -C "$src" rev-parse HEAD)" in "$SKILL_SHA"*) ;; *) echo "companion head moved"; exit 1;; esac
+          out=$PWD/skill-proof; mkdir -p "$out/home" "$out/local" "$out/remote"
+          cat > "$out/verify.py" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+          
+          source = pathlib.Path(sys.argv[1]) / 'skills/mastra'
+          installed = pathlib.Path(sys.argv[2]) / '.claude/skills/mastra'
+          assert installed.is_dir()
+          assert [p.name for p in installed.parent.iterdir()] == ['mastra']
+          hashes = {}
+          for relative in ['SKILL.md', 'references/knowledge.md', 'references/common-errors.md', 'references/remote-docs.md']:
+              expected = (source / relative).read_bytes()
+              actual = (installed / relative).read_bytes()
+              assert expected == actual, relative
+              hashes[relative] = hashlib.sha256(actual).hexdigest()
+          root = (installed / 'SKILL.md').read_text()
+          assert 'Knowledge' in root and 'references/knowledge.md' in root
+          reference = (installed / 'references/knowledge.md').read_text()
+          assert 'node_modules/@mastra/core/dist/docs/references/' in reference
+          print(json.dumps({'status': 'green', 'hashes': hashes}, sort_keys=True, indent=2))
+          PY
+          export HOME="$out/home"
+          (cd "$out/local" && npx --yes skills add "$src" --skill mastra --agent claude-code --yes) > "$out/local-install.log" 2>&1
+          python3 "$out/verify.py" "$src" "$out/local" | tee "$out/local-check.json"
+          echo 'PASS: clean local companion install'
+          (cd "$out/remote" && npx --yes skills add 'https://github.com/mastra-ai/skills#feat%2Fknowledge-reference' --skill mastra --agent claude-code --yes) > "$out/remote-install.log" 2>&1
+          python3 "$out/verify.py" "$src" "$out/remote" > "$out/before-update.json"
+          (cd "$out/remote" && npx --yes skills update mastra) > "$out/update.log" 2>&1
+          python3 "$out/verify.py" "$src" "$out/remote" > "$out/after-update.json"
+          cmp "$out/before-update.json" "$out/after-update.json"
+          grep -Eq 'Updated 1 skill\(s\)|All project skills are up to date' "$out/update.log" || { cat "$out/update.log"; exit 1; }
+          echo 'PASS: branch-qualified install/update preserves reviewed content'
+          cat "$out/after-update.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: official-skill-proof
+          path: skill-proof/
