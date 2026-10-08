@@ -393,6 +393,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options,
     messageId,
     initialState,
+    initialToolCalls,
     finishUsageIsTotal,
   }: {
     model: {
@@ -405,6 +406,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
     initialState?: any;
+    initialToolCalls?: ToolCallChunk[];
     finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
@@ -1482,6 +1484,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     if (initialState) {
       this.deserializeState(initialState);
+    } else if (initialToolCalls) {
+      this.#toolCalls = initialToolCalls;
     }
   }
 

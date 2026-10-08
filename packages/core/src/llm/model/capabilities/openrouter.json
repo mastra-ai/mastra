@@ -7,6 +7,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
@@ -255,13 +256,9 @@
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
-    "anthropic/claude-opus-4.8",
-    "anthropic/claude-opus-5",
-    "anthropic/claude-opus-5.5",
     "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
-    "anthropic/claude-sonnet-5.5",
     "apodex/apodex-1.1-mini:free",
     "arcee-ai/trinity-large-thinking",
     "baidu/ernie-4.5-vl-424b-a47b",
@@ -555,9 +552,6 @@
     "z-ai/glm-5.3-flashx",
     "z-ai/glm-5.3-prime",
     "z-ai/glm-5v-turbo",
-    "~anthropic/claude-haiku-latest",
-    "~anthropic/claude-opus-latest",
-    "~anthropic/claude-sonnet-latest",
     "~deepseek/deepseek-flash-latest",
     "~deepseek/deepseek-pro-latest",
     "~deepseek/deepseek-v4-flash-latest",
@@ -573,6 +567,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -980,6 +975,15 @@
       }
     ],
     "anthropic/claude-opus-4.7": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-5.5": [
       {
         "type": "toggle"
       },
@@ -1467,6 +1471,10 @@
     "~anthropic/claude-haiku-latest": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "~anthropic/claude-sonnet-latest": [
