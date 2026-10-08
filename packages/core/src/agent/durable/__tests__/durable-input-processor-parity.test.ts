@@ -6,25 +6,37 @@
  * whether a tripwire stopped the run before the model was called. Model-free: `stepScript(1)` — one
  * `step` tool call then `finished 1 steps` — with `maxSteps: 3`.
  *
- * Two shapes are ported:
+ * Three shapes are ported:
  *   - `mutate`   — the mutation reaches the model request and the persisted user message.
  *   - `tripwire` — `processInput` aborts, no model call happens, and the stream carries the tripwire
  *     chunk. Plain emits the `tripwire` chunk alone while durable and evented emit `start` before it,
  *     declared below against COR-1390 (the widened chunk-sequence ticket); the tripwire chunk's own
  *     content is compared exactly.
+ *   - `throws`   — `processInput` throws. The harness records this as a FAIL in its own engine
+ *     comparison: plain fails CLOSED (the run rejects `[Agent:script] - Input processor error` with no
+ *     model call and nothing persisted) while durable and evented fail OPEN, swallow the throw and run
+ *     to completion. That fail-open is COR-1413.
  *
- * One shape is held rather than weakened:
- *   - `throws` is a recorded FAIL in the harness's own engine comparison: plain fails CLOSED (the run
- *     rejects `[Agent:script] - Input processor error` with no model call) while durable and evented
- *     fail OPEN and run to completion. That fail-open is COR-1413; the shape lands once the helper can
- *     record a run whose stream rejects (COR-1417), the same wall as T36's error variant.
+ * The `throws` shape is checked per engine (`runT44ThrowsDirect`) rather than through the parity
+ * helper, as the task's known limit requires. There is no comparable pair to compare: the failing
+ * engine has no chunks, no finish chunk, no text, no steps and no requests while the running engines
+ * have all of them, so any declaration would have to ignore nearly every compared field — a vacuous
+ * comparison. Both engines' recorded values are pinned literally below, so when COR-1413 lands and the
+ * wrapped engines also fail closed, this test goes stale rather than passing over the change.
  */
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -116,9 +128,9 @@ function completedSteps(request: CapturedRequest): number {
   }, 0);
 }
 
-type Mode = 'mutate' | 'tripwire';
+type Mode = 'mutate' | 'tripwire' | 'throw';
 
-/** Mutates the last user text, or trips the wire, exactly where the harness probe does. */
+/** Mutates the last user text, trips the wire, or throws, exactly where the harness probe does. */
 function createInputProbe(id: string, mode: Mode, onInput: () => void): InputProcessor {
   return {
     id,
@@ -127,6 +139,8 @@ function createInputProbe(id: string, mode: Mode, onInput: () => void): InputPro
       onInput();
 
       if (mode === 'tripwire') abort(`${id} tripwire at processInput`);
+      // The harness probe's `act` runs before its mutation, so a throwing processor never mutates.
+      if (mode === 'throw') throw new Error(`${id} threw at processInput`);
 
       const last = [...messages].reverse().find(message => message.role === 'user');
       const part = (last?.content?.parts ?? []).filter(part => part.type === 'text').at(-1);
@@ -186,6 +200,195 @@ async function runT44(mode: Mode) {
   });
 
   return { results, memories, inputs };
+}
+
+/**
+ * The recorded contract of the `throws` shape, per engine. The harness's own comparison records
+ * plain as a FAIL and durable/evented as passing cells, so both sides are pinned here: the engine
+ * split is COR-1413 (a throwing input processor fails open on the wrapped engines), and pinning the
+ * wrapped values too means the test flags itself the moment that is fixed.
+ */
+const THROWS_CONTRACTS: Record<ParityEngine, Record<string, unknown>> = {
+  // COR-1413: plain fails CLOSED — the throw rejects the run before any model call.
+  plain: { modelCalls: 0, finishes: 0, errors: 0, tripwire: false, steps: 0, text: null, thrown: true },
+  // COR-1413: durable and evented fail OPEN — the throw is swallowed and the run completes.
+  durable: {
+    modelCalls: 2,
+    finishes: 1,
+    errors: 0,
+    tripwire: false,
+    steps: 1,
+    text: 'finished 1 steps',
+    thrown: false,
+  },
+  evented: {
+    modelCalls: 2,
+    finishes: 1,
+    errors: 0,
+    tripwire: false,
+    steps: 1,
+    text: 'finished 1 steps',
+    thrown: false,
+  },
+};
+
+/**
+ * What a direct run of the `throws` shape recorded on one engine — the harness's `throws` contract
+ * fields, read without the parity helper (see the file header: the shapes differ in nearly every
+ * field, so no tight declaration can express them).
+ */
+interface ThrowCaseState {
+  /** Model calls the run made. */
+  requests: number;
+  /** Chunk types the public stream yielded, in order. */
+  chunkTypes: string[];
+  /** The failure chunk's payload, when the stream carried one. */
+  failurePayload: unknown;
+  /** Text the stream streamed — the harness's `text`. */
+  streamedText: string;
+  /** `finish` chunks the stream yielded — the harness's `finishes`. */
+  finishes: number;
+  /** `step` tool executions that completed — the harness's `steps`. */
+  steps: number;
+  /** Times `processInput` ran. */
+  inputs: number;
+  /** The first model request's user messages, serialised. */
+  requestUser: string;
+  /** The persisted user messages, serialised. */
+  memoryUser: string;
+  /** Set when the run rejected — the harness's `thrown`. */
+  thrown?: string;
+}
+
+/**
+ * Drives one engine through the `throws` shape, mirroring what the parity helper does per engine
+ * (wrapper, host, one streamed turn), because the plain engine fails the run where the wrapped ones
+ * run to completion, so there is no comparable pair for the helper to check.
+ */
+async function runT44ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
+  const requests: Array<{ prompt?: unknown }> = [];
+  const model = new MockLanguageModelV2({
+    doStream: async (options: unknown) => {
+      requests.push(options as { prompt?: unknown });
+      return {
+        stream: convertArrayToReadableStream(
+          (requests.length === 1
+            ? toolCallTape('step', { n: 1 }, 't44-step-1')
+            : textOnlyTape(`finished ${STEPS} steps`)) as never[],
+        ),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  });
+  const state: ThrowCaseState = {
+    requests: 0,
+    chunkTypes: [],
+    failurePayload: undefined,
+    streamedText: '',
+    finishes: 0,
+    steps: 0,
+    inputs: 0,
+    requestUser: '',
+    memoryUser: '',
+  };
+  const memory = new MockMemory();
+  const agent = new Agent({
+    id: 't44-agent',
+    name: 'T44 Agent',
+    instructions: 'Use the step tool until you have finished.',
+    model: model as LanguageModelV2,
+    tools: {
+      step: createTool({
+        id: 'step',
+        description: 'Record one completed step.',
+        inputSchema: z.object({ n: z.number() }),
+        execute: async ({ n }) => {
+          state.steps += 1;
+          return { done: n };
+        },
+      }),
+    },
+    memory,
+    inputProcessors: [createInputProbe(PROCESSOR_ID, 'throw', () => (state.inputs += 1))],
+  });
+  const pubsub = new EventEmitterPubSub();
+  const runner =
+    engine === 'plain'
+      ? agent
+      : engine === 'durable'
+        ? createDurableAgent({ agent, pubsub })
+        : createEventedAgent({ agent });
+  const host = new Mastra({
+    agents: { 't44-agent': runner } as never,
+    storage: new InMemoryStore(),
+    logger: false,
+  });
+
+  const thread = `${THREAD}-throw`;
+  const resource = `${RESOURCE}-throw`;
+  const options = {
+    maxSteps: MAX_STEPS,
+    runId: `t44-run-throw-${engine}`,
+    memory: { thread, resource },
+  };
+
+  let cleanup: (() => Promise<void>) | undefined;
+  let output: { fullStream: AsyncIterable<{ type: string; payload?: unknown }> } | undefined;
+  try {
+    if (engine === 'plain') {
+      output = (await agent.stream('hello there', options)) as never;
+    } else {
+      const result = await (
+        runner as unknown as {
+          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
+        }
+      ).stream('hello there', options);
+      output = result.output;
+      cleanup = result.cleanup;
+    }
+  } catch (error) {
+    state.thrown = String((error as Error)?.message ?? error).slice(0, 200);
+  }
+  if (output) {
+    try {
+      for await (const chunk of output.fullStream) {
+        state.chunkTypes.push(chunk.type);
+        if (chunk.type === 'text-delta') {
+          state.streamedText += String((chunk.payload as { text?: string } | undefined)?.text ?? '');
+        }
+        if (chunk.type === 'finish') state.finishes += 1;
+        if (['error', 'abort', 'tripwire'].includes(chunk.type)) state.failurePayload = chunk.payload;
+      }
+    } catch (error) {
+      state.thrown = state.thrown ?? String((error as Error)?.message ?? error).slice(0, 200);
+    }
+  }
+  state.requests = requests.length;
+  state.requestUser = JSON.stringify(
+    requests[0]?.prompt === undefined
+      ? []
+      : (requests[0].prompt as Array<{ role?: string }>).filter(m => m.role === 'user'),
+  );
+  const { messages } = await memory.recall({ threadId: thread, resourceId: resource });
+  state.memoryUser = JSON.stringify(messages.filter(message => message.role === 'user'));
+  if (cleanup) await cleanup();
+  await host.shutdown();
+  return state;
+}
+
+/** The harness's `done()` contract fields, read from a direct run's state. */
+function throwsContract(state: ThrowCaseState): Record<string, unknown> {
+  return {
+    modelCalls: state.requests,
+    finishes: state.finishes,
+    errors: state.chunkTypes.filter(type => ['error', 'abort', 'tripwire'].includes(type)).length,
+    tripwire: state.chunkTypes.includes('tripwire'),
+    steps: state.steps,
+    text: state.streamedText || null,
+    // The harness app's agent name prefixes the rejection (`[Agent:script]`), so only whether the run
+    // rejected is stable across hosts; the wording is asserted separately below.
+    thrown: state.thrown !== undefined,
+  };
 }
 
 describe('T44 input processors (plain, durable, evented)', () => {
@@ -276,5 +479,35 @@ describe('T44 input processors (plain, durable, evented)', () => {
     for (const engine of ENGINES.slice(1)) {
       expect(contracts.get(engine), `${engine} contract`).toEqual(contracts.get('plain'));
     }
+  });
+
+  it('fails the run on a throwing input processor, and lets the wrapped engines run on', async () => {
+    const states = new Map<ParityEngine, ThrowCaseState>();
+    for (const engine of ENGINES) {
+      states.set(engine, await runT44ThrowsDirect(engine));
+    }
+
+    for (const engine of ENGINES) {
+      const state = states.get(engine)!;
+
+      // harness: `run settled` — a hung run would time out here — and `processInput ran exactly once`.
+      expect(state.inputs, `${engine}: processInput runs`).toBe(1);
+
+      // harness: the failure is visible somewhere, or the run completed.
+      expect(
+        Boolean(state.failurePayload) || state.thrown !== undefined || state.finishes === 1,
+        `${engine}: the run surfaced its failure or completed`,
+      ).toBe(true);
+
+      // harness: the `throw` mode never mutates, so no mutation reaches the request or memory.
+      expect(state.requestUser, `${engine}: no mutation reached the model request`).not.toContain(MUTATION);
+      expect(state.memoryUser, `${engine}: no mutation reached memory`).not.toContain(MUTATION);
+      expect(state.steps, `${engine}: step tool executions`).toBe(THROWS_CONTRACTS[engine].steps);
+
+      expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACTS[engine]);
+    }
+
+    // harness: plain rejects, and the rejection names the processor failure.
+    expect(states.get('plain')!.thrown, 'plain rejects').toContain('Input processor error');
   });
 });
