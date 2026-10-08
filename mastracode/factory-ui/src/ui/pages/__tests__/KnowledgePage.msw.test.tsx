@@ -310,7 +310,7 @@ function stubKnowledgeRoute(
         events: [
           {
             id: 'activity-1',
-            action: 'knowledge-appended',
+            action: 'record-created',
             recordType: 'record',
             recordId: 'record-1',
             scope: ['org:org-1', `resource:${FACTORY_ID}`],
@@ -669,7 +669,7 @@ describe('KnowledgePage', () => {
           events: [
             {
               id: 'activity-scope-1',
-              action: 'knowledge-appended',
+              action: 'record-created',
               recordType: 'record',
               recordId: 'record-1',
               scope: ['org:org-1', `resource:${FACTORY_ID}`],
