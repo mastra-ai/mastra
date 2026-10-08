@@ -6,7 +6,7 @@
  */
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { MastraDBMessage } from '../../message-list';
@@ -27,6 +27,9 @@ const history = (): MastraDBMessage[] =>
   }));
 
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
+const allHistoryIds = history().map(message => message.id);
+type Engine = 'default' | 'evented';
+const engines: Engine[] = ['default', 'evented'];
 
 // Decides from the transcript, so a recovering process makes the same call
 // the original one made: one tool round, then text.
@@ -58,16 +61,34 @@ function createModel(prompts: string[]) {
   });
 }
 
+const stopProcesses: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  await Promise.all(stopProcesses.splice(0).map(stop => stop()));
+});
+
 // A fresh module graph per process keeps module-level state (run registry,
 // verified memory rows) from carrying over into recovery.
-async function startProcess(messages: MastraDBMessage[], { requireApproval = false } = {}) {
+async function startProcess(
+  messages: MastraDBMessage[],
+  { requireApproval = false, engine = 'default' }: { requireApproval?: boolean; engine?: Engine } = {},
+) {
   vi.resetModules();
-  const [{ Mastra }, { InMemoryStore }, { MockMemory }, { Agent }, { createDurableAgent }] = await Promise.all([
+  const [
+    { Mastra },
+    { InMemoryStore },
+    { MockMemory },
+    { Agent },
+    { createDurableAgent },
+    { createEventedAgent },
+    { EventEmitterPubSub },
+  ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
     import('../../../memory/mock'),
     import('../../agent'),
     import('../create-durable-agent'),
+    import('../create-evented-agent'),
+    import('../../../events/event-emitter'),
   ]);
 
   const storage = new InMemoryStore();
@@ -96,13 +117,21 @@ async function startProcess(messages: MastraDBMessage[], { requireApproval = fal
       },
     },
   });
-  const durableAgent = createDurableAgent({ agent });
+  const pubsub = engine === 'evented' ? new EventEmitterPubSub() : undefined;
+  const durableAgent = pubsub ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent });
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,
+    ...(pubsub ? { pubsub } : {}),
     logger: false,
     recovery: { durableAgents: 'auto' },
   });
+  if (pubsub) {
+    stopProcesses.push(async () => {
+      await mastra.stopWorkers();
+      await pubsub.close();
+    });
+  }
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
   return { durableAgent, workflows, prompts, storage, toolExecutions: () => toolExecutions };
 }
@@ -158,8 +187,12 @@ async function outerSnapshot(workflows: Awaited<ReturnType<typeof startProcess>>
   return run?.snapshot;
 }
 
-const refIds = (snapshot: WorkflowRunState | undefined) =>
-  ((snapshot?.value as any)?.messageListState?.messages ?? [])
+// The default engine keeps workflow state in `value`, the evented engine in `context.__state`.
+const workflowState = (snapshot: WorkflowRunState | undefined, engine: Engine): any =>
+  engine === 'evented' ? (snapshot?.context as any)?.__state : snapshot?.value;
+
+const refIds = (snapshot: WorkflowRunState | undefined, engine: Engine = 'default') =>
+  (workflowState(snapshot, engine)?.messageListState?.messages ?? [])
     .filter((m: any) => m.__ref === 'memory')
     .map((m: any) => m.id);
 
@@ -188,7 +221,7 @@ describe('memory-recalled messages in durable runs', () => {
     const withTranscript = persisted.filter(row => (row.snapshot.value as any)?.messageListState);
     expect(withTranscript.length).toBeGreaterThan(0);
     for (const row of withTranscript) {
-      expect(refIds(row.snapshot)).toEqual(['history-0', 'history-1', 'history-2', 'history-3']);
+      expect(refIds(row.snapshot)).toEqual(allHistoryIds);
       expect(JSON.stringify(row.snapshot.value)).not.toContain(historyText(0));
     }
 
@@ -229,56 +262,70 @@ describe('memory-recalled messages in durable runs', () => {
     expect(modelCalls).toContain(0);
   }, 60_000);
 
-  it('resumes an approval in the same process with the stored version of recalled messages edited or deleted while suspended', async () => {
-    const { durableAgent, workflows, prompts, storage } = await startProcess(history(), { requireApproval: true });
-    const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
+  it.each(engines)(
+    'resumes an approval in the same process with the stored version of recalled messages edited or deleted while suspended (%s engine)',
+    async engine => {
+      const { durableAgent, workflows, prompts, storage } = await startProcess(history(), {
+        requireApproval: true,
+        engine,
+      });
+      const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
+      expect(refIds(await outerSnapshot(workflows, runId), engine)).toEqual(allHistoryIds);
 
-    const memoryStore = (await storage.getStore('memory'))!;
-    await memoryStore.updateMessages({
-      messages: [{ id: 'history-0', content: { format: 2, parts: [{ type: 'text', text: 'edited meanwhile' }] } }],
-    });
-    await memoryStore.deleteMessages(['history-1']);
-    const listMessagesById = vi.spyOn(memoryStore, 'listMessagesById');
+      const memoryStore = (await storage.getStore('memory'))!;
+      await memoryStore.updateMessages({
+        messages: [{ id: 'history-0', content: { format: 2, parts: [{ type: 'text', text: 'edited meanwhile' }] } }],
+      });
+      await memoryStore.deleteMessages(['history-1']);
+      const listMessagesById = vi.spyOn(memoryStore, 'listMessagesById');
 
-    const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption });
-    expect(await collectText(resumed)).toBe('done');
-    // Loaded once before the resume runs anything; the steps never read storage.
-    expect(listMessagesById).toHaveBeenCalledTimes(1);
+      const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption });
+      expect(await collectText(resumed)).toBe('done');
+      // Loaded once before the resume runs anything; the steps never read storage.
+      expect(listMessagesById).toHaveBeenCalledTimes(1);
 
-    expect(prompts).toHaveLength(2);
-    const afterResume = prompts[1]!;
-    expect(afterResume).toContain('edited meanwhile');
-    expect(afterResume).not.toContain(historyText(0));
-    expect(afterResume).not.toContain(historyText(1));
-    expect(afterResume).toContain(historyText(2));
-    expect(afterResume).toContain(historyText(3));
-  });
+      expect(prompts).toHaveLength(2);
+      const afterResume = prompts[1]!;
+      expect(afterResume).toContain('edited meanwhile');
+      expect(afterResume).not.toContain(historyText(0));
+      expect(afterResume).not.toContain(historyText(1));
+      expect(afterResume).toContain(historyText(2));
+      expect(afterResume).toContain(historyText(3));
+    },
+  );
 
-  it('keeps an approval suspended for a retry when memory storage cannot load the recalled messages', async () => {
-    const { durableAgent, workflows, prompts, storage, toolExecutions } = await startProcess(history(), {
-      requireApproval: true,
-    });
-    const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
+  it.each(engines)(
+    'keeps an approval suspended for a retry when memory storage cannot load the recalled messages (%s engine)',
+    async engine => {
+      const { durableAgent, workflows, prompts, storage, toolExecutions } = await startProcess(history(), {
+        requireApproval: true,
+        engine,
+      });
+      const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
+      const suspended = await outerSnapshot(workflows, runId);
+      expect(refIds(suspended, engine)).toEqual(allHistoryIds);
+      expect(JSON.stringify(workflowState(suspended, engine))).not.toContain(historyText(0));
 
-    const memoryStore = (await storage.getStore('memory'))!;
-    const listMessagesById = vi
-      .spyOn(memoryStore, 'listMessagesById')
-      .mockRejectedValueOnce(new Error('memory storage temporarily unavailable'));
+      const memoryStore = (await storage.getStore('memory'))!;
+      const listMessagesById = vi
+        .spyOn(memoryStore, 'listMessagesById')
+        .mockRejectedValueOnce(new Error('memory storage temporarily unavailable'));
 
-    await expect(durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption })).rejects.toThrow(
-      'memory storage temporarily unavailable',
-    );
-    expect(listMessagesById).toHaveBeenCalledTimes(1);
-    expect(toolExecutions()).toBe(0);
-    expect(await outerSnapshot(workflows, runId)).toMatchObject({ status: 'suspended' });
+      await expect(durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption })).rejects.toThrow(
+        'memory storage temporarily unavailable',
+      );
+      expect(listMessagesById).toHaveBeenCalledTimes(1);
+      expect(toolExecutions()).toBe(0);
+      expect(await outerSnapshot(workflows, runId)).toMatchObject({ status: 'suspended' });
 
-    const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption });
-    expect(await collectText(resumed)).toBe('done');
-    expect(listMessagesById).toHaveBeenCalledTimes(2);
-    expect(toolExecutions()).toBe(1);
-    expect(prompts).toHaveLength(2);
-    for (let i = 0; i < 4; i++) expect(prompts[1]).toContain(historyText(i));
-  });
+      const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory: memoryOption });
+      expect(await collectText(resumed)).toBe('done');
+      expect(listMessagesById).toHaveBeenCalledTimes(2);
+      expect(toolExecutions()).toBe(1);
+      expect(prompts).toHaveLength(2);
+      for (let i = 0; i < 4; i++) expect(prompts[1]).toContain(historyText(i));
+    },
+  );
 
   it('leaves a crashed run for the next recovery when memory storage cannot load the recalled messages', async () => {
     const { runId, recoverable } = await recoverableCheckpoints();

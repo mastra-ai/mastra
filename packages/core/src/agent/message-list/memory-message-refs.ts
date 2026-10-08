@@ -125,14 +125,14 @@ export class MemoryMessageRefs {
       }
       const stored = this.#stored.get(message.id);
       if (!stored) {
-        context.logger?.warn('A recalled message was deleted from memory while the run was persisted; dropping it', {
+        context.logger?.debug('A recalled message was deleted from memory while the run was persisted; dropping it', {
           runId: context.runId,
           messageId: message.id,
         });
         continue;
       }
       if (stored.fingerprint !== message.fingerprint) {
-        context.logger?.warn(
+        context.logger?.debug(
           'A recalled message changed in memory while the run was persisted; using the stored version',
           {
             runId: context.runId,

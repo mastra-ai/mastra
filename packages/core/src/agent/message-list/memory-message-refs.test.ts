@@ -54,7 +54,10 @@ function storage(rows = storedRows()) {
 }
 
 function testLogger() {
-  return { warn: vi.fn() } as unknown as IMastraLogger & { warn: ReturnType<typeof vi.fn> };
+  return { warn: vi.fn(), debug: vi.fn() } as unknown as IMastraLogger & {
+    warn: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe('MemoryMessageRefs', () => {
@@ -119,7 +122,7 @@ describe('MemoryMessageRefs', () => {
     expect(isMemoryMessageRef(dehydrated.messages[1])).toBe(true);
   });
 
-  it('restores a message edited in storage as stored, with a warning', async () => {
+  it('restores a message edited in storage as stored, logging it at debug level', async () => {
     const { byId, load } = storage();
     const writer = new MemoryMessageRefs();
     const state = runTranscript().serialize();
@@ -131,13 +134,14 @@ describe('MemoryMessageRefs', () => {
     const hydrated = await new MemoryMessageRefs().hydrate(persisted, load, { logger, runId: 'run-1' });
 
     expect(hydrated.messages[0]!.content.parts).toEqual([{ type: 'text', text: 'hi, edited' }]);
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('changed in memory'), {
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('changed in memory'), {
       runId: 'run-1',
       messageId: 'u1',
     });
   });
 
-  it('drops a message deleted from storage, with a warning', async () => {
+  it('drops a message deleted from storage, logging it at debug level', async () => {
     const { byId, load } = storage();
     const writer = new MemoryMessageRefs();
     const state = runTranscript().serialize();
@@ -150,7 +154,8 @@ describe('MemoryMessageRefs', () => {
     const hydrated = await reader.hydrate(persisted, load, { logger, runId: 'run-1' });
 
     expect(hydrated.messages.map(message => message.id)).toEqual(['u1', state.messages[2]!.id]);
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('deleted from memory'), {
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('deleted from memory'), {
       runId: 'run-1',
       messageId: 'a1',
     });
