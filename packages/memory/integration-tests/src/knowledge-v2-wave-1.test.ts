@@ -26,6 +26,7 @@ const outputPath = process.env.KNOWLEDGE_PROOF_OUTPUT;
 const temporaryDirectories: string[] = [];
 const stores: MastraCompositeStore[] = [];
 const memories: Memory[] = [];
+const subconsciousInstances: Subconscious[] = [];
 const postgresSchemas: string[] = [];
 // Same default as with-pg-storage.test.ts: this package's docker-compose.yml PostgreSQL.
 const postgresConnectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
@@ -176,6 +177,7 @@ function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
   });
   const { model, doGenerate } = deterministicObservationModel();
   const curator = deterministicObservationModel(true);
+  const subconscious = new Subconscious({ observation: [{ name: 'curate', model: curator.model }] });
   const memory = new Memory({
     storage,
     vector,
@@ -185,14 +187,15 @@ function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
       observationalMemory: {
         enabled: true,
         model,
-        experimental_subconscious: new Subconscious({ observation: [{ name: 'curate', model: curator.model }] }),
+        experimental_subconscious: subconscious,
         observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
       },
     },
   });
   memories.push(memory);
+  subconsciousInstances.push(subconscious);
   const mastra = new Mastra({ knowledge: { mastra: knowledge }, memory: { default: memory }, logger: false });
-  return { knowledge: mastra.getKnowledge('mastra'), memory, doGenerate, curator };
+  return { knowledge: mastra.getKnowledge('mastra'), memory, subconscious, doGenerate, curator };
 }
 
 /**
@@ -299,6 +302,13 @@ afterEach(async () => {
       cleanupErrors.push(error);
     }
   }
+  for (const subconscious of subconsciousInstances.splice(0)) {
+    try {
+      await subconscious.settled();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
   for (const storage of stores.splice(0).reverse()) {
     if (storage instanceof PostgresStore) {
       const schemaName = postgresSchemas.pop();
@@ -364,6 +374,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     expect(observed.observed).toBe(true);
     const visibleScope = ['org:acme', 'resource:shipyard'];
     await first.memory.settled();
+    await first.subconscious.settled();
     expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope })).toMatchObject({
       kind: 'feature',
       scope: ['org:acme', 'resource:shipyard'],
@@ -393,6 +404,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     );
 
     await first.memory.settled();
+    await first.subconscious.settled();
     memories.splice(memories.indexOf(first.memory), 1);
     await storage.close();
     stores.splice(stores.indexOf(storage), 1);
@@ -489,6 +501,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
       sendStateSignal: async () => ({ skipped: false }) as never,
     });
     await upgraded.memory.settled();
+    await upgraded.subconscious.settled();
     expect(
       await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scope: ['org:acme', 'resource:shipyard'] }),
     ).toMatchObject({ kind: 'feature' });

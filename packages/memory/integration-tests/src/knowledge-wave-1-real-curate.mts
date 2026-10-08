@@ -17,6 +17,7 @@ const scope = ['org:acme', 'resource:shipyard'];
 const model = 'openai/gpt-5-mini';
 let storage = new LibSQLStore({ id: 'real-curate', url });
 let memory: Memory | undefined;
+let subconscious: Subconscious | undefined;
 let failure: unknown;
 try {
   for (const [entry, expected] of [
@@ -44,7 +45,7 @@ try {
         enabled: true,
         model,
         observation: { messageTokens: 1, bufferTokens: false },
-        experimental_subconscious: new Subconscious({
+        experimental_subconscious: (subconscious = new Subconscious({
           observation: [
             {
               name: 'curate',
@@ -53,7 +54,7 @@ try {
                 'For this bounded synthetic proof, create exactly one feature node named "Atlas refund launch" using knowledge_create, with one record: "[[Maya Chen]] owns the [[Atlas refund launch]]." Use resource scope. Do not create other nodes or records. Verify existing evidence first; do not duplicate it.',
             },
           ],
-        }),
+        })),
       },
     },
   });
@@ -87,6 +88,7 @@ try {
   const observed = await (await memory.omEngine)!.observe({ threadId, resourceId: 'shipyard', requestContext });
   assert(observed.observed, 'Observer must process the synthetic message');
   await memory.settled();
+  await subconscious.settled();
   const node = await knowledge.resolveNode({ name: 'Atlas refund launch', scope });
   assert(node, 'Curator must create the expected feature');
   assert.equal(node.kind, 'feature');
@@ -146,6 +148,7 @@ try {
 } finally {
   for (const cleanup of [
     () => memory?.settled(),
+    () => subconscious?.settled(),
     () => storage.close(),
     () => rm(directory, { recursive: true, force: true }),
   ]) {
