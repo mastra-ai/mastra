@@ -7,10 +7,12 @@ import { Field, FieldError } from '@/ds/components/Field';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-function buildDateWithTime(date: Date, timeStr: string): Date | null {
+/** The draft day at the draft time, or the bare day when the time doesn't parse. */
+function combineDateAndTime(date: Date | undefined, timeStr: string): Date | undefined {
+  if (!date) return undefined;
   const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const combined = parse(timeStr, 'h:mm a', dateOnly);
-  return isValid(combined) ? combined : null;
+  return isValid(combined) ? combined : date;
 }
 
 export interface CustomRangeEditorProps {
@@ -30,14 +32,18 @@ export function CustomRangeEditor({ dateFrom, dateTo, disabled, onApply, onShowP
   const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(dateTo);
   const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
   const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
-  const [error, setError] = useState<string | undefined>();
+  const [applyAttempted, setApplyAttempted] = useState(false);
   const errorId = useId();
 
+  const fromDate = combineDateAndTime(draftDateFrom, draftTimeFrom);
+  const toDate = combineDateAndTime(draftDateTo, draftTimeTo);
+  const rangeInvalid = fromDate !== undefined && toDate !== undefined && fromDate.getTime() > toDate.getTime();
+  // Shown after a failed Apply, and gone as soon as the drafts form a valid range again.
+  const error = applyAttempted && rangeInvalid ? 'Start date/time must be before end date/time' : undefined;
+
   const apply = () => {
-    const fromDate = draftDateFrom ? (buildDateWithTime(draftDateFrom, draftTimeFrom) ?? draftDateFrom) : undefined;
-    const toDate = draftDateTo ? (buildDateWithTime(draftDateTo, draftTimeTo) ?? draftDateTo) : undefined;
-    if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) {
-      setError('Start date/time must be before end date/time');
+    if (rangeInvalid) {
+      setApplyAttempted(true);
       return;
     }
     onApply(fromDate, toDate);
