@@ -77,6 +77,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         [ids['team:a'], ids['team:b']].sort(),
       );
 
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', limit: Number.NaN })).toEqual(within);
       const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
       expect(first.scopes).toHaveLength(3);
       expect(first.nextCursor).toEqual(expect.any(String));
@@ -158,6 +159,30 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         }),
       ).resolves.toMatchObject({ changed: false, accessEpoch: withGrant.accessEpoch });
       expect(await teamParents()).toEqual([first.scopes['org:acme']]);
+    });
+
+    it('lets content nodes share a scope name without blocking reconciliation', async () => {
+      const org = { address: 'org:acme', name: 'Acme' };
+      const team = { address: 'team', name: 'Team', parentAddresses: ['org:acme'] };
+      try {
+        await store.reconcileStructure({ scopes: [org] });
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedCapabilityError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+      await store.createNode({ name: 'Team', kind: 'topic', scope: ['org:acme'] });
+
+      await expect(store.reconcileStructure({ scopes: [org, team] })).resolves.toMatchObject({ changed: true });
+      await expect(store.reconcileStructure({ scopes: [org, team] })).resolves.toMatchObject({ changed: false });
+      await expect(
+        store.reconcileStructure({
+          scopes: [org, team, { address: 'team-2', name: 'team', parentAddresses: ['org:acme'] }],
+        }),
+      ).rejects.toThrow('Knowledge scope name team already exists under org:acme');
     });
 
     it('persists one content-capable node record', async () => {

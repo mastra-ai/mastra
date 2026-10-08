@@ -54,7 +54,8 @@ export function parseListKnowledgeScopeNodesInput(input: ListKnowledgeScopeNodes
   limit: number;
   after: { name: string; id: string } | null;
 } {
-  const limit = Math.min(Math.max(Math.trunc(input.limit ?? MAX_KNOWLEDGE_SCOPE_NODES), 1), MAX_KNOWLEDGE_SCOPE_NODES);
+  const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit!) : MAX_KNOWLEDGE_SCOPE_NODES;
+  const limit = Math.min(Math.max(requested, 1), MAX_KNOWLEDGE_SCOPE_NODES);
   if (!input.cursor) return { limit, after: null };
   let value: unknown;
   try {
