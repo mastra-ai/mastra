@@ -224,7 +224,13 @@ function ScopeTree({
   if (selection?.scopeNodeId) addAncestors(selection.scopeNodeId);
 
   const loadPage = async (parentId: string | undefined, cursor: string | undefined) => {
-    const page = await scopePage.mutateAsync({ ...(parentId ? { parentId } : {}), ...(cursor ? { cursor } : {}) });
+    let page: Awaited<ReturnType<typeof scopePage.mutateAsync>>;
+    try {
+      page = await scopePage.mutateAsync({ ...(parentId ? { parentId } : {}), ...(cursor ? { cursor } : {}) });
+    } catch {
+      // The tree renders scopePage.isError; nothing else to do here.
+      return;
+    }
     setPages(current => [...current, page]);
     setNextCursorByParent(current => ({ ...current, [parentId ?? 'roots']: page.nextCursor ?? null }));
     onNodesLoaded(page.scopeNodes ?? []);
@@ -428,20 +434,34 @@ function ActivityPanel({
   );
 }
 
+/** Writes a rung lens to the URL; a thread rung is only written with its thread id. */
+function writeRungScope(params: URLSearchParams, rung: KnowledgeRung, threadId: string | undefined) {
+  if (rung === 'thread' && threadId) {
+    params.set('scope', 'thread');
+    params.set('thread', threadId);
+    return;
+  }
+  params.set('scope', rung === 'thread' ? 'resource' : rung);
+  params.delete('thread');
+}
+
 function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
   const requestedScope = searchParams.get('scope');
   // `?scope=` is an identity rung (org/resource/thread) or a reconciled
-  // structural scope node id from the scope tree.
+  // structural scope node id from the scope tree. Rung names are never node
+  // ids; a thread rung without a thread id falls back to the project view.
   const selection: KnowledgeSelection | undefined =
-    requestedScope === 'org' || requestedScope === 'resource' || (requestedScope === 'thread' && threadId)
+    requestedScope === 'org' || requestedScope === 'resource'
       ? { scopeLevel: requestedScope }
-      : requestedScope
-        ? { scopeNodeId: requestedScope }
-        : threadId
-          ? { scopeLevel: 'thread' }
-          : undefined;
+      : requestedScope === 'thread'
+        ? { scopeLevel: threadId ? 'thread' : 'resource' }
+        : requestedScope
+          ? { scopeNodeId: requestedScope }
+          : threadId
+            ? { scopeLevel: 'thread' }
+            : undefined;
   const scopesQuery = useKnowledgeScopes(factoryProjectId, threadId);
   const scopePageKey = threadId ?? 'project';
   const [loadedScopeNodesByView, setLoadedScopeNodesByView] = useState<Record<string, KnowledgeScopeNode[]>>({});
@@ -545,12 +565,17 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       return copy;
     });
   };
-  const selectScope = (next: KnowledgeSelection) => {
-    const nextScope = next.scopeNodeId ? allScopeNodes.find(scopeNode => scopeNode.id === next.scopeNodeId) : undefined;
+  /** `fallback` describes a scope the tree has not loaded, such as a lens member clicked on the canvas. */
+  const selectScope = (next: KnowledgeSelection, fallback?: KnowledgeScopeNode) => {
+    const loadedScope = next.scopeNodeId
+      ? allScopeNodes.find(scopeNode => scopeNode.id === next.scopeNodeId)
+      : undefined;
+    const fallbackScope = !loadedScope && fallback?.id === next.scopeNodeId ? fallback : undefined;
+    const nextScope = loadedScope ?? fallbackScope;
     const nextRung =
       next.scopeLevel ?? scopesQuery.data?.roots.find(root => root.scopeNodeId === next.scopeNodeId)?.level;
     const nextEntry = nextScope ? { nodeId: nextScope.id, name: nextScope.name, rung: nextRung } : null;
-    setSearchedScope(undefined);
+    setSearchedScope(fallbackScope);
     setTrail(nextEntry ? [nextEntry] : []);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -583,9 +608,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       writeNodeSelection(copy, entry);
-      if (result.threadId) copy.set('thread', result.threadId);
-      else copy.delete('thread');
-      copy.set('scope', result.type === 'scope' ? result.id : (result.rung ?? 'resource'));
+      if (result.type === 'scope') {
+        if (result.threadId) copy.set('thread', result.threadId);
+        else copy.delete('thread');
+        copy.set('scope', result.id);
+      } else {
+        writeRungScope(copy, result.rung ?? 'resource', result.threadId);
+      }
       return copy;
     });
   };
@@ -603,9 +632,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       const copy = new URLSearchParams(params);
       writeNodeSelection(copy, entry);
       copy.delete('view');
-      copy.set('scope', event.node.rung);
-      if (event.node.threadId) copy.set('thread', event.node.threadId);
-      else copy.delete('thread');
+      writeRungScope(copy, event.node.rung, event.node.threadId);
       return copy;
     });
   };
@@ -707,7 +734,21 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             if (node.isScope) {
               // Scope selection is identical in the tree and canvas: switch
               // the lens and open that scope's detail surface in one action.
-              selectScope({ scopeNodeId: node.id });
+              selectScope(
+                { scopeNodeId: node.id },
+                {
+                  id: node.id,
+                  address: node.name,
+                  name: node.name,
+                  ...(node.kind ? { kind: node.kind } : {}),
+                  ...(node.description ? { description: node.description } : {}),
+                  parentIds: [],
+                  memberCount: node.memberCount ?? 0,
+                  memberCountTruncated: node.memberCountTruncated ?? false,
+                  contentNodeCount: node.contentNodeCount ?? 0,
+                  childScopeCount: node.childScopeCount ?? 0,
+                },
+              );
               return;
             }
             setSelected({ nodeId: node.id, name: node.name, rung: node.rung });
@@ -730,6 +771,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             scope={selectedScope}
             childScopeCount={childScopeCount}
             contentNodeCount={contentNodeCount}
+            countsTruncated={graphQuery.data.truncated || selectedScope.memberCountTruncated}
             threadId={threadId}
             onSelectActivity={selectActivityEvent}
             onClose={() => setSelected(null)}
@@ -773,10 +815,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               setSearchParams(params => {
                 const copy = new URLSearchParams(params);
                 writeNodeSelection(copy, entry);
-                copy.set('scope', outside.rung);
                 const targetThread = outside.scope.find(address => address.startsWith('thread:'))?.slice(7);
-                if (outside.rung === 'thread' && targetThread) copy.set('thread', targetThread);
-                else copy.delete('thread');
+                writeRungScope(copy, outside.rung, targetThread);
                 return copy;
               });
             }}

@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
@@ -543,6 +543,103 @@ describe('KnowledgePage', () => {
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
   });
 
+  it('opens scope details for a canvas scope the tree has not loaded and marks truncated counts', async () => {
+    stubKnowledgeRoute();
+    const scopeNode = (id: string, name: string) => ({
+      id,
+      name,
+      kind: 'feature',
+      scope: null,
+      rung: null,
+      isScope: true,
+      pinned: false,
+      recordCount: 0,
+      memberCount: 0,
+      memberCountTruncated: false,
+      contentNodeCount: 0,
+      childScopeCount: 0,
+    });
+    const featuresId = '22222222-2222-4222-8222-222222222222';
+    const memoryId = '33333333-3333-4333-8333-333333333333';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
+        const scopeNodeId = new URL(request.url).searchParams.get('scopeNodeId');
+        if (scopeNodeId === featuresId) {
+          return HttpResponse.json({
+            ...graphFixture,
+            truncated: true,
+            nodes: [scopeNode(featuresId, 'features'), scopeNode(memoryId, 'memory')],
+            edges: [{ id: 'contains:2:3', source: featuresId, target: memoryId, type: 'contains' as const }],
+            records: [],
+          });
+        }
+        if (scopeNodeId === memoryId) {
+          return HttpResponse.json({ ...graphFixture, nodes: [scopeNode(memoryId, 'memory')], edges: [], records: [] });
+        }
+        return HttpResponse.json(graphFixture);
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    await user.click(await within(scopes).findByRole('button', { name: /features feature/ }));
+    const featuresFlyout = await screen.findByTestId('knowledge-scope-flyout');
+    expect(featuresFlyout).toHaveTextContent('Direct members1+');
+
+    // `memory` exists only in the lens; the tree was never expanded to load it.
+    expect(within(scopes).queryByRole('button', { name: /memory feature/ })).not.toBeInTheDocument();
+    const graphContainer = screen.getByTestId('knowledge-graph-container');
+    const memoryNode = (await within(graphContainer).findAllByTestId('knowledge-node')).find(
+      node => node.getAttribute('data-node-id') === memoryId,
+    );
+    if (!memoryNode) throw new Error('Expected the member scope node');
+    fireEvent.click(memoryNode);
+    await waitFor(() => expect(router.state.location.search).toContain(`scope=${memoryId}`));
+    expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
+  });
+
+  it('reads a thread lens without a thread id as the project view, never as a scope node id', async () => {
+    stubKnowledgeRoute();
+    const subgraphQueries: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
+        subgraphQueries.push(new URL(request.url).search);
+        return HttpResponse.json(graphFixture);
+      }),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?scope=thread`);
+
+    await waitFor(() => expect(subgraphQueries.length).toBeGreaterThan(0));
+    expect(subgraphQueries.every(query => !query.includes('scopeNodeId'))).toBe(true);
+    expect(subgraphQueries.at(-1)).toContain('scopeLevel=resource');
+  });
+
+  it('shows a failed scope expansion in the tree without an unhandled rejection', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('parentId')) {
+          return HttpResponse.json({ error: 'error', message: 'scopes unavailable' }, { status: 500 });
+        }
+        return undefined;
+      }),
+    );
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const user = userEvent.setup();
+      renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+      const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+      await user.click(await within(scopes).findByRole('button', { name: 'Expand features' }));
+      expect(await within(scopes).findByText('Unable to load more scopes.')).toBeInTheDocument();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('searches the server and navigates directly to node and scope details', async () => {
     stubKnowledgeRoute();
     const user = userEvent.setup();
@@ -895,6 +992,38 @@ describe('KnowledgePage', () => {
     expect(screen.getByRole('button', { name: 'Newer Service' })).toBeInTheDocument();
     expect(requestedCursors).toContain('cursor-older');
     expect(screen.queryByRole('button', { name: 'Load older activity' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the newest activity rows after paging back more than five pages', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('cursor') ?? 0);
+        return HttpResponse.json({
+          events: [
+            {
+              id: `activity-${page}`,
+              action: 'record-created',
+              recordType: 'record',
+              recordId: `record-${page}`,
+              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              node: { id: `ent-${page}`, name: `Service ${page}`, rung: 'resource' },
+              createdAt: '2026-08-13T03:00:00.000Z',
+            },
+          ],
+          ...(page < 6 ? { nextCursor: String(page + 1) } : {}),
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?scope=resource&view=activity`);
+
+    expect(await screen.findByRole('button', { name: 'Service 0' })).toBeInTheDocument();
+    for (let page = 1; page <= 6; page++) {
+      await user.click(screen.getByRole('button', { name: 'Load older activity' }));
+      expect(await screen.findByRole('button', { name: `Service ${page}` })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Service 0' })).toBeInTheDocument();
   });
 
   it('shows bounded-window status and deep-links rendered out-of-window wikilinks', async () => {
