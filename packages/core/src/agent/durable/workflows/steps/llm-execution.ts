@@ -7,6 +7,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
@@ -26,6 +27,7 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
+import { createRunScope } from '../../../../mastra/run-scope';
 import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
@@ -927,6 +929,28 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 logger?.error?.('Error in processLLMRequest processors:', error);
                 throw error;
               }
+            }
+
+            // Share the effective prompt with agent tools without putting it on the wire.
+            // OM's synthetic continuation is not part of the parent's conversation.
+            const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
+            const omContinuationText = omContinuation?.content.parts
+              .filter(part => part.type === 'text')
+              .map(part => part.text)
+              .join('');
+            const delegationMessages = omContinuationText
+              ? inputMessages.filter(message => {
+                  if (message.role !== 'user' || !Array.isArray(message.content)) return true;
+                  const text = message.content
+                    .filter(part => part.type === 'text')
+                    .map(part => part.text)
+                    .join('');
+                  return text !== omContinuationText;
+                })
+              : inputMessages;
+            if (registryEntry) {
+              registryEntry.runScope ??= createRunScope();
+              registryEntry.runScope.set(STEP_MODEL_MESSAGES_KEY, delegationMessages);
             }
 
             // Enable defer mode - step-finish won't auto-close the step span

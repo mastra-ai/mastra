@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
@@ -1089,7 +1090,9 @@ export function createDurableToolCallStep() {
 
       const toolOptions = {
         toolCallId,
-        messages: [],
+        messages: isAgentTool
+          ? (registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY) ?? messageList?.get.all.aiV5.model() ?? [])
+          : (messageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,

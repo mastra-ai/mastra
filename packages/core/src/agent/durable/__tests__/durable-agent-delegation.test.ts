@@ -12,11 +12,17 @@
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../loop/run-scope-keys';
+import { createTool } from '../../../tools';
+import type { ToolExecutionContext } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -47,7 +53,7 @@ function makeSubAgentModel(text: string) {
 /**
  * Supervisor: first turn calls `agent-{key}`; second turn stops.
  */
-function makeSupervisorModel(agentKey: string, prompt: string) {
+function makeSupervisorModel(agentKey: string, prompt: string, toolName = `agent-${agentKey}`) {
   let calls = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
@@ -61,7 +67,7 @@ function makeSupervisorModel(agentKey: string, prompt: string) {
               type: 'tool-call',
               toolCallType: 'function',
               toolCallId: 'sup-call-1',
-              toolName: `agent-${agentKey}`,
+              toolName,
               input: JSON.stringify({ prompt }),
               providerExecuted: false,
             },
@@ -95,13 +101,13 @@ function makeSupervisorModel(agentKey: string, prompt: string) {
   });
 }
 
-function makeSubAgent(id: string, text: string) {
+function makeSubAgent(id: string, text: string, model: LanguageModelV2 = makeSubAgentModel(text)) {
   return new Agent({
     id,
     name: id,
     description: `Sub-agent ${id}`,
     instructions: 'You are a helpful sub-agent.',
-    model: makeSubAgentModel(text) as LanguageModelV2,
+    model,
   });
 }
 
@@ -150,10 +156,191 @@ describe('DurableAgent delegation hooks', () => {
       expect.objectContaining({
         primitiveType: 'agent',
         prompt: 'research dolphins',
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Research dolphins' })]),
+          }),
+        ]),
       }),
     );
 
     cleanup();
+  });
+
+  it.each(['intact', 'missing-key', 'missing-scope'] as const)(
+    'forwards filtered parent conversation to the sub-agent (%s)',
+    async scopeState => {
+      const subAgentModel = makeSubAgentModel('Finished');
+      const modelSpy = vi.spyOn(subAgentModel, 'doStream');
+      const subAgent = makeSubAgent('worker', 'Finished', subAgentModel);
+      const streamSpy = vi.spyOn(subAgent, 'stream');
+      const model = makeSupervisorModel('worker', 'go');
+      const runId = `delegation-context-${scopeState}`;
+      let scopeCleared = false;
+      if (scopeState !== 'intact') {
+        const doStream = model.doStream.bind(model);
+        vi.spyOn(model, 'doStream').mockImplementation(async options => {
+          const result = await doStream(options);
+          const entry = globalRunRegistry.get(runId);
+          if (entry?.runScope?.has(STEP_MODEL_MESSAGES_KEY)) {
+            if (scopeState === 'missing-key') entry.runScope.delete(STEP_MODEL_MESSAGES_KEY);
+            else entry.runScope = undefined;
+            scopeCleared = true;
+          }
+          return result;
+        });
+      }
+      const supervisor = new Agent({
+        id: 'supervisor-context',
+        name: 'supervisor-context',
+        instructions: 'Delegate to worker.',
+        model,
+        agents: { worker: subAgent },
+      });
+      const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) =>
+        messages.filter(message => message.role === 'user'),
+      );
+      const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+      const { fullStream, cleanup } = await durableAgent.stream('Write a caption for the sunset photo', {
+        runId,
+        maxSteps: 3,
+        delegation: { messageFilter },
+      });
+      for await (const _chunk of fullStream) {
+        // no-op
+      }
+      expect(messageFilter).toHaveBeenCalledTimes(1);
+      const expectedMessages = expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'text', text: 'Write a caption for the sunset photo' }),
+          ]),
+        }),
+      ]);
+      expect(messageFilter).toHaveBeenCalledWith(expect.objectContaining({ messages: expectedMessages }));
+      expect(streamSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: expectedMessages }));
+      expect(streamSpy.mock.calls[0]?.[1]?.context?.every(message => message.role === 'user')).toBe(true);
+      expect(modelSpy).toHaveBeenCalledWith(expect.objectContaining({ prompt: expectedMessages }));
+      expect(scopeCleared).toBe(scopeState !== 'intact');
+      cleanup();
+    },
+  );
+
+  it.each(['plain', 'durable'] as const)('forwards transient request-processor messages (%s)', async engine => {
+    const subAgent = makeSubAgent('worker', 'Finished');
+    const streamSpy = vi.spyOn(subAgent, 'stream');
+    const supervisor = new Agent({
+      id: `supervisor-processor-${engine}`,
+      name: `supervisor-processor-${engine}`,
+      instructions: 'Delegate to worker.',
+      model: makeSupervisorModel('worker', 'go'),
+      agents: { worker: subAgent },
+      inputProcessors: [
+        {
+          id: 'transient-context',
+          processLLMRequest: ({ prompt }) => ({
+            prompt: [...prompt, { role: 'user', content: [{ type: 'text', text: 'Transient parent context' }] }],
+          }),
+        },
+      ],
+    });
+    const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) => messages);
+    const agent = engine === 'durable' ? createDurableAgent({ agent: supervisor, pubsub }) : supervisor;
+    const output = await agent.stream('Original user message', { maxSteps: 3, delegation: { messageFilter } });
+    for await (const _chunk of output.fullStream) {
+      // no-op
+    }
+    const expectedMessages = expect.arrayContaining([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Transient parent context' })]),
+      }),
+      expect.objectContaining({
+        role: 'user',
+        content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Original user message' })]),
+      }),
+    ]);
+    expect(messageFilter).toHaveBeenCalledWith(expect.objectContaining({ messages: expectedMessages }));
+    expect(streamSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ context: expectedMessages }));
+    if ('cleanup' in output && typeof output.cleanup === 'function') output.cleanup();
+  });
+
+  it('excludes observational-memory continuation hints from delegated context', async () => {
+    const subAgent = makeSubAgent('worker', 'Finished');
+    const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) => messages);
+    const supervisor = new Agent({
+      id: 'supervisor-observations',
+      name: 'supervisor-observations',
+      instructions: 'Delegate to worker.',
+      model: makeSupervisorModel('worker', 'go'),
+      agents: { worker: subAgent },
+      inputProcessors: [
+        {
+          id: 'observational-memory',
+          processInput: ({ messages, systemMessages }) => ({
+            messages: [
+              ...messages,
+              {
+                id: 'om-continuation',
+                role: 'user',
+                content: { format: 2, parts: [{ type: 'text', text: 'Synthetic continuation hint' }] },
+                createdAt: new Date(),
+              },
+            ],
+            systemMessages: [...systemMessages, { role: 'system', content: 'Observed parent history' }],
+          }),
+        },
+      ],
+    });
+    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+    const output = await durableAgent.stream('Real user request', { maxSteps: 3, delegation: { messageFilter } });
+    for await (const _chunk of output.fullStream) {
+      // no-op
+    }
+    const messages = messageFilter.mock.calls[0]?.[0].messages;
+    expect(messages).toBeDefined();
+    expect(JSON.stringify(messages)).toContain('Observed parent history');
+    expect(JSON.stringify(messages)).toContain('Real user request');
+    expect(JSON.stringify(messages)).not.toContain('Synthetic continuation hint');
+    output.cleanup();
+  });
+
+  it('gives ordinary tools input-only messages, not transient model context', async () => {
+    const execute = vi.fn(async (_input: { prompt: string }, _context: ToolExecutionContext) => 'Finished');
+    const supervisor = new Agent({
+      id: 'ordinary-tool-context',
+      name: 'ordinary-tool-context',
+      instructions: 'Use the lookup tool.',
+      model: makeSupervisorModel('unused', 'go', 'lookup'),
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up data',
+          inputSchema: z.object({ prompt: z.string() }),
+          execute,
+        }),
+      },
+      inputProcessors: [
+        {
+          id: 'transient-context',
+          processLLMRequest: ({ prompt }) => ({
+            prompt: [...prompt, { role: 'user', content: [{ type: 'text', text: 'Transient model context' }] }],
+          }),
+        },
+      ],
+    });
+    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+    const output = await durableAgent.stream('Original user message', { maxSteps: 3 });
+    for await (const _chunk of output.fullStream) {
+      // no-op
+    }
+    expect(execute).toHaveBeenCalledTimes(1);
+    const messages = execute.mock.calls[0]?.[1]?.agent?.messages;
+    expect(JSON.stringify(messages)).toContain('Original user message');
+    expect(JSON.stringify(messages)).not.toContain('Transient model context');
+    output.cleanup();
   });
 
   it('invokes onDelegationComplete with the sub-agent result', async () => {
