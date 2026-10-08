@@ -1070,7 +1070,9 @@ export class KnowledgePG extends KnowledgeStorage {
         ],
       });
       if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
-      await this.#replaceNodeScopes(tx, input.id, scope, now);
+      if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
+        await this.#swapIdentityScopes(tx, input.id, existing.scope, scope, now);
+      }
       if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
         await this.#replaceMentions(tx, 'node', input.id, content ?? '', input.resolutionScope ?? scope, scope);
       }
@@ -1574,6 +1576,33 @@ export class KnowledgePG extends KnowledgeStorage {
   ): Promise<void> {
     await executor.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [nodeId] });
     for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, addresses)) {
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  /**
+   * Move a node's identity memberships from `from` to `to` without touching structural
+   * placements added by `#placeNodeInScopes`, which a scope change must not erase.
+   */
+  async #swapIdentityScopes(
+    executor: Executor,
+    nodeId: string,
+    from: KnowledgeScope,
+    to: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    const next = await this.#resolveScopeNodeIds(executor, to);
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, from)) {
+      if (next.includes(scopeNodeId)) continue;
+      await executor.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
+        args: [nodeId, scopeNodeId],
+      });
+    }
+    for (const scopeNodeId of next) {
       await executor.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
         args: [nodeId, scopeNodeId, addedAt.toISOString()],

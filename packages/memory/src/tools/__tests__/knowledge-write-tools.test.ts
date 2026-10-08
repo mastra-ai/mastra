@@ -128,11 +128,42 @@ describe('Subconscious knowledge write tools', () => {
       {} as any,
     )) as any;
 
-    // Identity scope still comes from the default rung; placement is additive membership.
-    expect(result.node.scope).toEqual(['org:acme', 'resource:user-42']);
+    // The structural scope hangs off the org, so the node's identity scope widens to the
+    // org: it must be readable wherever the structural scope is.
+    expect(result.node.scope).toEqual(['org:acme']);
     expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features:memory']! })).members).toEqual([
       expect.objectContaining({ id: result.node.id }),
     ]);
+  });
+
+  it('keeps structurally placed org-level nodes readable from another resource in the org', async () => {
+    const { store, tools } = await structuralFixture();
+
+    const { node } = (await tools.knowledge_create!.execute?.(
+      { name: 'Inventory', kind: 'ref', text: 'Shared inventory service.', nodeScope: 'features:memory', scope: 'org' },
+      {} as any,
+    )) as any;
+
+    const otherProject = ['org:acme', 'resource:user-99'];
+    expect(await store.resolveNode({ name: 'Inventory', scope: otherProject })).toMatchObject({ id: node.id });
+    expect((await store.listKnowledgeAbout({ node: node.id, scope: otherProject })).records).toHaveLength(1);
+  });
+
+  it('creates a node at the first record level when no node placement is given', async () => {
+    const { tools } = await fixture();
+
+    const { node, record } = (await tools.knowledge_create!.execute?.(
+      { name: 'Thread Note', kind: 'note', text: 'Only relevant here.', scope: 'thread' },
+      {} as any,
+    )) as any;
+    expect(node.scope).toEqual(scope);
+    expect(record.scope).toEqual(scope);
+
+    const { node: orgNode } = (await tools.knowledge_create!.execute?.(
+      { name: 'Org Note', kind: 'note', text: 'Everyone should know.', scope: 'org' },
+      {} as any,
+    )) as any;
+    expect(orgNode.scope).toEqual(['org:acme']);
   });
 
   it('rejects structural placement outside the curator frontier', async () => {

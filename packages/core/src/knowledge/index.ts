@@ -120,32 +120,43 @@ export class Knowledge extends MastraBase {
    * Held identity addresses themselves are excluded — those are placed via rungs. The
    * structure plan is host configuration, so this frontier is host-vouched. @internal
    */
-  __getVisibleStructureScopes(scope: KnowledgeScope): Array<{ address: string; name: string; description?: string }> {
+  __getVisibleStructureScopes(
+    scope: KnowledgeScope,
+  ): Array<{ address: string; name: string; description?: string; heldAncestors: string[] }> {
     const held = new Set(scope);
     const configured = this.#structure?.scopes ?? [];
     const parentsByAddress = new Map(configured.map(configuredScope => [configuredScope.address, configuredScope]));
-    const reachesHeld = (address: string): boolean => {
+    // Held identity addresses reachable through the scope's ancestor chain. Placing a node
+    // into the scope should keep its identity scope at one of these so the node stays
+    // readable wherever the structural scope is.
+    const heldAncestorsOf = (address: string): string[] => {
       // DFS over all declared parents (multi-parent scopes are valid); the plan is
       // validated acyclic, the seen set is just belt-and-braces.
       const seen = new Set<string>();
+      const reached: string[] = [];
       const stack = [address];
       while (stack.length > 0) {
         const current = stack.pop()!;
         if (seen.has(current)) continue;
         seen.add(current);
-        if (held.has(current)) return true;
+        if (held.has(current)) {
+          reached.push(current);
+          continue;
+        }
         for (const parent of parentsByAddress.get(current)?.parentAddresses ?? []) stack.push(parent);
       }
-      return false;
+      return reached;
     };
-    const visible: Array<{ address: string; name: string; description?: string }> = [];
+    const visible: Array<{ address: string; name: string; description?: string; heldAncestors: string[] }> = [];
     for (const configuredScope of configured) {
       if (held.has(configuredScope.address)) continue;
-      if (!reachesHeld(configuredScope.address)) continue;
+      const heldAncestors = heldAncestorsOf(configuredScope.address);
+      if (heldAncestors.length === 0) continue;
       visible.push({
         address: configuredScope.address,
         name: configuredScope.name,
         ...(configuredScope.description ? { description: configuredScope.description } : {}),
+        heldAncestors,
       });
     }
     return visible;

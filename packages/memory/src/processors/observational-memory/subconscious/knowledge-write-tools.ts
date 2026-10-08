@@ -15,7 +15,7 @@ const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] }
 const nodePlacementSchema: JSONSchema7 = {
   type: 'string',
   description:
-    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
+    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory'). When omitted, the node uses the first record's scope. A structural node is visible at least as widely as its structural scope.",
 };
 const dateTimeSchema: JSONSchema7 = {
   type: 'string',
@@ -30,7 +30,7 @@ type KnowledgeWriteToolsMemory = {
     | {
         __getVisibleStructureScopes(
           scope: KnowledgeScope,
-        ): Array<{ address: string; name: string; description?: string }>;
+        ): Array<{ address: string; name: string; description?: string; heldAncestors?: string[] }>;
       }
     | undefined;
   storage?: {
@@ -61,29 +61,47 @@ function requireVisible(scope: KnowledgeScope, options: KnowledgeWriteToolsOptio
   }
 }
 
+/** Broadest of the given rungs (org is broader than resource, resource broader than thread). */
+function broadestLevel(levels: KnowledgeScopeLevel[]): KnowledgeScopeLevel {
+  return SCOPE_RUNGS.find(rung => levels.includes(rung)) ?? levels[0]!;
+}
+
+function rungOf(address: string): KnowledgeScopeLevel | undefined {
+  const namespace = address.slice(0, address.indexOf(':'));
+  return (SCOPE_RUNGS as readonly string[]).includes(namespace) ? (namespace as KnowledgeScopeLevel) : undefined;
+}
+
 /**
- * Resolve the node placement argument: a rung keeps the identity-scope path, anything
- * else is treated as a structural scope address and must be inside the host-configured
- * frontier visible to the curator's held scope.
+ * Resolve the node placement argument. A rung sets the node's identity scope directly.
+ * Without a rung the node takes the first record's level, so a node is never narrower than
+ * the record created with it. A structural scope address must be inside the host-configured
+ * frontier visible to the curator's held scope; the node is placed there and its identity
+ * scope widens to the structural scope's held identity ancestor, so the node is readable
+ * wherever the structural scope is.
  */
 function resolveNodePlacement(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
+  recordLevel: KnowledgeScopeLevel | undefined,
 ): { nodeScope: KnowledgeScope; scopeAddresses?: string[] } {
-  if (placement === undefined || (SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return {
-      nodeScope: expandKnowledgeScope(
-        options.scope,
-        (placement as KnowledgeScopeLevel | undefined) ?? options.defaultScope,
-      ),
-    };
+  const firstRecordLevel = recordLevel ?? options.defaultScope;
+  if (placement !== undefined && (SCOPE_RUNGS as readonly string[]).includes(placement)) {
+    return { nodeScope: expandKnowledgeScope(options.scope, placement as KnowledgeScopeLevel) };
+  }
+  if (placement === undefined) {
+    return { nodeScope: expandKnowledgeScope(options.scope, firstRecordLevel) };
   }
   const visible = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scope) ?? [];
-  if (!visible.some(visibleScope => visibleScope.address === placement)) {
+  const structural = visible.find(visibleScope => visibleScope.address === placement);
+  if (!structural) {
     throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
   }
-  return { nodeScope: expandKnowledgeScope(options.scope, options.defaultScope), scopeAddresses: [placement] };
+  const ancestorLevels = (structural.heldAncestors ?? []).flatMap(address => rungOf(address) ?? []);
+  return {
+    nodeScope: expandKnowledgeScope(options.scope, broadestLevel([firstRecordLevel, ...ancestorLevels])),
+    scopeAddresses: [placement],
+  };
 }
 
 export function createKnowledgeWriteTools(
@@ -126,7 +144,7 @@ export function createKnowledgeWriteTools(
           when?: string;
         };
         const store = await getStore(memory);
-        const { nodeScope, scopeAddresses } = resolveNodePlacement(memory, options, value.nodeScope);
+        const { nodeScope, scopeAddresses } = resolveNodePlacement(memory, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');

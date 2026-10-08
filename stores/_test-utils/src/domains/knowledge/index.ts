@@ -266,6 +266,17 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await expect(
         store.createNode({ name: 'Existing', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
       ).rejects.toThrow(/scope/i);
+
+      // Updates keep structural placement: a description-only update (what the curator
+      // does right after creating a node) and a rescope both leave the node placed.
+      const described = await store.updateNode({ id: node.id, version: node.version, description: 'short summary' });
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).members).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
+      await store.updateNode({ id: node.id, version: described.version, scope: ['org:acme'] });
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).members).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
     });
 
     it('treats scope identifiers literally when checking visibility', async () => {
