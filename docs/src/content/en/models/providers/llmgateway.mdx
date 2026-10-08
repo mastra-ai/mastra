@@ -7,7 +7,7 @@ description: "Browse DevPass (LLM Gateway) model IDs, capabilities, context wind
 
 # <img src="https://models.dev/logos/llmgateway.svg" alt="DevPass (LLM Gateway) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DevPass (LLM Gateway)
 
-Access 217 DevPass (LLM Gateway) models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 218 DevPass (LLM Gateway) models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [DevPass (LLM Gateway) documentation](https://llmgateway.io/docs).
 
@@ -116,6 +116,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 1,
     "outputCost": 5
+  },
+  {
+    "model": "llmgateway/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "llmgateway/claude-opus-4-1-20250805",

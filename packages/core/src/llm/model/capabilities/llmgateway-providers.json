@@ -23,6 +23,7 @@
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-5-20251101",
     "anthropic/claude-opus-4-6",
     "anthropic/claude-opus-4-7",
@@ -38,6 +39,7 @@
     "aws-bedrock/claude-fable-5-1",
     "aws-bedrock/claude-haiku-4-5",
     "aws-bedrock/claude-haiku-4-5-20251001",
+    "aws-bedrock/claude-haiku-5-5",
     "aws-bedrock/claude-opus-4-1-20250805",
     "aws-bedrock/claude-opus-4-5-20251101",
     "aws-bedrock/claude-opus-4-6",
@@ -122,6 +124,7 @@
     "deepinfra/qwen3-vl-30b-a3b-instruct",
     "deepseek/deepseek-v4.1-flash",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4.1-flash",
     "fireworks/glm-5.3-flash",
     "fireworks/kimi-k3",
@@ -403,6 +406,7 @@
     "embercloud/glm-5.2",
     "embercloud/qwen3-coder-next",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4-pro",
     "fireworks/deepseek-v4.1-flash",
@@ -633,6 +637,7 @@
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5",
     "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-5-20251101",
     "anthropic/claude-opus-4-6",
     "anthropic/claude-opus-4-7",
@@ -700,6 +705,7 @@
     "deepinfra/muse-glimmer-30b",
     "deepinfra/qwen3.8-2.4t-a95b",
     "entrim/deepseek-v4.1-flash",
+    "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
     "fireworks/deepseek-v4-pro",
     "fireworks/deepseek-v4.1-flash",
@@ -808,6 +814,12 @@
     "vertex-openai/grok-4-6"
   ],
   "reasoning": {
+    "entrim/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "entrim/deepseek-v4.1-flash": [
       {
         "type": "effort",
@@ -1187,6 +1199,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "aws-bedrock/claude-haiku-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "aws-bedrock/claude-sonnet-4-6": [
       {
         "type": "budget_tokens",
@@ -1265,7 +1283,7 @@
     "google-ai-studio/gemini-3.7-flash": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google-ai-studio/gemini-3-flash-preview": [
@@ -1374,6 +1392,12 @@
       }
     ],
     "anthropic/claude-haiku-4-5-20251001": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -2736,7 +2760,7 @@
     "google-vertex/gemini-3.7-flash": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google-vertex/gemini-3-flash-preview": [

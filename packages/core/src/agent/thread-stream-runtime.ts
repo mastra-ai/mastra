@@ -49,6 +49,28 @@ import type {
 } from './types';
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+
+/**
+ * Formats a thread key for use in error messages.
+ *
+ * Thread keys are `resourceId + NUL + threadId`. Never put a raw key in an
+ * error message: these errors flow back to senders (e.g. `agent_signal_send`)
+ * and into a notification's `lastDeliveryError`, and anything that treats the
+ * string as NUL-terminated (SQLite text binding, terminals, the TUI) silently
+ * drops everything after the resource id, including the thread id and the rest
+ * of the message. Ids themselves may contain NUL, so it is escaped as well.
+ */
+function describeThreadKey(key: string): string {
+  const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
+  // An id containing NUL makes the split ambiguous: show the whole key, escaped.
+  if (separator === -1 || key.lastIndexOf(AGENT_THREAD_KEY_SEPARATOR) !== separator) {
+    return `thread ${key.replaceAll(AGENT_THREAD_KEY_SEPARATOR, '\\0')}`;
+  }
+  const resourceId = key.slice(0, separator);
+  const threadId = key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length);
+  return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;
+}
+
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /**
@@ -260,9 +282,10 @@ type ThreadControlSubscription = {
 };
 
 type PreparedThreadRun = {
-  threadKey: string;
+  threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
+  finalizerToken?: object;
 };
 
 type PendingIdleSignal<OUTPUT = unknown> = {
@@ -562,6 +585,15 @@ function createRuntimeState(): AgentThreadRuntimeState {
 export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+  #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
+  #threadlessRunFinalizer = new FinalizationRegistry<{
+    state: AgentThreadRuntimeState;
+    runId: string;
+    token: object;
+  }>(({ state, runId, token }) => {
+    if (state.preparedRunsById.get(runId)?.finalizerToken !== token) return;
+    this.#cleanupPreparedRun(state, runId);
+  });
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
@@ -1231,7 +1263,7 @@ export class AgentThreadStreamRuntime {
             requestId: data.requestId,
             runId: data.runId,
             sourceId,
-            error: `Claimed thread owner could not acquire the execution lease for ${key}`,
+            error: `Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`,
           });
         } else if (accepted.error) {
           await reply({
@@ -1593,12 +1625,12 @@ export class AgentThreadStreamRuntime {
       else failMessageIdentity?.(failure);
     };
     if (!isOwnerActive()) {
-      releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-      return { runId, error: `Claimed thread owner was released for ${key}` };
+      releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+      return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
     }
     if (Date.now() >= expiresAt) {
-      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
-      return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+      return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
     }
     // Resolving the owner's stream options can reject. A later retry of the same
     // logical message must be free to route instead of being told this message was
@@ -1632,12 +1664,12 @@ export class AgentThreadStreamRuntime {
       subscription.references++;
       await subscription.ready;
       if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-        return { runId, error: `Claimed thread owner was released for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
       }
       if (Date.now() >= expiresAt) {
-        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
-        return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
       }
 
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -1669,8 +1701,8 @@ export class AgentThreadStreamRuntime {
       }
 
       if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-        return { runId, error: `Claimed thread owner was released for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
       }
       state.activeThreadRunIds.set(key, runId);
       state.threadKeysByRunId.set(runId, key);
@@ -1695,8 +1727,8 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
           const error = !ownerActive
-            ? `Claimed thread owner was released for ${key}`
-            : `Claimed thread owner acceptance expired for ${key}`;
+            ? `Claimed thread owner was released for ${describeThreadKey(key)}`
+            : `Claimed thread owner acceptance expired for ${describeThreadKey(key)}`;
           releaseMessageIdentity(error);
           const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
@@ -1715,7 +1747,9 @@ export class AgentThreadStreamRuntime {
           settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
-        releaseMessageIdentity(new Error(`Claimed thread owner could not acquire the execution lease for ${key}`));
+        releaseMessageIdentity(
+          new Error(`Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`),
+        );
         await this.#drainPendingIdleSignals(state, pubsub, key);
         return undefined;
       }
@@ -1758,7 +1792,9 @@ export class AgentThreadStreamRuntime {
       // never became ready, for example) must not leave a duplicate waiting on an
       // outcome that will never arrive.
       if (!admissionSettled) {
-        failMessageIdentity?.(new Error(`Claimed thread owner admission for ${key} did not complete`));
+        failMessageIdentity?.(
+          new Error(`Claimed thread owner admission for ${describeThreadKey(key)} did not complete`),
+        );
       }
       if (control) {
         control.references--;
@@ -1832,7 +1868,7 @@ export class AgentThreadStreamRuntime {
       // this caller has already reported as timed out.
       const expiresAt = Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS;
       const timeout = setTimeout(
-        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${key}`) }),
+        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${describeThreadKey(key)}`) }),
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
@@ -1880,7 +1916,7 @@ export class AgentThreadStreamRuntime {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
       throw new Error(
-        `No claimed thread owner responded for ${key} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
+        `No claimed thread owner responded for ${describeThreadKey(key)} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
       );
     }
     const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
@@ -2299,9 +2335,9 @@ export class AgentThreadStreamRuntime {
   }
 
   prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>, pubsub?: PubSub): AgentExecutionOptions<OUTPUT> {
+    if (!options.runId) return options;
     const { threadId, resourceId } = this.#getThreadTarget(options);
-    if (!threadId || !options.runId) return options;
-    const key = this.#threadKey(resourceId, threadId);
+    const key = threadId ? this.#threadKey(resourceId, threadId) : undefined;
 
     const state = this.#getState(pubsub);
     const abortController = new AbortController();
@@ -2313,12 +2349,14 @@ export class AgentThreadStreamRuntime {
       upstreamAbortSignal?.addEventListener('abort', abort, { once: true });
     }
 
-    state.preparedRunsById.set(options.runId, {
-      threadKey: key,
+    const preparedRun: PreparedThreadRun = {
+      ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
-    });
-    this.#ensureThreadControlSubscription(state, pubsub, key);
+    };
+    state.preparedRunsById.set(options.runId, preparedRun);
+    this.#preparedRunsByAbortSignal.set(abortController.signal, preparedRun);
+    if (key) this.#ensureThreadControlSubscription(state, pubsub, key);
 
     if (state.abortedRunIds.has(options.runId)) {
       abort();
@@ -2613,13 +2651,25 @@ export class AgentThreadStreamRuntime {
     state.activeThreadStreamIds.clear();
     state.streamSeqByRunId.clear();
     state.watchedThreadStreamIds.clear();
+    for (const preparedRun of state.preparedRunsById.values()) {
+      if (preparedRun.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
+    }
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
   }
 
-  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
-    state.preparedRunsById.get(runId)?.cleanup();
+  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string, expectedPreparedRun?: PreparedThreadRun) {
+    const preparedRun = state.preparedRunsById.get(runId);
+    if (expectedPreparedRun && preparedRun !== expectedPreparedRun) {
+      expectedPreparedRun.cleanup();
+      if (expectedPreparedRun.finalizerToken) {
+        this.#threadlessRunFinalizer.unregister(expectedPreparedRun.finalizerToken);
+      }
+      return;
+    }
+    preparedRun?.cleanup();
+    if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
     state.abortedRunIds.delete(runId);
   }
@@ -2888,7 +2938,23 @@ export class AgentThreadStreamRuntime {
     registrationOptions?: AgentThreadStrictRegistrationOptions | AgentThreadStreamRegistrationOptions,
   ): Promise<void | AgentThreadRunRegistration> | undefined {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
-    if (!threadId) return;
+    if (!threadId) {
+      if (registrationOptions?.strict) return;
+      const state = this.#getState(pubsub);
+      const runId = output.runId;
+      const finalizerToken = {};
+      const preparedRun = streamOptions.abortSignal
+        ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
+        : undefined;
+      if (preparedRun) {
+        preparedRun.finalizerToken = finalizerToken;
+        this.#threadlessRunFinalizer.register(output, { state, runId, token: finalizerToken }, finalizerToken);
+        void Promise.allSettled([output._waitUntilFinished()]).then(() => {
+          this.#cleanupPreparedRun(state, runId, preparedRun);
+        });
+      }
+      return;
+    }
 
     if (registrationOptions?.strict) {
       return this.#registerRunStrict(agent, output, streamOptions, pubsub, threadId, resourceId, registrationOptions);
@@ -3903,12 +3969,24 @@ export class AgentThreadStreamRuntime {
     runId: string,
     pubsub?: PubSub,
     failedRun?: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>,
+    expectedAbortSignal?: AbortSignal,
   ) {
     const state = this.#getState(pubsub);
     // Queued startups have their own catch path, which must restore input before draining anything else.
     if (state.threadRunsById.has(runId) || state.startingQueuedRunIds.has(runId)) return;
-    const key = state.threadKeysByRunId.get(runId) ?? state.preparedRunsById.get(runId)?.threadKey;
-    if (!key) return;
+    const preparedRun = state.preparedRunsById.get(runId);
+    const expectedPreparedRun = expectedAbortSignal
+      ? this.#preparedRunsByAbortSignal.get(expectedAbortSignal)
+      : undefined;
+    if (expectedAbortSignal && preparedRun !== expectedPreparedRun) {
+      if (expectedPreparedRun) this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
+      return;
+    }
+    const key = state.threadKeysByRunId.get(runId) ?? preparedRun?.threadKey;
+    if (!key) {
+      this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
+      return;
+    }
     try {
       state.threadKeysByRunId.delete(runId);
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -3919,7 +3997,7 @@ export class AgentThreadStreamRuntime {
       const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
       if (wasAborted && failedRun && target?.threadId) {
         // Failed preparation never registers a completion watcher. Recover pending input before idle work.
-        this.#cleanupPreparedRun(state, runId);
+        this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
         void this.#drainPendingSignals(state, pubsub, key, {
           ...failedRun,
           threadId: target.threadId,
@@ -3930,7 +4008,7 @@ export class AgentThreadStreamRuntime {
         void this.#drainPendingIdleSignals(state, pubsub, key);
       }
     } finally {
-      this.#cleanupPreparedRun(state, runId);
+      this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
       this.#releaseUnusedThreadControlSubscription(state, key);
     }
   }
@@ -5341,7 +5419,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions,
         );
         if (!localAcceptance) {
-          throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
+          throw new Error(
+            `Claimed thread owner could not acquire the execution lease for ${describeThreadKey(reservedKey)}`,
+          );
         }
         if (localAcceptance.error) throw new Error(localAcceptance.error);
         if (!localAcceptance.output) {

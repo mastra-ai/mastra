@@ -27,6 +27,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-opus-4",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
@@ -277,7 +278,6 @@
     "cohere/rerank-v4-pro",
     "deepseek/deepseek-r1",
     "deepseek/deepseek-v3.1",
-    "deepseek/deepseek-v3.1-terminus",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v3.2-thinking",
     "deepseek/deepseek-v4-flash",
@@ -353,7 +353,6 @@
     "mistral/mistral-nemo",
     "mistral/mistral-small",
     "moonshotai/kimi-k2",
-    "moonshotai/kimi-k2-thinking",
     "moonshotai/kimi-k2.5",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
@@ -440,7 +439,6 @@
     "spacexai/grok-4.6",
     "spacexai/grok-4.7",
     "spacexai/grok-build-0.1",
-    "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
     "tencent/hy3",
     "tencent/hy4-preview",
@@ -492,6 +490,7 @@
     "alibaba/qwen3.8-flash",
     "alibaba/qwen3.8-max-prime",
     "alibaba/qwen3.8-omni-flash",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-sonnet-4.5",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
@@ -942,12 +941,6 @@
       }
     ],
     "deepseek/deepseek-v4-flash-vision-exp": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "deepseek/deepseek-v3.1-terminus": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -1501,12 +1494,6 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/kimi-k2-thinking": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "moonshotai/kimi-k2.5": [
       {
         "type": "toggle"
@@ -1621,12 +1608,6 @@
     "minimax/minimax-m2": [
       {
         "type": "budget_tokens"
-      }
-    ],
-    "stepfun/step-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "stepfun/step-3.7-flash": [

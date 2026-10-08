@@ -416,6 +416,61 @@ describe('agent connection tools', () => {
     expect(getStored().sentSignals).toBeUndefined();
   });
 
+  it('reports a signal saved to the inbox but not delivered directly as queued', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: {
+        id: 'notification-1',
+        status: 'pending' as const,
+        lastDeliveryError: 'No claimed thread owner responded for thread thread-2 (resource resource-1) within 1000ms',
+      },
+      decision: { action: 'deliver' as const },
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    const result = await (tools.agent_signal_send as any).execute(
+      {
+        targetId: PEER_ID,
+        message: 'Status update',
+        priority: 'high',
+        expectsReply: false,
+        messageId: 'queued-message',
+      },
+      context,
+    );
+
+    expect(result).toMatchObject({ isError: false, messageId: 'queued-message', routingAction: 'persist' });
+    expect(result.content).toMatch(
+      /^Queued for .+: direct delivery failed \(No claimed thread owner responded for thread thread-2 \(resource resource-1\) within 1000ms\)/,
+    );
+    // A retry with the same messageId must still be able to deliver it.
+    expect(getStored().sentSignals).toBeUndefined();
+  });
+
+  it('does not report a queued but undelivered signal as a successful reply obligation', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1', status: 'pending' as const, lastDeliveryError: 'owner acceptance timed out' },
+      decision: { action: 'deliver' as const },
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    const result = await (tools.agent_signal_send as any).execute(
+      { targetId: PEER_ID, message: 'Please reply', priority: 'high', expectsReply: true, messageId: 'queued-reply' },
+      context,
+    );
+
+    expect(result).toMatchObject({ isError: true, messageId: 'queued-reply', routingAction: 'persist' });
+    expect(result.content).toMatch(/^Failed to establish a reply obligation: the signal was queued for /);
+    expect(getStored().sentSignals).toBeUndefined();
+  });
+
   it('does not report a summarized low-priority signal as a successful reply obligation', async () => {
     const sendNotificationSignal = vi
       .fn()

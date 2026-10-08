@@ -175,6 +175,16 @@ export interface DelegationCompleteContext {
       args?: unknown;
       isError?: boolean;
     }>;
+    /**
+     * Tool calls the sub-agent made that never got a result, because the tool has
+     * no server-side `execute` (a client tool). A sub-agent cannot resolve these, so
+     * its run ends at the tool-calls step. Only present when there is at least one.
+     */
+    subAgentPendingToolCalls?: Array<{
+      toolName: string;
+      toolCallId: string;
+      args?: unknown;
+    }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
       inputTokens: number;
