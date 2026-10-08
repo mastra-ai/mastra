@@ -61,16 +61,19 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
     effort: { acceptedLevels: ['off', 'low', 'medium', 'high'], toOptions: sendReasoningEffort },
   },
   togetherai: { optionsKey: 'togetherai', effort: { toOptions: sendReasoningEffort }, toggle: switchReasoning },
-  deepinfra: { optionsKey: 'deepinfra', effort: { toOptions: sendReasoningEffort }, toggle: switchReasoning },
+  deepinfra: {
+    optionsKey: 'deepinfra',
+    effort: { acceptedLevels: ['off', 'low', 'medium', 'high'], toOptions: sendReasoningEffort },
+    toggle: switchReasoning,
+  },
   cerebras: { optionsKey: 'cerebras', effort: { toOptions: sendReasoningEffort } },
   perplexity: { optionsKey: 'perplexity', effort: { toOptions: effort => ({ reasoning_effort: effort }) } },
 };
 
-const THINKING_ADAPTER_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
-export type ThinkingAdapterProvider = (typeof THINKING_ADAPTER_PROVIDERS)[number];
+const THINKING_ADAPTER_PROVIDERS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'google']);
 
-export function isThinkingAdapterProvider(provider: string): provider is ThinkingAdapterProvider {
-  return THINKING_ADAPTER_PROVIDERS.some(adapterProvider => adapterProvider === provider);
+export function isThinkingAdapterProvider(provider: string): boolean {
+  return THINKING_ADAPTER_PROVIDERS.has(provider);
 }
 
 function requestFormatFor(modelId: string): ThinkingRequestFormat | undefined {

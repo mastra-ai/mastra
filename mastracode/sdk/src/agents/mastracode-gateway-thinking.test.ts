@@ -113,8 +113,20 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('max', 'perplexity', 'sonar-reasoning-pro'))).reasoning_effort).toBe('high');
   });
 
-  it('sends no effort to a model that only switches thinking on or off through an OpenAI-compatible provider', async () => {
-    expect(await requestBody(resolve('high', 'togetherai', 'Qwen/Qwen3.5-9B'))).not.toHaveProperty('reasoning_effort');
+  it.each([
+    ['togetherai', 'Qwen/Qwen3.5-9B'],
+    ['deepinfra', 'XiaomiMiMo/MiMo-V2.6-Pro'],
+  ])('switches thinking on and off on %s models that only toggle it', async (providerId, modelId) => {
+    const on = await requestBody(resolve('high', providerId, modelId));
+    expect(on.reasoning).toEqual({ enabled: true });
+    expect(on).not.toHaveProperty('reasoning_effort');
+    expect((await requestBody(resolve('off', providerId, modelId))).reasoning).toEqual({ enabled: false });
+  });
+
+  it("caps DeepInfra's effort at the levels its API documents", async () => {
+    expect((await requestBody(resolve('max', 'deepinfra', 'deepseek-ai/DeepSeek-V4.1-Flash'))).reasoning_effort).toBe(
+      'high',
+    );
   });
 
   it('switches Alibaba thinking on and off', async () => {
@@ -148,20 +160,24 @@ describe('MastraCodeGateway thinking level forwarding', () => {
   });
 
   it.each([
-    ['an effort Claude', 'max', 'anthropic', 'claude-opus-4-7', { effort: 'max' }],
-    ['a budget Claude, with its direct-path budget', 'high', 'anthropic', 'claude-sonnet-4-5', { max_tokens: 16384 }],
-    ['GPT', 'xhigh', 'openai', 'gpt-5.5', { effort: 'xhigh' }],
-    ['a level Gemini', 'high', 'google', 'gemini-3-pro-preview', { effort: 'high' }],
-    ['a budget Gemini, with its direct-path budget', 'high', 'google', 'gemini-2.5-flash', { max_tokens: 24576 }],
-  ] as const)('sends the Mastra gateway the level %s runs', async (_model, level, providerId, modelId, reasoning) => {
-    expect((await requestBody(resolveThroughGateway(level, providerId, modelId))).reasoning).toEqual(reasoning);
+    ['an effort Claude', 'max', 'anthropic', 'claude-opus-4-7', 'max'],
+    ['a budget Claude', 'high', 'anthropic', 'claude-sonnet-4-5', 'high'],
+    ['GPT', 'xhigh', 'openai', 'gpt-5.5', 'xhigh'],
+    ['a level Gemini', 'max', 'google', 'gemini-3-pro-preview', 'high'],
+    ['a budget Gemini', 'medium', 'google', 'gemini-2.5-flash', 'medium'],
+  ] as const)('sends the Mastra gateway the effort %s runs', async (_model, level, providerId, modelId, effort) => {
+    expect((await requestBody(resolveThroughGateway(level, providerId, modelId))).reasoning).toEqual({ effort });
   });
 
-  it('leaves a Claude request through the Mastra gateway on its default at off, like the direct path', async () => {
-    expect(await requestBody(resolveThroughGateway('off', 'anthropic', 'claude-opus-4-7'))).not.toHaveProperty(
-      'reasoning',
-    );
-  });
+  it.each([
+    ['anthropic', 'claude-opus-4-7'],
+    ['openai', 'gpt-5.5'],
+  ])(
+    'leaves %s through the Mastra gateway on its default at off, like the direct path',
+    async (providerId, modelId) => {
+      expect(await requestBody(resolveThroughGateway('off', providerId, modelId))).not.toHaveProperty('reasoning');
+    },
+  );
 
   it("keeps the caller's own DeepSeek thinking setting whole instead of mixing it with the level", async () => {
     const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'), {
