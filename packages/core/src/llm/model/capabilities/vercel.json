@@ -49,7 +49,6 @@
     "bytedance/seedance-2.0-mini",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
-    "deepseek/deepseek-v4.1-flash-fast",
     "fireworks/ember-1",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
@@ -286,7 +285,6 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
-    "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-image",
     "google/gemini-2.5-flash-lite",
@@ -499,7 +497,6 @@
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
     "deepseek/deepseek-v4.1-flash",
-    "deepseek/deepseek-v4.1-flash-fast",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
     "google/gemini-2.5-pro",
@@ -958,12 +955,6 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash-fast": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "deepseek/deepseek-v3.1": [
       {
         "type": "effort",
@@ -1298,6 +1289,9 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "google/gemini-3.1-flash-image-preview": [
