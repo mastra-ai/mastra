@@ -49,7 +49,7 @@
     "vitest": "4.1.11"
   },
   "overrides": {
-    "@browserbasehq/stagehand@3.7.3": {
+    "@browserbasehq/stagehand@^3.2.1": {
       "@ai-sdk/provider-utils@3": {
         "undici@^5.29.0": "6.28.1"
       }
