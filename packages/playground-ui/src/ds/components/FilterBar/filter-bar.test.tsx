@@ -608,6 +608,36 @@ describe('FilterBar', () => {
         expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'status', operatorId: 'in', value: ['custom'] });
       });
 
+      it('keeps typed text that matches no suggestion when Done commits a selection', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
+
+        type('custom');
+        await screen.findByText('No suggestions — press Enter to use your text.');
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running', 'custom'] });
+      });
+
+      it('treats typed text that matches a suggestion as a search when Done commits', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
+
+        type('err');
+        await screen.findByRole('option', { name: 'Error' });
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running'] });
+      });
+
       it('adds a value on Enter in the chip editor without closing it', async () => {
         const onChange = vi.fn();
         render(

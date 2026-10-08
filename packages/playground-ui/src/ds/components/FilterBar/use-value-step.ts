@@ -124,8 +124,9 @@ export function useValueStep({
 
   /** Done (or Ctrl/Meta+Enter) on a multi-selection. */
   function commitDone() {
-    // Without suggestions the query can only be a value being typed: it joins the selection.
-    if (!suggestions.hasSuggestions) return commitFreeText() || commitSelection();
+    // Typed text that matches no suggestion is a value being entered (Enter would add it), so it
+    // joins the selection. Text that matches suggestions is a search and is left out.
+    if (suggestions.options.length === 0) return commitFreeText() || commitSelection();
     return commitSelection() || commitFreeText();
   }
 
