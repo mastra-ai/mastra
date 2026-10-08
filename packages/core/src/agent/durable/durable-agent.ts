@@ -2053,6 +2053,49 @@ export class DurableAgent<
   }
 
   /**
+   * Safety net for a durable run whose stream never receives a terminal
+   * pubsub event (see issue #25974). Each of `stream()` / `generate()` /
+   * `resume()` runs the driving workflow in-process and relies on a FINISH
+   * (or ERROR) event being published from inside it to close this stream's
+   * adapter; if that publish throws, or the event is otherwise dropped
+   * before this adapter's subscription observes it, the stream is left open
+   * forever. Any watcher of `output._waitUntilFinished()` — most notably
+   * `thread-stream-runtime`'s completion watcher, which releases the
+   * owning thread's "busy" state — then never resolves.
+   *
+   * Call once the workflow execution driving the stream has settled (via
+   * `.finally()`), regardless of whether it resolved or rejected: a
+   * genuinely suspended run (stream intentionally left open) and a stream
+   * that already reached a terminal state are both left alone. Otherwise,
+   * give pubsub a chance to flush/deliver an already-published terminal
+   * event (relevant for a transport where delivery is genuinely async)
+   * before concluding it is missing and force-terminating the stream with
+   * an error.
+   */
+  async #ensureDurableStreamTerminated(
+    runId: string,
+    output: MastraModelOutput<any>,
+    stream: Pick<DurableStreamAdapterResult<any>, 'isTerminal' | 'forceError' | 'waitForEventDelivery'>,
+  ): Promise<void> {
+    // Wrapped in a closure (rather than inlined) so re-checking after the
+    // await below reads the live status instead of a value TS narrowed away
+    // at the first check — the status can genuinely flip to 'suspended'
+    // during the await.
+    const settled = () => (output.status as string) === 'suspended' || stream.isTerminal();
+    try {
+      if (settled()) return;
+      await this.pubsub.flush();
+      await stream.waitForEventDelivery();
+      if (settled()) return;
+      await stream.forceError(
+        new Error(`Durable agent run ${runId} finished without emitting a terminal stream event`),
+      );
+    } catch (error) {
+      this.logger.warn(`Failed to verify stream termination for run ${runId}`, { runId, error });
+    }
+  }
+
+  /**
    * Abort the thread's active run.
    *
    * The base implementation flips the run's prepared `AbortController`, which a
@@ -2359,6 +2402,9 @@ export class DurableAgent<
       output,
       cleanup: createdStreamCleanup,
       ready,
+      waitForEventDelivery,
+      isTerminal,
+      forceError,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -2432,7 +2478,10 @@ export class DurableAgent<
       })
       .catch(error => {
         this.emitErrorInBackground(runId, error);
-      });
+      })
+      .finally(() =>
+        this.#ensureDurableStreamTerminated(runId, output, { isTerminal, forceError, waitForEventDelivery }),
+      );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
@@ -2817,6 +2866,8 @@ export class DurableAgent<
       detach: detachResumeStream,
       waitForEventDelivery,
       ready,
+      isTerminal,
+      forceError,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -2922,7 +2973,10 @@ export class DurableAgent<
       })
       .catch(error => {
         this.emitErrorInBackground(runId, error);
-      });
+      })
+      .finally(() =>
+        this.#ensureDurableStreamTerminated(runId, output, { isTerminal, forceError, waitForEventDelivery }),
+      );
     const trackedResumeEntry = globalRunRegistry.get(runId);
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
@@ -3459,6 +3513,9 @@ export class DurableAgent<
       output,
       cleanup: streamCleanup,
       ready,
+      waitForEventDelivery,
+      isTerminal,
+      forceError,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -3530,7 +3587,10 @@ export class DurableAgent<
       })
       .catch(error => {
         this.emitErrorInBackground(runId, error);
-      });
+      })
+      .finally(() =>
+        this.#ensureDurableStreamTerminated(runId, output, { isTerminal, forceError, waitForEventDelivery }),
+      );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;

@@ -179,6 +179,20 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
+  /**
+   * Whether the stream has reached a terminal state (FINISH/ERROR/ABORT, a
+   * closeOnSuspend suspend, idle termination, or cleanup). Use alongside
+   * `forceError` to detect and recover from a driving workflow that settled
+   * without ever delivering a terminal event to this adapter.
+   */
+  isTerminal: () => boolean;
+  /**
+   * Safety-net termination: if the stream has not already reached a terminal
+   * state, enqueues an error chunk, closes the stream, and fires `onError` —
+   * the same outcome a genuine ERROR pubsub event produces. No-op if the
+   * stream is already terminal (including after `cleanup()`/`detach()`).
+   */
+  forceError: (error: Error) => Promise<void>;
 }
 
 /**
@@ -368,6 +382,35 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }, idleTimeoutMs);
   };
 
+  // Enqueue an error chunk and close the stream normally (mirrors the regular
+  // agent's deferred-error-chunk pattern). Using controller.error() would
+  // error the base ReadableStream, which MastraModelOutput.consumeStream
+  // swallows — leaving fullStream hanging because no 'finish' event fires on
+  // the internal emitter.
+  //
+  // Shared by the genuine ERROR pubsub event (below) and by `forceError`
+  // (exposed on the returned result): a durable run's driving workflow can
+  // settle — successfully or not — without its terminal FINISH/ERROR/ABORT
+  // event ever reaching this adapter (the publish itself threw, or the event
+  // was dropped in transit). Nothing would otherwise ever close this stream,
+  // so a watcher of `output._waitUntilFinished()` (e.g. the thread-stream
+  // runtime's completion watcher) waits forever — observable as the owning
+  // thread staying "busy" indefinitely. See issue #25974.
+  const terminateWithError = async (error: Error) => {
+    if (!controller || terminated) return;
+    safeEnqueue(controller, {
+      type: 'error',
+      payload: { error },
+    } as ChunkType<OUTPUT>);
+    safeClose(controller);
+    markTerminated();
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    }
+  };
+
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
     // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
@@ -515,22 +558,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Enqueue an error chunk and close the stream normally (mirrors the
-          // regular agent's deferred-error-chunk pattern). Using
-          // controller.error() would error the base ReadableStream, which
-          // MastraModelOutput.consumeStream swallows — leaving fullStream
-          // hanging because no 'finish' event fires on the internal emitter.
-          safeEnqueue(controller, {
-            type: 'error',
-            payload: { error },
-          } as ChunkType<OUTPUT>);
-          safeClose(controller);
-          markTerminated();
-          try {
-            await onError?.({ error });
-          } catch (callbackError) {
-            logError(`[DurableAgentStream] onError callback error:`, callbackError);
-          }
+          await terminateWithError(error);
           break;
         }
 
@@ -684,7 +712,17 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Cleanup function - intentionally fire-and-forget for unsubscribe.
   // Sets cancelled=true so the subscribe .then() handler will unsubscribe
   // if cleanup runs before the subscription promise resolves.
+  //
+  // Closes the stream (like `detach()`) before nulling the controller: a
+  // `cleanup()` called before any terminal event arrived — e.g. an explicit
+  // early cleanup(), or the auto-cleanup timer racing a producer that never
+  // got to publish FINISH/ERROR — would otherwise unsubscribe from pubsub
+  // without ever closing the ReadableStream, leaving any consumer reading it
+  // waiting forever (see terminateWithError's comment, and issue #25974).
+  // safeClose is idempotent, so this is a no-op when a terminal event already
+  // closed the stream.
   const cleanup = () => {
+    if (controller) safeClose(controller);
     markTerminated();
     cancelled = true;
     if (isSubscribed) {
@@ -750,6 +788,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     detach,
     waitForEventDelivery,
     ready,
+    isTerminal: () => terminated,
+    forceError: terminateWithError,
   };
 }
 
