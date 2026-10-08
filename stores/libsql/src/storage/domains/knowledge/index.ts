@@ -1282,9 +1282,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
   async #resolveNode(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeNode | null> {
+    // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+    // visible-scope rows and merged aliases (whose terminal may be visible) are candidates.
+    const keys = visibleScopeKeys(scope);
     const result = await executor.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type='node' AND canonicalName=?`,
-      args: [canonicalName(name)],
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type='node' AND canonicalName=? AND (scopeKey IN (${keys.map(() => '?').join(',')}) OR mergedInto IS NOT NULL)`,
+      args: [canonicalName(name), ...keys],
     });
     const candidates = result.rows.map(parseNode).sort((left, right) => right.scope.length - left.scope.length);
     for (const candidate of candidates) {

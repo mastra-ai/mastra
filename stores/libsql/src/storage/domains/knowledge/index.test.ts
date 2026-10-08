@@ -190,6 +190,30 @@ createKnowledgeSchemaResetTests(async () => {
   };
 });
 
+describe('KnowledgeLibSQL name resolution', () => {
+  it('does not load same-named nodes from scopes the caller cannot see', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      for (let index = 0; index < 20; index++) {
+        await store.createNode({ name: 'Jane', kind: 'person', scope: ['org:acme', `resource:foreign-${index}`] });
+      }
+      const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: ['org:acme', 'resource:mastra'] });
+
+      const execute = vi.spyOn(client, 'execute');
+      await expect(
+        store.resolveNode({ name: 'Jane', scope: ['org:acme', 'resource:mastra', 'thread:t1'] }),
+      ).resolves.toMatchObject({ id: jane.id });
+
+      // One candidate query plus one terminal lookup for the single visible candidate.
+      expect(execute.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      client.close();
+    }
+  });
+});
+
 describe('KnowledgeLibSQL initialization', () => {
   it('replaces the v1 tables every published LibSQL store created, discarding their rows', async () => {
     const client = createClient({ url: ':memory:' });

@@ -334,6 +334,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('resolves names only through visible nodes or merged aliases with a visible terminal', async () => {
+      const sibling = [...resource, 'thread:t2'];
+      const foreign = ['org:acme', 'resource:foreign'];
+      const alias = await store.createNode({ name: 'Resolve Alias', kind: 'person', scope: sibling });
+      const target = await store.createNode({ name: 'Resolve Target', kind: 'person', scope: resource });
+      await store.mergeNodes({ sourceId: alias.id, targetId: target.id, sourceVersion: alias.version });
+      await store.createNode({ name: 'Resolve Hidden', kind: 'person', scope: foreign });
+      const foreignAlias = await store.createNode({
+        name: 'Resolve Foreign Alias',
+        kind: 'person',
+        scope: [...foreign, 'thread:f1'],
+      });
+      const foreignTarget = await store.createNode({ name: 'Resolve Foreign Target', kind: 'person', scope: foreign });
+      await store.mergeNodes({
+        sourceId: foreignAlias.id,
+        targetId: foreignTarget.id,
+        sourceVersion: foreignAlias.version,
+      });
+
+      await expect(store.resolveNode({ name: 'Resolve Alias', scope: thread })).resolves.toMatchObject({
+        id: target.id,
+      });
+      await expect(store.resolveNode({ name: 'Resolve Hidden', scope: thread })).resolves.toBeNull();
+      await expect(store.resolveNode({ name: 'Resolve Foreign Alias', scope: thread })).resolves.toBeNull();
+    });
+
     it('queries arbitrary companion scope memberships as visible scope subsets', async () => {
       const resourceCompanion = 'resource:r1:uncurated';
       const threadCompanion = 'thread:t1:uncurated';
