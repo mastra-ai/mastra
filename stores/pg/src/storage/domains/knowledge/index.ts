@@ -1785,13 +1785,12 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async completeSemanticOutbox(input: { ids: string[]; workerId: string }): Promise<string[]> {
     if (!input.ids.length) return [];
-    const now = new Date().toISOString();
     return this.#transaction(async tx => {
       const completed: string[] = [];
       for (const id of input.ids) {
         const result = await tx.execute({
-          sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='completed',completedAt=? WHERE id=? AND status='processing' AND claimedBy=?`,
-          args: [now, id, input.workerId],
+          sql: `DELETE FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE id=? AND status='processing' AND claimedBy=?`,
+          args: [id, input.workerId],
         });
         if (result.rowsAffected > 0) completed.push(id);
       }
