@@ -886,6 +886,54 @@ describe('KnowledgePage', () => {
     expect(breadcrumb).toHaveTextContent('Payments Service');
   });
 
+  it('searches the server and navigates directly to node and scope results', async () => {
+    stubKnowledgeRoute();
+    const queries: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/search`, ({ request }) => {
+        const query = new URL(request.url).searchParams.get('q') ?? '';
+        queries.push(query);
+        return HttpResponse.json({
+          results: query.startsWith('pay')
+            ? [
+                { id: 'ent-1', name: 'Payments Service', kind: 'service', type: 'node', rung: 'resource' },
+                {
+                  id: 'scope:payments',
+                  name: 'payments',
+                  kind: 'scope',
+                  type: 'scope',
+                  rung: null,
+                  address: 'features:payments',
+                },
+              ]
+            : [],
+          truncated: false,
+        });
+      }),
+    );
+    const { router } = renderRoute();
+    const user = userEvent.setup();
+
+    const search = await screen.findByRole('combobox', { name: 'Search knowledge' });
+    await user.type(search, 'payments');
+    const node = await screen.findByRole('option', { name: /Payments Service/ });
+    expect(node).toHaveAttribute('aria-selected', 'false');
+    await user.keyboard('{ArrowDown}');
+    expect(node).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}');
+    expect(await screen.findByTestId('knowledge-flyout')).toHaveTextContent('Payments Service');
+    await waitFor(() => expect(router.state.location.search).toContain('node=ent-1'));
+    expect(queries.some(query => query.includes('pay'))).toBe(true);
+
+    await user.type(search, 'payments');
+    const scope = await screen.findByRole('option', { name: /features:payments/ });
+    await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(scope).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(router.state.location.search).toContain('scope=scope%3Apayments'));
+    expect(router.state.location.search).not.toMatch(/[?&]node=/);
+  });
+
   it('keeps the selected node addressable through ?node= and reopens it from the link', async () => {
     stubKnowledgeRoute();
     const { router, unmount } = renderRoute();
