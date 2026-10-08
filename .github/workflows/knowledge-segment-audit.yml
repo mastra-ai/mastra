@@ -1,0 +1,115 @@
+name: Knowledge segment audit (branch-only)
+
+# Builds every W2-W4 segment head on its own and checks the stores touched by
+# the Knowledge stack. Lives only on ci/knowledge-v21-segment-audit; never merged.
+on:
+  push:
+    branches: [ci/knowledge-v21-segment-audit]
+
+permissions: {}
+
+jobs:
+  segment-build:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    name: segment-build (${{ matrix.ref }})
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        ref:
+          - feat/knowledge-v2-w2-registration
+          - feat/knowledge-v2-w2-state-runs
+          - feat/knowledge-v2-w2-static
+          - feat/knowledge-v2-w2-triggers
+          - feat/knowledge-v2-w2-agentic
+          - feat/knowledge-v2-w2-ui
+          - feat/knowledge-v2-w2-calendar-proof
+          - feat/knowledge-v2-w2-shipyard-proof
+          - feat/knowledge-v2-w3-grants
+          - feat/knowledge-v2-w3-closure
+          - feat/knowledge-v2-w3-strict-reads
+          - feat/knowledge-v2-w3-mutations
+          - feat/knowledge-v2-w3-governance
+          - feat/knowledge-v2-w3-surfaces
+          - feat/knowledge-v2-w3-proof
+          - feat/knowledge-v2-w4-canvas
+          - feat/knowledge-v2-w4-compiler
+          - feat/knowledge-v2-w4-adapters
+          - feat/knowledge-v2-w4-skill
+          - feat/knowledge-v2-w4-shipyard
+          - feat/knowledge-v2-w4-final-proof
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+          ref: ${{ matrix.ref }}
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build Knowledge packages at this segment
+        run: >-
+          pnpm turbo build
+          --filter "@mastra/core" --filter "@mastra/memory" --filter "@mastra/server" --filter "@mastra/client-js"
+          --filter "@mastra/libsql" --filter "@mastra/pg" --filter "@mastra/mysql" --filter "@mastra/mongodb"
+          --filter "@mastra/clickhouse" --filter "@mastra/cloudflare"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+  all-stores-build:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build every store
+        run: pnpm turbo build --filter "./stores/*"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+  touched-store-tests:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    name: touched-store-tests (${{ matrix.store }})
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [clickhouse, cloudflare]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build ${{ matrix.store }}
+        run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Run ${{ matrix.store }} tests
+        run: pnpm test
+        working-directory: stores/${{ matrix.store }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
