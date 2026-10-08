@@ -128,7 +128,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectEnvironmentGet",
     "method": "GET",
     "path": "/web/factory/projects/:id/environment",
-    "description": "Get the sandbox environment of a Factory project: resources and its repositories in order",
+    "description": "Get the sandbox environment of a Factory project: provider settings and its repositories in order",
     "pathParams": [
       "id"
     ],
@@ -235,7 +235,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectEnvironmentUpdate",
     "method": "PATCH",
     "path": "/web/factory/projects/:id/environment",
-    "description": "Update the sandbox environment of a Factory project: resources, repository order and setup",
+    "description": "Update the sandbox environment of a Factory project: provider settings, repository order and setup",
     "pathParams": [
       "id"
     ],

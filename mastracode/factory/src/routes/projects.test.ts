@@ -696,7 +696,8 @@ describe('ProjectRoutes', () => {
       readonly settings = {
         type: 'object',
         properties: {
-          cpuCount: { type: 'integer', minimum: 1, maximum: 64 },
+          // A schema default is advertised to the UI and never written by factory (D8).
+          cpuCount: { type: 'integer', minimum: 1, maximum: 64, default: 2 },
           memoryMb: { type: 'integer', minimum: 512 },
         },
         additionalProperties: false,
@@ -853,6 +854,11 @@ describe('ProjectRoutes', () => {
         sandboxSettings: { cpuCount: 8, memoryMb: 1024 },
       });
 
+      // A key the user never set is absent even though the schema declares a default for it.
+      await patch(app, project.id, { settings: { cpuCount: null } });
+      expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ memoryMb: 1024 });
+      await patch(app, project.id, { settings: { cpuCount: 8 } });
+
       // null removes a key and hands it back to the provider default; an empty document is stored as null.
       const cleared = await patch(app, project.id, { settings: { cpuCount: null } });
       expect(cleared.status).toBe(200);
@@ -904,7 +910,11 @@ describe('ProjectRoutes', () => {
       const read = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as {
         environment: { sandbox: { provider: string }; settings: object };
       };
-      expect(read.environment.sandbox.provider).toBe('none');
+      expect(read.environment.sandbox).toEqual({
+        provider: 'none',
+        settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
+        capabilities: { template: false, builds: { available: false, history: false } },
+      });
       expect(read.environment.settings).toEqual({});
 
       const refused = await patch(app, project.id, { settings: { cpuCount: 2 } });
