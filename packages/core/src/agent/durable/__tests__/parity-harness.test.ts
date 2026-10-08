@@ -9,12 +9,16 @@ import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import type { PublicStructuredOutputOptions } from '../../types';
 import type {
   CapturedRequest,
+  EngineDifference,
   EngineObservation,
   EngineParityScenario,
   EngineRunResult,
+  ModelTape,
   ParityEngine,
+  ParityStreamOptions,
 } from './parity-harness';
 import {
   chunksOfType,
@@ -24,6 +28,7 @@ import {
   textOnlyTape,
   toolCallTape,
   normalizeRequest,
+  normalizePayload,
 } from './parity-harness';
 
 function systemText(request: CapturedRequest): string {
@@ -449,9 +454,10 @@ describe('expectEngineParity', () => {
       input: 'hi',
     });
     const observe = (r: EngineRunResult) => structuredClone({ turns: r.turns, requests: r.requests });
-    const finishIndex = (r: EngineRunResult) => r.turns[0]!.chunkTypes.indexOf('finish');
-    const stepStartIndex = (r: EngineRunResult) => r.turns[0]!.chunkTypes.indexOf('step-start');
-    const payloadAt = (r: EngineRunResult, index: number) =>
+    // These three read only `turns`, so they accept what `observe` returns.
+    const finishIndex = (r: EngineObservation) => r.turns[0]!.chunkTypes.indexOf('finish');
+    const stepStartIndex = (r: EngineObservation) => r.turns[0]!.chunkTypes.indexOf('step-start');
+    const payloadAt = (r: EngineObservation, index: number) =>
       r.turns[0]!.chunkPayloads[index] as Record<string, unknown>;
 
     expect(staleKnownDifferences('durable', observe(results.plain!), observe(results.durable!))).toEqual([]);
@@ -569,6 +575,470 @@ describe('expectEngineParity', () => {
     );
   });
 
+  /**
+   * A model that streams a little text and then fails. The engine surfaces the
+   * failure one way or another — an `error` chunk, a rejecting stream — and
+   * either way the turn is recorded and compared.
+   */
+  function failingTape(message: string): ModelTape {
+    return [
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id: 'parity-id-0', modelId: 'parity-model', timestamp: new Date(0) },
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'before the failure' },
+      { type: 'error', error: new Error(message) },
+    ];
+  }
+
+  function failingScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+    return {
+      model: { respond: () => failingTape('scripted model failure') },
+      buildAgent: ({ model }) =>
+        new Agent({ id: 'parity-failing', name: 'Parity Failing', instructions: 'Be brief', model }),
+      input: 'fail',
+      ...overrides,
+    };
+  }
+
+  it('records a run that fails mid-stream and compares it', async () => {
+    // The failure is compared rather than thrown out of the scenario. The
+    // wrapped engines re-emit the failure's chunks from workflow state, and the
+    // only payload difference left is the `type` key plain keeps on its error
+    // chunk, which `KNOWN_CHUNK_DIFFERENCES` declares — so the payloads are not
+    // ignored here, they are compared.
+    const results = await expectEngineParity(failingScenario());
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      // The chunks streamed before the failure are kept, so the turn is not empty.
+      expect(turn.chunks).toEqual([
+        'AGENT:start',
+        'AGENT:step-start',
+        'AGENT:text-start',
+        'AGENT:text-delta',
+        'AGENT:error',
+        'AGENT:step-finish',
+        'AGENT:finish',
+      ]);
+      expect(turn.streamedText).toBe('before the failure');
+      // `toStrictEqual` so a `stack` recorded as `undefined` would still fail: the
+      // contract is exactly name and message.
+      expect(turn.error).toStrictEqual({ name: 'Error', message: 'scripted model failure' });
+
+      // Every engine hands the same failure on, read the same way: plain sends
+      // the live `Error`, the wrapped engines its serialised form, and both
+      // compare as name and message. A `stack` — which would carry this
+      // machine's checkout path — is stripped on both.
+      const errorPayload = (turn.chunkPayloads[turn.chunks.indexOf('AGENT:error')] as { error?: unknown }).error;
+      expect(errorPayload).toStrictEqual({ name: 'Error', message: 'scripted model failure' });
+    }
+  });
+
+  it('compares the error when engines fail mid-stream with different messages', async () => {
+    const scenario = failingScenario({
+      model: { respond: request => failingTape(`failed: ${systemText(request)}`) },
+      buildAgent: ({ engine, model }) =>
+        new Agent({
+          id: 'parity-failing',
+          name: 'Parity Failing',
+          instructions: engine === 'durable' ? 'B' : 'A',
+          model,
+        }),
+      engines: ['plain', 'durable'],
+    });
+
+    await expect(expectEngineParity(scenario)).rejects.toThrow(
+      /durable differs from plain at turns\[0\]\.error\.message/,
+    );
+
+    // The failure is compared twice over — as `turn.error` and inside the error
+    // chunk's own payload. Declaring the first away must not make the second
+    // pass, or restoring `ignore: ['chunkPayloads']` on failed runs would leave
+    // this test green.
+    await expect(
+      expectEngineParity({
+        ...scenario,
+        differences: {
+          durable: { reason: 'self-test: compare the payload alone', ignore: ['error'] },
+        },
+      }),
+    ).rejects.toThrow(
+      /durable differs from its declared expectation at turns\[0\]\.chunkPayloads\[\d+\]\.error\.message/,
+    );
+  });
+
+  it('records a run whose stream() rejects before it streams anything', async () => {
+    const scenario = failingScenario({
+      model: { tapes: [textOnlyTape('never sent')] },
+      buildAgent: ({ model }) => new Agent({ id: 'parity-invalid-timeout', name: 'P', instructions: 'x', model }),
+      options: { modelSettings: { timeout: { stepMs: -1 } } },
+    });
+
+    // The run produced no chunks at all, so it only clears the
+    // "compared nothing on plain" guard because its error was recorded.
+    //
+    // The one difference left is the failure's class, and it is a real one, not
+    // a recording artifact: `stream()` rejects before the model is called, and
+    // plain surfaces the plain `Error` the argument validation raises while the
+    // wrapped engines surface a `TypeError` for the same input and the same
+    // message. That split is tracked as COR-1419. The declaration is narrowed to
+    // `error` alone — the assertions below still compare both classes and the
+    // message.
+    const preStreamClassReason =
+      'COR-1419: pre-stream rejection, same message, but plain reports `Error` where the wrapped engines report `TypeError`';
+    const results = await expectEngineParity({
+      ...scenario,
+      differences: {
+        durable: { reason: preStreamClassReason, ignore: ['error'] },
+        evented: { reason: preStreamClassReason, ignore: ['error'] },
+      },
+    });
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(turn.chunks).toEqual([]);
+      // Same message on every engine; only the class differs. Asserted here for
+      // each engine rather than for plain and durable alone, so the declaration
+      // above cannot hide an evented that drifts to another message or class.
+      expect(turn.error?.message).toBe(results.plain!.turns[0]!.error?.message);
+      expect(turn.error).toStrictEqual({
+        name: engine === 'plain' ? 'Error' : 'TypeError',
+        message: turn.error!.message,
+      });
+      // Rejected before the model was ever called on any engine.
+      expect(results[engine]!.requests).toHaveLength(0);
+    }
+    // And the message is the settings validation's, not something else that
+    // happens to match across engines.
+    expect(results.plain!.turns[0]!.error?.message).toMatch(/modelSettings\.timeout/);
+
+    await expect(expectEngineParity(scenario)).rejects.toThrow(/durable differs from plain at turns\[0\]\.error\.name/);
+  });
+
+  const FLAT_SCHEMA = z.object({ reply: z.string(), number: z.number() });
+  const PARSED = { reply: 'hi', number: 7 };
+
+  /**
+   * The two ways the wrapped engines' structured-output chunks differ from
+   * plain's (both COR-1390, both pre-existing): they emit `object-result` after
+   * `step-finish` and `finish` rather than before them, and their `step-finish`
+   * payload does not carry the parsed object. Declaring both as the expectation
+   * keeps every parsed value itself compared.
+   */
+  function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation {
+    return {
+      requests: plain.requests,
+      turns: plain.turns.map(turn => {
+        const objectIndex = turn.chunkTypes.indexOf('object-result');
+        if (objectIndex < 0) return turn;
+        const move = <T>(list: T[]): T[] => [
+          ...list.slice(0, objectIndex),
+          ...list.slice(objectIndex + 1),
+          list[objectIndex]!,
+        ];
+        const chunkTypes = move(turn.chunkTypes);
+        const chunkPayloads = move(turn.chunkPayloads);
+        const stepFinish = chunkTypes.indexOf('step-finish');
+        const payload = chunkPayloads[stepFinish] as { output?: Record<string, unknown> } | undefined;
+        if (payload?.output && 'object' in payload.output) {
+          const output = { ...payload.output };
+          delete output.object;
+          chunkPayloads[stepFinish] = { ...payload, output };
+        }
+        return { ...turn, chunks: move(turn.chunks), chunkTypes, chunkPayloads };
+      }),
+    };
+  }
+
+  const DECLARE_OBJECT_CHUNKS = {
+    durable: {
+      reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+      expect: declareWrappedObjectChunks,
+    },
+    evented: {
+      reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+      expect: declareWrappedObjectChunks,
+    },
+  };
+
+  function structuredScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+    return {
+      model: { respond: () => textOnlyTape(JSON.stringify(PARSED)) },
+      buildAgent: ({ model }) =>
+        new Agent({ id: 'parity-structured', name: 'Parity Structured', instructions: 'Be brief', model }),
+      input: 'structured',
+      // Plain and durable declare `structuredOutput` differently, which is why
+      // the harness leaves it out of `ParityStreamOptions`: a scenario that needs
+      // it widens the option type where it builds them.
+      options: { structuredOutput: { schema: FLAT_SCHEMA } } as ParityStreamOptions & {
+        structuredOutput?: PublicStructuredOutputOptions<any>;
+      },
+      ...overrides,
+    };
+  }
+
+  it('records the structured output a run parsed, and compares it', async () => {
+    const results = await expectEngineParity(structuredScenario({ differences: DECLARE_OBJECT_CHUNKS }));
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(turn.fullOutput.object).toEqual(PARSED);
+
+      const index = turn.chunkTypes.indexOf('object-result');
+      expect(index).toBeGreaterThanOrEqual(0);
+      // The parsed value rides the chunk itself, not its payload, so recording
+      // the payload alone would have thrown the value away.
+      expect(turn.chunkPayloads[index]).toEqual({ object: PARSED });
+      expect(turn.chunkPayloads[turn.chunkTypes.indexOf('object')]).toEqual({ object: PARSED });
+    }
+
+    // The order difference the declaration above covers is real, on both sides.
+    const plainTypes = results.plain!.turns[0]!.chunkTypes;
+    expect(plainTypes.indexOf('object-result')).toBeLessThan(plainTypes.indexOf('step-finish'));
+    expect(results.durable!.turns[0]!.chunkTypes.at(-1)).toBe('object-result');
+  });
+
+  it('fails when engines parse different objects', async () => {
+    const error = await expectEngineParity(
+      structuredScenario({
+        // The model answers with its instructions, which is the only lever a
+        // scenario has to make one engine parse a different object.
+        model: { respond: request => textOnlyTape(JSON.stringify({ reply: systemText(request), number: 7 })) },
+        buildAgent: ({ engine, model }) =>
+          new Agent({
+            id: 'parity-structured',
+            name: 'Parity Structured',
+            instructions: engine === 'durable' ? 'B' : 'A',
+            model,
+          }),
+        engines: ['plain', 'durable'],
+        differences: {
+          durable: DECLARE_OBJECT_CHUNKS.durable,
+        },
+      }),
+    ).catch((e: Error) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    // Both places the parsed value is recorded report the divergence: the
+    // structured-output chunk's payload and `getFullOutput()`.
+    expect(message).toMatch(/chunkPayloads\[\d+\]\.object\.reply/);
+    expect(message).toMatch(/fullOutput\.object\.reply/);
+    expect(message).toContain('"B"');
+  });
+
+  function generateScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
+    return {
+      model: { tapes: [textOnlyTape('Generated.')] },
+      buildAgent: ({ model }) =>
+        new Agent({ id: 'parity-generate', name: 'Parity Generate', instructions: 'Be brief', model }),
+      run: async handle => {
+        await handle.generate('generate this');
+      },
+      ...overrides,
+    };
+  }
+
+  it('runs a generate() turn on all three engines and compares it', async () => {
+    const results = await expectEngineParity(generateScenario());
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      // A generate call has no stream, so the turn is compared through the
+      // output the caller receives rather than through chunks.
+      expect(turn.generate).toBe(true);
+      expect(turn.chunks).toEqual([]);
+      expect(turn.text).toBe('Generated.');
+      expect(turn.fullOutput.text).toBe('Generated.');
+      expect(turn.fullOutput.finishReason).toBe('stop');
+      expect(turn.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+
+      // The request the model received is what makes a generate turn comparable
+      // at all: it is the only thing both engines must have sent identically.
+      expect(results[engine]!.requests).toHaveLength(1);
+      expect(lastUserText(results[engine]!.requests[0]!)).toBe('generate this');
+    }
+  });
+
+  it('fails when engines generate different text', async () => {
+    const error = await expectEngineParity(
+      generateScenario({
+        buildAgent: ({ engine, model }) =>
+          new Agent({
+            id: 'parity-generate',
+            name: 'Parity Generate',
+            instructions: engine === 'durable' ? 'B' : 'A',
+            model,
+          }),
+        model: { respond: request => textOnlyTape(`Generated by ${systemText(request)}.`) },
+        engines: ['plain', 'durable'],
+      }),
+    ).catch((e: Error) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('durable differs from plain at turns[0].text');
+  });
+
+  it('records a generate() call that rejects', async () => {
+    // Without `maxRetries: 0` the model call is retried, which is a retry-policy
+    // difference the failed-run case is not about.
+    const stopRetrying = async (handle: { generate: (m: string, o?: ParityStreamOptions) => Promise<unknown> }) => {
+      await handle.generate('generate this', { modelSettings: { maxRetries: 0 } } as ParityStreamOptions);
+    };
+    const cases = [
+      {
+        name: 'Error',
+        message: 'scripted generate failure',
+        scenario: generateScenario({
+          model: {
+            respond: () => {
+              throw new Error('scripted generate failure');
+            },
+          },
+          run: stopRetrying,
+        }),
+      },
+      {
+        // A tape that ends in an error part fails a streaming run, so it fails a
+        // generate call too rather than reporting a success the run never had.
+        name: 'Error',
+        message: 'scripted tape failure',
+        scenario: generateScenario({
+          model: { tapes: [failingTape('scripted tape failure')] },
+          run: stopRetrying,
+        }),
+      },
+      {
+        // The same tape with the failure in the serialised shape the wrapped
+        // engines hand back: it keeps its name and message instead of collapsing
+        // to `'[object Object]'` on the way out.
+        name: 'TypeError',
+        message: 'scripted serialised failure',
+        scenario: generateScenario({
+          model: {
+            tapes: [
+              [
+                { type: 'stream-start', warnings: [] },
+                { type: 'error', error: { name: 'TypeError', message: 'scripted serialised failure' } },
+              ] as ModelTape,
+            ],
+          },
+          run: stopRetrying,
+        }),
+      },
+    ];
+
+    for (const { name, message, scenario } of cases) {
+      const results = await expectEngineParity(scenario);
+
+      for (const engine of ENGINES) {
+        const turn = results[engine]!.turns[0]!;
+        // A rejected generate() is an observation, not a reason to abort: the
+        // same failure on every engine is parity.
+        expect(turn.generate).toBe(true);
+        expect(turn.error).toStrictEqual({ name, message });
+        // The request is still recorded, so a failure does not hide what was sent.
+        expect(results[engine]!.requests).toHaveLength(1);
+      }
+    }
+  });
+
+  /**
+   * One deferred tool call, then text. The tool is eligible and the agent
+   * defers it, so it only runs in the background when the host manages tasks
+   * and its workers are up — which is what `host` turns on. `executions` counts
+   * how many times the tool really ran on each engine, which the assertions use
+   * because plain's loop does not wait for the background run here.
+   */
+  function backgroundScenario(
+    overrides: Partial<EngineParityScenario> = {},
+    executions?: Partial<Record<ParityEngine, number>>,
+  ): EngineParityScenario {
+    return {
+      model: { tapes: [toolCallTape('research', { topic: 'AI' }), textOnlyTape('Done.')] },
+      buildAgent: ({ engine, model }) =>
+        new Agent({
+          id: 'parity-background',
+          name: 'Parity Background',
+          instructions: 'Be brief',
+          model,
+          tools: {
+            research: createTool({
+              id: 'research',
+              description: 'Research a topic',
+              inputSchema: z.object({ topic: z.string() }),
+              execute: async ({ topic }) => {
+                if (executions) executions[engine] = (executions[engine] ?? 0) + 1;
+                return { summary: `Research on ${topic}` };
+              },
+              background: { enabled: true },
+            }),
+          },
+          backgroundTasks: { tools: { research: true } },
+        }),
+      input: 'Research AI',
+      options: { maxSteps: 3 },
+      ...overrides,
+    };
+  }
+
+  it('dispatches a deferred tool in the background when the scenario enables it, and not otherwise', async () => {
+    // A deferred dispatch is only comparable with the chunk and result fields
+    // declared: the wrapped engines stream an extra `background-task-progress`
+    // and flush the completed result after `step-finish`, where plain keeps the
+    // dispatch placeholder.
+    const difference: EngineDifference = {
+      reason:
+        'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish ' +
+        'where plain keeps the placeholder; taskId is a per-engine stubbed UUID.',
+      ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'toolResults', 'requests', 'finishChunk'],
+    };
+    const withHostExecutions: Partial<Record<ParityEngine, number>> = {};
+    const withHost = await expectEngineParity(
+      backgroundScenario(
+        {
+          host: { backgroundTasks: { enabled: true } },
+          differences: { durable: difference, evented: difference },
+        },
+        withHostExecutions,
+      ),
+    );
+
+    for (const engine of ENGINES) {
+      const turn = withHost[engine]!.turns[0]!;
+      // The task finishes before the loop's wait step arms, so no
+      // `background-task-completed` chunk is emitted on any engine: the proof a
+      // dispatch really went to the background is this `-started` chunk plus the
+      // result shape below, not a wait for completion.
+      expect(turn.chunkTypes).toContain('background-task-started');
+      expect(turn.text).toBe('Done.');
+      if (engine === 'plain') {
+        // Plain hands the model the dispatch placeholder and keeps going.
+        expect(turn.toolResults[0]!.result).toEqual(expect.stringContaining('running in the background'));
+      } else {
+        expect(turn.toolResults).toEqual([
+          { toolCallId: 'parity-call-1', toolName: 'research', result: { summary: 'Research on AI' } },
+        ]);
+      }
+      // The tool itself ran on every engine, so the dispatch above really
+      // executed — including plain, whose loop moves on without waiting for it.
+      expect(withHostExecutions[engine]).toBe(1);
+    }
+
+    // Without the host the same script degrades to a foreground call, so the
+    // scenario above would pass vacuously. This pins that.
+    const withoutHostExecutions: Partial<Record<ParityEngine, number>> = {};
+    const withoutHost = await expectEngineParity(backgroundScenario({}, withoutHostExecutions));
+
+    for (const engine of ENGINES) {
+      const turn = withoutHost[engine]!.turns[0]!;
+      expect(turn.chunkTypes.filter(t => t.startsWith('background-task'))).toEqual([]);
+      expect(turn.chunks).toContain('AGENT:tool-result:research');
+      expect(turn.text).toBe('Done.');
+      expect(withoutHostExecutions[engine]).toBe(1);
+    }
+  });
+
   it('normalizes only message createdAt stamps and an unset includeRawChunks', () => {
     const stamped = (createdAt: number) => ({ mastra: { createdAt, keep: 1 } });
     const request = (createdAt: number, includeRawChunks?: boolean, toolOutput: unknown = 'out'): CapturedRequest =>
@@ -599,6 +1069,49 @@ describe('expectEngineParity', () => {
     // createdAt inside content the model sees is real data, not a Mastra stamp.
     const nested = (createdAt: number) => ({ providerOptions: { mastra: { createdAt } } });
     expect(normalizeRequest(request(1, false, nested(1)))).not.toEqual(normalizeRequest(request(1, false, nested(2))));
+  });
+
+  it('drops an error stack but keeps a stack an application owns', () => {
+    // An `error` chunk's payload is the failure itself, and the stack it carries
+    // embeds the absolute checkout path: dropped where the payload is known to
+    // be a failure.
+    expect(
+      normalizePayload({ error: { name: 'Error', message: 'boom', stack: 'at /checkout/src/x.ts:1' } }, [], true),
+    ).toEqual({ error: { name: 'Error', message: 'boom' } });
+
+    // Everywhere else a `stack` is the application's data. Dropping it by key
+    // name would have made the two cases below compare equal.
+    const result = { name: 'deployment', message: 'ready', stack: ['a', 'b'] };
+    expect(normalizePayload(result)).toEqual(result);
+    expect(normalizePayload({ stack: 'a' })).not.toEqual(normalizePayload({ stack: 'b' }));
+  });
+
+  it('reads a live Error as the name and message a serialised one carries', () => {
+    // Plain hands a failure on as the `Error` itself; the wrapped engines hand
+    // on `{ name, message, stack }`. Both have to record the same thing, or the
+    // failure this harness now compares is a recording artifact rather than an
+    // engine difference.
+    const thrown = new Error('boom');
+    const serialised = { name: 'Error', message: 'boom', stack: thrown.stack };
+
+    expect(normalizePayload(thrown)).toEqual({ name: 'Error', message: 'boom' });
+    expect(normalizePayload(thrown, [], true)).toEqual(normalizePayload(serialised, [], true));
+    // The class is compared too, so a `TypeError` never passes for an `Error`.
+    expect(normalizePayload(new TypeError('boom'))).toEqual({ name: 'TypeError', message: 'boom' });
+
+    // Reading name and message must not cost the properties an application put
+    // on the error: those are enumerable, so they used to be recorded, and two
+    // errors differing only in one of them have to stay different.
+    const coded = Object.assign(new Error('boom'), { code: 'ETIMEDOUT' });
+    expect(normalizePayload(coded)).toEqual({ name: 'Error', message: 'boom', code: 'ETIMEDOUT' });
+    expect(normalizePayload(coded)).not.toEqual(normalizePayload(Object.assign(new Error('boom'), { code: 'OTHER' })));
+
+    // Following those properties has to stay cycle-safe: the error itself joins
+    // the ancestry before they are read, so an error that carries itself is
+    // recorded once rather than recursed into forever.
+    const selfReferential = Object.assign(new Error('boom'), { cause: undefined as unknown });
+    selfReferential.cause = selfReferential;
+    expect(normalizePayload(selfReferential)).toEqual({ name: 'Error', message: 'boom', cause: '[circular]' });
   });
 
   it('runs a suspension and a resume on all three engines', async () => {

@@ -452,7 +452,7 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a basic example that converts all input text in spans to lowercase:
 
 ```ts title="src/processors/lowercase-input-processor.ts"
-import type { SpanOutputProcessor, AnySpan } from '@mastra/observability'
+import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability'
 
 export class LowercaseInputProcessor implements SpanOutputProcessor {
   name = 'lowercase-processor'
