@@ -4,8 +4,8 @@
 
 `@mastra/core/workspace` exports the `FactorySandbox` host contract: one object a factory host hands over that owns the session sandbox constructor, the repo template factory, a schema of user-tunable settings and an optional `builds` capability.
 
-- `FactorySandbox` interface, `FactorySandboxContext`, `FactoryRepositoryAccess` and the build types
-- `FactorySandbox` sets the `Symbol.for('mastra.factory.sandbox')` brand; `isFactorySandbox` detects it
+- `FactorySandbox` abstract class, `FactorySandboxContext`, `FactoryRepositoryAccess` and the build types
+- The base class sets the `Symbol.for('mastra.factory.sandbox')` brand; `isFactorySandbox` detects it
 - `describeFactorySandbox` turns the settings schema (zod, JSON Schema or Standard Schema) into JSON Schema and reports `template` and `builds` capabilities
 
 ```ts
