@@ -104,10 +104,11 @@ describe('durable tool-call provider-tool fallback', () => {
     };
     vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(mastraTool as any);
 
-    // Run registry has no matching tool — resolveTool() should be consulted.
+    // A cold worker has only a placeholder entry, so the Mastra-wide fallback remains available.
     globalRunRegistry.set(RUN_ID, {
+      isPlaceholder: true,
       tools: {},
-      model: {} as any,
+      model: undefined as any,
     } as any);
 
     const step = createDurableToolCallStep();
@@ -143,8 +144,9 @@ describe('durable tool-call provider-tool fallback', () => {
     vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(undefined as any);
 
     globalRunRegistry.set(RUN_ID, {
+      isPlaceholder: true,
       tools: {},
-      model: {} as any,
+      model: undefined as any,
     } as any);
 
     const step = createDurableToolCallStep();

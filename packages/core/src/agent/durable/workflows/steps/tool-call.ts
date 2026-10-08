@@ -445,6 +445,12 @@ export function createDurableToolCallStep() {
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
       const registryEntry = globalRunRegistry.get(runId);
+      const registryModel = registryEntry?.model as { __metadataOnly?: boolean } | undefined;
+      const hasAuthoritativeToolSnapshot =
+        !!registryEntry &&
+        registryEntry.isPlaceholder !== true &&
+        !!registryModel &&
+        registryModel.__metadataOnly !== true;
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
@@ -505,7 +511,7 @@ export function createDurableToolCallStep() {
       // threadId regardless. Without this guard every tool call on a memoryless durable run would
       // pay for a full rebuild to obtain something that can neither exist nor be used.
       const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
-      if ((!tool || needsSaveQueueForFlush) && mastra) {
+      if (((!tool && !hasAuthoritativeToolSnapshot) || needsSaveQueueForFlush) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
@@ -524,13 +530,15 @@ export function createDurableToolCallStep() {
           rebuiltRequestContext = rebuilt.requestContext;
           // Keep an already-resolved tool: we may have rebuilt purely to obtain the
           // SaveQueueManager, and the registry's instance is the live per-request closure.
-          if (!tool) {
+          // A hydrated registry's per-step snapshot is authoritative, so a tool omitted
+          // from it must not be restored from the agent's full toolset.
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = rebuiltTools[toolName] as typeof tool;
           }
-          if (!tool) {
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = findProviderToolByName(rebuiltTools as any, toolName) as typeof tool;
           }
-          if (!tool) {
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = Object.values(rebuiltTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
@@ -538,14 +546,16 @@ export function createDurableToolCallStep() {
         }
       }
 
-      // Mastra-wide lookup runs only after the owning agent's tools (registry or
-      // rebuild) miss: tool ids are not unique across agents, so a global lookup
-      // first could execute another agent's same-id tool on a cold worker.
-      if (!tool) {
+      // Mastra-wide lookup runs only after a cold worker's rebuilt agent tools
+      // miss: tool ids are not unique across agents, so a global lookup first
+      // could execute another agent's same-id tool. A hydrated registry's
+      // per-step snapshot is authoritative and must not fall back to this full
+      // catalog when prepareStep or an input processor omitted a tool.
+      if (!tool && !hasAuthoritativeToolSnapshot) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && mastra) {
+      if (!tool && !hasAuthoritativeToolSnapshot && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
@@ -575,7 +585,11 @@ export function createDurableToolCallStep() {
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
 
       if (!tool || isHiddenByActiveTools) {
-        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
+        const availableToolNames =
+          effectiveActiveTools ??
+          Object.keys(
+            hasAuthoritativeToolSnapshot ? (registryEntry?.tools ?? {}) : (rebuiltTools ?? registryEntry?.tools ?? {}),
+          );
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
