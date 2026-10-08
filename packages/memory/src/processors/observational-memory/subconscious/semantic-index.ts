@@ -3,8 +3,11 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
+  SearchKnowledgeResult,
 } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScopeIds, isKnowledgeScopeVisible } from '@mastra/core/storage';
+
+export type KnowledgeSemanticSearchResult = SearchKnowledgeResult & { score: number };
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -67,7 +70,7 @@ export class KnowledgeSemanticIndexCoordinator {
     return draining;
   }
 
-  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10) {
+  async search(query: string, scopeIds: KnowledgeScopeIds, limit = 10): Promise<KnowledgeSemanticSearchResult[]> {
     await this.drain(scopeIds);
     const result = await this.#embedder.doEmbed({
       values: [query],
@@ -98,9 +101,54 @@ export class KnowledgeSemanticIndexCoordinator {
       const existing = deduped.get(candidate.id);
       if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
     }
-    return [...deduped.values()]
+    const ranked = [...deduped.values()]
       .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
       .slice(0, limit);
+    const results = await Promise.all(ranked.map(candidate => this.#toSearchResult(candidate, scopeIds)));
+    return results.filter((result): result is KnowledgeSemanticSearchResult => result !== null);
+  }
+
+  // Shape semantic hits like lexical SearchKnowledgeResult so callers can join on type + id.
+  async #toSearchResult(
+    candidate: { id: string; score: number; metadata?: Record<string, unknown> },
+    scopeIds: KnowledgeScopeIds,
+  ): Promise<KnowledgeSemanticSearchResult | null> {
+    const type = candidate.metadata?.document_type;
+    if (type === 'node') {
+      const node = await this.#knowledge.getNode(candidate.id.slice('knowledge:node:'.length));
+      if (!node) return null;
+      const nodeScopeIds = await this.#knowledge.getNodeScopeIds(node.id);
+      if (!isKnowledgeScopeVisible(nodeScopeIds, scopeIds)) return null;
+      return {
+        type: 'node',
+        id: node.id,
+        recordId: node.id,
+        name: node.name,
+        text: String(candidate.metadata?.text ?? node.name),
+        scopeIds: nodeScopeIds,
+        score: candidate.score,
+      };
+    }
+    if (type === 'record') {
+      const record = await this.#knowledge.getRecord({ id: candidate.id.slice('knowledge:record:'.length) });
+      if (!record) return null;
+      const recordScopeIds = await this.#knowledge.getRecordScopeIds(record.id);
+      if (!isKnowledgeScopeVisible(recordScopeIds, scopeIds)) return null;
+      const node = await this.#knowledge.getNode(record.nodeId);
+      const nodeVisible = node
+        ? isKnowledgeScopeVisible(await this.#knowledge.getNodeScopeIds(node.id), scopeIds)
+        : false;
+      return {
+        type: 'record',
+        id: record.id,
+        recordId: nodeVisible ? node!.id : record.id,
+        name: nodeVisible ? node!.name : '(private node)',
+        text: record.text,
+        scopeIds: recordScopeIds,
+        score: candidate.score,
+      };
+    }
+    return null;
   }
 
   async #drain(scopeIds?: KnowledgeScopeIds): Promise<number> {

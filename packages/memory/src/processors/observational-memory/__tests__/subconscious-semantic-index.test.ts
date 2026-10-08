@@ -219,3 +219,40 @@ describe('knowledge semantic index lost claims', () => {
     expect(indexed.get(`knowledge:node:${node.id}`)).toBe('Version two');
   });
 });
+
+describe('knowledge semantic search hit shape', () => {
+  it('returns hits joinable with lexical search results', async () => {
+    const { store, scopeIds, coordinator, upserts } = await fixture();
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    await store.createRecord({ node, text: 'Atlas ships in March', scopeIds });
+    await coordinator.drain(scopeIds);
+    const indexed = upserts.flatMap(batch => batch.ids.map((id, index) => ({ id, metadata: batch.metadata[index]! })));
+    const queryable = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector: {
+        ...createFakes().vector,
+        listIndexes: async () => ['knowledge_documents_dimension_3'],
+        query: async () => indexed.map(hit => ({ ...hit, score: 0.5 })),
+      },
+      embedder: createFakes().embedder,
+    });
+
+    const semantic = await queryable.search('Atlas', scopeIds);
+    const lexical = await store.search({ query: 'Atlas', scopeIds });
+
+    expect(lexical.length).toBeGreaterThan(0);
+    const joinKey = ({ type, id, recordId, name, scopeIds }: (typeof lexical)[number]) => ({
+      type,
+      id,
+      recordId,
+      name,
+      scopeIds,
+    });
+    for (const hit of lexical) {
+      expect(semantic.map(joinKey)).toContainEqual(joinKey(hit));
+    }
+    for (const hit of semantic) {
+      expect(hit).toEqual({ ...joinKey(hit), text: expect.any(String), score: 0.5 });
+    }
+  });
+});
