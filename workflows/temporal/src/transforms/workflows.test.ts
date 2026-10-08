@@ -19,6 +19,33 @@ async function transform(source: string): Promise<string> {
 }
 
 describe('workflow transform', () => {
+  it.each([
+    '...{ retry: { maximumAttempts: 5 } }',
+    '...{ ...{ retry: { maximumAttempts: 5 } } }',
+    'retry: { maximumAttempts: 0 }, ...{ retry: { maximumAttempts: 5 } }',
+    '...{ retry: { maximumAttempts: 0 } }, retry: { maximumAttempts: 5 }',
+  ])('preserves retry options and override order from inline spreads: %s', async options => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ${options} });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(/createWorkflow\('weather-workflow',\s*\{\s*retry: \{\s*maximumAttempts: 5\s*\}\s*\}\)/);
+    expect(result).not.toContain('maximumAttempts: 0');
+  });
+
+  it('rejects unresolved init option spreads rather than dropping activity retries', async () => {
+    await expect(
+      transform(`
+        import { init } from '@mastra/temporal';
+        const options = { retry: { maximumAttempts: 5 } };
+        const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ...options });
+        export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+      `),
+    ).rejects.toThrow('Provide retry and startToCloseTimeout directly in init() instead.');
+  });
+
   it.each([true, false])('injects activity retries with configured timeout: %s', async withTimeout => {
     const result = await transform(`
       import { init } from '@mastra/temporal';
