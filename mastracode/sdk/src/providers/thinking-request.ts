@@ -44,7 +44,7 @@ const OPENROUTER_FORMAT: ThinkingRequestFormat = {
 const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>> = {
   deepseek: {
     optionsKey: 'deepseek',
-    effort: { acceptedLevels: ['low', 'medium', 'high', 'xhigh', 'max'], toOptions: sendReasoningEffort },
+    effort: { acceptedLevels: ['low', 'high', 'max'], toOptions: sendReasoningEffort },
     toggle: enabled => ({ thinking: { type: enabled ? 'enabled' : 'disabled' } }),
   },
   openrouter: OPENROUTER_FORMAT,

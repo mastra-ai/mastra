@@ -48,9 +48,9 @@ import {
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import {
-  ModelRouterLanguageModelWithProviderOptions,
+  ModelRouterLanguageModelWithThinking,
   providerThinkingOptions,
-  withDefaultProviderOptionsModel,
+  withThinkingOptionsModel,
 } from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
@@ -541,7 +541,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (args.providerId === 'xai' && this.#credentials.get('xai')?.type === 'oauth') {
-      return withDefaultProviderOptionsModel(
+      return withThinkingOptionsModel(
         xaiProvider(args.modelId, { headers: args.headers, authStorage: this.#credentials }),
         providerThinkingOptions(`xai/${args.modelId}`, this.#thinkingLevel),
       );
@@ -554,7 +554,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     if (this.#routeThroughMastraGateway) {
       const gatewayModel = this.#mastraGateway.resolveLanguageModel(args);
       if (gatewayModel.specificationVersion !== 'v3') return gatewayModel;
-      return withDefaultProviderOptionsModel(
+      return withThinkingOptionsModel(
         gatewayModel,
         providerThinkingOptions(`${MASTRA_GATEWAY_PREFIX}${args.providerId}/${args.modelId}`, this.#thinkingLevel),
       );
@@ -569,7 +569,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     const routedModelId: `${string}/${string}` = `${args.providerId}/${args.modelId}`;
-    return new ModelRouterLanguageModelWithProviderOptions(
+    return new ModelRouterLanguageModelWithThinking(
       { id: routedModelId, apiKey: args.apiKey, headers: args.headers },
       providerThinkingOptions(routedModelId, this.#thinkingLevel),
     ) as unknown as GatewayLanguageModel;

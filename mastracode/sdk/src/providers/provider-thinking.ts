@@ -4,45 +4,61 @@ import type { JSONValue } from 'ai';
 import { runThinkingLevel } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { thinkingRequestFor } from './thinking-request.js';
+import type { ThinkingProviderOptions } from './thinking-request.js';
 
 type ProviderOptions = Record<string, Record<string, JSONValue | undefined>>;
+
+export interface ProviderThinkingOptions {
+  optionsKey: string;
+  options: ThinkingProviderOptions;
+  controlKeys: ReadonlySet<string>;
+}
 
 export function providerThinkingOptions(
   routedModelId: string,
   level: ThinkingLevelSetting | undefined,
-): ProviderOptions | undefined {
+): ProviderThinkingOptions | undefined {
   if (!level) return undefined;
   const reasoningOptions = getModelReasoningOptions(routedModelId);
   const request = thinkingRequestFor(routedModelId, reasoningOptions);
   if (!request) return undefined;
   const options = request.optionsByLevel.get(runThinkingLevel(routedModelId, level, reasoningOptions));
-  return options && { [request.optionsKey]: options };
+  if (!options) return undefined;
+  const controlKeys = new Set(
+    [...request.optionsByLevel.values()].flatMap(levelOptions => Object.keys(levelOptions ?? {})),
+  );
+  return { optionsKey: request.optionsKey, options, controlKeys };
 }
 
-function withDefaultProviderOptions<CallOptions extends { providerOptions?: ProviderOptions }>(
+function withThinkingOptions<CallOptions extends { providerOptions?: ProviderOptions }>(
   callOptions: CallOptions,
-  defaults: ProviderOptions | undefined,
+  thinking: ProviderThinkingOptions | undefined,
 ): CallOptions {
-  if (!defaults) return callOptions;
-  const providerOptions: ProviderOptions = { ...callOptions.providerOptions };
-  for (const [key, options] of Object.entries(defaults)) {
-    providerOptions[key] = { ...options, ...callOptions.providerOptions?.[key] };
-  }
-  return { ...callOptions, providerOptions };
+  if (!thinking) return callOptions;
+  const callerOptions = callOptions.providerOptions?.[thinking.optionsKey] ?? {};
+  const callerSetThinking = Object.keys(callerOptions).some(key => thinking.controlKeys.has(key));
+  if (callerSetThinking) return callOptions;
+  return {
+    ...callOptions,
+    providerOptions: {
+      ...callOptions.providerOptions,
+      [thinking.optionsKey]: { ...callerOptions, ...thinking.options },
+    },
+  };
 }
 
 type AiSdkLanguageModel = Parameters<typeof wrapLanguageModel>[0]['model'];
 
-export function withDefaultProviderOptionsModel(
+export function withThinkingOptionsModel(
   model: AiSdkLanguageModel,
-  defaults: ProviderOptions | undefined,
+  thinking: ProviderThinkingOptions | undefined,
 ): AiSdkLanguageModel {
-  if (!defaults) return model;
+  if (!thinking) return model;
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: 'v3',
-      transformParams: async ({ params }) => withDefaultProviderOptions(params, defaults),
+      transformParams: async ({ params }) => withThinkingOptions(params, thinking),
     },
   });
 }
@@ -51,19 +67,19 @@ type RouterConfig = ConstructorParameters<typeof ModelRouterLanguageModel>[0];
 type RouterCallOptions = Parameters<ModelRouterLanguageModel['doStream']>[0];
 type RouterCallResult = ReturnType<ModelRouterLanguageModel['doStream']>;
 
-export class ModelRouterLanguageModelWithProviderOptions extends ModelRouterLanguageModel {
-  readonly #defaultProviderOptions: ProviderOptions | undefined;
+export class ModelRouterLanguageModelWithThinking extends ModelRouterLanguageModel {
+  readonly #thinking: ProviderThinkingOptions | undefined;
 
-  constructor(config: RouterConfig, defaultProviderOptions: ProviderOptions | undefined) {
+  constructor(config: RouterConfig, thinking: ProviderThinkingOptions | undefined) {
     super(config);
-    this.#defaultProviderOptions = defaultProviderOptions;
+    this.#thinking = thinking;
   }
 
   override doGenerate(options: RouterCallOptions): RouterCallResult {
-    return super.doGenerate(withDefaultProviderOptions(options, this.#defaultProviderOptions));
+    return super.doGenerate(withThinkingOptions(options, this.#thinking));
   }
 
   override doStream(options: RouterCallOptions): RouterCallResult {
-    return super.doStream(withDefaultProviderOptions(options, this.#defaultProviderOptions));
+    return super.doStream(withThinkingOptions(options, this.#thinking));
   }
 }
