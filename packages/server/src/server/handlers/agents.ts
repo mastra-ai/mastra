@@ -1985,6 +1985,10 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
  * `wake` output stream instead.
  */
 function handleSignalRoutingError(error: unknown, defaultMessage: string): never {
+  // Same response as validateThreadOwnership; never echo the resource ids in the core error.
+  if (error instanceof MastraError && error.id === 'AGENT_MEMORY_THREAD_RESOURCE_MISMATCH') {
+    throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
+  }
   if (
     error instanceof MastraError &&
     error.category === ErrorCategory.USER &&
@@ -2078,6 +2082,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       if (runId) {
         const result = await agent.sendSignal(agentSignal, {
           runId,
+          requestContext: serverRequestContext,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
@@ -2101,6 +2106,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       const result = await agent.sendSignal(agentSignal, {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        requestContext: serverRequestContext,
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
@@ -2180,6 +2186,7 @@ async function handleAgentMessageRoute({
   if (runId) {
     const result = await agent[methodName](message, {
       runId,
+      requestContext: serverRequestContext,
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
@@ -2198,6 +2205,7 @@ async function handleAgentMessageRoute({
   const result = await agent[methodName](message, {
     resourceId: effectiveResourceId,
     threadId: effectiveThreadId,
+    requestContext: serverRequestContext,
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
   } as any);
