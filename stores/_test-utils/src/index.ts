@@ -4,6 +4,7 @@ export * from './domains/observability-vnext';
 export * from './domains/memory/messages-list-include-resource-scope';
 export * from './domains/knowledge';
 export * from './domains/datasets/fidelity';
+export * from './domains/datasets/snapshots';
 export * from './vector-factory';
 export * from './config-validation';
 export * from './client-acceptance';
