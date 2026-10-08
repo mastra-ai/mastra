@@ -73,6 +73,8 @@ export interface ThinkingLevelPickerProps<T extends string> {
   /** Disables the trigger and explains why in its tooltip, e.g. when the model cannot think. */
   unavailableReason?: string;
   description?: ReactNode;
+  origin?: string;
+  footer?: ReactNode;
   onChange: (value: T) => void | Promise<unknown>;
 }
 
@@ -82,13 +84,16 @@ export function ThinkingLevelPicker<T extends string>({
   label,
   unavailableReason,
   description,
+  origin,
+  footer,
   onChange,
 }: ThinkingLevelPickerProps<T>) {
   if (unavailableReason) {
     return <ThinkingLevelUnavailable options={options} label={label} reason={unavailableReason} />;
   }
 
-  const triggerLabel = `${label}: ${options.find(option => option.value === value)?.label ?? value}`;
+  const levelLabel = options.find(option => option.value === value)?.label ?? value;
+  const triggerLabel = origin ? `${label}: ${levelLabel} · ${origin}` : `${label}: ${levelLabel}`;
 
   return (
     <Popover>
@@ -102,6 +107,7 @@ export function ThinkingLevelPicker<T extends string>({
             {description}
           </Txt>
         ) : null}
+        {footer}
       </PopoverContent>
     </Popover>
   );

@@ -3,7 +3,7 @@ import {
   resolveDefaultThinkingLevel,
   runThinkingLevel,
 } from '@mastra/code-sdk/thinking';
-import type { ThinkingDefaults, ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingDefaults, ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
@@ -33,9 +33,26 @@ export function thinkingLevelOptionsForModel(
   }));
 }
 
-function defaultThinkingLevelForMode(defaults: ThinkingDefaults | undefined, modeId: string | undefined) {
+export type ThinkingLevelOrigin = 'session' | ThinkingLevelSource;
+
+export interface EffectiveThinkingLevel {
+  level: ThinkingLevelSetting;
+  origin: ThinkingLevelOrigin;
+}
+
+export function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
+  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
+}
+
+function chosenThinkingLevel(
+  override: ThinkingLevelSetting | undefined,
+  defaults: ThinkingDefaults | undefined,
+  modeId: string | undefined,
+): EffectiveThinkingLevel | undefined {
+  if (override) return { level: override, origin: 'session' };
   if (!defaults) return undefined;
-  return resolveDefaultThinkingLevel(defaults, modeId).level;
+  const { level, source } = resolveDefaultThinkingLevel(defaults, modeId);
+  return { level, origin: source };
 }
 
 export function resolveEffectiveThinkingLevel({
@@ -50,8 +67,8 @@ export function resolveEffectiveThinkingLevel({
   override: ThinkingLevelSetting | undefined;
   defaults: ThinkingDefaults | undefined;
   modeId: string | undefined;
-}): ThinkingLevelSetting | undefined {
-  const level = override ?? defaultThinkingLevelForMode(defaults, modeId);
-  if (!level || !modelId) return level;
-  return runThinkingLevel(modelId, level, reasoningOptions);
+}): EffectiveThinkingLevel | undefined {
+  const chosen = chosenThinkingLevel(override, defaults, modeId);
+  if (!chosen || !modelId) return chosen;
+  return { ...chosen, level: runThinkingLevel(modelId, chosen.level, reasoningOptions) };
 }

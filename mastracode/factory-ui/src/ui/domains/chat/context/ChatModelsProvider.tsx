@@ -20,10 +20,11 @@ interface ChatModelsProviderProps {
 
 export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { draftSessionId } = useChatSessionContext();
-  if (draftSessionId) {
-    return <DraftChatModelsProvider>{children}</DraftChatModelsProvider>;
-  }
-  return <LiveChatModelsProvider>{children}</LiveChatModelsProvider>;
+  return draftSessionId ? (
+    <DraftChatModelsProvider>{children}</DraftChatModelsProvider>
+  ) : (
+    <LiveChatModelsProvider>{children}</LiveChatModelsProvider>
+  );
 }
 
 function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
@@ -34,12 +35,13 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
   const [draftThinkingLevel, setDraftThinkingLevel] = useState<ThinkingLevelSetting>();
   const defaultModelId = defaultModelQuery.data?.modelId ?? undefined;
   const activeModelId = draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined;
-  const effectiveThinkingLevel = useEffectiveThinkingLevel(activeModelId, draftThinkingLevel);
+  const { effective, defaultsError } = useEffectiveThinkingLevel(activeModelId, draftThinkingLevel);
   const value: ChatModelsApi = {
     activeModelId,
     defaultModelId,
-    effectiveThinkingLevel,
+    effectiveThinkingLevel: effective,
     thinkingLevelOverride: draftThinkingLevel,
+    thinkingLevelError: effective ? undefined : defaultsError,
     isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
     error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
     setModel: async modelId => {
@@ -47,6 +49,9 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
     },
     setThinkingLevel: async level => {
       setDraftThinkingLevel(level);
+    },
+    resetThinkingLevel: async () => {
+      setDraftThinkingLevel(undefined);
     },
   };
 
@@ -69,13 +74,14 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(sessionArgs);
   const activeModelId = state?.modelId;
   const thinkingLevelOverride = settingsQuery.data?.thinkingLevel;
-  const resolvedThinkingLevel = useEffectiveThinkingLevel(activeModelId, thinkingLevelOverride);
+  const { effective, defaultsError } = useEffectiveThinkingLevel(activeModelId, thinkingLevelOverride);
   const sessionSettingsLoaded = settingsQuery.data !== undefined;
   const value: ChatModelsApi = {
     activeModelId,
     defaultModelId: defaultModelQuery.data?.modelId ?? undefined,
-    effectiveThinkingLevel: sessionSettingsLoaded ? resolvedThinkingLevel : undefined,
+    effectiveThinkingLevel: sessionSettingsLoaded ? effective : undefined,
     thinkingLevelOverride,
+    thinkingLevelError: settingsQuery.error ?? (effective ? undefined : defaultsError),
     isLoading: false,
     error: undefined,
     setModel: async modelId => {
@@ -83,6 +89,9 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     },
     setThinkingLevel: async level => {
       await updateSettings({ thinkingLevel: level });
+    },
+    resetThinkingLevel: async () => {
+      await updateSettings({ thinkingLevel: null });
     },
   };
 

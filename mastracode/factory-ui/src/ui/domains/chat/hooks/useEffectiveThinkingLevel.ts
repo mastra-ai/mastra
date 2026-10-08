@@ -4,19 +4,21 @@ import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useChatModes } from '../context/useChatModes';
 import { resolveEffectiveThinkingLevel } from '../services/thinkingLevels';
+import type { EffectiveThinkingLevel } from '../services/thinkingLevels';
 
 export function useEffectiveThinkingLevel(
   modelId: string | undefined,
   override: ThinkingLevelSetting | undefined,
-): ThinkingLevelSetting | undefined {
+): { effective: EffectiveThinkingLevel | undefined; defaultsError: Error | undefined } {
   const { activeModeId } = useChatModes();
-  const { data: thinkingDefaults } = useThinkingConfigQuery();
+  const thinkingConfigQuery = useThinkingConfigQuery();
   const reasoningOptions = useModelReasoningOptions(modelId);
-  return resolveEffectiveThinkingLevel({
+  const effective = resolveEffectiveThinkingLevel({
     modelId,
     reasoningOptions,
     override,
-    defaults: thinkingDefaults,
+    defaults: thinkingConfigQuery.data,
     modeId: activeModeId,
   });
+  return { effective, defaultsError: thinkingConfigQuery.error ?? undefined };
 }

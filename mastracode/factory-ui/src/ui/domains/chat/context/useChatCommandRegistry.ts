@@ -6,7 +6,7 @@ import {
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { ThinkingConfigInfo } from '../../../../api/types';
 
@@ -29,7 +29,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { THINKING_LEVEL_LABELS, thinkingSourceLabel } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModes } from './useChatModes';
 import { useChatPermissions } from './useChatPermissions';
@@ -38,9 +38,6 @@ import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
-function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
-  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
-}
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();

@@ -258,7 +258,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -267,6 +267,32 @@ describe('a user session draft on the real thread route', () => {
 
     await waitFor(() => expect(route.posted).toEqual(['think harder']));
     expect(route.bindingsBeforePrompt).toEqual(['mode:build', 'model:openai/gpt-4o-mini thinking:high']);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('starts the session on the defaults when the draft level is reset before the first message', async () => {
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    const ramp = screen.getByRole('slider', { name: 'Thinking' });
+    fireEvent.change(ramp, { target: { value: '3' } });
+    fireEvent.keyUp(ramp);
+    await user.click(await screen.findByRole('button', { name: 'Use default' }));
+    expect(await screen.findByText('Follows the global default.')).toBeInTheDocument();
+    await user.type(message, 'use the default');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['use the default']));
+    expect(route.bindingsBeforePrompt).toEqual(['mode:build']);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);
