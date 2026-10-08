@@ -9,7 +9,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { EnvironmentSection } from '../EnvironmentSection';
-import { environmentPayload, environmentRepository, FACTORY_ID } from './fixtures/environment';
+import { customEnvironment, environmentPayload, environmentRepository, FACTORY_ID } from './fixtures/environment';
 
 const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`;
 
@@ -197,6 +197,123 @@ describe('Environment settings', () => {
     await user.type(workdir, '/home/user{Enter}');
     await waitFor(() => expect(screen.getAllByText('Failed to save environment (500)').length).toBeGreaterThan(1));
     await waitFor(() => expect(workdir).toHaveValue('/workspace'));
+  });
+
+  it('renders one row per provider setting with the stored value or the default as placeholder', async () => {
+    useFactory();
+    useEnvironment(environmentPayload());
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText('Sessions run on the Mastra platform.')).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2);
+    expect(screen.getByText('vCPUs of the sandbox.')).toBeInTheDocument();
+    const memory = screen.getByRole('spinbutton', { name: 'Memory (MB)' });
+    expect(memory).toHaveValue(null);
+    expect(memory).toHaveAttribute('placeholder', '1024');
+    expect(screen.getByRole('spinbutton', { name: 'Idle timeout (minutes)' })).toHaveAttribute('placeholder', '5');
+    expect(screen.getAllByRole('spinbutton')).toHaveLength(3);
+  });
+
+  it('saves one setting per field and clears a setting with null', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.type(await screen.findByRole('spinbutton', { name: 'Memory (MB)' }), '4096{Enter}');
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { memoryMb: 4096 } });
+
+    const cpu = screen.getByRole('spinbutton', { name: 'CPU' });
+    await user.clear(cpu);
+    await user.tab();
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ settings: { cpuCount: null } });
+  });
+
+  it('refuses a value outside the schema range before any request', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.type(await screen.findByRole('spinbutton', { name: 'Memory (MB)' }), '256{Enter}');
+    expect(await screen.findByText('Enter a whole number between 512 and 65536')).toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+  });
+
+  it('keeps the stored value when the provider rejects a setting', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    server.use(
+      http.patch(ENVIRONMENT_URL, () =>
+        HttpResponse.json(
+          { error: 'invalid_environment', issues: [{ message: 'must be <= 8', path: ['cpuCount'] }] },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const cpu = await screen.findByRole('spinbutton', { name: 'CPU' });
+    await user.clear(cpu);
+    await user.type(cpu, '16{Enter}');
+    expect(await screen.findByText('Failed to save environment (400)')).toBeInTheDocument();
+    await waitFor(() => expect(cpu).toHaveValue(2));
+  });
+
+  it('shows the provider line and no settings for a custom sandbox', async () => {
+    useFactory();
+    useEnvironment(customEnvironment());
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText('Sessions run on a custom sandbox.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  });
+
+  it('renders boolean and enum settings as a switch and a select, and an unsupported type as a note', async () => {
+    useFactory();
+    const environment = environmentPayload({
+      sandbox: {
+        provider: 'docker',
+        settingsSchema: {
+          type: 'object',
+          properties: {
+            privileged: { type: 'boolean', title: 'Privileged' },
+            region: { type: 'string', title: 'Region', enum: ['us', 'eu'], default: 'us' },
+            mounts: { type: 'array', title: 'Mounts' },
+          },
+        },
+        capabilities: { template: true, builds: { available: false, history: false } },
+      },
+      settings: { region: 'eu' },
+    });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByText('Sessions run on Docker.')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Region' })).toHaveTextContent('eu');
+    expect(screen.getByText('Mounts')).toBeInTheDocument();
+    expect(screen.getByText('Unsupported setting type')).toBeInTheDocument();
+    const privileged = screen.getByRole('switch', { name: 'Privileged' });
+    expect(privileged).not.toBeChecked();
+    await userEvent.setup().click(privileged);
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { privileged: true } });
   });
 
   it('saves the workspace setup command', async () => {

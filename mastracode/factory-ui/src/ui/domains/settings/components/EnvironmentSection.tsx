@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -8,7 +9,7 @@ import { useFactoryEnvironmentQuery, useSaveFactoryEnvironmentMutation } from '.
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { settingsSectionPath } from '../settingsSections';
 import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
-import { ResourcesBlock } from './environment/ResourcesBlock';
+import { providerLine, ResourcesBlock } from './environment/ResourcesBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -95,6 +96,9 @@ function EnvironmentBlocks({
 
   return (
     <div className="flex flex-col gap-8">
+      <Txt as="p" variant="meta" tone="faint">
+        {providerLine(environment.sandbox.provider)}
+      </Txt>
       <ResourcesBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
       <RepositoriesBlock
         repositories={environment.repositories}
