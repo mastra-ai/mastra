@@ -296,7 +296,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 #### `resume(runId, resumeData, options?)`
 
-Resumes a suspended run, for example after a tool approval. Pass the `runId` from the original stream and the data the run was waiting on. Throws if no registry entry exists for the run.
+Resumes a suspended run, for example after a tool approval. Pass the `runId` from the original stream and the data the run was waiting on. Throws if no registry entry exists for the run. If another execution holds the run, `resume()` waits up to 5 seconds for it to finish, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`. See [run ownership](/docs/harness/durable-agents#run-ownership).
 
 ```typescript
 const { output, cleanup } = await durableAgent.resume(runId, {
@@ -493,7 +493,7 @@ interface DurableAgentListActiveRunsResult {
 
 #### `recoverActiveRuns(options?)`
 
-Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns a summary of what was recovered.
+Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns the outcome for each run.
 
 ```typescript
 const result = await durableAgent.recoverActiveRuns()
@@ -506,11 +506,26 @@ Pass a `runId` to recover a single known run:
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
+A run that another execution still drives isn't taken over. Its entry has `status: 'skipped'` and a `reason`, and `recoverActiveRuns()` doesn't check it again. For a run held by another process, `retryAt` is the time after which that claim lapses unless renewed. Call `recoverActiveRuns({ runId })` after it to recover the run if its process crashed. [`mastra.recoverAllDurableAgents()`](/reference/core/mastra-class#recoveralldurableagents) schedules these re-checks itself.
+
+| `reason` | Meaning |
+| - | - |
+| `run-active` | Another execution, possibly in another process, holds the run. Sets `retryAt`. |
+| `run-active-locally` | This process is executing the run. |
+| `already-in-progress` | This process is already recovering the run. |
+
 Returns:
 
 ```typescript
 interface DurableAgentRecoverActiveRunsResult {
-  recovered: Array<{ runId: string; status: 'success' | 'failed'; error?: Error }>
+  recovered: Array<{
+    runId: string
+    status: 'success' | 'failed' | 'skipped'
+    error?: Error
+    reason?: 'run-active' | 'run-active-locally' | 'already-in-progress'
+    // Epoch milliseconds
+    retryAt?: number
+  }>
   succeeded: number
   failed: number
 }
@@ -540,6 +555,31 @@ const { output, cleanup } = await durableAgent.recover('run-abc-123', {
 await output.text
 cleanup()
 ```
+
+`recover()` throws instead of recovering a run that isn't orphaned:
+
+| Error ID | Thrown when |
+| - | - |
+| `DURABLE_AGENT_RUN_ACTIVE` | Another execution holds the run, and `force` isn't set. |
+| `DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY` | This process is executing the run. `force` doesn't override this. |
+| `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS` | This process is already recovering the run. |
+| `DURABLE_AGENT_RECOVER_RUN_SUSPENDED` | The run is suspended. Continue it with `resume()`. |
+| `DURABLE_AGENT_EXECUTION_CONFLICT` | With `force`, another execution claimed the run during the takeover. |
+
+The server's `POST /agents/:agentId/recover` route returns these errors as `409 Conflict`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.force',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Take the run over even while another execution holds it. That execution loses the run and stops, and streams for the run drop the events it still publishes. Its writes are rejected when the storage adapter supports [run fencing](/docs/harness/durable-agents#run-ownership).',
+  },
+]}
+/>
 
 Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 

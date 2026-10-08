@@ -24,6 +24,7 @@ import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
+import { currentRunFenceScope } from './run-fence-scope';
 import type {
   AgentStreamEvent,
   AgentChunkEventData,
@@ -34,6 +35,13 @@ import type {
   AgentAbortEventData,
   AgentIterationCompleteEventData,
 } from './types';
+
+const STREAM_ENDING_EVENT_TYPES = new Set<string>([
+  AgentStreamEventTypes.FINISH,
+  AgentStreamEventTypes.ERROR,
+  AgentStreamEventTypes.SUSPENDED,
+  AgentStreamEventTypes.ABORT,
+]);
 
 /**
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
@@ -91,6 +99,19 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
    */
   offset?: number | 'latest';
+  /**
+   * Claim generation of the execution this stream follows. Events tagged with
+   * an older generation come from an execution that has since lost the run and
+   * are dropped. Newer generations seen on the topic raise the bar further.
+   */
+  minGeneration?: number;
+  /**
+   * Reads the run's current claim generation. Pass it when `minGeneration`
+   * couldn't be read: until a read succeeds, the stream reads the claim again
+   * before an event from a claimed execution can end it, so the terminal event
+   * of a superseded execution doesn't close the stream.
+   */
+  rereadMinGeneration?: () => Promise<number | undefined>;
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -203,6 +224,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     threadId,
     resourceId,
     offset,
+    minGeneration,
+    rereadMinGeneration,
     idleTimeoutMs,
     isAlive,
     onChunk,
@@ -372,17 +395,38 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }, idleTimeoutMs);
   };
 
+  let newestGeneration = minGeneration;
+  let pendingMinGenerationRead = rereadMinGeneration;
+
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
     // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
     // must not fire onFinish/onError again.
     if (!controller || terminated) return;
 
+    // Parse the event data as AgentStreamEvent
+    const streamEvent = event as unknown as AgentStreamEvent;
+
+    // Another execution took the run over: what the superseded one still
+    // publishes is stale, and doesn't prove the run's producer is alive.
+    const generation = streamEvent.generation;
+    if (generation !== undefined) {
+      if (pendingMinGenerationRead && STREAM_ENDING_EVENT_TYPES.has(streamEvent.type)) {
+        const claimed = await pendingMinGenerationRead().catch(() => undefined);
+        if (!controller || terminated) return;
+        if (claimed !== undefined) {
+          pendingMinGenerationRead = undefined;
+          newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
+        }
+      }
+      if (newestGeneration !== undefined && generation < newestGeneration) return;
+      newestGeneration = generation;
+    }
+
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();
 
-    // Parse the event data as AgentStreamEvent
-    const streamEvent = event as unknown as AgentStreamEvent;
+    if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
 
     try {
       switch (streamEvent.type) {
@@ -759,6 +803,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 }
 
 /**
+ * Tags a run's stream event with the claim generation of the execution
+ * publishing it, read from the run fence scope unless the caller passes it.
+ */
+function generationTag(runId: string, generation?: number): { generation?: number } {
+  const tagged = generation ?? currentRunFenceScope()?.generationFor?.(runId);
+  return tagged === undefined ? {} : { generation: tagged };
+}
+
+/**
  * Helper to emit a chunk event to pubsub
  */
 export async function emitChunkEvent<OUTPUT = undefined>(
@@ -775,6 +828,20 @@ export async function emitChunkEvent<OUTPUT = undefined>(
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),
+    ...generationTag(runId),
+  });
+}
+
+/**
+ * Announce that the execution with `generation` claimed the run, so the run's
+ * stream consumers drop what older executions still publish from here on.
+ */
+export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
+    runId,
+    data: {},
+    generation,
   });
 }
 
@@ -815,6 +882,7 @@ export async function emitStepStartEvent(
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...generationTag(runId),
   });
 }
 
@@ -830,6 +898,7 @@ export async function emitStepFinishEvent(
     type: AgentStreamEventTypes.STEP_FINISH,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
@@ -841,13 +910,14 @@ export async function emitFinishEvent(pubsub: PubSub, runId: string, data: Agent
     type: AgentStreamEventTypes.FINISH,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
 /**
  * Helper to emit an error event to pubsub
  */
-export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error): Promise<void> {
+export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error, generation?: number): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
@@ -858,6 +928,7 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
         // stack intentionally omitted — avoid leaking internals through external pubsub
       },
     },
+    ...generationTag(runId, generation),
   });
 }
 
@@ -869,6 +940,7 @@ export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: Ag
     type: AgentStreamEventTypes.SUSPENDED,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
@@ -880,6 +952,7 @@ export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentA
     type: AgentStreamEventTypes.ABORT,
     runId,
     data,
+    ...generationTag(runId),
   });
 }
 
@@ -895,5 +968,6 @@ export async function emitIterationCompleteEvent(
     type: AgentStreamEventTypes.ITERATION_COMPLETE,
     runId,
     data,
+    ...generationTag(runId),
   });
 }

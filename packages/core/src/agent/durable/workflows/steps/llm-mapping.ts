@@ -13,6 +13,7 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
+import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -494,9 +495,13 @@ export function createDurableLLMMappingStep() {
               }
               output.state = { ...output.state, threadExists: true };
             }
-            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
+              beforePersist: () =>
+                assertExecutionOwned({ runId: _runId, agentId: _agentId, requestContext, mastra: mastra as Mastra }),
+            });
           }
         } catch (error) {
+          if (isExecutionFenceError(error)) throw error;
           mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to save step: ${error}`);
         }
       }

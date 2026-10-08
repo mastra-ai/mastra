@@ -149,6 +149,11 @@ export class EventedAgent<
    * @internal
    */
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment's background promise settles.
+    const entry = globalRunRegistry.get(runId);
+    const executionFence = entry?.executionFence;
+    const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
     try {
       const workflow = this.getWorkflow();
       // The evented engine executes via pubsub events consumed by in-process
@@ -175,13 +180,14 @@ export class EventedAgent<
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        ...(this.resolveWorkflowEngine() === 'default' ? { pubsub: this.pubsubInternal } : {}),
+        ...(this.resolveWorkflowEngine() === 'default'
+          ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) }
+          : {}),
       });
       // stream() runs executeWorkflow in the background. Track the full run here
       // so an immediate resume waits for the suspension snapshot to be persisted.
       // Pass the caller's requestContext (so config selectors pick the same observability
       // instance the root spans were created with) and parent the run under the AGENT_RUN span.
-      const entry = globalRunRegistry.get(runId);
       await run
         .start({
           inputData: workflowInput,
@@ -189,33 +195,28 @@ export class EventedAgent<
           actor: workflowInput.options?.actor,
           ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
         })
-        .then(async result => {
+        .then(
           // A failure the loop itself didn't catch resolves (not rejects) with
           // status 'failed' — mirror DurableAgent.executeWorkflow and publish
           // an ERROR event, otherwise the caller's stream never terminates
-          // (#17727's idle-start gap on the evented transport).
-          if (result?.status === 'failed') {
-            const error = new Error((result as any).error?.message || 'Workflow execution failed');
-            // Background variant: a pubsub already closing during shutdown must
-            // not turn the run's own failure into an unhandledRejection (#23168).
-            this.emitErrorInBackground(runId, error);
-          }
-          // Reaching any non-suspended terminal status means the run is done and
-          // its persisted snapshot rows will never be resumed. Delete them so
-          // finished runs stop showing up in listActiveRuns() and being re-driven
-          // by recoverActiveRuns() (#22209). Suspended runs keep their snapshots
-          // so `resume()` / `recoverActiveRuns()` can find them. If the process
-          // dies before this fires, the run is a genuine orphan and the recover
-          // path performs the same cleanup once it reaches a terminal status.
-          if (result?.status && result.status !== 'suspended') {
-            await this.deleteRunSnapshots(runId);
-          }
-        })
-        .catch(error => {
-          this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
-        });
+          // (#17727's idle-start gap on the evented transport). Non-suspended
+          // terminal runs also drop their snapshots so they stop being
+          // re-driven by recoverActiveRuns() (#22209). If the process dies
+          // before this fires, the recover path performs the same cleanup.
+          result =>
+            this.settleExecution(runId, executionFence, {
+              status: result?.status,
+              error:
+                result?.status === 'failed'
+                  ? new Error((result as any).error?.message || 'Workflow execution failed')
+                  : undefined,
+            }),
+          // settleExecution never rejects: a pubsub already closing during
+          // shutdown must not become an unhandledRejection (#23168).
+          error => this.settleExecution(runId, executionFence, { error: toError(error) }),
+        );
     } catch (error) {
-      this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
+      await this.settleExecution(runId, executionFence, { error: toError(error) });
     }
   }
 }

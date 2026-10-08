@@ -150,7 +150,7 @@ To add your own endpoints, see [Custom API Routes](/docs/server/custom-api-route
 
 ## Graceful shutdown and rolling deploys
 
-By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
+By default, the generated server handles `SIGINT` and `SIGTERM`. It stops accepting connections, waits up to [`server.drainTimeout`](/reference/configuration#serverdraintimeout) for active requests and streams, then runs `mastra.shutdown()`. Shutdown gives in-flight workflow runs (including durable agent runs) the same drain window to finish before workers and pub/sub subscriptions are torn down. A durable agent run still executing after the window stops and releases its claim on the run, so the next boot can recover it right away. The drain timeout defaults to 5 seconds. A second signal terminates the process immediately. See [`server.handleShutdownSignals`](/reference/configuration#serverhandleshutdownsignals) if you need to manage signals yourself.
 
 Increase `drainTimeout` when your hosting platform's termination grace period can accommodate longer turns. The HTTP drain and the workflow drain run one after the other, so keep enough time for both plus shutdown cleanup.
 
@@ -170,7 +170,7 @@ export const mastra = new Mastra({
 })
 ```
 
-A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Multi-replica recovery doesn't yet use a distributed lease.
+A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Recovering from multiple replicas requires a storage adapter that supports run fencing or a PubSub backend that every replica shares. See [multi-instance deployments](/docs/harness/durable-agents#multi-instance-deployments).
 
 ## Troubleshooting
 

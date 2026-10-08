@@ -1332,10 +1332,12 @@ export interface DurableAgentLike {
    */
   [key: string]: any;
   /**
-   * Recover active runs for this durable agent.
+   * Recover active runs for this durable agent, or only `runId` when given.
+   * A run another execution still drives is reported as `skipped`, with
+   * `retryAt` (epoch ms) when it may be recoverable later.
    */
-  recoverActiveRuns(): Promise<{
-    recovered: Array<{ runId: string }>;
+  recoverActiveRuns(options?: { runId?: string }): Promise<{
+    recovered: Array<{ runId: string; status?: 'success' | 'failed' | 'skipped'; retryAt?: number }>;
     succeeded: number;
     failed: number;
   }>;

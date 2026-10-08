@@ -107,8 +107,19 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // subscriptions the run needs to make progress.
     const releaseTracking = this.mastra?.__trackEventedRun(resultPromise) ?? (() => {});
 
+    // Resolved up front: a finishing run unregisters its run-scoped workflow.
+    // A workflow Mastra can't resolve sets no such option.
+    let isForeignExecution: ((eventRequestContext: unknown, requestContext: RequestContext) => boolean) | undefined;
+    try {
+      isForeignExecution = this.resolveWorkflow(params.workflowId, params.runId)?.options?.isForeignExecution;
+    } catch {
+      isForeignExecution = undefined;
+    }
+
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
-      if (event.runId !== params.runId) {
+      // Another execution of this run (one that lost it to recover(), say) still
+      // publishes its finish under the same runId; it isn't this caller's result.
+      if (event.runId !== params.runId || isForeignExecution?.(event.data?.requestContext, params.requestContext)) {
         await ack?.();
         return;
       }

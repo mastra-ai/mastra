@@ -9,6 +9,7 @@ import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
+import { coverNestedRun } from '../../../storage/run-fencing';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -677,6 +678,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Track parent-child relationship if this is a nested workflow
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
+      coverNestedRun(parentWorkflow.runId, runId);
     }
     // Preserve resourceId from an existing snapshot if present (resume /
     // timeTravel / restart keep their original attribution); otherwise fall
@@ -1115,7 +1117,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'failed',
       }) ?? true;
 
-    if (shouldPersist) {
+    if (workflow?.options?.isOwnershipLostError?.((prevResult as any)?.error)) {
+      // Another execution may be driving the run from its stored snapshot:
+      // neither mark that row failed nor delete it.
+    } else if (shouldPersist) {
       await workflowsStore?.updateWorkflowState({
         workflowName: workflowId,
         runId,
@@ -1983,6 +1988,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } else {
         const nestedRunId = globalThis.crypto.randomUUID();
+        coverNestedRun(runId, nestedRunId);
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
             stepResults: {},
@@ -2632,6 +2638,32 @@ export class WorkflowEventProcessor extends EventProcessor {
     // The finished step's id. Works for plain steps, declarative agent/tool/mapping
     // entries (their own id) and loop/foreach bodies (the wrapped step's id).
     const stepId = getStepIds(step)[0]!;
+
+    // This execution no longer owns the run, and another may be driving it from
+    // the stored snapshot: fail without merging the step result into that row.
+    if (prevResult.status === 'failed' && workflow.options?.isOwnershipLostError?.(prevResult.error)) {
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.fail',
+        runId,
+        data: {
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          parentWorkflow,
+          stepResults: { ...stepResults, [stepId]: prevResult, __state: currentState },
+          timeTravel,
+          restart,
+          prevResult,
+          activeStepsPath,
+          requestContext,
+          actor,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
+    }
 
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');

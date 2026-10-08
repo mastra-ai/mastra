@@ -19,6 +19,7 @@ import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
+import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
@@ -385,13 +386,16 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * resolver evaluated at execution time.
    */
   override buildIterationWorkflow() {
-    const llmExecutionStep = this.llmExecutionStep();
-    const toolCallStep = this.toolCallStep();
-    const llmMappingStep = this.llmMappingStep();
-    const backgroundTaskCheckStep = this.backgroundTaskCheckStep();
-    const signalDrainStep = this.signalDrainStep();
-    const isTaskCompleteStep = this.isTaskCompleteStep();
-    const goalStep = this.goalStep();
+    // Every step that calls a model, runs tools, or writes memory checks that
+    // its execution still owns the run (#23734), so a superseded execution
+    // stops at the next step boundary instead of overwriting the new owner.
+    const llmExecutionStep = withExecutionFence(this.llmExecutionStep());
+    const toolCallStep = withExecutionFence(this.toolCallStep());
+    const llmMappingStep = withExecutionFence(this.llmMappingStep());
+    const backgroundTaskCheckStep = withExecutionFence(this.backgroundTaskCheckStep());
+    const signalDrainStep = withExecutionFence(this.signalDrainStep());
+    const isTaskCompleteStep = withExecutionFence(this.isTaskCompleteStep());
+    const goalStep = withExecutionFence(this.goalStep());
 
     return (
       this.workflowFactory()({
@@ -410,6 +414,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // acknowledge unclaimed resumes. Harmless when `running` is persisted:
           // claims still land and de-dup still works.
           allowUnclaimedResumes: true,
+          // A superseded execution must leave the stored run to its new owner
+          // (the evented engine otherwise merges, marks failed, or deletes it).
+          isOwnershipLostError: isExecutionFenceError,
+          isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
@@ -814,6 +822,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // policy may exclude `running`, in which case resume claims cannot
           // be de-duplicated.
           allowUnclaimedResumes: true,
+          isOwnershipLostError: isExecutionFenceError,
+          isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
