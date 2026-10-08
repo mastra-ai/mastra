@@ -134,13 +134,33 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     });
   });
 
-  it("sends OpenRouter's reasoning setting for models routed through the Mastra gateway", async () => {
-    const model = createGateway('max', { routeThroughMastraGateway: true }).resolveLanguageModel({
-      providerId: 'deepseek',
-      modelId: 'deepseek-v4-pro',
+  const resolveThroughGateway = (level: ThinkingLevelSetting, providerId: string, modelId: string) =>
+    createGateway(level, { routeThroughMastraGateway: true }).resolveLanguageModel({
+      providerId,
+      modelId,
       apiKey: 'gateway-key',
     });
-    expect((await requestBody(model)).reasoning).toEqual({ effort: 'max' });
+
+  it("sends OpenRouter's reasoning setting for models routed through the Mastra gateway", async () => {
+    expect((await requestBody(resolveThroughGateway('max', 'deepseek', 'deepseek-v4-pro'))).reasoning).toEqual({
+      effort: 'max',
+    });
+  });
+
+  it.each([
+    ['an effort Claude', 'max', 'anthropic', 'claude-opus-4-7', { effort: 'max' }],
+    ['a budget Claude, with its direct-path budget', 'high', 'anthropic', 'claude-sonnet-4-5', { max_tokens: 16384 }],
+    ['GPT', 'xhigh', 'openai', 'gpt-5.5', { effort: 'xhigh' }],
+    ['a level Gemini', 'high', 'google', 'gemini-3-pro-preview', { effort: 'high' }],
+    ['a budget Gemini, with its direct-path budget', 'high', 'google', 'gemini-2.5-flash', { max_tokens: 24576 }],
+  ] as const)('sends the Mastra gateway the level %s runs', async (_model, level, providerId, modelId, reasoning) => {
+    expect((await requestBody(resolveThroughGateway(level, providerId, modelId))).reasoning).toEqual(reasoning);
+  });
+
+  it('leaves a Claude request through the Mastra gateway on its default at off, like the direct path', async () => {
+    expect(await requestBody(resolveThroughGateway('off', 'anthropic', 'claude-opus-4-7'))).not.toHaveProperty(
+      'reasoning',
+    );
   });
 
   it("keeps the caller's own DeepSeek thinking setting whole instead of mixing it with the level", async () => {

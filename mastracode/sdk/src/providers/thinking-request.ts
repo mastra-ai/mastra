@@ -35,8 +35,10 @@ const LEVEL_FOR_EFFORT: Partial<Record<string, ThinkingLevelSetting>> = {
 const sendReasoningEffort = (reasoningEffort: string): ThinkingProviderOptions => ({ reasoningEffort });
 const switchReasoning = (enabled: boolean): ThinkingProviderOptions => ({ reasoning: { enabled } });
 
+export const OPENROUTER_OPTIONS_KEY = 'openrouter';
+
 const OPENROUTER_FORMAT: ThinkingRequestFormat = {
-  optionsKey: 'openrouter',
+  optionsKey: OPENROUTER_OPTIONS_KEY,
   effort: { toOptions: effort => ({ reasoning: { effort } }) },
   toggle: switchReasoning,
 };
@@ -64,12 +66,17 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
   perplexity: { optionsKey: 'perplexity', effort: { toOptions: effort => ({ reasoning_effort: effort }) } },
 };
 
-const PROVIDERS_WITH_THINKING_ADAPTERS = new Set(['anthropic', 'openai', 'google']);
+const THINKING_ADAPTER_PROVIDERS = ['anthropic', 'openai', 'google'] as const;
+export type ThinkingAdapterProvider = (typeof THINKING_ADAPTER_PROVIDERS)[number];
+
+export function isThinkingAdapterProvider(provider: string): provider is ThinkingAdapterProvider {
+  return THINKING_ADAPTER_PROVIDERS.some(adapterProvider => adapterProvider === provider);
+}
 
 function requestFormatFor(modelId: string): ThinkingRequestFormat | undefined {
   const routedThroughMastraGateway = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   const [provider = ''] = stripMastraGatewayPrefix(modelId).split('/');
-  if (PROVIDERS_WITH_THINKING_ADAPTERS.has(provider)) return undefined;
+  if (isThinkingAdapterProvider(provider)) return undefined;
   if (routedThroughMastraGateway) return OPENROUTER_FORMAT;
   return REQUEST_FORMATS_BY_PROVIDER[provider.includes('alibaba') ? 'alibaba' : provider];
 }

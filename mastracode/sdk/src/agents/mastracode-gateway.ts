@@ -28,11 +28,11 @@ import {
   createPromptCacheMiddleware,
   opencodeClaudeMaxProvider,
 } from '../providers/claude-max.js';
+import { mastraGatewayThinkingOptions } from '../providers/gateway-thinking.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
-  MASTRA_GATEWAY_PREFIX,
   normalizeAnthropicModelId,
   OPENAI_PREFIX,
   remapOpenAIModelForCodexOAuth,
@@ -547,17 +547,10 @@ export class MastraCodeGateway extends MastraModelGateway {
       );
     }
 
+    if (this.#routeThroughMastraGateway) return this.#resolveThroughMastraGateway(args);
+
     if (args.providerId === 'google') {
       return this.#resolveGoogleModel(args);
-    }
-
-    if (this.#routeThroughMastraGateway) {
-      const gatewayModel = this.#mastraGateway.resolveLanguageModel(args);
-      if (gatewayModel.specificationVersion !== 'v3') return gatewayModel;
-      return withThinkingOptionsModel(
-        gatewayModel,
-        providerThinkingOptions(`${MASTRA_GATEWAY_PREFIX}${args.providerId}/${args.modelId}`, this.#thinkingLevel),
-      );
     }
 
     if (args.providerId === 'kimi-for-coding') {
@@ -609,15 +602,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         });
       }
 
-      const gatewayModel = this.#mastraGateway.resolveLanguageModel({
-        ...args,
-        modelId: bareModelId,
-      });
-      if (!thinkingMiddleware) return gatewayModel;
-      return wrapLanguageModel({
-        model: gatewayModel as any,
-        middleware: [thinkingMiddleware],
-      });
+      return this.#resolveThroughMastraGateway({ ...args, modelId: bareModelId });
     }
 
     if (storedCred?.type === 'oauth') {
@@ -692,7 +677,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         });
       }
 
-      return this.#mastraGateway.resolveLanguageModel(args);
+      return this.#resolveThroughMastraGateway(args);
     }
 
     if (storedCred?.type === 'oauth') {
@@ -720,20 +705,26 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const baseModel = this.#routeThroughMastraGateway
-      ? this.#mastraGateway.resolveLanguageModel(args)
-      : (new ModelRouterLanguageModel({
-          id: `${args.providerId}/${args.modelId}`,
-          apiKey: args.apiKey,
-          headers: args.headers,
-        }) as unknown as GatewayLanguageModel);
-
+    const routerModel = new ModelRouterLanguageModel({
+      id: `${args.providerId}/${args.modelId}`,
+      apiKey: args.apiKey,
+      headers: args.headers,
+    }) as unknown as GatewayLanguageModel;
     const thinkingMiddleware = createGoogleThinkingMiddleware(args.modelId, this.#thinkingLevel);
-    if (!thinkingMiddleware) return baseModel;
+    if (!thinkingMiddleware) return routerModel;
 
     return wrapLanguageModel({
-      model: baseModel as any,
+      model: routerModel as any,
       middleware: [thinkingMiddleware],
     });
+  }
+
+  #resolveThroughMastraGateway(args: Parameters<MastraCodeGateway['resolveLanguageModel']>[0]): GatewayLanguageModel {
+    const gatewayModel = this.#mastraGateway.resolveLanguageModel(args);
+    if (gatewayModel.specificationVersion !== 'v3') return gatewayModel;
+    return withThinkingOptionsModel(
+      gatewayModel,
+      mastraGatewayThinkingOptions(args.providerId, args.modelId, this.#thinkingLevel),
+    );
   }
 }
