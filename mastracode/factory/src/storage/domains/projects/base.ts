@@ -15,7 +15,6 @@ export interface FactoryProject {
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans: boolean;
-  /** Sandbox provider for the Factory's environment (null = never configured). */
   /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
   sandboxWorkdir: string | null;
   sandboxCpuCount: number | null;
