@@ -16,7 +16,10 @@
  * (COR-1390 — plain forwards the live `Error` where durable and evented forward the serialised error
  * alone) does not reproduce for a failure raised by an output processor, because neither engine adds
  * the `type` key the declaration names, and `checkEngine` reports a stale declaration before any
- * scenario-level declaration is considered.
+ * scenario-level declaration is considered (COR-1429 covers letting a scenario run past a built-in
+ * difference that does not apply). Memory diverges too (COR-1414): plain persists no assistant message
+ * where durable and evented persist the tool-invocation part plus an error part, pinned per engine so
+ * the assertion goes stale when the fix lands.
  *
  * Not ported, escalated rather than weakened:
  *
@@ -141,6 +144,19 @@ const THROWS_CONTRACT: Record<string, unknown> = {
   thrown: null,
   modelCalls: 2,
   steps: 1,
+};
+
+/**
+ * The assistant messages each engine persisted on the `throws` shape (COR-1414). The harness contract
+ * hides this: `memoryMutated`/`memoryUppercased` are false everywhere. Plain fails the run before any
+ * step output is saved, so it persists nothing; durable and evented persist the tool-invocation part
+ * and then an `error` part. Pinned per engine so the assertion goes stale once COR-1414 makes the
+ * saved messages match.
+ */
+const THROWS_MEMORY: Record<ParityEngine, { messages: number; partTypes: string[] }> = {
+  plain: { messages: 0, partTypes: [] },
+  durable: { messages: 2, partTypes: ['tool-invocation', 'error'] },
+  evented: { messages: 2, partTypes: ['tool-invocation', 'error'] },
 };
 
 /** Harness `errorChunks`: `error`, `abort` and `tripwire` chunks all count as a surfaced failure. */
@@ -310,6 +326,8 @@ interface ThrowCaseState {
   steps: number;
   /** The persisted assistant messages, serialised. */
   assistant: string;
+  /** How many assistant messages were persisted, and each message part's type in order. */
+  assistantShape: { messages: number; partTypes: string[] };
 }
 
 /**
@@ -318,7 +336,7 @@ interface ThrowCaseState {
  * for the `error` chunk (COR-1390, plain forwards the live `Error` under `type: 'error'` where the
  * wrapped engines forward the serialised error alone) does not reproduce for a failure raised by an
  * output processor — neither engine adds that `type` key here — and `checkEngine` reports a stale
- * declaration before any scenario-level declaration is considered.
+ * declaration before any scenario-level declaration is considered (COR-1429).
  */
 async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
   const requests: CapturedRequest[] = [];
@@ -347,6 +365,7 @@ async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState>
     requests: 0,
     steps: 0,
     assistant: '',
+    assistantShape: { messages: 0, partTypes: [] },
   };
   const memory = new MockMemory();
   const agent = new Agent({
@@ -424,7 +443,12 @@ async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState>
   }
   state.requests = requests.length;
   const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
-  state.assistant = JSON.stringify(messages.filter(message => message.role === 'assistant'));
+  const assistantMessages = messages.filter(message => message.role === 'assistant');
+  state.assistant = JSON.stringify(assistantMessages);
+  state.assistantShape = {
+    messages: assistantMessages.length,
+    partTypes: assistantMessages.flatMap(message => (message.content?.parts ?? []).map(part => part.type)),
+  };
   if (cleanup) await cleanup();
   await host.shutdown();
   return state;
@@ -592,10 +616,9 @@ describe('T45 output processors (plain, durable, evented)', () => {
       // harness: `fails closed: the processor failure surfaced (error chunk or stream error)`.
       expect(state.errors > 0 || state.thrown !== undefined, `${engine}: failure surfaced`).toBe(true);
 
-      // Every engine reaches the same chunk sequence and the same contract; the failure chunk carries
-      // the same `error` payload content, but plain holds the live `Error` while durable and evented
-      // hold a serialised `{ name, message }` object (the divergence the frozen helper declares for the
-      // `error` chunk under COR-1390). Only the shared content is asserted.
+      // Every engine reaches the same chunk sequence and the same contract. The failure chunk's
+      // payload diverges: plain holds the live `Error` while durable and evented hold a serialised
+      // `{ name, message }` object, so only the shared content is asserted.
       expect(state.chunkTypes, `${engine}: chunk types`).toEqual(THROWS_CHUNK_TYPES);
       expect(Object.keys((state.errorPayload ?? {}) as object), `${engine}: failure chunk payload keys`).toEqual([
         'error',
@@ -605,6 +628,10 @@ describe('T45 output processors (plain, durable, evented)', () => {
       expect(failure?.message, `${engine}: failure message`).toBe(`${OUTPUT_ID} threw at processOutputStream`);
       expect(state.thrown, `${engine}: run rejection`).toBeUndefined();
       expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACT);
+      // COR-1414: memory diverges — plain persists no assistant message, durable and evented persist
+      // the tool-invocation part plus an error part. Pinned per engine so this goes red when the fix
+      // lands.
+      expect(state.assistantShape, `${engine}: persisted assistant messages`).toEqual(THROWS_MEMORY[engine]);
     }
   });
 });
