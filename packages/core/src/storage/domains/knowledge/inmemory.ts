@@ -392,10 +392,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   #resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): KnowledgeNode | null {
     const canonical = canonicalizeKnowledgeScope(scope);
     const canonicalName = name.trim().toLocaleLowerCase();
-    // Match same-name candidates in any scope, then check visibility on each merge terminal: a node
-    // outside the caller's scope may have been merged into one the caller can see.
+    // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+    // visible nodes and merged aliases (whose terminal may be visible) are candidates.
     const visible = [...this.#db.knowledgeNodes.values()]
       .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
+      .filter(node => node.mergedInto || isKnowledgeScopeVisible(node.scope, canonical))
       .map(node => this.#resolveTerminalNode(node.id)!)
       .filter(node => isKnowledgeScopeVisible(node.scope, canonical))
       .sort((left, right) => right.scope.length - left.scope.length);
