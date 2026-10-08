@@ -540,6 +540,8 @@ overrides:
   'smol-toml@<1.9.0': 1.9.0
   'strnum@<2.4.2': 2.4.2
   'inline-style-parser@<0.2.9': 0.2.9
+  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
+  'http-cache-semantics@<4.3.0': 4.3.0
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false

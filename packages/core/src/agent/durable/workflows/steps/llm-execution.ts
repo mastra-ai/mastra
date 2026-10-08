@@ -57,6 +57,7 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { durableOptionsSchema } from '../shared/schemas';
 
 /**
@@ -151,7 +152,8 @@ const durableLLMInputSchema = z.object({
  * validation is ever (re-)enabled — declare new output fields here.
  */
 const durableLLMOutputSchema = z.object({
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
   text: z.string().optional(),
   // Element shape mirrors DurableToolCallInput / the tool-call step's input schema.
   toolCalls: z.array(
@@ -233,7 +235,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         mastra: mastra as Mastra,
         runId,
         agentId,
-        input: typedInput,
+        input: { ...typedInput, messageListState: readMessageListState(params.state, typedInput) },
         requestContext,
         logger,
       });
@@ -312,7 +314,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
 
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           text: '',
           toolCalls: [],
           stepResult: {
@@ -342,7 +344,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           return emitFatalErrorBail(earlyTimeout, typedInput.modelConfig?.modelId ?? 'unknown');
         }
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           text: '',
           toolCalls: [],
           stepResult: {
@@ -388,7 +390,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
 
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           text: '',
           toolCalls: [],
           stepResult: {
@@ -765,7 +767,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // predicate will see isContinued: false and stop the loop,
                   // then emitFinishEvent will emit reason: 'tripwire'.
                   return {
-                    messageListState: messageList.serialize(),
+                    ...(await storeMessageListState(params, messageList.serialize())),
                     text: '',
                     toolCalls: [],
                     stepResult: {
@@ -918,7 +920,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     });
                   }
                   return {
-                    messageListState: messageList.serialize(),
+                    ...(await storeMessageListState(params, messageList.serialize())),
                     text: '',
                     toolCalls: [],
                     stepResult: {
@@ -1976,7 +1978,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // isContinued: false and stop the loop. The FINISH event
                 // (emitted by the finalization block) will carry reason: 'abort'.
                 return {
-                  messageListState: messageList.serialize(),
+                  ...(await storeMessageListState(params, messageList.serialize())),
                   text: textDeltas.join(''),
                   toolCalls: [],
                   stepResult: {
@@ -2060,7 +2062,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // Persist already-streamed partial output (#22593).
                 materializeStreamedMessages();
                 return {
-                  messageListState: messageList.serialize(),
+                  ...(await storeMessageListState(params, messageList.serialize())),
                   text: textDeltas.join(''),
                   toolCalls: [],
                   stepResult: {
@@ -2098,7 +2100,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 });
               }
               return {
-                messageListState: messageList.serialize(),
+                ...(await storeMessageListState(params, messageList.serialize())),
                 text: textDeltas.join(''),
                 toolCalls: [],
                 stepResult: {
@@ -2157,7 +2159,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     });
                   }
                   return {
-                    messageListState: messageList.serialize(),
+                    ...(await storeMessageListState(params, messageList.serialize())),
                     text: textDeltas.join(''),
                     toolCalls: [],
                     stepResult: {
@@ -2340,7 +2342,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 15. Build output
             const output: DurableLLMStepOutput = {
-              messageListState: messageList.serialize(),
+              ...(await storeMessageListState(params, messageList.serialize())),
               text: textDeltas.join(''),
               // A rejected response's tool calls never run.
               toolCalls: processOutputStepTripwire ? [] : toolCalls,
@@ -2439,7 +2441,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // land here without passing through the inner catch.
               materializeStreamedMessages?.();
               return {
-                messageListState: messageList.serialize(),
+                ...(await storeMessageListState(params, messageList.serialize())),
                 text: textDeltas.join(''),
                 toolCalls: [],
                 stepResult: {
