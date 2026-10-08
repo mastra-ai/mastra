@@ -1135,6 +1135,32 @@ export function createKnowledgeSchemaLatchTests(createIncompatible: () => Promis
       expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
     });
 
+    it('re-runs an identical import whose metadata has several keys in non-sorted order', async () => {
+      const records = [
+        { id: 'event-42-time', text: '10:00-11:00', metadata: { zeta: 1, tz: 'UTC', alpha: { b: 2, a: 1 } } },
+      ];
+      const { knowledge, run } = await createImporter(records);
+
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+      const first = await knowledge.getRecord({ id: 'event-42-time' });
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+    });
+
+    it('re-runs an identical import whose metadata has several keys in non-sorted order', async () => {
+      const records = [
+        { id: 'event-42-time', text: '10:00-11:00', metadata: { zeta: 1, tz: 'UTC', alpha: { b: 2, a: 1 } } },
+      ];
+      const { knowledge, run } = await createImporter(records);
+
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+      const first = await knowledge.getRecord({ id: 'event-42-time' });
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+    });
+
     it('fails a re-run that emits different content for an existing record id', async () => {
       const records = [{ id: 'event-42-time', text: '10:00-11:00' }];
       const { knowledge, run } = await createImporter(records);
