@@ -314,7 +314,7 @@ export const weatherTool = createTool({
 
 ## Tools that run on the client
 
-A tool without an `execute` function is a client tool: the server can't run it, so the agent stops at the step where the model called it. The run ends with `finishReason: 'tool-calls'`, and the model doesn't produce more text until the tool has a result. Pick the pattern that matches what the model needs back:
+A tool without an `execute` function is a client tool: the server can't run it. The agent stops at the step where the model called it. The run ends with `finishReason: 'tool-calls'`, and the model doesn't produce more text until the tool has a result. Pick the pattern that matches what the model needs back:
 
 - **The client runs the tool and the model needs its result**: Leave out `execute`. The client runs the tool, adds the result to the conversation, and sends a new request so the agent continues. With AI SDK `useChat()`, see [client tools with `useChat()`](/integrations/agentic-ui/ai-sdk-ui#client-tools-with-usechat).
 - **The client only renders the call** (for example a product card): Give the tool an `execute` that returns a short acknowledgement. The agent continues in the same run, and the client renders the tool part from its input. Return a small value instead of echoing the input so the model context and stored messages stay small.
