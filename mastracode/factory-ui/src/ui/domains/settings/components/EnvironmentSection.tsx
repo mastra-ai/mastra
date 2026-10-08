@@ -14,7 +14,7 @@ import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../w
 import { settingsSectionPath } from '../settingsSections';
 import { BuildStatusBlock } from './environment/BuildStatusBlock';
 import { BuildTriggersBlock } from './environment/BuildTriggersBlock';
-import { RepositoriesBlock } from './environment/RepositoriesBlock';
+import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
 import { ResourcesBlock } from './environment/ResourcesBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -29,6 +29,10 @@ export function EnvironmentSection() {
   const factoryQuery = useFactoryQuery(factoryId);
   const environmentQuery = useFactoryEnvironmentQuery(factoryId);
   const factory = factoryQuery.data;
+  // The environment payload carries no provider; the factory's link list does.
+  const providers: RepositoryProviders = Object.fromEntries(
+    (factory?.repositories ?? []).map(repository => [repository.projectRepositoryId, repository.provider ?? 'github']),
+  );
 
   if (!factoryId || (factoryQuery.isSuccess && !factory)) {
     return <Notice variant="info">Select a factory to manage its environment.</Notice>;
@@ -50,7 +54,7 @@ export function EnvironmentSection() {
             {environmentQuery.error instanceof Error ? environmentQuery.error.message : 'Failed to load environment'}
           </Notice>
         ) : environmentQuery.data ? (
-          <EnvironmentBlocks factoryId={factoryId} environment={environmentQuery.data} />
+          <EnvironmentBlocks factoryId={factoryId} environment={environmentQuery.data} providers={providers} />
         ) : (
           <Skeleton className="h-24 w-full" />
         )}
@@ -59,7 +63,15 @@ export function EnvironmentSection() {
   );
 }
 
-function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
+function EnvironmentBlocks({
+  factoryId,
+  environment,
+  providers,
+}: {
+  factoryId: string;
+  environment: FactoryEnvironmentPayload;
+  providers: RepositoryProviders;
+}) {
   const saveMutation = useSaveFactoryEnvironmentMutation();
   const buildMutation = useRequestEnvironmentBuildMutation();
   const [buildRequested, setBuildRequested] = useState(false);
@@ -106,7 +118,12 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
     <div className="flex flex-col gap-8">
       {buildRequested && <Notice variant="info">Changes to the environment start a new build.</Notice>}
       <ResourcesBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
-      <RepositoriesBlock repositories={environment.repositories} disabled={saveMutation.isPending} onSave={save} />
+      <RepositoriesBlock
+        repositories={environment.repositories}
+        providers={providers}
+        disabled={saveMutation.isPending}
+        onSave={save}
+      />
       <WorkspaceSetupBlock value={environment.workspaceSetupCommand} disabled={saveMutation.isPending} onSave={save} />
       <BuildTriggersBlock
         triggers={environment.buildTriggers}

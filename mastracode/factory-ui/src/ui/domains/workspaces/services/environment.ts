@@ -53,8 +53,8 @@ export interface FactoryEnvironmentBuild {
 export interface FactoryEnvironmentPayload {
   sandboxProvider: string | null;
   sandboxWorkdir: string | null;
-  sandboxCpuCount: number;
-  sandboxMemoryMb: number;
+  sandboxCpuCount: number | null;
+  sandboxMemoryMb: number | null;
   sandboxIdleTimeoutMinutes: number | null;
   workspaceSetupCommand: string | null;
   activeTemplateId: string | null;
@@ -81,8 +81,8 @@ export interface FactoryEnvironmentRepositoryPatch {
 export interface FactoryEnvironmentPatch {
   sandboxProvider?: string | null;
   sandboxWorkdir?: string | null;
-  sandboxCpuCount?: number;
-  sandboxMemoryMb?: number;
+  sandboxCpuCount?: number | null;
+  sandboxMemoryMb?: number | null;
   sandboxIdleTimeoutMinutes?: number | null;
   workspaceSetupCommand?: string | null;
   /** Positions, when given, must be a permutation of 1..n over the listed repositories. */

@@ -112,13 +112,15 @@ describe('Environment settings', () => {
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');
     expect(screen.getByRole('textbox', { name: 'Workspace setup command' })).toHaveValue('pnpm install');
 
-    const names = screen.getAllByText(/^acme\/|Repository unavailable/).map(node => node.textContent);
-    expect(names).toEqual(['acme/link-web', 'acme/link-api', 'Repository unavailable']);
+    // Rows follow `position`; a link whose repository is gone is not shown at all.
+    const names = screen.getAllByText(/^acme\//).map(node => node.textContent);
+    expect(names).toEqual(['acme/link-web', 'acme/link-api']);
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('switch', { name: /Include .* in the environment/ })).toHaveLength(2);
     expect(screen.getByText('Configured')).toBeInTheDocument();
     expect(screen.getByText('Last build failed')).toBeInTheDocument();
-    expect(screen.getByText('Unbuilt')).toBeInTheDocument();
+    expect(screen.queryByText('Unbuilt')).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Include acme/link-web in the environment' })).toBeChecked();
-    expect(screen.getByRole('switch', { name: 'Include Repository unavailable in the environment' })).toBeDisabled();
 
     expect(screen.queryByText('pnpm build exited with 1')).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Show details for acme/link-api' }));
@@ -126,51 +128,45 @@ describe('Environment settings', () => {
     expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
   });
 
-  it('reorders repositories with renumbered positions and carries dead links along unchanged', async () => {
+  it('offers a drag handle per live repository and none for a dead link', async () => {
     useFactory();
-    const environment = environmentPayload({
-      repositories: [
-        environmentRepository({ projectRepositoryId: 'link-web', position: 1 }),
-        environmentRepository({ projectRepositoryId: 'link-api', position: 2, setupCommand: 'pnpm build' }),
-        environmentRepository({ projectRepositoryId: 'link-gone', slug: null, position: 3 }),
-      ],
-    });
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
+    useEnvironment(
+      environmentPayload({
+        repositories: [
+          environmentRepository({ projectRepositoryId: 'link-web', position: 1 }),
+          environmentRepository({ projectRepositoryId: 'link-api', position: 2 }),
+          environmentRepository({ projectRepositoryId: 'link-gone', slug: null, position: 3 }),
+        ],
+      }),
+    );
 
     renderEnvironmentSettings();
 
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Move acme/link-api up' }));
+    // Drag and drop itself needs layout jsdom does not provide; the PATCH a drop
+    // produces is covered by `repositoriesPatch`'s unit test.
+    expect(await screen.findByLabelText('Drag acme/link-web')).toBeInTheDocument();
+    expect(screen.getByLabelText('Drag acme/link-api')).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/^Drag /)).toHaveLength(2);
+  });
 
+  it('clears a resource back to the provider default and renders it as an empty field', async () => {
+    useFactory();
+    const environment = environmentPayload({ sandboxMemoryMb: null });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const memory = await screen.findByRole('spinbutton', { name: 'Memory in megabytes' });
+    expect(memory).toHaveValue(null);
+    expect(memory).toHaveAttribute('placeholder', 'default');
+
+    const cpu = screen.getByRole('spinbutton', { name: 'CPU cores' });
+    await user.clear(cpu);
+    await user.tab();
     await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({
-      repositories: [
-        {
-          projectRepositoryId: 'link-api',
-          position: 1,
-          inEnvironment: true,
-          setupCommand: 'pnpm build',
-          teardownCommand: null,
-        },
-        {
-          projectRepositoryId: 'link-web',
-          position: 2,
-          inEnvironment: true,
-          setupCommand: null,
-          teardownCommand: null,
-        },
-        // The route counts every link of the project, dead ones included.
-        {
-          projectRepositoryId: 'link-gone',
-          position: 3,
-          inEnvironment: true,
-          setupCommand: null,
-          teardownCommand: null,
-        },
-      ],
-    });
-    expect(screen.getByRole('button', { name: 'Move acme/link-web up' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move Repository unavailable up' })).toBeDisabled();
+    expect(patches[0]).toEqual({ sandboxCpuCount: null });
   });
 
   it('toggles a repository out of the environment', async () => {
