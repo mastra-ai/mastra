@@ -88,7 +88,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #db: InMemoryDB;
   readonly #structureScopes = new Map<
     string,
-    { id: string; name: string; kind?: string; description?: string; deletedAt?: Date }
+    { id: string; name: string; kind?: string; description?: string; createdAt: Date; deletedAt?: Date }
   >();
   readonly #structureParents = new Set<string>();
   readonly #structureGrants = new Set<string>();
@@ -149,6 +149,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       this.#structureScopes.set(scope.address, {
         id,
         name: scope.name,
+        createdAt: new Date(),
         ...(scope.kind ? { kind: scope.kind } : {}),
         ...(scope.description ? { description: scope.description } : {}),
       });
@@ -278,10 +279,29 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       const [scopeId, parentId] = edge.split('\u0000');
       if (scopeId && parentId === input.scopeNodeId) memberIds.add(scopeId);
     }
+    // Child scopes live in the structure maps, not the node table; return them as scope nodes the way
+    // the persistent adapters do (no content scope, empty kind when unset).
+    const scopesById = new Map([...this.#structureScopes.values()].map(scope => [scope.id, scope]));
     const members: KnowledgeNode[] = [];
     for (const id of memberIds) {
       const node = await this.getNode(id);
-      if (node && !node.mergedInto) members.push(node);
+      if (node) {
+        if (!node.mergedInto) members.push(node);
+        continue;
+      }
+      const scope = scopesById.get(id);
+      if (!scope || scope.deletedAt) continue;
+      members.push({
+        id: scope.id,
+        type: 'node',
+        name: scope.name,
+        kind: scope.kind ?? '',
+        ...(scope.description ? { description: scope.description } : {}),
+        scope: null as unknown as KnowledgeScope,
+        version: 1,
+        createdAt: scope.createdAt,
+        updatedAt: scope.createdAt,
+      });
     }
     return members.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, limit);
   }

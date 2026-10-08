@@ -53,7 +53,15 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
     expect(Object.values(scopes)).toEqual(expect.arrayContaining([features.id, mastra.id, memory.id]));
 
-    await expect(store.listScopeMembers({ scopeNodeId: mastra.id })).resolves.toEqual([]);
+    // Child scopes are members of their parent, as in the persistent adapters.
+    const members = await store.listScopeMembers({ scopeNodeId: mastra.id });
+    expect(members).toEqual([
+      expect.objectContaining({ id: features.id, type: 'node', name: 'features', kind: 'domain', scope: null }),
+    ]);
+    await expect(store.listScopeMembers({ scopeNodeId: features.id })).resolves.toEqual([
+      expect.objectContaining({ id: memory.id, name: 'memory', kind: '', description: 'Memory scope' }),
+    ]);
+    await expect(store.listScopeMembers({ scopeNodeId: memory.id })).resolves.toEqual([]);
     await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual([]);
   });
 
