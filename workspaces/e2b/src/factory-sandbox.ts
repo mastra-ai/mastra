@@ -46,7 +46,7 @@ const SETTINGS_SCHEMA = {
       description: 'Memory in MB for the sandbox template',
       default: DEFAULT_SETTINGS.memoryMb,
       minimum: 512,
-      maximum: 8192,
+      maximum: 65536,
     },
     idleTimeoutMinutes: {
       type: 'integer',
