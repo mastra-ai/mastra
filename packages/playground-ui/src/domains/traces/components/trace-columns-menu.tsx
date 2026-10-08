@@ -22,11 +22,19 @@ import { Txt } from '@/ds/components/Txt';
 
 const EMPTY_KEYS: readonly string[] = [];
 
-const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
+const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = [
+  'type',
+  'input',
+  'output',
+  'duration',
+  'endTime',
+  'environment',
+];
 
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   type: 'Primitive type',
   input: 'Input',
+  output: 'Output',
   duration: 'Duration',
   endTime: 'End',
   environment: 'Environment',

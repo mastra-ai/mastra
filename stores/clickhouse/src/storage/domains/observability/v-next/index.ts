@@ -31,7 +31,7 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesLightResponse,
+  ListTraceRootRowsResponse,
   ListTracesResponse,
   BatchCreateLogsArgs,
   ListLogsArgs,
@@ -96,7 +96,7 @@ import type {
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
   TraceAggregateResponse,
-  TraceQueryResponse,
+  TraceQueryRowsResponse,
   TrustedThreadQueryPlan,
   TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
@@ -1153,7 +1153,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
-  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+  protected override async queryTraceRows(plan: TrustedTraceQueryPlan): Promise<TraceQueryRowsResponse> {
     try {
       return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs, this.#deltaCursorStrategy);
     } catch (error) {
@@ -1261,9 +1261,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
   }
 
-  override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+  protected override async listTraceRootRows(args: ListTracesArgs): Promise<ListTraceRootRowsResponse> {
     try {
-      return await traceRootsOps.listTracesLight(this.#client, args, this.#deltaCursorStrategy);
+      return await traceRootsOps.listTraceRootRows(this.#client, args, this.#deltaCursorStrategy);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

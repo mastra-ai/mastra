@@ -383,6 +383,7 @@ export const traceQueryTraceSchema = z
     createdAt: z.string().datetime({ offset: true }),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     inputPreview: z.string().nullable(),
+    outputPreview: z.string().nullable(),
     threadId: z.string().nullable(),
     resourceId: z.string().nullable(),
     startedAt: z.string().datetime({ offset: true }),
@@ -478,6 +479,20 @@ export type TraceQueryRequest = Omit<TraceQueryRequestInput, 'group'> & {
 };
 export type NormalizedTraceQueryRequest = z.output<typeof traceQueryRequestObjectSchema>;
 export type TraceQueryTrace = z.infer<typeof traceQueryTraceSchema>;
+/**
+ * Raw trace row returned by the `queryTraceRows` storage port: the trace fields plus the
+ * root span type and raw `input`/`output` payloads (parsed values or JSON strings).
+ * The core turns these into previews; the payloads never leave the server.
+ */
+export type TraceQueryTraceRow = Omit<TraceQueryTrace, 'inputPreview' | 'outputPreview'> & {
+  spanType: string | null;
+  input?: unknown;
+  output?: unknown;
+  attributes?: unknown;
+};
+type WithTraceRows<T> = T extends { traces: unknown } ? Omit<T, 'traces'> & { traces: TraceQueryTraceRow[] } : T;
+/** Response of the `queryTraceRows` storage port. */
+export type TraceQueryRowsResponse = WithTraceRows<TraceQueryResponse>;
 export type TraceQueryTraceResponse = z.infer<typeof traceQueryTraceResponseSchema>;
 export type TraceQueryPaginatedTraceResponse = z.infer<typeof traceQueryPaginatedTraceResponseSchema>;
 export type TraceQueryDeltaTraceResponse = z.infer<typeof traceQueryDeltaTraceResponseSchema>;

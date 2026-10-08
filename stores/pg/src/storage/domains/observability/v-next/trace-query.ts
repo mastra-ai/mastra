@@ -8,7 +8,8 @@ import type {
   TraceQueryField,
   TraceQueryPredicateField,
   TraceQueryTenantScope,
-  TraceQueryResponse,
+  TraceQueryRowsResponse,
+  TraceQueryTraceRow,
   TraceQueryScoreField,
   TraceQuerySpanField,
   TrustedThreadPredicate,
@@ -116,7 +117,10 @@ const TRACE_SELECT = `
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
   r."metadataRaw" AS "metadata",
+  r."spanType" AS "spanType",
   r."input" AS "input",
+  r."output" AS "output",
+  r."attributes" AS "attributes",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
@@ -983,16 +987,19 @@ async function setRemainingTimeout(transaction: TxClient, deadline: number): Pro
   await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
 }
 
-function traceRowToResult(row: Record<string, unknown>) {
+function traceRowToResult(row: Record<string, unknown>): TraceQueryTraceRow {
   return {
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
+    name: String(row.name),
+    entityId: row.entityId == null ? null : String(row.entityId),
+    parentSpanId: row.parentSpanId == null ? null : String(row.parentSpanId),
     createdAt: asIsoTimestamp(row.startedAt),
-    metadata: row.metadata ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    metadata: (row.metadata ?? null) as Record<string, unknown> | null,
+    spanType: row.spanType == null ? null : String(row.spanType),
+    input: row.input ?? null,
+    output: row.output ?? null,
+    attributes: row.attributes ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -1000,7 +1007,7 @@ function traceRowToResult(row: Record<string, unknown>) {
     entityName: row.entityName == null ? null : String(row.entityName),
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
+    status: row.status as TraceQueryTraceRow['status'],
   };
 }
 
@@ -1009,7 +1016,7 @@ export async function queryTraces(
   schema: string,
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
-): Promise<TraceQueryResponse> {
+): Promise<TraceQueryRowsResponse> {
   if (plan.paginationMode === 'delta') {
     assertDeltaPollingEnabled();
     const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
@@ -1030,7 +1037,7 @@ export async function queryTraces(
         }
         const visible = rows.slice(0, plan.limit);
         const last = visible.at(-1);
-        return coreStorage.traceQueryResponseSchema.parse({
+        return {
           traces: visible.map(traceRowToResult),
           delta: { limit: plan.limit, hasMore: rows.length > plan.limit },
           deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(
@@ -1038,7 +1045,7 @@ export async function queryTraces(
             'pg',
             last ? encodeDeltaCursor(last.xactId, last.cursorId) : emptyDeltaWatermark(horizon, watermark),
           ),
-        });
+        };
       },
       { repeatableRead: true },
     );
@@ -1070,7 +1077,7 @@ export async function queryTraces(
       { repeatableRead: true },
     );
     const traces = rows.map(traceRowToResult);
-    return coreStorage.traceQueryResponseSchema.parse({
+    return {
       traces,
       ...(deltaCursor === undefined ? {} : { deltaCursor }),
       pagination: {
@@ -1079,7 +1086,7 @@ export async function queryTraces(
         perPage: plan.perPage,
         hasMore: (plan.page + 1) * plan.perPage < total,
       },
-    });
+    };
   }
 
   const query = compilePostgresTraceQuery(schema, plan);
@@ -1091,7 +1098,7 @@ export async function queryTraces(
   if (plan.result === 'groups') {
     const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
     const last = groups.at(-1);
-    return coreStorage.traceQueryResponseSchema.parse({
+    return {
       groups,
       page: {
         next:
@@ -1099,12 +1106,12 @@ export async function queryTraces(
             ? coreStorage.encodeTraceQueryCursor(plan, { result: 'groups', threadId: last.threadId })
             : null,
       },
-    });
+    };
   }
 
   const traces = visibleRows.map(traceRowToResult);
   const last = traces.at(-1);
-  return coreStorage.traceQueryResponseSchema.parse({
+  return {
     traces,
     page: {
       next:
@@ -1116,7 +1123,7 @@ export async function queryTraces(
             })
           : null,
     },
-  });
+  };
 }
 
 export async function queryThreads(

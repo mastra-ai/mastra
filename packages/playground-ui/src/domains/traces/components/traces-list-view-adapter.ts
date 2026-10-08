@@ -10,6 +10,7 @@ export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListVie
     name: displayTraceName(trace.name),
     createdAt: trace.createdAt,
     inputPreview: trace.inputPreview,
+    outputPreview: trace.outputPreview,
     metadata: trace.metadata,
     entityId: trace.entityId,
     entityName: trace.entityName,

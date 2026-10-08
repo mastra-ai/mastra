@@ -391,5 +391,148 @@ describe('ObservabilityStorage base class', () => {
 
       await expect(s.listTracesLight({})).rejects.toThrow('does not support listing traces');
     });
+
+    it('derives outputPreview from the result text of the root span', async () => {
+      const s = new TracesOnly();
+
+      const { spans } = await s.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+      const row = spans[0]!;
+      expect(row.outputPreview).toBe(`${'x'.repeat(100)}…`);
+    });
+  });
+
+  describe('listTraceRootRows port', () => {
+    const rootRow = {
+      traceId: 't1',
+      spanId: 's1',
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: 'agent_run' as const,
+      isEvent: false,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: new Date('2026-01-01T00:00:01Z'),
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: null,
+      status: 'success' as const,
+      error: null,
+      entityType: null,
+      entityId: null,
+      entityName: null,
+      threadId: null,
+      resourceId: null,
+      metadata: null,
+      // Stores read JSON columns as strings; the core parses them.
+      input: JSON.stringify([{ role: 'user', content: 'what is the weather?' }]),
+      output: JSON.stringify({ text: 'It is sunny.' }),
+    };
+
+    class PortOnly extends ObservabilityStorage {
+      protected override async listTraceRootRows() {
+        return { pagination: { total: 1, page: 0, perPage: 10, hasMore: false }, spans: [rootRow] };
+      }
+    }
+
+    it('returns previews computed by the core and never the raw payloads', async () => {
+      const { spans } = await new PortOnly().listTracesLight({});
+
+      const row = spans[0]! as Record<string, unknown>;
+      expect(row.inputPreview).toBe('what is the weather?');
+      expect(row.outputPreview).toBe('It is sunny.');
+      expect(row).not.toHaveProperty('input');
+      expect(row).not.toHaveProperty('output');
+    });
+
+    it('shows the status of a suspended workflow that has no output and never returns its attributes', async () => {
+      class SuspendedPort extends ObservabilityStorage {
+        protected override async listTraceRootRows() {
+          return {
+            pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+            spans: [
+              {
+                ...rootRow,
+                spanType: 'workflow_run' as const,
+                output: null,
+                attributes: JSON.stringify({ status: 'suspended' }),
+              },
+            ],
+          };
+        }
+      }
+
+      const row = (await new SuspendedPort().listTracesLight({})).spans[0]! as Record<string, unknown>;
+      expect(row.outputPreview).toBe('suspended');
+      expect(row).not.toHaveProperty('attributes');
+    });
+  });
+
+  describe('queryTraceRows port', () => {
+    const traceRow = {
+      traceId: 't1',
+      rootSpanId: 's1',
+      name: 'my workflow',
+      spanType: 'workflow_run',
+      entityId: null,
+      parentSpanId: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      metadata: null,
+      threadId: null,
+      resourceId: null,
+      startedAt: '2026-01-01T00:00:00.000Z',
+      endedAt: '2026-01-01T00:00:01.000Z',
+      entityName: null,
+      entityType: null,
+      environment: null,
+      status: 'success' as const,
+      input: JSON.stringify({ city: 'Paris' }),
+      output: JSON.stringify({ forecast: 'sunny' }),
+    };
+
+    class QueryPortOnly extends ObservabilityStorage {
+      protected override async queryTraceRows() {
+        return { traces: [traceRow], page: { next: null } };
+      }
+    }
+
+    it('returns previews computed by the core and never the raw payloads', async () => {
+      const response = await new QueryPortOnly().queryTraces({} as never);
+
+      expect('traces' in response).toBe(true);
+      const trace = (response as { traces: Array<Record<string, unknown>> }).traces[0]!;
+      expect(trace.inputPreview).toBe('{"city":"Paris"}');
+      expect(trace.outputPreview).toBe('{"forecast":"sunny"}');
+      expect(trace).not.toHaveProperty('input');
+      expect(trace).not.toHaveProperty('output');
+      expect(trace).not.toHaveProperty('spanType');
+    });
+
+    it('shows the status of a suspended workflow that has no output and never returns its attributes', async () => {
+      class SuspendedQueryPort extends ObservabilityStorage {
+        protected override async queryTraceRows() {
+          return {
+            traces: [{ ...traceRow, output: null, attributes: { status: 'suspended' } }],
+            page: { next: null },
+          };
+        }
+      }
+
+      const response = await new SuspendedQueryPort().queryTraces({} as never);
+      const trace = (response as { traces: Array<Record<string, unknown>> }).traces[0]!;
+      expect(trace.outputPreview).toBe('suspended');
+      expect(trace).not.toHaveProperty('attributes');
+    });
+
+    it('passes grouped responses through unchanged', async () => {
+      class Groups extends ObservabilityStorage {
+        protected override async queryTraceRows() {
+          return { groups: [{ threadId: 'th1' }], page: { next: null } };
+        }
+      }
+
+      await expect(new Groups().queryTraces({} as never)).resolves.toEqual({
+        groups: [{ threadId: 'th1' }],
+        page: { next: null },
+      });
+    });
   });
 });

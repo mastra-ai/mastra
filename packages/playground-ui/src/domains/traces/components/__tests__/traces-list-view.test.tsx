@@ -73,13 +73,14 @@ describe('TracesListView columns', () => {
         'Primitive type',
         'Primitive name',
         'Input',
+        'Output',
         'Status',
         'Duration',
         'Est. cost',
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -288,27 +289,45 @@ describe('TracesListView — rows', () => {
     expect(row?.textContent).toContain(new Date('2026-06-11T08:30:00.000Z').getDate().toString());
   });
 
-  it('prefers the preview the server rendered over one derived from the raw input', () => {
+  it('shows the input and output previews the server rendered', () => {
     render(
       <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1', inputPreview: 'server preview', input: { raw: 'local input' } })]}
+        traces={[makeTrace({ traceId: 'trace-1', inputPreview: 'what is the weather', outputPreview: 'Sunny, 21°C' })]}
         onTraceClick={vi.fn()}
       />,
     );
 
-    expect(screen.getByText('server preview')).toBeTruthy();
-    expect(screen.queryByText(/local input/)).toBeNull();
+    expect(screen.getByText('what is the weather')).toBeTruthy();
+    expect(screen.getByText('Sunny, 21°C')).toBeTruthy();
   });
 
-  it('derives a preview itself when the row carries none', () => {
-    render(
+  it('shows a dash when a row carries no output preview', () => {
+    const { container } = render(
       <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1', input: { prompt: 'what is the weather' } })]}
+        traces={[makeTrace({ traceId: 'trace-1', inputPreview: 'hello', outputPreview: null })]}
+        columnPreferences={{ visibleColumns: ['output'], customColumns: [], metadataKeys: [] }}
         onTraceClick={vi.fn()}
       />,
     );
 
-    expect(screen.getByText(/what is the weather/)).toBeTruthy();
+    expect(screen.getByText('Output')).toBeTruthy();
+    expect(screen.queryByText('hello')).toBeNull();
+    expect(container.querySelector('.data-list-row, [role="row"], button')?.textContent ?? '').toContain('-');
+  });
+
+  it('keeps the name bounded so a lone Output column absorbs the free space', () => {
+    const { container } = render(
+      <TracesListView
+        traces={[]}
+        columnPreferences={{ visibleColumns: ['output'], customColumns: [], metadataKeys: [] }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Input')).toBeNull();
+    const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+    assert(grid);
+    expect(grid.style.gridTemplateColumns).toBe('11rem 14rem minmax(8rem,1fr) 6rem');
   });
 
   it('explains the level icon only where rows mix traces and subtraces', () => {

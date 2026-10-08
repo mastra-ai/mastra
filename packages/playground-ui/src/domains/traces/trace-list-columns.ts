@@ -1,6 +1,7 @@
 export const TRACE_OPTIONAL_COLUMNS = [
   'type',
   'input',
+  'output',
   'duration',
   'endTime',
   'environment',
@@ -41,7 +42,7 @@ import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
 export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
-  visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+  visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
   customColumns: [],
   metadataKeys: [],
 };
@@ -114,13 +115,15 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
 
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
-  // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
-  // without Input, Name is the flexible track that fills the grid.
+  // Name is bounded when a preview column is visible so the previews (1fr) absorb the free space;
+  // without them, Name is the flexible track that fills the grid.
   const columns = ['11rem'];
+  const hasPreview = visible.has('input') || visible.has('output');
 
   if (visible.has('type')) columns.push('7rem');
-  columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
+  columns.push(hasPreview ? '14rem' : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
+  if (visible.has('output')) columns.push('minmax(8rem,1fr)');
 
   columns.push('6rem');
 

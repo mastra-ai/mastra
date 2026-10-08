@@ -8,7 +8,8 @@ import type {
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
-  TraceQueryResponse,
+  TraceQueryRowsResponse,
+  TraceQueryTraceRow,
   TraceQueryScoreField,
   TraceQuerySpanField,
   TraceQueryTenantScope,
@@ -121,7 +122,10 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadataRaw AS metadata,
+  r.spanType AS spanType,
   r.input AS input,
+  r.output AS output,
+  r.attributes AS attributes,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -600,7 +604,7 @@ LIMIT ${limit}`,
     // One pass over `candidates`: CTEs are inlined, so separate page and total
     // subqueries would re-run the root dedupe and relation scans for each. The
     // window sorts every candidate, so it only carries narrow columns; the
-    // metadata/input payloads of the page rows are fetched afterwards
+    // metadata/input/output payloads of the page rows are fetched afterwards
     // (compileClickHouseTraceRootPayloads). The first row doubles as the
     // metadata row (carrying `total`) when the requested page is past the end.
     const onPage = `__row_position > ${offset} AND __row_position <= ${pageEnd}`;
@@ -642,7 +646,7 @@ LIMIT ${limit}`,
 }
 
 /**
- * Fetches the metadata/input payloads for page-mode rows. Looks rows up by the
+ * Fetches the metadata/input/output payloads for page-mode rows. Looks rows up by the
  * trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
  * granules are read. A root can have unmerged versions in different `endedAt`
  * partitions, so `endedAt` is part of the key: the payload comes from the same
@@ -657,7 +661,7 @@ export function compileClickHouseTraceRootPayloads(
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
   return {
-    query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input
+    query: `SELECT traceId, spanId AS rootSpanId, spanType, metadataRaw AS metadata, input, output, attributes
 FROM ${TABLE_TRACE_ROOTS}
 WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
 LIMIT 1 BY traceId, spanId`,
@@ -870,12 +874,36 @@ export async function getTraceQueryValues(
   });
 }
 
+function toTraceQueryTraceRow(row: Record<string, any>): TraceQueryTraceRow {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: (parseJson(row.metadata) as Record<string, unknown> | null) ?? null,
+    spanType: row.spanType == null ? null : String(row.spanType),
+    input: row.input,
+    output: row.output,
+    attributes: row.attributes,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+  };
+}
+
 export async function queryTraces(
   client: ClickHouseClient,
   plan: TrustedTraceQueryPlan,
   timeoutMs: number,
   strategy: ClickHouseDeltaCursorStrategy | null = null,
-): Promise<TraceQueryResponse> {
+): Promise<TraceQueryRowsResponse> {
   const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   const remaining = () => {
     const value = Math.floor(deadline - performance.now());
@@ -905,11 +933,11 @@ export async function queryTraces(
     );
     deltaHead = head[0] ? parseDeltaWatermark(JSON.stringify(head[0])) : { cursorId: '0', traceId: '' };
     if (plan.paginationMode === 'delta' && !plan.deltaCursor) {
-      return coreStorage.traceQueryResponseSchema.parse({
+      return {
         traces: [],
         delta: { limit: plan.limit, hasMore: false },
         deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(deltaHead)),
-      });
+      };
     }
   }
   if (plan.paginationMode === 'page') {
@@ -938,25 +966,8 @@ export async function queryTraces(
     }
     const traces = pageRows
       .map(row => ({ ...row, ...payloads.get(`${row.traceId}\u0000${row.rootSpanId}`) }))
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
-    return coreStorage.traceQueryResponseSchema.parse({
+      .map(toTraceQueryTraceRow);
+    return {
       traces,
       ...(deltaHead
         ? { deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(deltaHead)) }
@@ -967,7 +978,7 @@ export async function queryTraces(
         perPage: plan.perPage,
         hasMore: (plan.page + 1) * plan.perPage < total,
       },
-    });
+    };
   }
 
   const rows = await runWithClickHouseTraceQueryTimeout(
@@ -980,7 +991,7 @@ export async function queryTraces(
   if (plan.result === 'groups') {
     const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
     const last = groups.at(-1);
-    return coreStorage.traceQueryResponseSchema.parse({
+    return {
       groups,
       page: {
         next:
@@ -988,27 +999,10 @@ export async function queryTraces(
             ? coreStorage.encodeTraceQueryCursor(plan, { result: 'groups', threadId: last.threadId })
             : null,
       },
-    });
+    };
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = visibleRows.map(toTraceQueryTraceRow);
   const last = traces.at(-1);
   if (plan.paginationMode === 'delta') {
     const lastRow = visibleRows.at(-1);
@@ -1022,13 +1016,13 @@ export async function queryTraces(
       (previous.cursorId === watermark.cursorId && previous.traceId > watermark.traceId)
     )
       watermark = previous;
-    return coreStorage.traceQueryResponseSchema.parse({
+    return {
       traces,
       delta: { limit: plan.limit, hasMore: rows.length > plan.limit },
       deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'clickhouse', JSON.stringify(watermark)),
-    });
+    };
   }
-  return coreStorage.traceQueryResponseSchema.parse({
+  return {
     traces,
     page: {
       next:
@@ -1040,7 +1034,7 @@ export async function queryTraces(
             })
           : null,
     },
-  });
+  };
 }
 
 export async function queryThreads(

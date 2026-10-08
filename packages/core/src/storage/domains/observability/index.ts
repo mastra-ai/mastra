@@ -97,6 +97,8 @@ export type {
   TraceQueryRequest,
   NormalizedTraceQueryRequest,
   TraceQueryTrace,
+  TraceQueryTraceRow,
+  TraceQueryRowsResponse,
   TraceQueryTraceResponse,
   TraceQueryPaginatedTraceResponse,
   TraceQueryDeltaTraceResponse,

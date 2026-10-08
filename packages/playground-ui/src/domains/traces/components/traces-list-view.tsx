@@ -9,7 +9,7 @@ import {
   hasTraceColumn,
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
-import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
+import { getSpanDurationMs } from '../utils/span-utils';
 import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
@@ -34,9 +34,9 @@ export type TracesListViewTrace = {
   resourceId?: string | null;
   environment?: string | null;
   status?: string | null;
-  /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
+  /** Server-rendered previews of the root span payloads; rows never carry the raw payloads. */
   inputPreview?: string | null;
-  input?: unknown;
+  outputPreview?: string | null;
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
   endedAt?: Date | string | null;
@@ -159,6 +159,7 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'type') && <TracesDataList.TopCell>Primitive type</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'output') && <TracesDataList.TopCell>Output</TracesDataList.TopCell>}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
@@ -257,8 +258,9 @@ export function TracesListView({
                   parentSpanId={trace.parentSpanId}
                   showLevelTooltip={isBranchesMode}
                 />
-                {hasTraceColumn(columnPreferences, 'input') && (
-                  <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
+                {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.InputCell input={trace.inputPreview} />}
+                {hasTraceColumn(columnPreferences, 'output') && (
+                  <TracesDataList.InputCell input={trace.outputPreview} />
                 )}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (

@@ -60,7 +60,7 @@ describe('trace list columns', () => {
   describe('when the grid is built', () => {
     it('keeps the existing default layout', () => {
       expect(buildTraceListColumns(DEFAULT_TRACE_COLUMN_PREFERENCES)).toBe(
-        '11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem',
+        '11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem',
       );
     });
 
@@ -94,6 +94,7 @@ describe('trace list columns', () => {
       expect(TRACE_OPTIONAL_COLUMNS).toEqual([
         'type',
         'input',
+        'output',
         'duration',
         'endTime',
         'environment',
@@ -109,9 +110,9 @@ describe('trace list columns', () => {
       expect(TRACE_OPTIONAL_COLUMNS.filter(isTraceUsageColumn)).toEqual([...TRACE_USAGE_COLUMNS]);
     });
 
-    it('shows type, input, duration and cost by default', () => {
+    it('shows type, input, output, duration and cost by default', () => {
       expect(DEFAULT_TRACE_COLUMN_PREFERENCES).toEqual({
-        visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+        visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
         customColumns: [],
         metadataKeys: [],
       });
@@ -201,7 +202,7 @@ describe('trace list columns', () => {
     it('stamps the payload with its version', () => {
       expect(JSON.parse(serializeTraceColumnPreferences(DEFAULT_TRACE_COLUMN_PREFERENCES))).toEqual({
         version: 3,
-        visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+        visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
         customColumns: [],
         metadataKeys: [],
       });

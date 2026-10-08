@@ -13,7 +13,8 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesLightResponse,
+  ListTraceRootRowsResponse,
+  LightTraceRootRow,
   ListTracesResponse,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -21,7 +22,6 @@ import type {
 } from '@mastra/core/storage';
 import {
   BRANCH_SPAN_TYPES,
-  buildInputPreview,
   computeTraceStatus,
   listBranchesArgsSchema,
   listTracesArgsSchema,
@@ -158,8 +158,8 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT = `
 
 /**
  * Lightweight list variant — also reconstructs `metadata` for the list's
- * configurable columns and `input` so the row mapper can derive `inputPreview`
- * without shipping the blob to the caller.
+ * configurable columns plus raw `input`, `output` and `attributes` so the core can derive
+ * short previews; the blobs themselves never leave the server.
  */
 const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
   SELECT
@@ -177,7 +177,9 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('resourceId')},
     ${argMaxNonNull('error')},
     ${argMaxNonNull('metadata')},
-    ${argMaxNonNull('input')}
+    ${argMaxNonNull('input')},
+    ${argMaxNonNull('output')},
+    ${argMaxNonNull('attributes')}
   FROM span_events
 `;
 
@@ -321,7 +323,7 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
   };
 }
 
-function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpanRecord {
+function rowToLightTraceRootRow(row: Record<string, unknown>): LightTraceRootRow {
   const record = rowToLightSpanRecord(row);
   return {
     ...record,
@@ -329,7 +331,9 @@ function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpa
     threadId: (row.threadId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
-    inputPreview: buildInputPreview(row.input),
+    input: row.input ?? null,
+    output: row.output ?? null,
+    attributes: row.attributes ?? null,
   };
 }
 
@@ -1082,7 +1086,10 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
   };
 }
 
-export async function listTracesLight(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesLightResponse> {
+export async function listTraceRootRows(
+  db: DuckDBConnection,
+  args: ListTracesArgs,
+): Promise<ListTraceRootRowsResponse> {
   const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
 
   const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getTraceDeltaCursor(db, filters) : undefined;
@@ -1091,13 +1098,13 @@ export async function listTracesLight(db: DuckDBConnection, args: ListTracesArgs
     db,
     { filters, pagination, orderBy },
     SPAN_RECONSTRUCT_SELECT_LIGHT_LIST,
-    rowToLightSpanRecordWithPreview,
+    rowToLightTraceRootRow,
     spans => spans,
   );
 
   return {
     pagination: resultPagination,
-    spans: spans as LightSpanRecord[],
+    spans: spans as LightTraceRootRow[],
     ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }

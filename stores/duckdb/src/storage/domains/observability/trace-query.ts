@@ -7,7 +7,8 @@ import type {
   TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryPredicateField,
-  TraceQueryResponse,
+  TraceQueryRowsResponse,
+  TraceQueryTraceRow,
   TraceQueryScoreField,
   TraceQuerySpanField,
   TraceQueryTenantScope,
@@ -118,7 +119,10 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadata AS metadata,
+  r.spanType AS spanType,
   ${payloadColumnSql('r.input')} AS input,
+  ${payloadColumnSql('r.output')} AS output,
+  ${payloadColumnSql('r.attributes')} AS attributes,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -863,33 +867,38 @@ export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
-export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+function toTraceQueryTraceRow(row: Record<string, any>): TraceQueryTraceRow {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: (parseJson(row.metadata) as Record<string, unknown> | null) ?? null,
+    spanType: row.spanType == null ? null : String(row.spanType),
+    input: row.input,
+    output: row.output,
+    attributes: row.attributes,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+  };
+}
+
+export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryRowsResponse> {
   if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
   if (plan.paginationMode === 'page') {
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
-    const traces = rows
-      .filter(row => row.traceId != null)
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
-    return coreStorage.traceQueryResponseSchema.parse({
+    const traces = rows.filter(row => row.traceId != null).map(toTraceQueryTraceRow);
+    return {
       traces,
       // The list-polling feature predates the trace-query cursor encoder.
       ...(deltaPollingFeatureEnabled() && typeof coreStorage.encodeTraceQueryDeltaCursor === 'function'
@@ -901,7 +910,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         perPage: plan.perPage,
         hasMore: (plan.page + 1) * plan.perPage < total,
       },
-    });
+    };
   }
 
   const query = compileDuckDBTraceQuery(plan);
@@ -912,7 +921,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
   if (plan.result === 'groups') {
     const groups = visibleRows.map(row => ({ threadId: String(row.threadId) }));
     const last = groups.at(-1);
-    return coreStorage.traceQueryResponseSchema.parse({
+    return {
       groups,
       page: {
         next:
@@ -920,27 +929,10 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
             ? coreStorage.encodeTraceQueryCursor(plan, { result: 'groups', threadId: last.threadId })
             : null,
       },
-    });
+    };
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = visibleRows.map(toTraceQueryTraceRow);
   if (plan.paginationMode === 'delta') {
     const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
     const head = String(rows[0]?.streamHead ?? 0);
@@ -949,14 +941,14 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
       : BigInt(head) > BigInt(previous)
         ? head
         : previous;
-    return coreStorage.traceQueryResponseSchema.parse({
+    return {
       traces,
       delta: { limit: plan.limit, hasMore: matchingRows.length > plan.limit },
       deltaCursor: coreStorage.encodeTraceQueryDeltaCursor(plan, 'duckdb', watermark),
-    });
+    };
   }
   const last = traces.at(-1);
-  return coreStorage.traceQueryResponseSchema.parse({
+  return {
     traces,
     page: {
       next:
@@ -968,7 +960,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
             })
           : null,
     },
-  });
+  };
 }
 
 export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
