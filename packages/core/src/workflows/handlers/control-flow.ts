@@ -1228,6 +1228,10 @@ export async function executeForeach(
     });
   };
 
+  /**
+   * Executes one queued item and checkpoints eligible successes before releasing its slot.
+   * A checkpoint failure stops queued work while preserving the item's successful result.
+   */
   const worker = async (task: ForeachTask, cb: DoneCallback) => {
     const { item, k, resumeToUse } = task;
     let checkpointDue = false;

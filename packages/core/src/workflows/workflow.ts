@@ -1854,6 +1854,11 @@ export class Workflow<
 
   #schedules: WorkflowScheduleConfig[];
 
+  /**
+   * Initializes workflow schemas, schedules and execution options.
+   * Uses the supplied engine or creates a default engine with these options,
+   * including the foreach checkpoint budget.
+   */
   constructor({
     mastra,
     id,
