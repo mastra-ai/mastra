@@ -337,6 +337,7 @@ function fakeGithubIntegration() {
               }
             : null;
         }),
+        setBuildStatus: vi.fn(async () => null),
       },
       connections: {
         get: vi.fn(async () => ({
@@ -3591,6 +3592,40 @@ describe('factory environment sandbox context', () => {
         slug: 'octocat/hello',
         setupStatus: 'failed',
       });
+    });
+
+    it('records each repository setup result on its link, redacting credentials from the failure', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm docs') {
+          throw new SetupCommandError(
+            'Setup command failed (exit 1): fatal: https://x-access-token:ghs_abc123@github.com/octocat/docs',
+            'setup-failed',
+          );
+        }
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
+        (call: [unknown]) => call[0],
+      );
+      expect(writes).toEqual([
+        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
+        {
+          orgId: 'org-1',
+          id: 'link-2',
+          status: 'failed',
+          error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
+          builtAt: expect.any(Date),
+        },
+      ]);
+      warn.mockRestore();
     });
   });
 });
