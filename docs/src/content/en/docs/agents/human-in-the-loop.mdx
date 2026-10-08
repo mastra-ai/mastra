@@ -277,6 +277,8 @@ const weatherTool = createTool({
 
 :::
 
+Use `suspend()` instead of a tool without `execute` when the tool needs a structured answer from the user and also runs inside a subagent: subagents can't run client tools, but suspension propagates through the supervisor. To resume from AI SDK `useChat()`, see [resuming a suspended tool from `useChat()`](/integrations/agentic-ui/ai-sdk-ui#resuming-a-suspended-tool-from-usechat).
+
 ## Tool approval with `generate()`
 
 Tool approval also works with `generate()` for non-streaming use cases. When a tool requires approval, `generate()` returns immediately with `finishReason: 'suspended'`, a `suspendPayload` containing the tool call details (`toolCallId`, `toolName`, `args`), and a `runId`:
