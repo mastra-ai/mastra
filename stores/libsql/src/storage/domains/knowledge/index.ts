@@ -5,6 +5,7 @@ import {
   createKnowledgeCoreLoader,
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
+  canonicalizeKnowledgeRecordScopeIds,
   canonicalizeKnowledgeScopeIds,
   isKnowledgeNodeVisible,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
@@ -1036,7 +1037,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     importRunId?: string;
     contextScopeId?: string;
   }): Promise<KnowledgeRecord> {
-    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    const scopeIds = canonicalizeKnowledgeRecordScopeIds(input.scopeIds);
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);

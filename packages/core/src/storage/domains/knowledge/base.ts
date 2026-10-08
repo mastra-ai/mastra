@@ -461,6 +461,12 @@ export function canonicalizeKnowledgeNodeId(id: string): string {
 export function canonicalizeKnowledgeScopeIds(scopeIds: KnowledgeScopeIds): KnowledgeScopeIds {
   return [...new Set(scopeIds.map(canonicalizeKnowledgeNodeId))].sort();
 }
+/** Canonicalizes a record's scope list; a record with no scopes is unreachable, so use deleteRecord instead. */
+export function canonicalizeKnowledgeRecordScopeIds(scopeIds: KnowledgeScopeIds): KnowledgeScopeIds {
+  const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
+  if (canonical.length === 0) throw new Error('Knowledge records require at least one scope.');
+  return canonical;
+}
 export function knowledgeScopeIdsKey(scopeIds: KnowledgeScopeIds): string {
   return canonicalizeKnowledgeScopeIds(scopeIds).join('\u001f');
 }

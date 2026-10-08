@@ -486,6 +486,21 @@ export function createKnowledgeStorageTests(
       }
     });
 
+    it('rejects empty record scope lists without changing the record', async () => {
+      const node = await store.createNode({ name: 'Scoped subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Must stay reachable', scopeIds: [PROJECT_SCOPE_ID] });
+
+      await expect(store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [] })).rejects.toThrow(
+        'Knowledge records require at least one scope.',
+      );
+
+      expect(await store.getRecord({ id: record.id })).toEqual(record);
+      expect(await store.getRecordScopeIds(record.id)).toEqual([PROJECT_SCOPE_ID]);
+      expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records.map(item => item.id)).toEqual([
+        record.id,
+      ]);
+    });
+
     it('updates node memberships with optimistic concurrency and refreshes record semantics', async () => {
       const node = await store.createNode({ name: 'Movable', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node, text: 'Attached record', scopeIds: [PROJECT_SCOPE_ID] });

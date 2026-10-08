@@ -56,6 +56,14 @@ describe('Knowledge core compatibility', () => {
       coreStorage.canonicalizeKnowledgeScopeIds(scopeIds),
     );
     expect(knowledgeCompat.knowledgeScopeIdsKey(scopeIds)).toBe(coreStorage.knowledgeScopeIdsKey(scopeIds));
+    expect(knowledgeCompat.canonicalizeKnowledgeRecordScopeIds(scopeIds)).toEqual(
+      coreStorage.canonicalizeKnowledgeRecordScopeIds(scopeIds),
+    );
+    for (const storage of [knowledgeCompat, coreStorage]) {
+      expect(() => storage.canonicalizeKnowledgeRecordScopeIds([])).toThrow(
+        new Error('Knowledge records require at least one scope.'),
+      );
+    }
 
     for (const binding of ['[" github ","repo:mastra "]', '["github","repo:mastra"]']) {
       expect(knowledgeCompat.canonicalizeKnowledgeImporterBindingKey(binding)).toBe(

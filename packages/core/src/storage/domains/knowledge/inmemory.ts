@@ -2,6 +2,7 @@ import type { InMemoryDB } from '../inmemory-db';
 import {
   canonicalizeKnowledgeImporterBindingKey,
   canonicalizeKnowledgeNodeId,
+  canonicalizeKnowledgeRecordScopeIds,
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
@@ -790,7 +791,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (record.version !== version) throw new KnowledgeConflictError(id);
-    const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
+    const canonical = canonicalizeKnowledgeRecordScopeIds(scopeIds);
     this.#assertScopeNodes(canonical);
     const oldScopeIds = this.#recordScopeIds(record.id);
     const updated = { ...record, version: record.version + 1, updatedAt: new Date() };
