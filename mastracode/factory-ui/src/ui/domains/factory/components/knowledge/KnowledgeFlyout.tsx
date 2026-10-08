@@ -13,6 +13,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { knowledgeScopes } from './knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from './knowledgeStyles';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
@@ -41,9 +45,9 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <Txt as="span" variant="meta" className="bg-badge-purple-strong text-badge-purple-foreground rounded px-1.5 py-0.5">
+    <Badge variant={knowledgeScopes[rung].tone} emphasis="subtle">
       {RUNG_LABELS[rung].toLowerCase()}
-    </Txt>
+    </Badge>
   );
 }
 
@@ -117,19 +121,13 @@ function RecordCard({
       ref={cardRef}
       data-testid="knowledge-record"
       data-pinned={record.pinned || undefined}
-      className={[
-        'rounded-lg border transition-colors',
+      className={cn(
+        'rounded-lg border transition-colors duration-fast motion-reduce:transition-none',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
         record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
-        expanded
-          ? record.pinned
-            ? 'border-badge-amber-indicator'
-            : 'border-badge-purple-edge'
-          : record.pinned
-            ? 'border-badge-amber-edge'
-            : 'border-border',
-      ].join(' ')}
+        getRecordBorderClass(record.pinned, expanded),
+      )}
     >
       <div
         role="button"
@@ -261,7 +259,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform duration-300"
+      className="border-border bg-card shadow-overlay duration-normal absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform motion-reduce:transition-none"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
@@ -286,14 +284,9 @@ export function KnowledgeFlyout({
                 <RungBadge rung={nodeQuery.data.node.rung} />
               </div>
             </div>
-            <button
-              type="button"
-              aria-label="Close details"
-              className="text-muted-foreground hover:text-foreground ml-auto rounded p-1"
-              onClick={onClose}
-            >
-              <X size={16} />
-            </button>
+            <Button variant="ghost" size="icon-sm" aria-label="Close details" className="ml-auto" onClick={onClose}>
+              <X />
+            </Button>
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -349,7 +342,7 @@ export function KnowledgeFlyout({
                       <div
                         key={record.id}
                         className={
-                          record.id === focusRecordId ? 'ring-badge-purple-indicator rounded-lg ring-2' : undefined
+                          record.id === focusRecordId ? cn('rounded-lg', getRecordRingClass(record.pinned)) : undefined
                         }
                       >
                         <RecordCard

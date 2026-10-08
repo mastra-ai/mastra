@@ -2,6 +2,7 @@
   "attachment": [
     "claude-fable-5",
     "claude-fable-5-1",
+    "claude-haiku-5-5",
     "claude-opus-5",
     "claude-opus-5-5",
     "claude-sonnet-5",
@@ -47,6 +48,7 @@
   "structuredOutput": [
     "claude-fable-5",
     "claude-fable-5-1",
+    "claude-haiku-5-5",
     "claude-opus-5",
     "claude-opus-5-5",
     "claude-sonnet-5",
@@ -207,6 +209,15 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gemini-3.8-flash": [
