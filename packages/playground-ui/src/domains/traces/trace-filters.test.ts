@@ -120,9 +120,9 @@ describe('createTraceFilterBarFields', () => {
       expect(rootDuration?.label).toBe('Duration (ms)');
     });
 
-    it('treats it as a number field with number operators', () => {
+    it('treats it as a number field with range operators only', () => {
       expect(rootDuration?.type).toBe('number');
-      expect(rootDuration?.operators).toEqual(['is', 'isNot', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists']);
+      expect(rootDuration?.operators).toEqual(['gt', 'gte', 'lt', 'lte']);
     });
   });
 

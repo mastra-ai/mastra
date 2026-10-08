@@ -305,6 +305,8 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'exists',
   'notExists',
 ];
+/** Root duration: only ranges make sense on a millisecond value. */
+const TRACE_ROOT_DURATION_OPERATORS: TraceFilterOperatorId[] = ['gt', 'gte', 'lt', 'lte'];
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
@@ -574,7 +576,10 @@ export function createTraceFilterBarFields({
   }
   return [
     ...[...pickFields, ...tagsFields].sort(byLabel),
-    ...[...textFields, ...(withRootDuration ? [number('durationMs')] : [])].sort(byLabel),
+    ...[
+      ...textFields,
+      ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
+    ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]
