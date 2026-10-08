@@ -1,6 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
+import { Card, CardContent, CardTitle } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMastraClient } from '@mastra/react';
 import { useChannelPlatforms } from '@mastra/react/hooks/agents';
@@ -37,10 +37,8 @@ export const AgentChannelsCard = ({ agentId }: { agentId: string }) => {
 
   return (
     <Card elevation="flat" data-testid="agent-channels-card">
-      <CardHeader>
+      <CardContent className="flex flex-col gap-1">
         <CardTitle>Finish connecting your channels</CardTitle>
-      </CardHeader>
-      <CardContent density="compact" className="px-4">
         <ul className="divide-y divide-border">
           {actions.map(({ platform, isPending }) => (
             <ChannelAction key={platform.id} platform={platform} agentId={agentId} isPending={isPending} />

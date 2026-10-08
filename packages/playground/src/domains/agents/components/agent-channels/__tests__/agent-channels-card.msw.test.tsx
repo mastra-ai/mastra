@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
+import type { ChannelInstallationInfo } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { noSlackInstallations, slackInstallations } from '../../__tests__/fixtures/channels';
+import {
+  activeDiscordInstallations,
+  noSlackInstallations,
+  pendingSlackInstallations,
+  slackDiscordConfiguredPlatforms,
+  slackInstallations,
+} from '../../__tests__/fixtures/channels';
 import { AgentChannelsCard } from '../agent-channels-card';
 import { server } from '@/test/msw-server';
 
@@ -34,15 +41,9 @@ function renderCard() {
   return { ...view, queryClient };
 }
 
-const useChannels = (slackInstalls: unknown[], discordInstalls: unknown[]) =>
+const useChannels = (slackInstalls: ChannelInstallationInfo[], discordInstalls: ChannelInstallationInfo[]) =>
   server.use(
-    http.get(`${BASE_URL}/api/channels/platforms`, () =>
-      HttpResponse.json([
-        { id: 'slack', name: 'Slack', isConfigured: true },
-        { id: 'discord', name: 'Discord', isConfigured: true },
-        { id: 'telegram', name: 'Telegram', isConfigured: false },
-      ]),
-    ),
+    http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(slackDiscordConfiguredPlatforms)),
     http.get(`${BASE_URL}/api/channels/slack/installations`, () => HttpResponse.json(slackInstalls)),
     http.get(`${BASE_URL}/api/channels/discord/installations`, () => HttpResponse.json(discordInstalls)),
   );
@@ -71,13 +72,37 @@ describe('AgentChannelsCard', () => {
     expect(screen.queryByText('Telegram')).toBeNull();
   });
 
-  it('flags a pending install', async () => {
-    useChannels([{ ...slackInstallations[0], status: 'pending' }], noSlackInstallations);
+  it('starts the connect flow for the clicked channel', async () => {
+    useChannels(noSlackInstallations, activeDiscordInstallations);
+    let connectBody: unknown;
+    server.use(
+      http.post(`${BASE_URL}/api/channels/slack/connect`, async ({ request }) => {
+        connectBody = await request.json();
+        return HttpResponse.json({ type: 'immediate', installationId: 'install-1' });
+      }),
+    );
+
+    renderCard();
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+    await waitFor(() => expect(connectBody).toMatchObject({ agentId: 'agent-1' }));
+  });
+
+  it('flags a pending install and reconciles it when the window regains focus', async () => {
+    useChannels(pendingSlackInstallations, activeDiscordInstallations);
+    let reconciled = false;
+    server.use(
+      http.post(`${BASE_URL}/api/channels/slack/agent-1/reconcile`, () => {
+        reconciled = true;
+        return HttpResponse.json(null);
+      }),
+    );
 
     renderCard();
 
     expect(await screen.findByText('Pending')).not.toBeNull();
-    expect(screen.getByText(HEADING)).not.toBeNull();
+    fireEvent.focus(window);
+    await waitFor(() => expect(reconciled).toBe(true));
   });
 
   it('renders nothing when no channel is connected yet', async () => {
@@ -91,7 +116,7 @@ describe('AgentChannelsCard', () => {
   });
 
   it('renders nothing once every configured channel is installed', async () => {
-    useChannels(slackInstallations, [{ ...slackInstallations[0], platform: 'discord' }]);
+    useChannels(slackInstallations, activeDiscordInstallations);
 
     const { queryClient } = renderCard();
     await settle(queryClient);
