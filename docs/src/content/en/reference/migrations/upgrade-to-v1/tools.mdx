@@ -127,7 +127,7 @@ This applies to all tool executions, whether called directly or through agents a
 
 Tools with an `outputSchema` now validate their return values at runtime. Previously, `outputSchema` was only used for type inference - the output was never validated.
 
-If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data.
+If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data. This is the default `outputValidation: 'strict'` behavior. With [`outputValidation: 'warn'`](/reference/tools/create-tool), Mastra logs the mismatch and returns the original output unchanged.
 
 To fix validation errors, ensure the tool's output matches the schema definition:
 
