@@ -93,6 +93,25 @@ describe('rebuildRunToolsFromMastra request context', () => {
     },
   );
 
+  it('retains the missing-agent fallback when processor hydration is requested', async () => {
+    const runId = 'missing-agent-rebuild';
+    const getAgentById = vi.fn().mockImplementation(() => {
+      throw new Error('Agent with id missing-agent not found');
+    });
+
+    await expect(
+      rebuildRunToolsFromMastra({
+        mastra: { getAgentById } as any,
+        runId,
+        agentId: 'missing-agent',
+        state: {} as any,
+        rehydrateProcessors: true,
+      }),
+    ).resolves.toBeUndefined();
+    expect(getAgentById).toHaveBeenCalledWith('missing-agent');
+    expect(globalRunRegistry.has(runId)).toBe(false);
+  });
+
   it('rebuilds the save queue without resolving processors for persistence-only callers', async () => {
     const runId = 'persistence-only-rebuild';
     const memory = {};

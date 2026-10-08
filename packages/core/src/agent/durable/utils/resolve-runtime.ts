@@ -450,8 +450,10 @@ export async function rebuildRunToolsFromMastra(options: {
   } = options;
   if (!mastra) return undefined;
 
+  let agentResolved = false;
   try {
     const agent = mastra.getAgentById(agentId);
+    agentResolved = true;
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
@@ -546,7 +548,7 @@ export async function rebuildRunToolsFromMastra(options: {
   } catch (error) {
     if (error instanceof DurableProcessorRebuildError) throw error;
     const entry = globalRunRegistry.get(runId);
-    if (options.rehydrateProcessors && (!entry?.outputProcessors || !entry.processorStates)) {
+    if (agentResolved && options.rehydrateProcessors && (!entry?.outputProcessors || !entry.processorStates)) {
       throw new DurableProcessorRebuildError(agentId, error);
     }
     logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
