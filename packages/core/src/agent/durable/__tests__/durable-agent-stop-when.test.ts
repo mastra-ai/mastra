@@ -277,7 +277,7 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
   it('a throwing stopWhen settles the run one way or another', async () => {
     const { results, commits, calls } = await runT23('throws');
 
-    // The harness records this contract per engine, reference-vs-candidate; each field is asserted
+    // The harness records this contract per engine, reference-vs-candidate; its fields are asserted
     // below from the observation the helper returned.
     for (const engine of ENGINES) {
       const { turns, requests } = results[engine]!;
@@ -288,12 +288,14 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
       expect(requests, `${engine}: modelCalls`).toHaveLength(1);
       expect(commits.get(engine), `${engine}: commits`).toBe(1);
       expect(chunksOfType(turn, 'finish'), `${engine}: finish`).toBe(0);
+      // No finish chunk reached the stream, so the harness's finishReason has nothing to read.
+      expect(turn.finishChunk.payloadKeys, `${engine}: finishReason`).toEqual([]);
       expect(
-        chunksOfType(turn, 'finish') >= 1 || errorMessages(turn).length > 0 || turn.error !== undefined,
+        errorMessages(turn).length > 0 || turn.error !== undefined,
         `${engine}: throwing stopWhen settles the run one way or another`,
       ).toBe(true);
       expect(turn.error, `${engine}: threw`).toEqual({ name: 'Error', message: 'T23 stopWhen failure' });
-      // The shared chunks `chunkPayloads` is ignored for this behaviour (see COR_1430), so pin the
+      // The shared chunks' `chunkPayloads` is ignored for this behaviour (see COR_1430), so pin the
       // payload the harness's `commits` stands for.
       expect((turn.chunkPayloads[3] as { result?: unknown }).result, `${engine}: tool result`).toEqual({ done: 1 });
     }
@@ -323,13 +325,11 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
       ).toBe('tool-calls');
     }
 
-    // The predicate consults differ across engines too (evented asks more than once, because its
-    // worker retries the step); that divergence is recorded with COR-1412 rather than pinned.
-    for (const engine of ENGINES) {
-      expect(
-        calls.get(engine)!.map(call => call.name),
-        `${engine}: predicate names`,
-      ).toEqual(Array<string>(calls.get(engine)!.length).fill('throws'));
-    }
+    // How often the predicate is consulted differs across engines: plain and durable ask once,
+    // evented asks more because its worker re-runs the step and re-reads the decision. That is the
+    // divergence COR-1412 already records for this harness case, so only the vacuity floor is pinned.
+    expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
+    expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
+    expect(calls.get('evented')!.length, 'evented: the predicate was consulted').toBeGreaterThanOrEqual(1);
   });
 });
