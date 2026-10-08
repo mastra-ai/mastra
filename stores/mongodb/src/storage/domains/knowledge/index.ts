@@ -770,7 +770,16 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const rows = await (
       await this.#nodes()
     )
-      .find({ type: 'node', canonicalName: canonicalName(name) }, sessionOptions(session))
+      .find(
+        // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+        // visible-scope rows and merged aliases (whose terminal may be visible) are candidates.
+        {
+          type: 'node',
+          canonicalName: canonicalName(name),
+          $or: [{ scopeKey: { $in: visibleScopeKeys(scope) } }, { mergedInto: { $ne: null } }],
+        },
+        sessionOptions(session),
+      )
       .toArray();
     const candidates = rows.map(nodeFromDocument).sort((left, right) => right.scope.length - left.scope.length);
     for (const candidate of candidates) {
