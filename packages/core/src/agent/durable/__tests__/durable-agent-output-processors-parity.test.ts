@@ -5,15 +5,21 @@
  * to the stream and to memory. Model-free: `stepScript(1)` — one `step` tool call then
  * `finished 1 steps` — with `maxSteps: 3`.
  *
- * Ported variants: `mutate`, `tripwire` and `data`. `data` was green first try; `tripwire` needed the
- * harness's own `steps` counter (the `step` tool's commit log, not the parity snapshot's
+ * Ported variants: `mutate`, `tripwire`, `data` and `throws`. `data` was green first try; `tripwire`
+ * needed the harness's own `steps` counter (the `step` tool's commit log, not the parity snapshot's
  * `toolResults`); `mutate` needs the COR-1414 declaration below.
+ *
+ * `throws` (fail CLOSED per #25826 / COR-1315): a processor that throws on every text delta and in
+ * `processOutputResult` never lets the unprocessed text reach the stream and surfaces the failure on
+ * every engine, so the case's own checks are asserted against each engine directly
+ * (`runT45ThrowsDirect`). The helper cannot drive it: its built-in declaration for the `error` chunk
+ * (COR-1390 — plain forwards the live `Error` where durable and evented forward the serialised error
+ * alone) does not reproduce for a failure raised by an output processor, because neither engine adds
+ * the `type` key the declaration names, and `checkEngine` reports a stale declaration before any
+ * scenario-level declaration is considered.
  *
  * Not ported, escalated rather than weakened:
  *
- * - `throws` (fail CLOSED per #25826 / COR-1315): a throwing output processor makes the run surface an
- *   error, so the turn cannot be recorded by the parity helper at all — the same wall as T36's error
- *   variant and T44's `throws`.
  * - `tool-result` and `retry` (COR-1343, GH #22980) are recorded FAIL on durable and evented at every
  *   pin: `processOutputStream` sees the `tool-result` chunk twice and the `processOutputStep`
  *   `{ retry: true }` abort ends the run in a tripwire instead of calling the model again. A known
@@ -31,12 +37,19 @@
  * everywhere.
  */
 
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { OutputProcessor } from '../../../processors';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -48,6 +61,8 @@ import type {
 import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 type Mode = 'mutate' | 'tripwire' | 'data';
+/** `throws` is driven directly (see below), so it is not one of `PLAIN_CONTRACTS`' recorded variants. */
+type ProbeMode = Mode | 'throws';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const THREAD = 't45-thread';
@@ -97,6 +112,37 @@ const PLAIN_CONTRACTS: Record<Mode, Record<string, unknown>> = {
   },
 };
 
+/**
+ * The `throws` shape, measured on every engine at the audit pin (all three identical): the throwing
+ * `processOutputStream` swallows the unprocessed text, the run surfaces one `error` chunk and still
+ * reaches `step-finish`/`finish`. Pinned literally so the checks go stale if any engine moves.
+ */
+const THROWS_CHUNK_TYPES = [
+  'start',
+  'step-start',
+  'tool-call',
+  'tool-result',
+  'step-finish',
+  'step-start',
+  'text-start',
+  'error',
+  'step-finish',
+  'finish',
+];
+
+const THROWS_CONTRACT: Record<string, unknown> = {
+  streamedMutated: false,
+  memoryMutated: false,
+  memoryUppercased: false,
+  lastType: 'finish',
+  finishes: 1,
+  errors: 1,
+  tripwire: false,
+  thrown: null,
+  modelCalls: 2,
+  steps: 1,
+};
+
 /** Harness `errorChunks`: `error`, `abort` and `tripwire` chunks all count as a surfaced failure. */
 function errorChunks(turn: ParitySnapshot): number {
   return ['error', 'abort', 'tripwire'].reduce((total, type) => total + chunksOfType(turn, type), 0);
@@ -141,10 +187,12 @@ interface ProbeHandles {
   log: HookRecord[];
 }
 
-function createOutputProbe(id: string, mode: Mode, handles: ProbeHandles): OutputProcessor {
+function createOutputProbe(id: string, mode: ProbeMode, handles: ProbeHandles): OutputProcessor {
   const record = (hook: string, extra: Omit<HookRecord, 'hook'> = {}) => handles.log.push({ hook, ...extra });
   const act = (hook: string, abort: (reason?: string) => never) => {
     if (mode === 'tripwire') abort(`${id} tripwire at ${hook}`);
+    // Harness probe `throw`: the same hook throws where `tripwire` aborts.
+    if (mode === 'throws') throw new Error(`${id} threw at ${hook}`);
   };
   let emitted = false;
 
@@ -239,6 +287,163 @@ async function runT45(mode: Mode) {
   });
 
   return { results, memories, handleLogs, stepCommits };
+}
+
+interface ThrowCaseState {
+  /** Chunk types the public stream yielded, in order. */
+  chunkTypes: string[];
+  /** The failure chunk's payload, when the stream carried one. */
+  errorPayload: unknown;
+  /** Text the stream streamed — the harness's `text`. */
+  streamedText: string;
+  /** `finish` chunks the stream yielded — the harness's `finishes`. */
+  finishes: number;
+  /** Failure chunks (`error`/`abort`/`tripwire`) — the harness's `errors`. */
+  errors: number;
+  /** Whether the stream carried a `tripwire` chunk. */
+  tripwire: boolean;
+  /** Set when the run rejected — the harness's `thrown`. */
+  thrown?: string;
+  /** Model calls the run made. */
+  requests: number;
+  /** `step` tool executions that completed. */
+  steps: number;
+  /** The persisted assistant messages, serialised. */
+  assistant: string;
+}
+
+/**
+ * Drives one engine through the `throws` shape the way the parity helper does per engine (wrapper,
+ * host, one streamed turn). A direct check is required because the helper's own built-in declaration
+ * for the `error` chunk (COR-1390, plain forwards the live `Error` under `type: 'error'` where the
+ * wrapped engines forward the serialised error alone) does not reproduce for a failure raised by an
+ * output processor — neither engine adds that `type` key here — and `checkEngine` reports a stale
+ * declaration before any scenario-level declaration is considered.
+ */
+async function runT45ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
+  const requests: CapturedRequest[] = [];
+  const model = new MockLanguageModelV2({
+    doStream: async (options: unknown) => {
+      const request = options as unknown as CapturedRequest;
+      requests.push(request);
+      const done = completedSteps(request);
+      return {
+        stream: convertArrayToReadableStream(
+          (done >= STEPS
+            ? textOnlyTape(`finished ${done} steps`)
+            : toolCallTape('step', { n: done + 1 }, `t45-step-${done + 1}`)) as never[],
+        ),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  });
+  const state: ThrowCaseState = {
+    chunkTypes: [],
+    errorPayload: undefined,
+    streamedText: '',
+    finishes: 0,
+    errors: 0,
+    tripwire: false,
+    requests: 0,
+    steps: 0,
+    assistant: '',
+  };
+  const memory = new MockMemory();
+  const agent = new Agent({
+    id: 't45-agent',
+    name: 'T45 Agent',
+    instructions: 'Use the step tool until you have finished.',
+    model: model as LanguageModelV2,
+    tools: {
+      step: createTool({
+        id: 'step',
+        description: 'Record one completed step.',
+        inputSchema: z.object({ n: z.number() }),
+        execute: async ({ n }) => {
+          state.steps += 1;
+          return { done: n };
+        },
+      }),
+    },
+    memory,
+    outputProcessors: [createOutputProbe(OUTPUT_ID, 'throws', { log: [] })],
+  });
+  const pubsub = new EventEmitterPubSub();
+  const runner =
+    engine === 'plain'
+      ? agent
+      : engine === 'durable'
+        ? createDurableAgent({ agent, pubsub })
+        : createEventedAgent({ agent });
+  const host = new Mastra({
+    agents: { 't45-agent': runner } as never,
+    storage: new InMemoryStore(),
+    logger: false,
+  });
+
+  const options = {
+    maxSteps: MAX_STEPS,
+    runId: `t45-run-throws-${engine}`,
+    memory: { thread: THREAD, resource: RESOURCE },
+  };
+
+  let cleanup: (() => Promise<void>) | undefined;
+  let output: { fullStream: AsyncIterable<{ type: string; payload?: unknown }> } | undefined;
+  try {
+    if (engine === 'plain') {
+      output = (await agent.stream('go', options)) as never;
+    } else {
+      const result = await (
+        runner as unknown as {
+          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
+        }
+      ).stream('go', options);
+      output = result.output;
+      cleanup = result.cleanup;
+    }
+  } catch (error) {
+    state.thrown = String((error as Error)?.message ?? error).slice(0, 200);
+  }
+  if (output) {
+    try {
+      for await (const chunk of output.fullStream) {
+        state.chunkTypes.push(chunk.type);
+        if (chunk.type === 'text-delta') {
+          state.streamedText += String((chunk.payload as { text?: string } | undefined)?.text ?? '');
+        }
+        if (chunk.type === 'finish') state.finishes += 1;
+        if (['error', 'abort', 'tripwire'].includes(chunk.type)) {
+          state.errors += 1;
+          state.errorPayload = chunk.payload;
+        }
+        if (chunk.type === 'tripwire') state.tripwire = true;
+      }
+    } catch (error) {
+      state.thrown = state.thrown ?? String((error as Error)?.message ?? error).slice(0, 200);
+    }
+  }
+  state.requests = requests.length;
+  const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+  state.assistant = JSON.stringify(messages.filter(message => message.role === 'assistant'));
+  if (cleanup) await cleanup();
+  await host.shutdown();
+  return state;
+}
+
+/** The harness's `done()` contract fields, read from a direct run's state. */
+function throwsContract(state: ThrowCaseState): Record<string, unknown> {
+  return {
+    streamedMutated: state.streamedText.includes('FINISHED'),
+    memoryMutated: state.assistant.includes(`[out:${OUTPUT_ID}]`),
+    memoryUppercased: state.assistant.includes('FINISHED 1 STEPS'),
+    lastType: state.chunkTypes.at(-1) ?? null,
+    finishes: state.finishes,
+    errors: state.errors,
+    tripwire: state.tripwire,
+    thrown: state.thrown ?? null,
+    modelCalls: state.requests,
+    steps: state.steps,
+  };
 }
 
 describe('T45 output processors (plain, durable, evented)', () => {
@@ -373,6 +578,33 @@ describe('T45 output processors (plain, durable, evented)', () => {
     expect(contracts.get('plain'), 'plain contract').toEqual(PLAIN_CONTRACTS.data);
     for (const engine of ENGINES.slice(1)) {
       expect(contracts.get(engine), `${engine} contract`).toEqual(contracts.get('plain'));
+    }
+  });
+  it('fails closed when a text delta throws', async () => {
+    const states = new Map<ParityEngine, ThrowCaseState>();
+    for (const engine of ENGINES) states.set(engine, await runT45ThrowsDirect(engine));
+
+    for (const engine of ENGINES) {
+      const state = states.get(engine)!;
+
+      // harness: `fails closed: unprocessed text never streamed (#25826)`.
+      expect(state.streamedText, `${engine}: streamed text`).not.toContain(FINAL_TEXT);
+      // harness: `fails closed: the processor failure surfaced (error chunk or stream error)`.
+      expect(state.errors > 0 || state.thrown !== undefined, `${engine}: failure surfaced`).toBe(true);
+
+      // Every engine reaches the same chunk sequence and the same contract; the failure chunk carries
+      // the same `error` payload content, but plain holds the live `Error` while durable and evented
+      // hold a serialised `{ name, message }` object (the divergence the frozen helper declares for the
+      // `error` chunk under COR-1390). Only the shared content is asserted.
+      expect(state.chunkTypes, `${engine}: chunk types`).toEqual(THROWS_CHUNK_TYPES);
+      expect(Object.keys((state.errorPayload ?? {}) as object), `${engine}: failure chunk payload keys`).toEqual([
+        'error',
+      ]);
+      const failure = (state.errorPayload as { error?: { name?: string; message?: string } }).error;
+      expect(failure?.name, `${engine}: failure name`).toBe('Error');
+      expect(failure?.message, `${engine}: failure message`).toBe(`${OUTPUT_ID} threw at processOutputStream`);
+      expect(state.thrown, `${engine}: run rejection`).toBeUndefined();
+      expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACT);
     }
   });
 });
