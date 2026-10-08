@@ -1,7 +1,7 @@
 import { fork } from 'node:child_process';
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
@@ -368,5 +368,52 @@ describe('Agent.abortRunStream without a thread', () => {
     await Promise.resolve();
 
     expect(agent.abortRunStream(runId)).toBe(false);
+  });
+
+  describe('in runtimes without FinalizationRegistry', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    });
+
+    it('loads the runtime module', async () => {
+      vi.stubGlobal('FinalizationRegistry', undefined);
+      vi.resetModules();
+
+      const runtimeModule = await import('../thread-stream-runtime');
+
+      expect(runtimeModule.agentThreadStreamRuntime).toBeInstanceOf(runtimeModule.AgentThreadStreamRuntime);
+    });
+
+    it('aborts thread-less runs and removes them after they finish', async () => {
+      vi.stubGlobal('FinalizationRegistry', undefined);
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = new Agent({
+        id: 'no-finalizer-no-thread',
+        name: 'No finalizer cleanup test',
+        instructions: 'Test',
+        model: createParkedModel().model,
+      });
+      const register = (runId: string, finished: Promise<void>) => {
+        const options = runtime.prepareRunOptions({ runId }, pubsub);
+        runtime.registerRun(agent, { runId, _waitUntilFinished: () => finished } as any, options, pubsub);
+        return options;
+      };
+
+      const aborted = register('no-finalizer-aborted-run', new Promise<void>(() => {}));
+      expect(runtime.abortRun('no-finalizer-aborted-run', pubsub)).toBe(true);
+      expect(aborted.abortSignal?.aborted).toBe(true);
+
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      register('no-finalizer-finished-run', finished);
+      finish();
+      await finished;
+      await Promise.resolve();
+      expect(runtime.abortRun('no-finalizer-finished-run', pubsub)).toBe(false);
+    });
   });
 });

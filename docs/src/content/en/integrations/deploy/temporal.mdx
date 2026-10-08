@@ -52,6 +52,29 @@ export const { createWorkflow, createStep } = init({
 
 `loadClientConnectConfig()` reads standard Temporal environment variables such as `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, and mTLS settings. See the [Temporal envconfig docs](https://docs.temporal.io/develop/typescript/temporal-clients) for the full list.
 
+### Configure activity retries
+
+Pass `retry` to `init()` to set a Temporal activity retry policy for workflows created by these helpers. For example, add the following options to the initialization above to limit a failing activity to five total attempts:
+
+```ts
+export const { createWorkflow, createStep } = init({
+  client,
+  taskQueue: 'mastra',
+  startToCloseTimeout: '5 minutes',
+  retry: {
+    initialInterval: '5 seconds',
+    backoffCoefficient: 2,
+    maximumInterval: '5 minutes',
+    maximumAttempts: 5,
+    nonRetryableErrorTypes: ['ValidationError'],
+  },
+})
+```
+
+The policy applies to all generated activities, including steps, mappings, and conditions. Set `maximumAttempts: 1` to disable retries. Omitting `retry` preserves Temporal's default policy, which allows unlimited attempts. Mastra's workflow `retryConfig` doesn't configure Temporal activity retries.
+
+Keep retry options in the statically analyzable `init()` configuration so the worker build can include them. Inline object literal spreads are supported. Spreads of variables or function results are skipped during activity option extraction, so `retry` and `startToCloseTimeout` inside those spreads aren't forwarded to the generated workflow. Provide these options directly in `init()` or in an inline object literal spread instead. Rebuild and restart the worker after changing the policy.
+
 ### Creating steps
 
 Define the individual steps that will compose your workflow. Each step becomes a Temporal activity.
