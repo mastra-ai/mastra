@@ -31,10 +31,12 @@ function AccountMenuExample({
   initiallyOpen = true,
   initialTheme = 'dark',
   includeCopyAction = false,
+  multiOrg = true,
 }: {
   initiallyOpen?: boolean;
   initialTheme?: 'light' | 'dark';
   includeCopyAction?: boolean;
+  multiOrg?: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
   const [organization, setOrganization] = useState('mastra');
@@ -64,32 +66,34 @@ function AccountMenuExample({
           align="start"
           sideOffset={8}
           rail={
-            <AvatarRail aria-label="Organizations">
-              <AvatarRail.Item
-                aria-label={longOrganizationName}
-                current={organization === 'mastra'}
-                onClick={() => setOrganization('mastra')}
-              >
-                <Avatar name={longOrganizationName} src={mastraLogo} size="rail" />
-              </AvatarRail.Item>
-              <AvatarRail.Item
-                aria-label="Acme"
-                current={organization === 'acme'}
-                onClick={() => setOrganization('acme')}
-              >
-                <Avatar name="Acme" src={acmeLogo} size="rail" />
-              </AvatarRail.Item>
-              <AvatarRail.Item
-                aria-label="Cloud"
-                current={organization === 'cloud'}
-                onClick={() => setOrganization('cloud')}
-              >
-                <Avatar name="Cloud" src={cloudLogo} size="rail" />
-              </AvatarRail.Item>
-              <AvatarRail.Item aria-label="Create an organization" variant="action" onClick={() => setOpen(false)}>
-                <PlusIcon />
-              </AvatarRail.Item>
-            </AvatarRail>
+            multiOrg ? (
+              <AvatarRail aria-label="Organizations">
+                <AvatarRail.Item
+                  aria-label={longOrganizationName}
+                  current={organization === 'mastra'}
+                  onClick={() => setOrganization('mastra')}
+                >
+                  <Avatar name={longOrganizationName} src={mastraLogo} size="rail" />
+                </AvatarRail.Item>
+                <AvatarRail.Item
+                  aria-label="Acme"
+                  current={organization === 'acme'}
+                  onClick={() => setOrganization('acme')}
+                >
+                  <Avatar name="Acme" src={acmeLogo} size="rail" />
+                </AvatarRail.Item>
+                <AvatarRail.Item
+                  aria-label="Cloud"
+                  current={organization === 'cloud'}
+                  onClick={() => setOrganization('cloud')}
+                >
+                  <Avatar name="Cloud" src={cloudLogo} size="rail" />
+                </AvatarRail.Item>
+                <AvatarRail.Item aria-label="Create an organization" variant="action" onClick={() => setOpen(false)}>
+                  <PlusIcon />
+                </AvatarRail.Item>
+              </AvatarRail>
+            ) : null
           }
         >
           <div className="flex min-w-0 items-center gap-2.5 px-3 py-1.5">
@@ -227,4 +231,9 @@ export const Keyboard: Story = {
 
 export const WithOrganizationCopy: Story = {
   args: { includeCopyAction: true },
+};
+
+export const WithoutRail: Story = {
+  args: { multiOrg: false },
+  globals: { theme: 'dark' },
 };

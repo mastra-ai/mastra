@@ -4,7 +4,7 @@ Use `AvatarRail` for organization shortcuts and `CompositeAvatar` for a person's
 
 ## Compose the menu
 
-The rail makes the popup a dialog containing a toolbar and named menus. Declare the trigger's popup type, label the content, and put action items inside `DropdownMenu.Group`.
+The rail makes the popup a dialog containing a toolbar and named menus. Declare the trigger's popup type, label the content, and put action items inside `DropdownMenu.Group`. Pass `rail={null}` to keep the same layout without the rail column when only one organization applies.
 
 ```tsx
 import { Avatar, CompositeAvatar } from '@mastra/playground-ui/components/Avatar'

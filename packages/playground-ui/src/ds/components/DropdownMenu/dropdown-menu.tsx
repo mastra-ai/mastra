@@ -237,27 +237,29 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
             <NativeItemHighlightContext.Provider value={rail !== undefined}>
               {rail !== undefined ? (
                 <>
-                  <div
-                    data-slot="dropdown-menu-rail"
-                    className="flex shrink-0 border-r border-border"
-                    onKeyDown={event => {
-                      if (event.key === 'ArrowRight') {
-                        event.currentTarget.parentElement
-                          ?.querySelector<HTMLElement>('[role=menuitem]:not([data-disabled])')
-                          ?.focus();
-                        event.preventDefault();
-                      }
-                      if (
-                        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(
-                          event.key,
-                        )
-                      ) {
-                        event.stopPropagation();
-                      }
-                    }}
-                  >
-                    {rail}
-                  </div>
+                  {rail !== null && (
+                    <div
+                      data-slot="dropdown-menu-rail"
+                      className="flex shrink-0 border-r border-border"
+                      onKeyDown={event => {
+                        if (event.key === 'ArrowRight') {
+                          event.currentTarget.parentElement
+                            ?.querySelector<HTMLElement>('[role=menuitem]:not([data-disabled])')
+                            ?.focus();
+                          event.preventDefault();
+                        }
+                        if (
+                          ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(
+                            event.key,
+                          )
+                        ) {
+                          event.stopPropagation();
+                        }
+                      }}
+                    >
+                      {rail}
+                    </div>
+                  )}
                   <div
                     data-slot="dropdown-menu-actions"
                     className="min-h-0 min-w-0 flex-1 overflow-y-auto px-1 py-0.75"

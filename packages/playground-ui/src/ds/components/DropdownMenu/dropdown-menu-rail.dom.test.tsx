@@ -46,6 +46,23 @@ describe('DropdownMenu with an avatar rail', () => {
     expect(await screen.findByRole('menu', { name: 'Account' })).toBeDefined();
   });
 
+  it('keeps the account layout without a rail column when rail is null', async () => {
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger aria-haspopup="dialog">Account</DropdownMenu.Trigger>
+        <DropdownMenu.Content aria-label="Account menu" rail={null}>
+          <DropdownMenu.Group role="menu" aria-label="Actions">
+            <DropdownMenu.Item>Sign out</DropdownMenu.Item>
+          </DropdownMenu.Group>
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+    const popup = await screen.findByRole('dialog', { name: 'Account menu' });
+    expect(popup.className).toContain('w-87');
+    expect(popup.querySelector('[data-slot=dropdown-menu-rail]')).toBeNull();
+    expect(popup.querySelector('[data-slot=dropdown-menu-actions]')).not.toBeNull();
+  });
+
   it('moves between the rail and actions and restores focus on Escape', async () => {
     const select = vi.fn();
     const user = userEvent.setup();
