@@ -10,47 +10,52 @@
  * wake-up segments. The harness runs plain and durable only; evented is
  * excluded because its background workers are covered by T4e.
  *
- * The harness green even when chunk payloads diverge, so this port asserts every
+ * The harness greens even when chunk payloads diverge, so this port asserts every
  * harness `evaluate()` check per engine and reproduces the harness's
  * `done(contract)` cross-engine deep-equality on top of it.
  *
- * Expressibility: this case cannot drive `expectEngineParity`. The frozen helper
- * builds its host as `new Mastra({ agents, storage, logger: false })` and never
- * calls `startWorkers()`, and a deferred background dispatch silently degrades to
- * a foreground call without a `BackgroundTaskManager` bound to the host
- * (`Mastra#ensureBackgroundTaskManager` requires `backgroundTasks.enabled` plus
- * storage, and `#maybeEnableBackgroundTasksForAgent` only auto-enables it for
- * agents that declare sub-agents). Running this scenario through the helper would
- * therefore pass every check vacuously without ever exercising the wake-up path.
- * The case instead runs each engine on a case-local host that enables background
- * tasks and starts workers, following the T16/T17 precedent.
+ * The case runs through `expectEngineParity` on a host with
+ * `host: { backgroundTasks: { enabled: true } }`, which is what makes the helper
+ * bind a `BackgroundTaskManager` and call `startWorkers()`. Without that a
+ * deferred dispatch degrades silently to a foreground call and every check here
+ * would pass without ever exercising the wake-up path.
  *
  * Timing note: the harness's artificial 1500 ms tool delay is reduced to 400 ms.
  * T30 excludes exact timing from its claims and no check depends on the duration.
  */
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
+import type { EngineDifference, ModelScript, ParityEngine, ParitySnapshot } from './parity-harness';
+import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 /** The harness excludes evented (`background workers; T4e`). */
 const ENGINES = ['plain', 'durable'] as const;
-type Engine = (typeof ENGINES)[number];
 
 const VARIANTS = ['unbounded', 'max-steps'] as const;
-type Variant = (typeof VARIANTS)[number];
 
 const CAP = 6;
 const IDLE_MS = 20_000;
 /** The harness's `FETCH_DELAY_MS` is 1500; 400 keeps the port CI-viable. */
 const FETCH_DELAY_MS = 400;
 const USAGE = { inputTokens: 1, outputTokens: 1, totalTokens: 2 } as const;
+
+/** One thread for both engines: the harness compares contracts, not request metadata. */
+const MEMORY = { thread: 't30-thread', resource: 't30-resource' };
+
+/**
+ * COR-1390: on the deferred-dispatch path plain keeps the placeholder
+ * `tool-result` inside the step and the wrapped engines stream
+ * `background-task-progress` and flush the completed result after `step-finish`
+ * instead; the `taskId` itself is a per-engine UUID.
+ */
+const COR_1390_BACKGROUND = {
+  reason:
+    'COR-1390: wrapped engines stream background-task-progress and flush the completed result after step-finish where plain keeps the placeholder; taskId is a per-engine stubbed UUID.',
+  ignore: ['chunks', 'chunkTypes', 'chunkPayloads', 'toolResults', 'requests'],
+} satisfies EngineDifference;
 
 type ToolLogEntry = { tool: string; event: string; name: string };
 
@@ -71,43 +76,18 @@ function createFetchRecordTool(log: ToolLogEntry[]) {
 }
 
 /** The harness's script: a new deferred dispatch on every call until CAP, then text. */
-function createScriptModel(next: () => { toolCall: string } | { text: string }) {
-  return new MockLanguageModelV2({
-    doStream: async () => {
-      const step = next();
-      const parts: unknown[] = [
-        { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 't30-response', modelId: 't30-model', timestamp: new Date(0) },
-      ];
-      if ('toolCall' in step) {
-        parts.push(
-          {
-            type: 'tool-call',
-            toolCallId: step.toolCall,
-            toolName: 'fetchRecord',
-            input: JSON.stringify({ name: step.toolCall, _background: { disposition: 'deferred' } }),
-          },
-          { type: 'finish', finishReason: 'tool-calls', usage: USAGE },
-        );
-      } else {
-        parts.push(
-          { type: 'text-start', id: 't30-text' },
-          { type: 'text-delta', id: 't30-text', delta: step.text },
-          { type: 'text-end', id: 't30-text' },
-          { type: 'finish', finishReason: 'stop', usage: USAGE },
-        );
-      }
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream(parts as any[]),
-      };
-    },
-  });
-}
+const T30_SCRIPT: ModelScript = {
+  respond: (_request, callIndex) =>
+    callIndex <= CAP
+      ? toolCallTape(
+          'fetchRecord',
+          { name: `t30-${callIndex}`, _background: { disposition: 'deferred' } },
+          `t30-${callIndex}`,
+          USAGE,
+        )
+      : textOnlyTape('capped by harness', USAGE),
+};
 
-type Chunk = { type: string; payload?: { error?: { message?: string } } };
-type T30Run = { chunks: Chunk[]; log: ToolLogEntry[]; modelCalls: number; threw: string | null };
 type T30Contract = {
   modelCalls: number;
   dispatched: number;
@@ -119,65 +99,36 @@ type T30Contract = {
   cappedBy: 'harness' | 'product';
 };
 
-async function runOnEngine(engine: Engine, variant: Variant): Promise<T30Run> {
-  const log: ToolLogEntry[] = [];
-  let calls = 0;
-  const next = () => (calls++ < CAP ? { toolCall: `t30-${calls}` } : { text: 'capped by harness' });
-
-  const agent = new Agent({
-    id: 't30-agent',
-    name: 't30',
-    instructions: 'Go.',
-    model: createScriptModel(next),
-    memory: new MockMemory(),
-    tools: { fetchRecord: createFetchRecordTool(log) },
-  });
-
-  const pubsub = engine === 'durable' ? new EventEmitterPubSub() : undefined;
-  const runner = engine === 'durable' ? createDurableAgent({ agent, pubsub }) : agent;
-
-  // The harness host: background workers must be enabled and started or a
-  // deferred dispatch degrades to a foreground call and the case is vacuous.
-  const host = new Mastra({
-    agents: { [agent.id]: runner as any },
-    storage: new InMemoryStore(),
-    logger: false,
-    backgroundTasks: { enabled: true },
-  });
-  await host.startWorkers();
-
-  let threw: string | null = null;
-  const chunks: Chunk[] = [];
-  try {
-    const result = (await (runner as any).stream('Go.', {
-      memory: { thread: `t30-thread-${engine}`, resource: `t30-resource-${engine}` },
-      runId: `t30-run-${engine}`,
-      untilIdle: { maxIdleMs: IDLE_MS },
-      maxSteps: variant === 'max-steps' ? 3 : 20,
-    })) as { fullStream: AsyncIterable<Chunk>; cleanup?: () => void | Promise<void> };
-    for await (const chunk of result.fullStream) chunks.push(chunk);
-    await result.cleanup?.();
-  } catch (error) {
-    threw = String((error as Error)?.message ?? error).slice(0, 200);
-  } finally {
-    await host.shutdown();
-    await pubsub?.close();
-  }
-
-  return { chunks, log, modelCalls: calls, threw };
+function countType(turn: ParitySnapshot, type: string): number {
+  return turn.chunkTypes.filter(chunkType => chunkType === type).length;
 }
 
-/** Every check from the harness's `evaluate()`, asserted per engine. */
-function assertHarnessChecks(where: string, run: T30Run): T30Contract {
-  const { chunks, log, modelCalls, threw } = run;
-  const starts = log.filter(e => e.tool === 'fetchRecord' && e.event === 'start').length;
-  const errors = chunks.filter(c => c.type === 'error').map(c => String(c.payload?.error?.message ?? '').slice(0, 120));
+/**
+ * The `error` chunk payload is the error itself (plain hands over the live
+ * `Error`, the wrapped engines its serialised shape), so accept both.
+ */
+function errorMessages(turn: ParitySnapshot): string[] {
+  const messages: string[] = [];
+  turn.chunkTypes.forEach((type, index) => {
+    if (type !== 'error') return;
+    const payload = turn.chunkPayloads[index] as { message?: unknown; error?: { message?: unknown } } | undefined;
+    const message = payload?.error?.message ?? payload?.message;
+    if (message !== undefined) messages.push(String(message).slice(0, 120));
+  });
+  return messages;
+}
+
+/** Every check from the harness's `evaluate()`, plus the vacuity guards it cannot express. */
+function contractOf(where: string, turn: ParitySnapshot, log: ToolLogEntry[], modelCalls: number): T30Contract {
+  const starts = log.filter(entry => entry.tool === 'fetchRecord' && entry.event === 'start').length;
+  const errors = errorMessages(turn);
+  const threw = turn.error ? turn.error.message.slice(0, 200) : null;
   const contract: T30Contract = {
     modelCalls,
     dispatched: starts,
-    segments: chunks.filter(c => c.type === 'start').length,
-    finish: chunks.filter(c => c.type === 'finish').length,
-    completed: chunks.filter(c => c.type === 'background-task-completed').length,
+    segments: countType(turn, 'start'),
+    finish: countType(turn, 'finish'),
+    completed: countType(turn, 'background-task-completed'),
     errors,
     threw,
     cappedBy: modelCalls > CAP ? 'harness' : 'product',
@@ -203,9 +154,43 @@ function assertHarnessChecks(where: string, run: T30Run): T30Contract {
 describe('T30 untilIdle wake-up ceiling', () => {
   for (const variant of VARIANTS) {
     it(`${variant}: the wake-up loop settles and records how many segments it allowed`, async () => {
-      const observed = new Map<Engine, T30Contract>();
+      const logs = new Map<ParityEngine, ToolLogEntry[]>();
+
+      const results = await expectEngineParity({
+        engines: ENGINES,
+        model: T30_SCRIPT,
+        host: { backgroundTasks: { enabled: true } },
+        differences: { durable: COR_1390_BACKGROUND },
+        buildAgent: ({ engine, model }) => {
+          const log: ToolLogEntry[] = [];
+          logs.set(engine, log);
+          return new Agent({
+            id: 't30-agent',
+            name: 't30',
+            instructions: 'Go.',
+            model,
+            memory: new MockMemory(),
+            tools: { fetchRecord: createFetchRecordTool(log) },
+          });
+        },
+        run: async handle => {
+          await handle.turn('Go.', {
+            memory: MEMORY,
+            runId: `t30-run-${handle.engine}`,
+            untilIdle: { maxIdleMs: IDLE_MS },
+            maxSteps: variant === 'max-steps' ? 3 : 20,
+          });
+        },
+      });
+
+      const observed = new Map<ParityEngine, T30Contract>();
       for (const engine of ENGINES) {
-        observed.set(engine, assertHarnessChecks(`${engine}/${variant}`, await runOnEngine(engine, variant)));
+        const result = results[engine];
+        expect(result, `${engine} ran`).toBeDefined();
+        observed.set(
+          engine,
+          contractOf(`${engine}/${variant}`, result!.turns[0]!, logs.get(engine)!, result!.requests.length),
+        );
       }
 
       // The script's own cap is what ended the run: the loop kept re-dispatching until the harness
