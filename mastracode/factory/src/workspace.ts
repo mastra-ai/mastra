@@ -720,8 +720,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
-        // The provider reads resources (cpu, memory, idle timeout) from the
-        // project's stored settings document, never from the context.
+        // The provider reads its own settings (resources, images) from the
+        // project's stored document, never from the context.
         const sandbox = factorySandbox.create(
           {
             sessionId: session.id,

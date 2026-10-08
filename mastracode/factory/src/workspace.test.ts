@@ -3185,6 +3185,17 @@ describe('factory environment sandbox context', () => {
     expect('cpuCount' in ctx).toBe(false);
     expect('memoryMB' in ctx).toBe(false);
     expect('idleTimeoutMinutes' in ctx).toBe(false);
+    expect(Object.keys(ctx).sort()).toEqual([
+      'continueOnSetupFailure',
+      'getRepositoryAccess',
+      'repoFullName',
+      'repos',
+      'sandboxId',
+      'sessionId',
+      'setupCommand',
+      'workingDirectory',
+      'workspaceSetupCommand',
+    ]);
     expect(sandbox.calls).toHaveLength(1);
     expect(sandbox.calls[0]!.ctx).toBe(ctx);
     expect(sandbox.calls[0]!.settings).toEqual({ cpuCount: 2, idleTimeoutMinutes: 45 });
@@ -3243,12 +3254,33 @@ describe('factory environment sandbox context', () => {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
       expect(typeof ctx.getRepositoryAccess).toBe('function');
-      expect('repos' in ctx).toBe(false);
-      expect('cpuCount' in ctx).toBe(false);
+      expect(Object.keys(ctx).sort()).toEqual([
+        'getRepositoryAccess',
+        'repoFullName',
+        'sandboxId',
+        'sessionId',
+        'setupCommand',
+      ]);
     }
     // The settings belong to the project: the factory session boots with them
     // in single-repository form too; a session without a factory gets none.
     expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);
+  });
+
+  it('boots a session whose own link left the environment in single-repository form, still with the settings', async () => {
+    const { resolver, sandbox } = environmentFixture({
+      links: twoLinks.map(link => (link.id === 'project-1' ? { ...link, inEnvironment: false } : link)),
+      project: { sandboxSettings: { cpuCount: 4 } },
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const [call] = sandbox.calls;
+    expect('repos' in call!.ctx).toBe(false);
+    expect(call!.ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
+    expect(call!.settings).toEqual({ cpuCount: 4 });
   });
 
   describe('environment boot', () => {

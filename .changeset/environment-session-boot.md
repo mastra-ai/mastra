@@ -8,4 +8,4 @@ Sessions boot every repository in the Factory environment instead of one linked 
 - The session branch is resumed where the remote has it; a repository's setup command is skipped when the template already ran it; the workspace setup command runs last.
 - A `factory-environment` state signal tells the agent which repositories are present, where, and on which branch.
 - Every repository is torn down when the session retires.
-- The provider receives the project's stored sandbox settings document on every boot through `FactorySandbox.create(ctx, settings)`.
+- The provider receives the project's stored sandbox settings document when a session's sandbox is constructed, through `FactorySandbox.create(ctx, settings)`; a document saved later applies to sandboxes constructed after it.
