@@ -56,6 +56,7 @@ import {
   restoreRequestContext,
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
 
 /**
@@ -604,15 +605,21 @@ export function createDurableToolCallStep() {
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       let threadExists = state?.threadExists ?? false;
 
-      // Reconstruct MessageList from workflow state if available
-      // Note: In foreach mode, the message list from the registry may be available
-      // but for durability, we access what's available through the registry
-      let messageList: MessageList | undefined;
-      // For local execution, the globalRunRegistry might have an ExtendedRunRegistry entry
-      // that stores the messageList. We cast and check safely.
-      const extendedEntry = globalRunRegistry.get(runId) as any;
-      if (extendedEntry?.messageList) {
-        messageList = extendedEntry.messageList;
+      let messageList = globalRunRegistry.get(runId)?.messageList;
+      // A durable engine can replay the completed LLM step on a cold resume,
+      // so its runtime rehydration never runs before this suspended tool step.
+      // The suspension metadata was flushed to memory before suspending.
+      if (!messageList && workflowResumeData !== undefined && memory && state?.threadId) {
+        const { messages } = await memory.recall({
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+          perPage: false,
+        });
+        messageList = createRunMessageList({
+          mastra,
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+        }).add(messages, 'memory');
       }
 
       const doFlush = async () => {
@@ -788,6 +795,7 @@ export function createDurableToolCallStep() {
         }
         // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
         if (matchedEntry && pubsub) {
+          const resumedEntry = globalRunRegistry.get(runId);
           // Re-run the original approval/suspension display transform so the ack never re-exposes redacted payloads.
           const displayed = await applyToolPayloadTransformToChunk(
             {
@@ -805,8 +813,13 @@ export function createDurableToolCallStep() {
               metadata: undefined as Record<string, any> | undefined,
             },
             {
-              policy: registryEntry?.toolPayloadTransform,
-              tools: registryEntry?.tools,
+              policy:
+                resumedEntry?.toolPayloadTransform ??
+                Object.values(mastra?.listAgents?.() ?? {})
+                  .find(agent => agent.id === initData.agentId)
+                  ?.getToolPayloadTransform?.() ??
+                mastra?.getToolPayloadTransform?.(),
+              tools: resumedEntry?.tools ?? rebuiltTools,
               logger: logger as any,
             },
           );
