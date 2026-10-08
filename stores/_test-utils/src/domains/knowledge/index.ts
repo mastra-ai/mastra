@@ -457,7 +457,8 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const node = await store.createNode({ name: 'Atlas', scopeIds: [PROJECT_SCOPE_ID] });
       await store.updateNode({ id: node.id, version: node.version, kind: 'project' });
       const documentId = knowledgeSemanticDocumentId('node', node.id);
-      const forNode = (entries: { documentId: string }[]) => entries.filter(entry => entry.documentId === documentId);
+      const forNode = <T extends { documentId: string }>(entries: T[]) =>
+        entries.filter(entry => entry.documentId === documentId);
 
       const first = forNode(await store.claimSemanticOutbox({ workerId: 'first', limit: 100 }));
       expect(first).toHaveLength(1);
