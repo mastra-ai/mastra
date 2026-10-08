@@ -19,14 +19,15 @@
  *     is what makes this shape inexpressible to the parity helper: its recording model always turns a
  *     tape into a stream, and a turn that fails on the model call leaves the helper's own
  *     `finish.stepResult` declaration with nothing to strip, so `expectEngineParity` rejects the
- *     scenario as a stale declaration before it compares anything. Each engine is therefore checked
- *     directly here, with no per-scenario override, and the checks are the harness's own for this
- *     shape — `onError` once, no `onFinish`, a step reported before the error.
+ *     scenario as a stale declaration before it compares anything (COR-1429). Each engine is therefore
+ *     checked directly here, with no per-scenario override, and the checks are the harness's own for
+ *     this shape — `onError` once, no `onFinish`, a step reported before the error.
  *
  * The engines also genuinely disagree on what the callbacks themselves see — the harness's own
  * recorded pairing for the callback contract is red, and the helper does not compare callbacks — so
- * each engine's contract is pinned literally below, with plain's as the reference. One of those
- * divergences is ticketed: plain's `onFinish` payload carries keys the wrappers do not (COR-1390).
+ * each engine's contract is pinned literally below, with plain's as the reference. Two of those
+ * divergences are ticketed under COR-1390: plain's `onFinish` payload carries keys the wrappers do not,
+ * and the wrappers report `onError` after both steps where plain reports it between them.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -498,7 +499,8 @@ interface ErrorCaseState {
 
 /**
  * Drives one engine through the `error` shape, mirroring what the parity helper does per engine
- * (wrapper, host, one streamed turn), because the helper cannot run a model whose `doStream` throws.
+ * (wrapper, host, one streamed turn), because the helper cannot run a model whose `doStream` throws
+ * (COR-1429).
  */
 async function runErrorDirect(engine: ParityEngine): Promise<ErrorCaseState> {
   const requests: unknown[] = [];
@@ -629,6 +631,16 @@ const ERROR_CONTRACTS: Record<ParityEngine, { onChunk: string[]; requests: numbe
   },
 };
 
+/**
+ * The `error` shape's callback order, per engine (same run as the types above). Durable and evented
+ * report the error after both steps; plain reports it between them (COR-1390).
+ */
+const ERROR_CALLBACK_NAMES: Record<ParityEngine, string[]> = {
+  plain: ['onStepFinish', 'onError', 'onStepFinish'],
+  durable: ['onStepFinish', 'onStepFinish', 'onError'],
+  evented: ['onStepFinish', 'onStepFinish', 'onError'],
+};
+
 describe('T36 callback order parity', () => {
   it('fires the lifecycle callbacks in order', async () => {
     const { results, states } = await runT36('normal');
@@ -756,12 +768,10 @@ describe('T36 callback order parity', () => {
 
       // The failure reaches the output reads on every engine: the run cannot be read as a result.
       expect(state.fullOutputError, `${engine}: getFullOutput rejects`).toContain(ERROR_MESSAGE);
-    }
 
-    // Plain's callback order, pinned literally (harness recording: `onStepFinish, onError,
-    // onStepFinish`). Durable and evented report the error after both steps instead — a divergence
-    // the harness does not check (it only requires a step before the error, asserted above) and for
-    // which no ticket exists, so it is recorded here and not pinned.
-    expect(states.get('plain')!.names, 'plain: callback names').toEqual(['onStepFinish', 'onError', 'onStepFinish']);
+      // harness: `callbacks fired in the recorded order`. Each engine's own recorded order is pinned,
+      // so the wrapped order goes red when COR-1390 moves `onError` back between the two steps.
+      expect(state.names, `${engine}: callback names`).toEqual(ERROR_CALLBACK_NAMES[engine]);
+    }
   });
 });
