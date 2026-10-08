@@ -144,6 +144,7 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   entityId: 'filterEntityId',
   entityName: 'filterEntityName',
   traceId: 'filterTraceId',
+  durationMs: 'filterDurationMs',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
   sessionId: 'filterSessionId',
@@ -303,6 +304,8 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'exists',
   'notExists',
 ];
+/** Root duration: only ranges make sense on a millisecond value. */
+const TRACE_ROOT_DURATION_OPERATORS: TraceFilterOperatorId[] = ['gt', 'gte', 'lt', 'lte'];
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
@@ -344,6 +347,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'spans.spanType': 'Span type',
   'spans.model': 'Model',
   'spans.provider': 'Provider',
+  durationMs: 'Duration (ms)',
   'spans.durationMs': 'Span duration (ms)',
   'spans.error': 'Span error',
   'scores.scorerId': 'Scorer',
@@ -375,6 +379,7 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   'spans.spanType': ShapesIcon,
   'spans.model': CpuIcon,
   'spans.provider': CloudIcon,
+  durationMs: TimerIcon,
   'spans.durationMs': TimerIcon,
   'spans.error': TriangleAlertIcon,
   'scores.scorerId': GaugeIcon,
@@ -464,7 +469,10 @@ export function createTraceFilterBarFields({
   canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
+  withRootDuration = false,
 }: {
+  /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
+  withRootDuration?: boolean;
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -565,7 +573,10 @@ export function createTraceFilterBarFields({
   }
   return [
     ...[...pickFields, ...tagsFields].sort(byLabel),
-    ...textFields.sort(byLabel),
+    ...[
+      ...textFields,
+      ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
+    ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]

@@ -10,6 +10,7 @@ import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
+  noRootDurationCapabilities,
   traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
@@ -1188,6 +1189,113 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the server declares traceQueryRootDuration', () => {
+    const renderRootDuration = async (entry = '/traces') => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry);
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+      return { onQuery, queryClient };
+    };
+    const rootGt = (literal: number) => JSON.stringify({ op: 'gt', left: { path: 'durationMs' }, right: { literal } });
+
+    it('sends a top-level durationMs predicate for filterDurationMs=1000 with gt', async () => {
+      const { onQuery } = await renderRootDuration('/traces?filterDurationMs=1000&filterDurationMs.op=gt');
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(rootGt(1000));
+      expect(body).not.toContain('"spans"');
+    });
+
+    it('offers Duration (ms) in the field step', async () => {
+      await renderRootDuration();
+
+      focusFilterInput();
+      expect(await screen.findByRole('option', { name: 'Duration (ms)' })).toBeTruthy();
+    });
+
+    it('writes the filter to the URL and queries it when the user picks Duration (ms) › greater than › 2000', async () => {
+      const { onQuery, queryClient } = await renderRootDuration();
+
+      focusFilterInput();
+      typeInFilter('Duration (ms)');
+      await screen.findByRole('option', { name: 'Duration (ms)' });
+      pressInFilter('Enter');
+      typeInFilter('greater than');
+      await screen.findByRole('option', { name: 'greater than' });
+      pressInFilter('Enter');
+      typeInFilter('2000');
+      pressInFilter('Enter');
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toContain('filterDurationMs=2000&filterDurationMs.op=gt'),
+      );
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(rootGt(2000));
+    });
+  });
+
+  describe('when the server does not declare traceQueryRootDuration', () => {
+    const renderWithoutRootDuration = async (entry = '/traces') => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(noRootDurationCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry);
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+      return onQuery;
+    };
+
+    it('does not offer Duration (ms) in the field step', async () => {
+      await renderWithoutRootDuration();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Duration (ms)' })).toBeNull();
+    });
+
+    it('sends no durationMs predicate for a filterDurationMs URL param', async () => {
+      const onQuery = await renderWithoutRootDuration('/traces?filterDurationMs=1000&filterDurationMs.op=gt');
+
+      expect(onQuery).toHaveBeenCalled();
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).not.toContain('durationMs');
+    });
+
+    it('drops durationMs conditions from a filterGroup and keeps the rest of the group', async () => {
+      const group = {
+        id: 'g1',
+        logic: 'or',
+        nodes: [
+          { id: 'n1', fieldId: 'durationMs', value: '1000', operatorId: 'gt' },
+          { id: 'n2', fieldId: 'status', value: 'error' },
+        ],
+      };
+      const onQuery = await renderWithoutRootDuration(
+        `/traces?filterGroup=${encodeURIComponent(JSON.stringify(group))}`,
+      );
+
+      expect(onQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+        where: { op: 'and', args: [{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }] },
+      });
+    });
+  });
+
   describe('when the URL carries filterSpanError with the exists operator', () => {
     const renderExists = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
@@ -1304,6 +1412,62 @@ describe('Traces page filter bar', () => {
       expect(screen.queryByRole('option', { name: 'Primitive name' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
+    });
+  });
+});
+
+describe('Agent traces page opened from a conversation', () => {
+  const SAVED_FILTERS_KEY = 'mastra:traces:saved-filters:agent:weather-agent';
+
+  const renderFromConversation = async () => {
+    setTracePageHandlers(metricsCapableCapabilities);
+    const result = renderPage('/agents/weather-agent/traces?filterThreadId=thread-1', {
+      scopedEntityId: 'weather-agent',
+      scopedEntityType: EntityType.AGENT,
+    });
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(result.queryClient.isFetching()).toBe(0);
+    });
+    return result;
+  };
+
+  describe('when the agent has saved filters', () => {
+    it('shows only the conversation filter as a removable chip', async () => {
+      window.localStorage.setItem(SAVED_FILTERS_KEY, 'status=error');
+      await renderFromConversation();
+
+      const chips = [...getFilterChips()].slice(1);
+      expect(chips.map(chip => chip.textContent)).toEqual(['Thread IDisthread-1']);
+      expect(within(chips[0]!).getByRole('button', { name: /remove/i })).toBeTruthy();
+      expect(screen.getByTestId('location').textContent).not.toContain('status=');
+    });
+  });
+
+  describe('when the user removes the conversation filter', () => {
+    it('lists all of the agent traces', async () => {
+      await renderFromConversation();
+
+      fireEvent.click(within([...getFilterChips()][1]!).getByRole('button', { name: /remove/i }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterThreadId'));
+      expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
+    });
+  });
+
+  describe('when the user changes another filter', () => {
+    it('does not remember the conversation for the next visit', async () => {
+      await renderFromConversation();
+
+      fireEvent.click(within([...getFilterChips()][0]!).getByRole('button', { name: 'Value: Last 7 days' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
+      const saved = window.localStorage.getItem(SAVED_FILTERS_KEY) ?? '';
+      expect(saved).toContain('datePreset=last-24h');
+      expect(saved).not.toContain('filterThreadId');
+      expect(screen.getByTestId('location').textContent).toContain('filterThreadId=thread-1');
     });
   });
 });

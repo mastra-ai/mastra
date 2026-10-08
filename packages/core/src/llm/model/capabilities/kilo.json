@@ -519,6 +519,7 @@
     "stealth/claude-opus-4.7",
     "stealth/claude-opus-4.8",
     "stealth/claude-sonnet-4.6",
+    "stealth/glyph-cluster",
     "stealth/qwen3.6-plus",
     "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
@@ -905,6 +906,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "stealth/glyph-cluster": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "stealth/claude-sonnet-4.6": [
