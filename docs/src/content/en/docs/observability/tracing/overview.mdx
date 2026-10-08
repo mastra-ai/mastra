@@ -925,18 +925,9 @@ This creates a single distributed trace that includes both the HTTP request hand
 
 ### MCP calls
 
-Model Context Protocol (MCP) calls link the caller's trace to the server's trace without any setup. When an agent or workflow calls a tool through `MCPClient`, the client sends the W3C `traceparent` of the tool call span with the request. An `MCPServer` that receives a `traceparent` starts its own trace and records a link to the caller's span. Its reply names the span that served the request, and `MCPClient` links the tool call span back to it:
+Model Context Protocol (MCP) calls link the caller's trace and the server's trace without any setup. When an agent or workflow calls a tool through `MCPClient`, the `MCPServer` that handles it keeps its own trace and records a link to the tool call span, and the tool call span links back to the server's span. Each side keeps its own trace, root span, and trace summary, and Mastra storage saves the links with the spans.
 
-```text
-Agent service                                 MCP server service
-Trace A                                       Trace B
-agent run: 'support-agent'                    tools/call lookupOrder
-└── mcp_tool: 'orders_lookupOrder'  ◄─links─► └── agent run: 'order-summarizer'
-```
-
-Each side keeps its own trace, root span, and trace summary, so exporters show both traces as before. Mastra storage saves the links with the spans.
-
-This also works with non-Mastra software on either side. An `MCPServer` links to any caller that sends `traceparent` in the request `_meta` or as an HTTP header, and any MCP server can read the `traceparent` that `MCPClient` sends. See the [`MCPServer` reference](/reference/tools/mcp-server#linking-to-the-callers-trace) and the [`MCPClient` reference](/reference/tools/mcp-client) for the `traceContext` option.
+This also works with non-Mastra software on either side. See the [`MCPServer` reference](/reference/tools/mcp-server#linking-to-the-callers-trace) for details, and the [`MCPClient` reference](/reference/tools/mcp-client) to send your own trace context.
 
 ## What gets traced
 

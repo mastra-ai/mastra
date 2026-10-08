@@ -1026,7 +1026,7 @@ A request that carries a W3C `traceparent` keeps its own trace and links to the 
 
 The server reads `traceparent` from two places, in this order:
 
-1. The request `_meta`. `MCPClient` sends it there for every tool call an agent or workflow makes, over HTTP and stdio.
+1. The request `_meta`. `MCPClient` sends it there for every traced tool call an agent or workflow makes, over HTTP and stdio.
 1. The `traceparent` HTTP header. OpenTelemetry HTTP instrumentation in a non-Mastra caller sends it there.
 
 A request without a valid `traceparent` gets no link. The trace fields are left out of the span input.
