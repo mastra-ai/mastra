@@ -1961,7 +1961,6 @@
         "deepinfra/gemma-4-26b-a4b-it",
         "deepinfra/gemma-4-31b-it",
         "deepinfra/granite-4.2-8b",
-        "deepinfra/hy3",
         "deepinfra/inkling",
         "deepinfra/ling-3.0-flash",
         "deepinfra/ling-3.0-flash-vl",
@@ -5687,7 +5686,6 @@
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-pro-0813",
         "deepseek/deepseek-v4.1-flash",
-        "deepseek/deepseek-v4.1-flash-fast",
         "fireworks/ember-1",
         "fish-audio/s1",
         "fish-audio/s2-pro",
@@ -8937,6 +8935,8 @@
         "claude-fable-5@eu",
         "claude-haiku-4-5",
         "claude-haiku-4-5@eu",
+        "claude-haiku-5-5",
+        "claude-haiku-5-5@eu",
         "claude-opus-4-1",
         "claude-opus-4-5",
         "claude-opus-4-5@eu",
@@ -9437,6 +9437,7 @@
       "models": [
         "claude-fable-5",
         "claude-fable-5-1",
+        "claude-haiku-5-5",
         "claude-opus-5",
         "claude-opus-5-5",
         "claude-sonnet-5",
@@ -9511,6 +9512,9 @@
         },
         "gemini-3.7-flash": {
           "npm": "@ai-sdk/openai-compatible"
+        },
+        "claude-haiku-5-5": {
+          "npm": "@ai-sdk/anthropic"
         },
         "gemini-3.8-flash": {
           "npm": "@ai-sdk/openai-compatible"
@@ -12272,7 +12276,6 @@
       "deepinfra/gemma-4-26b-a4b-it",
       "deepinfra/gemma-4-31b-it",
       "deepinfra/granite-4.2-8b",
-      "deepinfra/hy3",
       "deepinfra/inkling",
       "deepinfra/ling-3.0-flash",
       "deepinfra/ling-3.0-flash-vl",
@@ -15157,7 +15160,6 @@
       "deepseek/deepseek-v4-pro",
       "deepseek/deepseek-v4-pro-0813",
       "deepseek/deepseek-v4.1-flash",
-      "deepseek/deepseek-v4.1-flash-fast",
       "fireworks/ember-1",
       "fish-audio/s1",
       "fish-audio/s2-pro",
@@ -17320,6 +17322,8 @@
       "claude-fable-5@eu",
       "claude-haiku-4-5",
       "claude-haiku-4-5@eu",
+      "claude-haiku-5-5",
+      "claude-haiku-5-5@eu",
       "claude-opus-4-1",
       "claude-opus-4-5",
       "claude-opus-4-5@eu",
@@ -17763,6 +17767,7 @@
     "vivgrid": [
       "claude-fable-5",
       "claude-fable-5-1",
+      "claude-haiku-5-5",
       "claude-opus-5",
       "claude-opus-5-5",
       "claude-sonnet-5",

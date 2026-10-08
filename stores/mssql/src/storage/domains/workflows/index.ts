@@ -123,12 +123,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
@@ -170,6 +172,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
       // Merge the new step result and request context
       snapshot.context[stepId] = result;
+      if (state !== undefined) {
+        (snapshot.context as Record<string, unknown>).__state = state;
+      }
       snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
       // Upsert within the same transaction to handle both insert and update

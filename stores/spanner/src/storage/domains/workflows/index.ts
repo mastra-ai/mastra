@@ -307,12 +307,14 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
@@ -352,6 +354,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
               snapshot = (typeof raw === 'string' ? JSON.parse(raw) : raw) as WorkflowRunState;
             }
             snapshot.context[stepId] = result;
+            if (state !== undefined) {
+              (snapshot.context as Record<string, unknown>).__state = state;
+            }
             snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
             const now = new Date();
             const resolvedCreatedAt = existing?.createdAt
