@@ -5675,6 +5675,7 @@ export class Session<TState = unknown> {
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
                 : Promise.resolve({ decision: policy === 'allow' ? ('approve' as const) : ('decline' as const) });
             let approvalDisposed = false;
+            let abortedApproval = false;
             const removeApprovalDeletionListener = this.machinery.onSessionDeleted?.(() => {
               approvalDisposed = true;
               this.approval.cancel(next);
@@ -5694,6 +5695,13 @@ export class Session<TState = unknown> {
                 if (approvalDisposed) return;
                 let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
                 let accepted = false;
+                let dispatchAttempted = false;
+                const deferredAbortOrigin =
+                  approval.decision === 'decline' && context.isThreadActive?.()
+                    ? this.takeDeferredAbortOrigin()
+                    : undefined;
+                abortedApproval ||= deferredAbortOrigin !== undefined;
+                let abortCompleted = false;
                 try {
                   const continuation = await this.machinery.buildRequestContext(
                     approval.requestContext ?? requestContext,
@@ -5703,14 +5711,29 @@ export class Session<TState = unknown> {
                   observer = await this.observeSourceResume(agent, next, continuation);
                   if (approvalDisposed) return;
                   const binding = { ...next, agent, requestContext: continuation, abortSignal: context.abortSignal };
+                  dispatchAttempted = true;
                   if (approval.decision === 'approve') await this.approveToolCall(binding);
                   else await this.declineToolCall({ ...binding, declineContext: approval.declineContext });
                   accepted = true;
+                  if (deferredAbortOrigin) {
+                    this.completeDeferredAbort(deferredAbortOrigin);
+                    abortCompleted = true;
+                  }
                   await observer.promise;
                   return;
                 } catch (error) {
                   if (approvalDisposed) return;
-                  if (accepted || observer?.dispatched()) throw error;
+                  if (deferredAbortOrigin && !dispatchAttempted) {
+                    await this.declineToolCall({
+                      ...next,
+                      agent,
+                      requestContext,
+                      abortSignal: context.abortSignal,
+                      declineContext: { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON },
+                    });
+                  }
+                  if (deferredAbortOrigin || context.abortSignal?.aborted || accepted || observer?.dispatched())
+                    throw error;
                   pendingDecision = this.approval.arm({ ...next, toolName: chunk.payload.toolName });
                   context.emitEvent?.({
                     type: 'tool_approval_required',
@@ -5721,12 +5744,15 @@ export class Session<TState = unknown> {
                   });
                 } finally {
                   observer?.cancel();
+                  if (deferredAbortOrigin && !abortCompleted) this.completeDeferredAbort(deferredAbortOrigin);
                 }
               }
             })()
               .catch(error => context.emitEvent?.({ type: 'error', error: getErrorFromUnknown(error) }))
               .finally(() => {
-                ownedCalls.delete(next.toolCallId);
+                // An abort can leave older approval chunks in the visible subscription.
+                // Keep them suppressed until the aborted run's scope is disposed.
+                if (!abortedApproval) ownedCalls.delete(next.toolCallId);
                 if (!ownedCalls.size) runScope?.delete(SOURCE_APPROVAL_CALLS_KEY);
                 removeApprovalDeletionListener?.();
               });

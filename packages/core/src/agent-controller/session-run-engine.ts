@@ -908,6 +908,12 @@ export class SessionRunEngine {
           abortSignal: this.#session.run.getAbortSignal(),
         };
 
+        if (
+          binding.runId &&
+          this.#machinery.getRunScope(binding.runId)?.get(SOURCE_APPROVAL_CALLS_KEY)?.has(toolCallId)
+        )
+          break;
+
         // A retained approval prompt can be replayed after this run has already
         // advanced to a generic tool suspension. Ignore that obsolete prompt and
         // let the matching `tool-call-suspended` chunk restore the current gate.

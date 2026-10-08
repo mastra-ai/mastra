@@ -121,6 +121,8 @@ describe('AgentController: ask_user native suspension', () => {
     'warm-approval',
     'warm-approval-reattach',
     'warm-approval-setup-failure',
+    'warm-approval-abort',
+    'warm-approval-abort-setup-failure',
     'warm-approval-siblings',
     'warm-stream-closed',
     'cold',
@@ -470,6 +472,34 @@ describe('AgentController: ask_user native suspension', () => {
           expect(session.displayState.get()).toEqual(display);
           expect(cleanup).not.toHaveBeenCalled();
           expect(abortSignal?.aborted).toBe(false);
+        }
+        if (recovery.startsWith('warm-approval-abort')) {
+          navigated = true;
+          await session.thread.switch({ threadId: address.threadId });
+          await vi.waitFor(() => expect(session.getCurrentRunId()).toBe(address.runId));
+          const completeAbort = vi.spyOn(session, 'completeDeferredAbort');
+          if (recovery === 'warm-approval-abort-setup-failure') {
+            vi.spyOn(session.machinery, 'subscribeToThread').mockRejectedValueOnce(
+              new Error('aborted approval setup unavailable'),
+            );
+          }
+          session.abort();
+          await vi.waitFor(() =>
+            expect(session.machinery.getRunScope(address.runId)?.has(SOURCE_APPROVAL_CALLS_KEY)).not.toBe(true),
+          );
+          expect(session.approval.isArmed(second)).toBe(false);
+          expect(events.filter(event => event.type === 'tool_approval_required')).toHaveLength(1);
+          await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
+          expect(completeAbort).toHaveBeenCalledOnce();
+          await vi.waitFor(async () => {
+            const suspended = await fixture.source.listSuspendedRuns({
+              threadId: address.threadId,
+              resourceId: address.resourceId,
+            });
+            expect(suspended.runs.some(run => run.runId === address.runId)).toBe(false);
+          });
+          expect(observations).toHaveLength(1);
+          return;
         }
         if (recovery === 'warm-approval-reattach') {
           navigated = true;
