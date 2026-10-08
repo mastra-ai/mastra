@@ -74,7 +74,7 @@ describe('MySQL knowledge concurrency and indexes', () => {
     expect(indexes).toContain('idx_knowledge_nodes_identity');
     expect(indexes).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgeMySQL.getExportDDL();
-    expect(ddl).toHaveLength(15);
+    expect(ddl).toHaveLength(16);
     expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
     expect(ddl.join('\n')).not.toContain('mastra_knowledge_cursors');
 
