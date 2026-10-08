@@ -1,8 +1,13 @@
+import { Mastra } from '@mastra/core/mastra';
+import { InMemoryStore } from '@mastra/core/storage';
 import { FactorySandbox } from '@mastra/core/workspace';
-import type { FactorySandboxContext } from '@mastra/core/workspace';
+import type { FactorySandboxBuilds, FactorySandboxContext } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
+import { EnvironmentBuildRunner } from '../environment/build-runner.js';
+import { scheduleIdFor } from '../environment/build-schedule.js';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from '../environment/build-workflow.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { ProjectRoutes } from './projects.js';
@@ -970,6 +975,244 @@ describe('ProjectRoutes', () => {
 
       const after = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
       expect(after).toEqual(before);
+    });
+
+    describe('builds', () => {
+      const SHA = 'f'.repeat(40);
+      vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
+
+      type Settings = Record<string, unknown>;
+      class BuildingSandbox extends FactorySandbox<Settings> {
+        readonly provider = 'building';
+        readonly settings = {
+          type: 'object',
+          properties: { cpuCount: { type: 'integer', minimum: 1 } },
+          additionalProperties: false,
+        } as const;
+        readonly starts: Array<{ sessionId: string; settings: Settings }> = [];
+        readonly reads: Array<{ buildId: string; heads: Record<string, string | undefined> }> = [];
+        withHistory = false;
+        readonly builds: FactorySandboxBuilds<Settings> = {
+          start: async (ctx, settings) => {
+            this.starts.push({ sessionId: ctx.sessionId, settings });
+            return { buildId: 'tpl-1:build-1', status: 'building', templateId: 'tpl-1' };
+          },
+          get: async (ctx, _settings, buildId) => {
+            this.reads.push({
+              buildId,
+              heads: { api: await ctx.resolveHead!('https://github.com/acme/api.git') },
+            });
+            return { buildId, status: 'ready', templateId: 'tpl-1' };
+          },
+          list: async () =>
+            this.withHistory ? [{ buildId: 'tpl-1:build-1', status: 'ready' as const, templateId: 'tpl-1' }] : [],
+        };
+        create(): never {
+          throw new Error('not constructed in route tests');
+        }
+      }
+
+      async function seedBuilding(sandbox = new BuildingSandbox()) {
+        const seed = await createFactoryStorageForTests();
+        const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+        const github = seed.sourceControl.forIntegration('github');
+        const installation = await github.installations.upsert({
+          orgId: 'org-1',
+          connectedByUserId: 'user-1',
+          externalId: 'gh-1',
+        });
+        const connection = await github.connections.create({
+          orgId: 'org-1',
+          factoryProjectId: project.id,
+          installationId: installation.id,
+          createdByUserId: 'user-1',
+        });
+        const repository = await github.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: installation.id, externalId: 'acme/api', slug: 'acme/api', defaultBranch: 'main' },
+        });
+        await github.projectRepositories.link({
+          orgId: 'org-1',
+          connectionId: connection.id,
+          repositoryId: repository.id,
+          createdByUserId: 'user-1',
+          sandboxProvider: 'platform',
+          sandboxWorkdir: '/workspace',
+        });
+        let mastra: Mastra | undefined;
+        const runner = new EnvironmentBuildRunner(
+          {
+            sandbox,
+            projects: seed.projects,
+            sourceControl: {
+              storage: github,
+              versionControl: { getRepositoryAccess: async () => ({ token: 't', cloneUrl: 'u' }) as never },
+            },
+          },
+          { getMastra: () => mastra, sleep: async () => {} },
+        );
+        mastra = new Mastra({
+          logger: false,
+          storage: new InMemoryStore({ id: `routes-builds-${project.id}` }),
+          workflows: { [ENVIRONMENT_BUILD_WORKFLOW_ID]: runner.workflow },
+          notifications: { dispatch: { enabled: false } },
+        });
+        await runner.probeSchedules();
+        const app = new Hono();
+        app.use('*', async (context, next) => {
+          context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+          await next();
+        });
+        mountApiRoutes(
+          app as never,
+          projectRoutes(seed, ['github'], undefined, undefined, { sandbox, environmentBuilds: runner }),
+        );
+        return { seed, project, app, sandbox, runner, mastra };
+      }
+
+      const read = async (app: Hono, projectId: string) =>
+        (
+          (await (await app.request(`/web/factory/projects/${projectId}/environment`)).json()) as {
+            environment: Record<string, any>;
+          }
+        ).environment;
+
+      const until = async (check: () => Promise<boolean>) => {
+        for (let i = 0; i < 100 && !(await check()); i += 1) await new Promise(r => setTimeout(r, 20));
+      };
+
+      it('reports triggers and the last build on GET without calling the provider', async () => {
+        const { app, project, sandbox } = await seedBuilding();
+        const environment = await read(app, project.id);
+        expect(environment.sandbox.capabilities.builds).toEqual({ available: true, history: true });
+        expect(environment.buildTriggers).toEqual({
+          schedule: { enabled: false, cron: null, timezone: null, scheduleAvailable: true },
+          push: { enabled: false, debounceMinutes: 10 },
+        });
+        expect(environment.build).toBeNull();
+        expect(environment.buildRequested).toBeUndefined();
+        expect(sandbox.reads).toEqual([]);
+      });
+
+      it('builds now, serves live status by id with heads from the stored template, then lists history', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        const started = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+        expect(started.status).toBe(200);
+        expect(await started.json()).toEqual({
+          outcome: 'started',
+          buildId: 'tpl-1:build-1',
+          templateId: 'tpl-1',
+        });
+        expect(sandbox.starts).toEqual([{ sessionId: `environment-build:${project.id}`, settings: {} }]);
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.activeTemplateId === 'tpl-1');
+        expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+          activeTemplateId: 'tpl-1',
+          activeTemplateHeads: { 'acme/api': SHA },
+          lastBuildId: 'tpl-1:build-1',
+        });
+        expect((await read(app, project.id)).build).toMatchObject({ buildId: 'tpl-1:build-1' });
+
+        const detail = await app.request(
+          `/web/factory/projects/${project.id}/environment/builds/${encodeURIComponent('tpl-1:build-1')}`,
+        );
+        expect(detail.status).toBe(200);
+        expect(await detail.json()).toEqual({
+          build: { buildId: 'tpl-1:build-1', status: 'ready', templateId: 'tpl-1' },
+        });
+        // The route decoded the composite id and resolved heads from the pinned template, not GitHub.
+        expect(sandbox.reads.at(-1)).toEqual({ buildId: 'tpl-1:build-1', heads: { api: SHA } });
+
+        sandbox.withHistory = true;
+        const history = await app.request(`/web/factory/projects/${project.id}/environment/builds`);
+        expect(history.status).toBe(200);
+        expect(await history.json()).toEqual({
+          builds: [{ buildId: 'tpl-1:build-1', status: 'ready', templateId: 'tpl-1' }],
+        });
+      });
+
+      it('answers 404 no_builds without a builds capability and no_history without list', async () => {
+        const { seed, project } = await seedEnvironment();
+        const plain = new Hono();
+        plain.use('*', async (context, next) => {
+          context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+          await next();
+        });
+        mountApiRoutes(
+          plain as never,
+          projectRoutes(seed, ['github'], undefined, undefined, { sandbox: new StubFactorySandbox() }),
+        );
+        for (const [path, method] of [
+          ['/environment/build', 'POST'],
+          ['/environment/builds', 'GET'],
+          ['/environment/builds/x', 'GET'],
+        ] as const) {
+          const response = await plain.request(`/web/factory/projects/${project.id}${path}`, { method });
+          expect([path, response.status, await response.json()]).toEqual([path, 404, { error: 'no_builds' }]);
+        }
+        expect((await patch(plain, project.id, { buildTriggers: { push: { enabled: true } } })).status).toBe(400);
+
+        const sandbox = new BuildingSandbox();
+        (sandbox.builds as { list?: unknown }).list = undefined;
+        const { app, project: building } = await seedBuilding(sandbox);
+        const response = await app.request(`/web/factory/projects/${building.id}/environment/builds`);
+        expect([response.status, await response.json()]).toEqual([404, { error: 'no_history' }]);
+      });
+
+      it('stores push triggers, keeps the cron in core Schedules, and rejects a bad cron', async () => {
+        const { app, project, mastra } = await seedBuilding();
+        const pushed = await patch(app, project.id, { buildTriggers: { push: { enabled: true, debounceMinutes: 3 } } });
+        expect(pushed.status).toBe(200);
+        expect(((await pushed.json()) as any).environment.buildTriggers.push).toEqual({
+          enabled: true,
+          debounceMinutes: 3,
+        });
+
+        const bad = await patch(app, project.id, {
+          buildTriggers: { schedule: { enabled: true, cron: 'not a cron' } },
+        });
+        expect(bad.status).toBe(400);
+        expect(((await bad.json()) as any).issues[0].path).toEqual(['buildTriggers', 'schedule', 'cron']);
+        expect((await patch(app, project.id, { buildTriggers: { schedule: { enabled: true } } })).status).toBe(400);
+
+        const scheduled = await patch(app, project.id, {
+          buildTriggers: { schedule: { enabled: true, cron: '0 3 * * *', timezone: 'UTC' } },
+        });
+        expect(scheduled.status).toBe(200);
+        expect(((await scheduled.json()) as any).environment.buildTriggers.schedule).toEqual({
+          enabled: true,
+          cron: '0 3 * * *',
+          timezone: 'UTC',
+          scheduleAvailable: true,
+        });
+        const row = await mastra.schedules.get(scheduleIdFor(project.id));
+        expect(row).toMatchObject({
+          workflowId: ENVIRONMENT_BUILD_WORKFLOW_ID,
+          cron: '0 3 * * *',
+          status: 'active',
+          inputData: { projectId: project.id, trigger: 'schedule' },
+        });
+
+        const paused = await patch(app, project.id, { buildTriggers: { schedule: { enabled: false } } });
+        expect(((await paused.json()) as any).environment.buildTriggers.schedule).toMatchObject({
+          enabled: false,
+          cron: '0 3 * * *',
+        });
+        expect((await mastra.schedules.get(scheduleIdFor(project.id)))?.status).toBe('paused');
+      });
+
+      it('starts a build when a setting changes and reports buildRequested', async () => {
+        const { app, project, sandbox } = await seedBuilding();
+        const unchanged = await patch(app, project.id, { buildTriggers: { push: { enabled: true } } });
+        expect(((await unchanged.json()) as any).environment.buildRequested).toBe(false);
+        expect(sandbox.starts).toEqual([]);
+
+        const changed = await patch(app, project.id, { settings: { cpuCount: 4 } });
+        expect(changed.status).toBe(200);
+        const body = (await changed.json()) as any;
+        expect(body.environment.buildRequested).toBe(true);
+        expect(body.environment.build).toMatchObject({ buildId: 'tpl-1:build-1' });
+        expect(sandbox.starts).toEqual([{ sessionId: `environment-build:${project.id}`, settings: { cpuCount: 4 } }]);
+      });
     });
 
     it('scopes the environment to the organization', async () => {

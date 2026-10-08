@@ -140,6 +140,40 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/environment/builds": {
+    "contractKey": "projectEnvironmentBuilds",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/environment/builds",
+    "description": "List the environment template builds of a Factory project, newest first, when the provider keeps history",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "builds"
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds/:buildId": {
+    "contractKey": "projectEnvironmentBuildGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/environment/builds/:buildId",
+    "description": "Get the live status of one environment template build of a Factory project",
+    "pathParams": [
+      "id",
+      "buildId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/health/thresholds": {
     "contractKey": "healthThresholdsGet",
     "method": "GET",
@@ -241,6 +275,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "buildTriggers",
       "repositories",
       "sandboxWorkdir",
       "settings",
@@ -426,6 +461,22 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [
       "id",
       "decisionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /web/factory/projects/:id/environment/build": {
+    "contractKey": "projectEnvironmentBuild",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/environment/build",
+    "description": "Build the sandbox environment template of a Factory project now",
+    "pathParams": [
+      "id"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -1131,6 +1182,89 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "lastBuiltAt"
                 ]
               }
+            },
+            "buildTriggers": {
+              "type": "object",
+              "properties": {
+                "schedule": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "cron": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "timezone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scheduleAvailable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "cron",
+                    "timezone",
+                    "scheduleAvailable"
+                  ]
+                },
+                "push": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "debounceMinutes": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "debounceMinutes"
+                  ]
+                }
+              },
+              "required": [
+                "schedule",
+                "push"
+              ]
+            },
+            "build": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "buildId": {
+                      "type": "string"
+                    },
+                    "attemptedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "buildId",
+                    "attemptedAt"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "buildRequested": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -1146,6 +1280,136 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "environment"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "builds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "buildId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "building",
+                  "ready",
+                  "failed",
+                  "unknown"
+                ]
+              },
+              "templateId": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": "string"
+              },
+              "finishedAt": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "logs": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "buildId",
+              "status"
+            ]
+          }
+        }
+      },
+      "required": [
+        "builds"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/environment/builds/:buildId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "buildId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "buildId"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": "object",
+          "properties": {
+            "buildId": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "building",
+                "ready",
+                "failed",
+                "unknown"
+              ]
+            },
+            "templateId": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "string"
+            },
+            "finishedAt": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "logs": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "buildId",
+            "status"
+          ]
+        }
+      },
+      "required": [
+        "build"
       ]
     }
   },
@@ -1440,8 +1704,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "workspaceSetupCommand": {
           "$ref": "#/$defs/__schema4"
         },
-        "repositories": {
+        "buildTriggers": {
           "$ref": "#/$defs/__schema5"
+        },
+        "repositories": {
+          "$ref": "#/$defs/__schema6"
         }
       },
       "$defs": {
@@ -1488,13 +1755,52 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema5": {
-          "maxItems": 100,
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/__schema6"
+          "type": "object",
+          "properties": {
+            "schedule": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "cron": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "timezone": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            },
+            "push": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "debounceMinutes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1440
+                }
+              }
+            }
           }
         },
         "__schema6": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema7"
+          }
+        },
+        "__schema7": {
           "type": "object",
           "properties": {
             "projectRepositoryId": {
@@ -1715,6 +2021,89 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "lastBuiltAt"
                 ]
               }
+            },
+            "buildTriggers": {
+              "type": "object",
+              "properties": {
+                "schedule": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "cron": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "timezone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scheduleAvailable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "cron",
+                    "timezone",
+                    "scheduleAvailable"
+                  ]
+                },
+                "push": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "debounceMinutes": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "debounceMinutes"
+                  ]
+                }
+              },
+              "required": [
+                "schedule",
+                "push"
+              ]
+            },
+            "build": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "buildId": {
+                      "type": "string"
+                    },
+                    "attemptedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "buildId",
+                    "attemptedAt"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "buildRequested": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -2355,6 +2744,48 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "POST /web/factory/projects/:id/environment/build": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "started",
+            "skipped",
+            "unavailable",
+            "failed"
+          ]
+        },
+        "buildId": {
+          "type": "string"
+        },
+        "templateId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome"
+      ]
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2909,6 +3340,8 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "boardCatalog": "GET /web/factory/projects/:id/boards",
   "decisionList": "GET /web/factory/projects/:id/decisions",
   "projectEnvironmentGet": "GET /web/factory/projects/:id/environment",
+  "projectEnvironmentBuilds": "GET /web/factory/projects/:id/environment/builds",
+  "projectEnvironmentBuildGet": "GET /web/factory/projects/:id/environment/builds/:buildId",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "supervisorHealth": "GET /web/factory/projects/:id/supervisor/health",
@@ -2925,6 +3358,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "decisionApprove": "POST /web/factory/projects/:id/decisions/:decisionId/approve",
   "decisionDismiss": "POST /web/factory/projects/:id/decisions/:decisionId/dismiss",
   "decisionRetry": "POST /web/factory/projects/:id/decisions/:decisionId/retry",
+  "projectEnvironmentBuild": "POST /web/factory/projects/:id/environment/build",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "supervisorSession": "POST /web/factory/projects/:id/supervisor/session",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",

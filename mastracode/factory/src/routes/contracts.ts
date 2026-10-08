@@ -87,6 +87,21 @@ export const environmentSandboxSchema = z.object({
   }),
 });
 
+/** When the environment builds on its own; present only when the sandbox can build. */
+export const environmentBuildTriggersSchema = z.object({
+  schedule: z.object({
+    enabled: z.boolean(),
+    cron: z.string().nullable(),
+    timezone: z.string().nullable(),
+    /** False when the host's storage has no schedules domain; the cron trigger cannot be enabled then. */
+    scheduleAvailable: z.boolean(),
+  }),
+  push: z.object({ enabled: z.boolean(), debounceMinutes: z.number().int() }),
+});
+
+/** The last build factory asked the provider for, from the project row only; status is read live. */
+export const environmentLastBuildSchema = z.object({ buildId: z.string(), attemptedAt: z.string().nullable() });
+
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
     sandbox: environmentSandboxSchema,
@@ -97,8 +112,36 @@ export const projectEnvironmentResponseSchema = z.object({
     activeTemplateId: z.string().nullable(),
     activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
     repositories: z.array(environmentRepositorySchema),
+    buildTriggers: environmentBuildTriggersSchema.optional(),
+    build: environmentLastBuildSchema.nullable().optional(),
+    /** True when this update changed a setting and a build was started for it. */
+    buildRequested: z.boolean().optional(),
   }),
 });
+
+const environmentBuildStatusSchema = z.enum(['pending', 'building', 'ready', 'failed', 'unknown']);
+
+export const environmentBuildStartResponseSchema = z.object({
+  outcome: z.enum(['started', 'skipped', 'unavailable', 'failed']),
+  buildId: z.string().optional(),
+  templateId: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+export const environmentBuildSchema = z.object({
+  buildId: z.string(),
+  status: environmentBuildStatusSchema,
+  templateId: z.string().optional(),
+  startedAt: z.string().optional(),
+  finishedAt: z.string().optional(),
+  error: z.string().optional(),
+  logs: z.string().optional(),
+});
+
+export const environmentBuildsResponseSchema = z.object({ builds: z.array(environmentBuildSchema) });
+export const environmentBuildResponseSchema = z.object({ build: environmentBuildSchema });
+
+const buildPathSchema = projectPathSchema.extend({ buildId: z.string().min(1) });
 
 const environmentRepositoryPatchSchema = z.object({
   projectRepositoryId: uuidSchema,
@@ -116,6 +159,24 @@ export const updateProjectEnvironmentBodySchema = z
     /** Partial settings merged onto the stored document; null removes a key. Validated by the FactorySandbox. */
     settings: z.record(z.string(), z.unknown().nullable()).optional(),
     workspaceSetupCommand: nullableTrimmed(2_000).optional(),
+    /** Build triggers; only accepted when the sandbox can build. */
+    buildTriggers: z
+      .object({
+        schedule: z
+          .object({
+            enabled: z.boolean(),
+            cron: z.string().trim().min(1).max(100).optional(),
+            timezone: z.string().trim().min(1).max(100).optional(),
+          })
+          .optional(),
+        push: z
+          .object({
+            enabled: z.boolean().optional(),
+            debounceMinutes: z.number().int().min(0).max(1_440).optional(),
+          })
+          .optional(),
+      })
+      .optional(),
     repositories: z
       .array(environmentRepositoryPatchSchema)
       .max(100)
@@ -444,6 +505,28 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     bodySchema: updateProjectEnvironmentBodySchema,
     responseSchema: projectEnvironmentResponseSchema,
+  },
+  projectEnvironmentBuild: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/environment/build',
+    description: 'Build the sandbox environment template of a Factory project now',
+    pathSchema: projectPathSchema,
+    responseSchema: environmentBuildStartResponseSchema,
+  },
+  projectEnvironmentBuilds: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/environment/builds',
+    description:
+      'List the environment template builds of a Factory project, newest first, when the provider keeps history',
+    pathSchema: projectPathSchema,
+    responseSchema: environmentBuildsResponseSchema,
+  },
+  projectEnvironmentBuildGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/environment/builds/:buildId',
+    description: 'Get the live status of one environment template build of a Factory project',
+    pathSchema: buildPathSchema,
+    responseSchema: environmentBuildResponseSchema,
   },
   projectApplyDefaultModel: {
     method: 'POST',

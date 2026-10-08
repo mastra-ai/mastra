@@ -6,6 +6,7 @@ import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/wor
 import type { Context } from 'hono';
 
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
+import { ensureSchedule, invalidCronMessage, readSchedule } from '../environment/build-schedule.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type {
   FactoryProject,
@@ -329,8 +330,102 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         activeTemplateId: project.activeTemplateId,
         activeTemplateHeads: project.activeTemplateHeads,
         repositories,
+        ...(await this.#buildPayload(project)),
       },
     };
+  }
+
+  /**
+   * The build keys of the environment payload, present only when the
+   * sandbox can build. Reads the project row and the schedule row; never
+   * the provider (live status is the builds routes' job).
+   */
+  async #buildPayload(project: FactoryProject) {
+    const builds = this.deps.environmentBuilds;
+    if (!builds) return {};
+    const schedules = builds.scheduleAvailable ? builds.schedules() : undefined;
+    const schedule = schedules
+      ? await readSchedule(schedules, project.id)
+      : { enabled: false, cron: null, timezone: null };
+    return {
+      buildTriggers: {
+        schedule: { ...schedule, scheduleAvailable: builds.scheduleAvailable },
+        push: { enabled: project.buildOnPushEnabled, debounceMinutes: project.buildPushDebounceMinutes },
+      },
+      build: project.lastBuildId
+        ? { buildId: project.lastBuildId, attemptedAt: project.lastBuildAttemptedAt?.toISOString() ?? null }
+        : null,
+    };
+  }
+
+  /** The builds capability behind the routes, or the 404 to answer with. */
+  #builds(context: Context) {
+    const builds = this.deps.sandbox?.builds;
+    const runner = this.deps.environmentBuilds;
+    if (!builds || !runner) return { response: context.json({ error: 'no_builds' }, 404) };
+    return { builds, runner };
+  }
+
+  #buildRoutes(): ApiRoute[] {
+    return [
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          const { heads: _heads, ...outcome } = await capability.runner.start(project.id, 'manual');
+          return context.json(outcome);
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          if (!capability.builds.list) return context.json({ error: 'no_history' }, 404);
+          const read = await capability.runner.readContext(project.id);
+          if (!read) return context.json({ error: 'no_environment' }, 404);
+          return context.json({ builds: await capability.builds.list(read.ctx, read.settings) });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          // A composite provider id (E2B's `<templateId>:<buildId>`) travels encoded.
+          const buildId = decodeURIComponent(context.req.param('buildId') ?? '');
+          if (!buildId) return context.json({ error: 'Build not found' }, 404);
+          const read = await capability.runner.readContext(project.id);
+          if (!read) return context.json({ error: 'no_environment' }, 404);
+          return context.json({ build: await capability.builds.get(read.ctx, read.settings, buildId) });
+        },
+      }),
+    ];
   }
 
   async #retireProjectRepositorySessions(
@@ -708,8 +803,49 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!project) return context.json({ error: 'Project not found' }, 404);
           const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
-          const { repositories: repositoryPatches, settings: settingsPatch, ...projectInput } = parsed.data;
+          const {
+            repositories: repositoryPatches,
+            settings: settingsPatch,
+            buildTriggers,
+            ...projectInput
+          } = parsed.data;
           const input: UpdateFactoryProjectInput = projectInput;
+          const runner = this.deps.environmentBuilds;
+          if (buildTriggers !== undefined) {
+            if (!runner) return context.json({ error: 'no_builds' }, 400);
+            if (buildTriggers.push?.enabled !== undefined) input.buildOnPushEnabled = buildTriggers.push.enabled;
+            if (buildTriggers.push?.debounceMinutes !== undefined) {
+              input.buildPushDebounceMinutes = buildTriggers.push.debounceMinutes;
+            }
+            if (buildTriggers.schedule) {
+              if (!runner.scheduleAvailable) {
+                if (buildTriggers.schedule.enabled) return context.json({ error: 'schedules_unavailable' }, 400);
+              } else {
+                const { cron, timezone } = buildTriggers.schedule;
+                const stored = await readSchedule(runner.schedules()!, project.id);
+                const nextCron = cron ?? stored.cron;
+                if (!nextCron)
+                  return context.json(
+                    {
+                      error: 'invalid_environment',
+                      issues: [{ message: 'cron is required', path: ['buildTriggers', 'schedule', 'cron'] }],
+                    },
+                    400,
+                  );
+                const nextTimezone = timezone ?? stored.timezone ?? undefined;
+                const message = invalidCronMessage(nextCron, nextTimezone);
+                if (message) {
+                  return context.json(
+                    {
+                      error: 'invalid_environment',
+                      issues: [{ message, path: ['buildTriggers', 'schedule', 'cron'] }],
+                    },
+                    400,
+                  );
+                }
+              }
+            }
+          }
           if (settingsPatch !== undefined) {
             if (!this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
             const result = await this.#mergeSettings(project.sandboxSettings ?? {}, settingsPatch);
@@ -760,7 +896,32 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               input,
             });
           }
-          return context.json(await this.#environmentPayload(tenant.orgId, updated));
+          if (buildTriggers?.schedule && runner?.scheduleAvailable) {
+            const stored = await readSchedule(runner.schedules()!, project.id);
+            await ensureSchedule(runner.schedules()!, project.id, {
+              enabled: buildTriggers.schedule.enabled,
+              cron: (buildTriggers.schedule.cron ?? stored.cron)!,
+              ...((buildTriggers.schedule.timezone ?? stored.timezone)
+                ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
+                : {}),
+            });
+          }
+          // A setting, workdir or workspace setup change may change the
+          // template; a capable sandbox builds it right away so the next
+          // session finds the image warm.
+          const templateChanged =
+            runner !== undefined &&
+            (JSON.stringify(project.sandboxSettings ?? {}) !== JSON.stringify(updated.sandboxSettings ?? {}) ||
+              project.sandboxWorkdir !== updated.sandboxWorkdir ||
+              project.workspaceSetupCommand !== updated.workspaceSetupCommand);
+          let buildRequested = false;
+          if (templateChanged) {
+            const outcome = await runner.start(project.id, 'settings');
+            buildRequested = outcome.outcome === 'started';
+            if (buildRequested) updated = (await this.#project(tenant.orgId, projectId)) ?? updated;
+          }
+          const payload = await this.#environmentPayload(tenant.orgId, updated);
+          return context.json(runner ? { environment: { ...payload.environment, buildRequested } } : payload);
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
@@ -808,6 +969,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           return context.body(null, 204);
         },
       }),
+      ...this.#buildRoutes(),
     ];
   }
 }
