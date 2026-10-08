@@ -9,6 +9,7 @@ import {
   useFeedbackAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
+  useTraceQueryRootDurationAvailable,
 } from '@mastra/playground-ui/domains/capabilities';
 import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
@@ -117,6 +118,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // that has no effect on the list.
   for (const field of TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS) {
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
+  }
+  // Servers without root-duration support reject `durationMs` predicates (shared links, saved filters).
+  const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
+  if (!withRootDuration) {
+    querySearchParams.delete('filterDurationMs');
+    querySearchParams.delete('filterDurationMs.op');
   }
   const url = useTraceUrlState(querySearchParams, setPersistedSearchParams);
   const { sort, onSortChange } = useUrlSort({
@@ -237,9 +244,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         canonicalTraceFields,
         valueSuggestions: withQueryTrace ? valueSuggestions : undefined,
         withQueryTrace,
+        withRootDuration,
       }),
     ],
     [
+      withRootDuration,
       rootEntityNameSuggestions,
       discoveredEnvironments,
       hiddenFieldIds,

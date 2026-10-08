@@ -145,6 +145,7 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   entityId: 'filterEntityId',
   entityName: 'filterEntityName',
   traceId: 'filterTraceId',
+  durationMs: 'filterDurationMs',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
   sessionId: 'filterSessionId',
@@ -345,6 +346,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'spans.spanType': 'Span type',
   'spans.model': 'Model',
   'spans.provider': 'Provider',
+  durationMs: 'Duration (ms)',
   'spans.durationMs': 'Span duration (ms)',
   'spans.error': 'Span error',
   'scores.scorerId': 'Scorer',
@@ -376,6 +378,7 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: str
   'spans.spanType': { icon: ShapesIcon, color: hueAccentColor('purple') },
   'spans.model': { icon: CpuIcon, color: hueAccentColor('green') },
   'spans.provider': { icon: CloudIcon, color: hueAccentColor('cyan') },
+  durationMs: { icon: TimerIcon, color: hueAccentColor('amber') },
   'spans.durationMs': { icon: TimerIcon, color: hueAccentColor('orange') },
   'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-foreground)' },
   'scores.scorerId': { icon: GaugeIcon, color: hueAccentColor('green') },
@@ -467,7 +470,10 @@ export function createTraceFilterBarFields({
   canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
+  withRootDuration = false,
 }: {
+  /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
+  withRootDuration?: boolean;
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -568,7 +574,7 @@ export function createTraceFilterBarFields({
   }
   return [
     ...[...pickFields, ...tagsFields].sort(byLabel),
-    ...textFields.sort(byLabel),
+    ...[...textFields, ...(withRootDuration ? [number('durationMs')] : [])].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]

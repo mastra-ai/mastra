@@ -10,6 +10,7 @@ import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
+  noRootDurationCapabilities,
   traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
@@ -1182,6 +1183,95 @@ describe('Traces page filter bar', () => {
       expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
         JSON.stringify({ spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 1000 } } } }),
       );
+    });
+  });
+
+  describe('when the server declares traceQueryRootDuration', () => {
+    const renderRootDuration = async (entry = '/traces') => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry);
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+      return { onQuery, queryClient };
+    };
+    const rootGt = (literal: number) => JSON.stringify({ op: 'gt', left: { path: 'durationMs' }, right: { literal } });
+
+    it('sends a top-level durationMs predicate for filterDurationMs=1000 with gt', async () => {
+      const { onQuery } = await renderRootDuration('/traces?filterDurationMs=1000&filterDurationMs.op=gt');
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(rootGt(1000));
+      expect(body).not.toContain('"spans"');
+    });
+
+    it('offers Duration (ms) in the field step', async () => {
+      await renderRootDuration();
+
+      focusFilterInput();
+      expect(await screen.findByRole('option', { name: 'Duration (ms)' })).toBeTruthy();
+    });
+
+    it('writes the filter to the URL and queries it when the user picks Duration (ms) › greater than › 2000', async () => {
+      const { onQuery, queryClient } = await renderRootDuration();
+
+      focusFilterInput();
+      typeInFilter('Duration (ms)');
+      await screen.findByRole('option', { name: 'Duration (ms)' });
+      pressInFilter('Enter');
+      typeInFilter('greater than');
+      await screen.findByRole('option', { name: 'greater than' });
+      pressInFilter('Enter');
+      typeInFilter('2000');
+      pressInFilter('Enter');
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toContain('filterDurationMs=2000&filterDurationMs.op=gt'),
+      );
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(rootGt(2000));
+    });
+  });
+
+  describe('when the server does not declare traceQueryRootDuration', () => {
+    const renderWithoutRootDuration = async (entry = '/traces') => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(noRootDurationCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry);
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+      return onQuery;
+    };
+
+    it('does not offer Duration (ms) in the field step', async () => {
+      await renderWithoutRootDuration();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Duration (ms)' })).toBeNull();
+    });
+
+    it('sends no durationMs predicate for a filterDurationMs URL param', async () => {
+      const onQuery = await renderWithoutRootDuration('/traces?filterDurationMs=1000&filterDurationMs.op=gt');
+
+      expect(onQuery).toHaveBeenCalled();
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).not.toContain('durationMs');
     });
   });
 

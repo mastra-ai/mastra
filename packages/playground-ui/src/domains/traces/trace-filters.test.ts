@@ -109,6 +109,41 @@ describe('createTraceFilterBarFields', () => {
     expect(byId('serviceName')).toBeUndefined();
   });
 
+  describe('when the server supports root duration predicates', () => {
+    const rootDuration = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      withRootDuration: true,
+    }).find(f => f.id === 'durationMs');
+
+    it('offers a Duration (ms) field', () => {
+      expect(rootDuration?.label).toBe('Duration (ms)');
+    });
+
+    it('treats it as a number field with number operators', () => {
+      expect(rootDuration?.type).toBe('number');
+      expect(rootDuration?.operators).toEqual(['is', 'isNot', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists']);
+    });
+  });
+
+  describe('when the server does not support root duration predicates', () => {
+    it('does not offer a Duration (ms) field', () => {
+      expect(byId('durationMs')).toBeUndefined();
+    });
+  });
+
+  describe('when only the legacy list endpoint is available', () => {
+    it('does not offer a Duration (ms) field even if root duration is supported', () => {
+      const legacy = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        withQueryTrace: false,
+        withRootDuration: true,
+      });
+      expect(legacy.find(f => f.id === 'durationMs')).toBeUndefined();
+    });
+  });
+
   describe('when the backend has not described the tags field', () => {
     it('does not offer tags', () => {
       expect(byId('tags')).toBeUndefined();
@@ -655,6 +690,26 @@ describe('filter operator URL params', () => {
       applyTracePropertyFilterTokens(params, [{ fieldId: 'spans.error', value: '', operatorId: 'exists' }]);
 
       expect(params.toString()).toBe('filterSpanError=&filterSpanError.op=exists');
+    });
+  });
+
+  describe('when the URL carries a root duration filter', () => {
+    const query = 'filterDurationMs=1000&filterDurationMs.op=gt';
+
+    it('reads it as a durationMs token', () => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams(query))).toEqual([
+        { fieldId: 'durationMs', value: '1000', operatorId: 'gt' },
+      ]);
+    });
+
+    it('writes it back unchanged', () => {
+      const params = new URLSearchParams();
+      applyTracePropertyFilterTokens(params, getTracePropertyFilterTokens(new URLSearchParams(query)));
+      expect(params.toString()).toBe(query);
+    });
+
+    it('counts as an active filter', () => {
+      expect(hasAnyTraceFilterParams(new URLSearchParams(query))).toBe(true);
     });
   });
 
