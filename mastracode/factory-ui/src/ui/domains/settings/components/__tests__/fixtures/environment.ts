@@ -37,18 +37,6 @@ export function environmentPayload(overrides: Partial<FactoryEnvironmentPayload>
       environmentRepository({ projectRepositoryId: 'link-web', slug: 'acme/web', position: 1 }),
       environmentRepository({ projectRepositoryId: 'link-api', slug: 'acme/api', position: 2 }),
     ],
-    buildTriggers: {
-      schedule: { enabled: true, hours: 24 },
-      onPush: { enabled: true, debounceMinutes: 10 },
-    },
-    build: {
-      status: null,
-      error: null,
-      lastBuiltAt: null,
-      activeTemplateId: null,
-      requestedAt: null,
-      pushSignal: 'polling',
-    },
     ...overrides,
   };
 }

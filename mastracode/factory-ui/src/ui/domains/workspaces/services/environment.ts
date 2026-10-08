@@ -1,9 +1,8 @@
 /**
  * Browser-side helpers for a Factory's environment: the sandbox resources, the
- * ordered repository list with per-repository setup, the workspace setup
- * command, the build triggers and the last build's status. Mirrors the factory's
- * `GET`/`PATCH /web/factory/projects/:id/environment` and
- * `POST …/environment/build` contracts.
+ * ordered repository list with per-repository setup and the workspace setup
+ * command. Mirrors the factory's `GET`/`PATCH /web/factory/projects/:id/environment`
+ * contract.
  */
 
 import { readJsonOrThrow } from './http';
@@ -26,28 +25,6 @@ export interface FactoryEnvironmentRepository {
   lastBuiltAt: string | null;
 }
 
-export interface FactoryEnvironmentBuildTriggers {
-  schedule: { enabled: boolean; hours: number };
-  onPush: {
-    enabled: boolean;
-    debounceMinutes: number;
-  };
-}
-
-export type FactoryEnvironmentBuildStatus = 'ready' | 'partial' | 'failed' | 'building';
-
-/** How this host learns about pushes: the Platform polling worker, the self-hosted webhook, or nothing. */
-export type FactoryEnvironmentPushSignal = 'polling' | 'webhook' | 'none';
-
-export interface FactoryEnvironmentBuild {
-  status: FactoryEnvironmentBuildStatus | null;
-  error: string | null;
-  lastBuiltAt: string | null;
-  activeTemplateId: string | null;
-  requestedAt: string | null;
-  pushSignal: FactoryEnvironmentPushSignal;
-}
-
 export interface FactoryEnvironmentPayload {
   sandboxWorkdir: string | null;
   sandboxCpuCount: number | null;
@@ -57,14 +34,10 @@ export interface FactoryEnvironmentPayload {
   activeTemplateId: string | null;
   activeTemplateHeads: Record<string, string> | null;
   repositories: FactoryEnvironmentRepository[];
-  buildTriggers: FactoryEnvironmentBuildTriggers;
-  build: FactoryEnvironmentBuild;
 }
 
 export interface FactoryEnvironmentResponse {
   environment: FactoryEnvironmentPayload;
-  /** Present on PATCH when the change affects the template and a build was queued. */
-  buildRequested?: boolean;
 }
 
 export interface FactoryEnvironmentRepositoryPatch {
@@ -83,15 +56,6 @@ export interface FactoryEnvironmentPatch {
   workspaceSetupCommand?: string | null;
   /** Positions, when given, must be a permutation of 1..n over the listed repositories. */
   repositories?: FactoryEnvironmentRepositoryPatch[];
-  buildTriggers?: {
-    schedule?: { enabled?: boolean; hours?: number };
-    onPush?: { enabled?: boolean; debounceMinutes?: number };
-  };
-}
-
-export interface FactoryEnvironmentBuildResponse {
-  requested: true;
-  build: FactoryEnvironmentBuild;
 }
 
 function environmentUrl(baseUrl: string, factoryProjectId: string): string {
@@ -122,16 +86,4 @@ export async function patchFactoryEnvironment(
     body: JSON.stringify(input),
   });
   return readJsonOrThrow<FactoryEnvironmentResponse>(res, 'Failed to save environment');
-}
-
-export async function requestEnvironmentBuild(
-  baseUrl: string,
-  factoryProjectId: string,
-): Promise<FactoryEnvironmentBuildResponse> {
-  const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/build`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  return readJsonOrThrow<FactoryEnvironmentBuildResponse>(res, 'Failed to request a build');
 }

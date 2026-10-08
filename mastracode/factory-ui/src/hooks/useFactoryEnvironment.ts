@@ -2,19 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  getFactoryEnvironment,
-  patchFactoryEnvironment,
-  requestEnvironmentBuild,
-} from '../ui/domains/workspaces/services/environment';
+import { getFactoryEnvironment, patchFactoryEnvironment } from '../ui/domains/workspaces/services/environment';
 import type { FactoryEnvironmentPatch } from '../ui/domains/workspaces/services/environment';
 
-const BUILD_POLL_MS = 10_000;
-
 /**
- * A Factory's environment (resources, ordered repositories, setup, build
- * triggers and status) through the shared React Query cache. Idle without a
- * factory id.
+ * A Factory's environment (resources, ordered repositories and setup) through
+ * the shared React Query cache. Idle without a factory id.
  */
 export function useFactoryEnvironmentQuery(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
@@ -22,11 +15,6 @@ export function useFactoryEnvironmentQuery(factoryId: string | undefined) {
     queryKey: queryKeys.factoryEnvironment(factoryId),
     queryFn: () => getFactoryEnvironment(baseUrl, factoryId!),
     enabled: Boolean(factoryId),
-    // A build in flight (or one just requested) finishes on the server; poll so the status moves.
-    refetchInterval: query => {
-      const build = query.state.data?.build;
-      return build && (build.status === 'building' || build.requestedAt) ? BUILD_POLL_MS : false;
-    },
   });
 }
 
@@ -47,18 +35,6 @@ export function useSaveFactoryEnvironmentMutation() {
       queryClient.setQueryData(queryKeys.factoryEnvironment(factoryId), saved.environment);
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryProject(factoryId) });
-    },
-  });
-}
-
-/** Ask the factory to rebuild the environment template now. */
-export function useRequestEnvironmentBuildMutation() {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ factoryId }: { factoryId: string }) => requestEnvironmentBuild(baseUrl, factoryId),
-    onSuccess: (_result, { factoryId }) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryId) });
     },
   });
 }

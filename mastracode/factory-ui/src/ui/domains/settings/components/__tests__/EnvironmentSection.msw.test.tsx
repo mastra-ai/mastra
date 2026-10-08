@@ -25,13 +25,13 @@ function useEnvironment(environment: FactoryEnvironmentPayload) {
   server.use(http.get(ENVIRONMENT_URL, () => HttpResponse.json({ environment })));
 }
 
-/** Records every PATCH body and answers with the given environment, optionally flagging a queued build. */
-function recordPatches(environment: FactoryEnvironmentPayload, extra: { buildRequested?: boolean } = {}) {
+/** Records every PATCH body and answers with the given environment. */
+function recordPatches(environment: FactoryEnvironmentPayload) {
   const patches: FactoryEnvironmentPatch[] = [];
   server.use(
     http.patch(ENVIRONMENT_URL, async ({ request }) => {
       patches.push((await request.json()) as FactoryEnvironmentPatch);
-      return HttpResponse.json({ environment, ...extra });
+      return HttpResponse.json({ environment });
     }),
   );
   return patches;
@@ -203,11 +203,11 @@ describe('Environment settings', () => {
     expect(patches[0]?.repositories?.[1]).toMatchObject({ projectRepositoryId: 'link-api', setupCommand: null });
   });
 
-  it('patches one resource field at a time and announces a queued build', async () => {
+  it('patches one resource field at a time', async () => {
     useFactory();
     const environment = environmentPayload();
     useEnvironment(environment);
-    const patches = recordPatches(environment, { buildRequested: true });
+    const patches = recordPatches(environment);
     const user = userEvent.setup();
 
     renderEnvironmentSettings();
@@ -218,42 +218,12 @@ describe('Environment settings', () => {
 
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]).toEqual({ sandboxCpuCount: 4 });
-    expect(await screen.findByText('Changes to the environment start a new build.')).toBeInTheDocument();
 
     const idle = screen.getByRole('spinbutton', { name: 'Idle timeout in minutes' });
     await user.clear(idle);
     await user.tab();
     await waitFor(() => expect(patches).toHaveLength(2));
     expect(patches[1]).toEqual({ sandboxIdleTimeoutMinutes: null });
-  });
-
-  it('drops the build notice once a later save does not queue one', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    let queue = true;
-    const patches: FactoryEnvironmentPatch[] = [];
-    server.use(
-      http.patch(ENVIRONMENT_URL, async ({ request }) => {
-        patches.push((await request.json()) as FactoryEnvironmentPatch);
-        return HttpResponse.json(queue ? { environment, buildRequested: true } : { environment });
-      }),
-    );
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    const cpu = await screen.findByRole('spinbutton', { name: 'CPU cores' });
-    await user.clear(cpu);
-    await user.type(cpu, '4{Enter}');
-    expect(await screen.findByText('Changes to the environment start a new build.')).toBeInTheDocument();
-
-    queue = false;
-    await user.click(screen.getByRole('switch', { name: 'Rebuild on a schedule' }));
-    await waitFor(() => expect(patches).toHaveLength(2));
-    await waitFor(() =>
-      expect(screen.queryByText('Changes to the environment start a new build.')).not.toBeInTheDocument(),
-    );
   });
 
   it('rejects a non-integer or out-of-range number without a PATCH', async () => {
@@ -312,125 +282,5 @@ describe('Environment settings', () => {
 
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]).toEqual({ workspaceSetupCommand: 'pnpm install' });
-  });
-
-  it('round-trips the build triggers one field at a time', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    await user.click(await screen.findByRole('switch', { name: 'Rebuild on a schedule' }));
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ buildTriggers: { schedule: { enabled: false } } });
-
-    const hours = screen.getByRole('spinbutton', { name: 'Schedule interval in hours' });
-    await user.clear(hours);
-    await user.type(hours, '12{Enter}');
-    await waitFor(() => expect(patches).toHaveLength(2));
-    expect(patches[1]).toEqual({ buildTriggers: { schedule: { hours: 12 } } });
-
-    const debounce = screen.getByRole('spinbutton', { name: 'Push debounce in minutes' });
-    await user.clear(debounce);
-    await user.type(debounce, '0{Enter}');
-    await waitFor(() => expect(patches).toHaveLength(3));
-    expect(patches[2]).toEqual({ buildTriggers: { onPush: { debounceMinutes: 0 } } });
-  });
-
-  it('warns that push triggers cannot fire when the host delivers no pushes', async () => {
-    useFactory();
-    useEnvironment(environmentPayload({ build: { ...environmentPayload().build, pushSignal: 'none' } }));
-
-    renderEnvironmentSettings();
-
-    expect(await screen.findByText(/Pushes are not delivered to this Factory/)).toBeInTheDocument();
-  });
-
-  it('keeps the push warning quiet while the push trigger is off', async () => {
-    useFactory();
-    const base = environmentPayload();
-    useEnvironment(
-      environmentPayload({
-        build: { ...base.build, pushSignal: 'none' },
-        buildTriggers: { ...base.buildTriggers, onPush: { ...base.buildTriggers.onPush, enabled: false } },
-      }),
-    );
-
-    renderEnvironmentSettings();
-
-    await screen.findByRole('switch', { name: 'Rebuild on push' });
-    expect(screen.queryByText(/Pushes are not delivered to this Factory/)).not.toBeInTheDocument();
-  });
-
-  it('shows no push warning while the polling worker delivers pushes', async () => {
-    useFactory();
-    useEnvironment(environmentPayload());
-
-    renderEnvironmentSettings();
-
-    await screen.findByRole('switch', { name: 'Rebuild on push' });
-    expect(screen.queryByText(/Pushes are not delivered to this Factory/)).not.toBeInTheDocument();
-  });
-
-  it('shows the last build: status, template id and error', async () => {
-    useFactory();
-    useEnvironment(
-      environmentPayload({
-        build: {
-          status: 'failed',
-          error: 'pnpm install exited with 1',
-          lastBuiltAt: '2026-10-07T12:00:00.000Z',
-          activeTemplateId: 'tpl-0123456789abcdef',
-          requestedAt: null,
-          pushSignal: 'polling',
-        },
-      }),
-    );
-
-    renderEnvironmentSettings();
-
-    expect(await screen.findByText('Failed')).toBeInTheDocument();
-    expect(screen.getByTitle('tpl-0123456789abcdef')).toHaveTextContent('tpl-0123456789abcdef');
-    expect(screen.getByText('pnpm install exited with 1')).toBeInTheDocument();
-    expect(screen.queryByText('Build requested')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Build now' })).toBeEnabled();
-  });
-
-  it('disables Build now while a build is running', async () => {
-    useFactory();
-    useEnvironment(environmentPayload({ build: { ...environmentPayload().build, status: 'building' } }));
-
-    renderEnvironmentSettings();
-
-    expect(await screen.findByRole('button', { name: 'Building…' })).toBeDisabled();
-    expect(screen.getByText('Building')).toBeInTheDocument();
-  });
-
-  it('Build now posts to the build route and the status shows the request after refetch', async () => {
-    useFactory();
-    const before = environmentPayload();
-    const requested: FactoryEnvironmentPayload = {
-      ...before,
-      build: { ...before.build, requestedAt: '2026-10-07T12:00:00.000Z' },
-    };
-    let builds = 0;
-    server.use(
-      http.get(ENVIRONMENT_URL, () => HttpResponse.json({ environment: builds === 0 ? before : requested })),
-      http.post(`${ENVIRONMENT_URL}/build`, () => {
-        builds += 1;
-        return HttpResponse.json({ requested: true, build: requested.build });
-      }),
-    );
-
-    renderEnvironmentSettings();
-
-    expect(await screen.findByText('Never built')).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Build now' }));
-
-    await waitFor(() => expect(builds).toBe(1));
-    expect(await screen.findByText('Build requested')).toBeInTheDocument();
   });
 });
