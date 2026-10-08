@@ -157,6 +157,77 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it.each(['subagent', 'observer', 'reflector'] as const)('awaits queued %s model writes', async role => {
+    const controller = await createSettingsController(new InMemoryStore(), `queued-${role}`);
+    const session = await controller.createSession({ createInitialThread: false });
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const previous = session.state.update(async () => {
+      entered.resolve();
+      await release.promise;
+      return { updates: {}, result: undefined };
+    });
+    await entered.promise;
+    const modelId = 'kimi-for-coding/kimi-for-coding';
+    const setting =
+      role === 'subagent' ? session.subagents.model.set({ modelId }) : session.om[role].switchModel({ modelId });
+    try {
+      const settled = await Promise.race([
+        setting.then(() => true),
+        new Promise<boolean>(resolve => setImmediate(() => resolve(false))),
+      ]);
+      expect(settled).toBe(false);
+    } finally {
+      release.resolve();
+      await previous;
+      await setting;
+    }
+    const key = role === 'subagent' ? 'subagentModelId' : `${role}ModelId`;
+    expect(session.state.get()[key]).toBe(modelId);
+  });
+
+  it.each(['subagent', 'observer', 'reflector'] as const)(
+    'fences %s model events during metadata persistence',
+    async role => {
+      const storage = new InMemoryStore();
+      const controller = await createSettingsController(storage, `persisted-${role}`);
+      const session = await controller.createSession({ createInitialThread: false });
+      const a = await session.thread.create({ id: `setter-a-${role}` });
+      const memory = (await storage.getStore('memory'))!;
+      const saveThread = memory.saveThread.bind(memory);
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      vi.spyOn(memory, 'saveThread').mockImplementation(async args => {
+        if (args.thread.id === a.id) {
+          entered.resolve();
+          await release.promise;
+        }
+        return saveThread(args);
+      });
+      const events: AgentControllerEvent[] = [];
+      session.subscribe(event => {
+        events.push(event);
+      });
+      const modelId = 'kimi-for-coding/kimi-for-coding';
+      const setting =
+        role === 'subagent' ? session.subagents.model.set({ modelId }) : session.om[role].switchModel({ modelId });
+      await entered.promise;
+      const switching = session.thread.create({ id: `setter-b-${role}` });
+      await vi.waitFor(() => expect(session.thread.getId()).toBe(`setter-b-${role}`));
+      events.length = 0;
+      release.resolve();
+      await setting;
+      await switching;
+      const key = role === 'subagent' ? 'subagentModelId' : `${role}ModelId`;
+      expect(session.state.get()[key]).toBeUndefined();
+      expect(
+        events.filter(event => event.type === 'subagent_model_changed' || event.type === 'om_model_changed'),
+      ).toEqual([]);
+      expect((await session.thread.getById({ threadId: a.id }))?.metadata?.[key]).toBe(modelId);
+      await session.thread.clearAndReleaseLock();
+    },
+  );
+
   it('restores global and per-type subagent selections without leaking them to new conversations', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'subagent-selections');
