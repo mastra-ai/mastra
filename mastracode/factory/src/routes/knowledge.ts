@@ -1434,6 +1434,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     limit: number,
   ): Promise<{ items: VisibleKnowledgeActivity[]; scanCursor?: string }> {
     const out: VisibleKnowledgeActivity[] = [];
+    // Many events in a scan target the same node; read each node once per request.
+    const nodes = new Map<string, Promise<KnowledgeNode | null>>();
+    const getNode = (id: string) => {
+      let node = nodes.get(id);
+      if (!node) {
+        node = view.store.getNode(id);
+        nodes.set(id, node);
+      }
+      return node;
+    };
     let after = cursor;
     let scanned = 0;
     let exhausted = false;
@@ -1448,10 +1458,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         scanned += 1;
         let targetNode: KnowledgeNode | null;
         if (event.recordType === 'node') {
-          targetNode = await view.store.getNode(event.recordId);
+          targetNode = await getNode(event.recordId);
         } else {
           const record = await view.store.getKnowledge({ id: event.recordId });
-          targetNode = record ? await view.store.getNode(record.node) : null;
+          targetNode = record ? await getNode(record.node) : null;
           if (record && !isKnowledgeScopeVisible(record.scope, view.scope)) targetNode = null;
         }
         if (

@@ -1220,6 +1220,20 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(seen)).not.toContain('other-thread');
   });
 
+  it('reads each activity target node once per request', async () => {
+    const h = await createHarness();
+    const busy = await node(h.knowledge, 'Busy Service', h.projectScope);
+    for (let i = 0; i < 20; i++) {
+      await record(h.knowledge, busy, `Evidence ${i}`, h.projectScope);
+    }
+    const getNode = vi.spyOn(h.knowledge, 'getNode');
+
+    const res = await activity(h);
+    expect(res.status).toBe(200);
+    expect(res.body.events.length).toBeGreaterThan(10);
+    expect(getNode.mock.calls.filter(([id]) => id === busy.id)).toHaveLength(1);
+  });
+
   it('404s node detail for a structural scope node instead of failing on its missing scope', async () => {
     const h = await createHarness();
     const scopeNodeId = crypto.randomUUID();
