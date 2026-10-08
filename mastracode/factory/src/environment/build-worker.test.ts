@@ -212,7 +212,7 @@ describe('FactoryEnvironmentBuildWorker', () => {
     vi.unstubAllGlobals();
   });
 
-  it('turns a push to the base branch into one build after the debounce, surviving a new worker instance', async () => {
+  it('builds on the first push, holds the next one for the debounce, and survives a new worker instance', async () => {
     const { seed, project } = await seedEnvironment();
     await seed.projects.update({
       orgId: 'org-1',
@@ -220,20 +220,27 @@ describe('FactoryEnvironmentBuildWorker', () => {
       input: { buildScheduleEnabled: false, activeTemplateHeads: { 'acme/api': SHA_A } },
     });
     let now = T0;
+    const push = {
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      repositoryExternalId: 'ext-api',
+      ref: 'refs/heads/main',
+    };
     const first = worker(seed, { now: () => now, heads: () => SHA_B });
-    expect(
-      await first.instance.notePush({
-        orgId: 'org-1',
-        factoryProjectId: project.id,
-        repositoryExternalId: 'ext-api',
-        ref: 'refs/heads/main',
-        after: SHA_B,
-      }),
-    ).toBe(true);
+    expect(await first.instance.notePush({ ...push, after: SHA_B })).toBe(true);
     await first.instance.tick();
-    expect(first.build).not.toHaveBeenCalled();
+    await first.instance.stop();
+    expect(first.build).toHaveBeenCalledTimes(1);
 
-    // Restart: a fresh instance over the same storage, past the debounce.
+    // A second push inside the window waits; a tick before it elapses builds nothing.
+    now = minutes(2);
+    expect(await first.instance.notePush({ ...push, after: SHA_B })).toBe(true);
+    now = minutes(5);
+    await first.instance.tick();
+    await first.instance.stop();
+    expect(first.build).toHaveBeenCalledTimes(1);
+
+    // Restart: a fresh instance over the same storage, once the window has passed.
     now = minutes(10);
     const second = worker(seed, { now: () => now, heads: () => SHA_B });
     await second.instance.tick();
@@ -243,8 +250,8 @@ describe('FactoryEnvironmentBuildWorker', () => {
     await second.instance.stop();
     expect(second.build).toHaveBeenCalledTimes(1);
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
-      buildWindowStartedAt: minutes(10),
-      buildWindowCount: 1,
+      buildWindowStartedAt: T0,
+      buildWindowCount: 2,
       activeTemplateId: 'tpl-1',
     });
     vi.unstubAllGlobals();

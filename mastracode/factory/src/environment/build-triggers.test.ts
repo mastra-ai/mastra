@@ -107,14 +107,19 @@ describe('retryBackoffActive', () => {
 });
 
 describe('pushPending', () => {
-  it('waits out the debounce after the push', () => {
-    const pushed = project({ lastPushAt: T0 });
+  it('builds on the next tick after the first push', () => {
+    expect(pushPending(project({ lastPushAt: T0 }), T0)).toBe(true);
+  });
+
+  it('holds a push inside the debounce window after an attempt, then serves it', () => {
+    const pushed = project({ lastPushAt: minutes(2), lastBuildAttemptedAt: T0, lastBuildStatus: 'ready' });
     expect(pushPending(pushed, minutes(9))).toBe(false);
     expect(pushPending(pushed, minutes(10))).toBe(true);
   });
 
-  it('builds on the next tick with a zero debounce', () => {
-    expect(pushPending(project({ lastPushAt: T0, buildPushDebounceMinutes: 0 }), T0)).toBe(true);
+  it('serves every push on the next tick with a zero debounce', () => {
+    const pushed = project({ lastPushAt: minutes(1), lastBuildAttemptedAt: T0, buildPushDebounceMinutes: 0 });
+    expect(pushPending(pushed, minutes(1))).toBe(true);
   });
 
   it('is consumed by any attempt made after the push, failed or not', () => {
@@ -145,32 +150,41 @@ describe('capAllows', () => {
 describe('pendingTrigger over a timeline', () => {
   const scheduledOff = project({ buildScheduleEnabled: false });
 
-  it('collapses three pushes inside the debounce window into one build after it elapses', () => {
+  it('builds on the first push, then collapses pushes inside the window into one build after it', () => {
     const { builds } = simulate(scheduledOff, [
       { at: minutes(0), push: true },
       { at: minutes(3), push: true },
       { at: minutes(6), push: true },
       ...ticksEvery(1, 0, 30),
     ]);
-    expect(builds).toEqual([minutes(16)]);
+    expect(builds).toEqual([minutes(0), minutes(10)]);
   });
 
-  it('builds once the window passes even with no further push: the tick fires it, not the push', () => {
+  it('a lone push builds once and nothing follows', () => {
     const { builds } = simulate(scheduledOff, [{ at: minutes(0), push: true }, ...ticksEvery(1, 0, 60)]);
-    expect(builds).toEqual([minutes(10)]);
+    expect(builds).toEqual([minutes(0)]);
   });
 
-  it('a push during a build yields exactly one more build after the debounce', () => {
-    // The first tick at minute 10 claims and builds; the attempt is stamped
-    // with the claim time, so a push at minute 12 while the build runs stays
-    // newer than it and is served once its own debounce passes.
+  it('a push during a build yields exactly one more build once the window passes', () => {
+    // The tick at minute 0 claims and builds; the attempt is stamped with the
+    // claim time, so a push at minute 2 while the build runs stays newer than
+    // it and is served at minute 10, the debounce measured from the attempt.
     const { builds } = simulate(scheduledOff, [
       { at: minutes(0), push: true },
-      { at: minutes(10), tick: true },
-      { at: minutes(12), push: true },
-      ...ticksEvery(1, 13, 60),
+      { at: minutes(0), tick: true },
+      { at: minutes(2), push: true },
+      ...ticksEvery(1, 3, 60),
     ]);
-    expect(builds).toEqual([minutes(10), minutes(22)]);
+    expect(builds).toEqual([minutes(0), minutes(10)]);
+  });
+
+  it('a repository pushed to more often than the debounce still rebuilds every window', () => {
+    const events = [];
+    for (let i = 0; i < 30; i++) events.push({ at: minutes(i * 2), push: true as const });
+    events.push(...ticksEvery(1, 0, 60));
+    events.sort((a, b) => a.at.getTime() - b.at.getTime() || (a.push ? -1 : 1));
+    const { builds } = simulate(project({ buildScheduleEnabled: false, buildPushMaxPerHour: 0 }), events);
+    expect(builds).toEqual([0, 10, 20, 30, 40, 50, 60].map(minutes));
   });
 
   it('holds push builds at maxPerHour and resumes when the window rolls over', () => {
@@ -179,10 +193,10 @@ describe('pendingTrigger over a timeline', () => {
     events.push(...ticksEvery(1, 0, 150));
     events.sort((a, b) => a.at.getTime() - b.at.getTime() || (a.push ? -1 : 1));
     const { builds } = simulate(project({ buildScheduleEnabled: false, buildPushMaxPerHour: 2 }), events);
-    // Pushes every 12 minutes from 0 (debounce 10): builds at 10 and 22 fill
-    // the window opened at 10; the pushes at 36 and 48 wait for the rollover
-    // at 70, then 70 and 82 fill the next window; the push at 84 waits for 130.
-    expect(builds).toEqual([minutes(10), minutes(22), minutes(70), minutes(82), minutes(130)]);
+    // Pushes every 12 minutes from 0 (debounce 10): builds at 0 and 12 fill
+    // the window opened at 0; the pushes at 24..48 wait for the rollover at
+    // 60, then 60 and 72 fill the next window; the push at 84 waits for 120.
+    expect(builds).toEqual([minutes(0), minutes(12), minutes(60), minutes(72), minutes(120)]);
   });
 
   it('a failed push build is not retried on the next tick; a new push builds once', () => {
@@ -196,7 +210,7 @@ describe('pendingTrigger over a timeline', () => {
     expect(pendingTrigger(failed, minutes(11))).toBeNull();
     expect(pendingTrigger(failed, minutes(60))).toBeNull();
     const { builds } = simulate(failed, [{ at: minutes(12), push: true }, ...ticksEvery(1, 12, 40)]);
-    expect(builds).toEqual([minutes(22)]);
+    expect(builds).toEqual([minutes(20)]);
   });
 
   it('an explicit request bypasses the backoff', () => {

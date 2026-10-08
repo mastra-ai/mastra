@@ -51,14 +51,17 @@ export function retryBackoffActive(project: BuildTriggerProject, now: Date): boo
 /**
  * A push to a base branch is waiting on a build: push triggers are on, the
  * push is newer than the last attempt (an attempt consumes every push before
- * it, failed or not), and the debounce window since the push has elapsed.
+ * it, failed or not), and the debounce window since that attempt has elapsed.
+ * Leading edge: the first push builds on the next tick; pushes that land
+ * within the window are held and collapse into one build once it passes, so
+ * a repository pushed to constantly still rebuilds every `debounce` minutes.
  */
 export function pushPending(project: BuildTriggerProject, now: Date): boolean {
   if (!project.buildOnPushEnabled || !project.lastPushAt) return false;
-  if (project.lastBuildAttemptedAt && project.lastPushAt.getTime() <= project.lastBuildAttemptedAt.getTime()) {
-    return false;
-  }
-  return now.getTime() - project.lastPushAt.getTime() >= project.buildPushDebounceMinutes * MINUTE_MS;
+  const attempted = project.lastBuildAttemptedAt;
+  if (!attempted) return true;
+  if (project.lastPushAt.getTime() <= attempted.getTime()) return false;
+  return now.getTime() - attempted.getTime() >= project.buildPushDebounceMinutes * MINUTE_MS;
 }
 
 /** The trailing-hour window as it stands at `now`: reset when it is an hour old or was never opened. */
