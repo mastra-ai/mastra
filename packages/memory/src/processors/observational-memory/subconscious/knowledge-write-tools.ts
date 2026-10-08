@@ -9,12 +9,12 @@ type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
-const SCOPE_RUNGS = ['resource', 'thread'] as const;
+const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
 const nodePlacementSchema: JSONSchema7 = {
   type: 'string',
   description:
-    "Placement for the node: an identity rung ('resource' or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
+    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
 };
 const dateTimeSchema: JSONSchema7 = {
   type: 'string',
@@ -43,7 +43,8 @@ function getKnowledge(memory: KnowledgeWriteToolsMemory): Knowledge {
 /**
  * Writes run with the parent session's ordinary authority: the resource and thread rungs are the
  * vouched principals (the org rung is never vouched, matching the read tools), and every mutation goes
- * through the Knowledge facade, which authorizes capabilities and fences the access epoch.
+ * through the Knowledge facade, which authorizes capabilities and fences the access epoch. Any rung,
+ * including org, can be a write target; writing there needs a grant that gives the session `append`.
  */
 function vouchedScopeIds(options: KnowledgeWriteToolsOptions): KnowledgeScopeIds {
   return options.scopeIds.slice(1);
@@ -51,9 +52,9 @@ function vouchedScopeIds(options: KnowledgeWriteToolsOptions): KnowledgeScopeIds
 
 function resolveWriteScopeIds(
   options: KnowledgeWriteToolsOptions,
-  scope: Exclude<SubconsciousScopeSelection, 'org'> = 'thread',
+  scope: SubconsciousScopeSelection = 'thread',
 ): KnowledgeScopeIds {
-  return [options.scopeIds[scope === 'resource' ? 1 : 2]!];
+  return [options.scopeIds[scope === 'org' ? 0 : scope === 'resource' ? 1 : 2]!];
 }
 
 /**
@@ -65,13 +66,13 @@ async function resolveNodePlacement(
   knowledge: Knowledge,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
-  recordScope: Exclude<SubconsciousScopeSelection, 'org'> | undefined,
+  recordScope: SubconsciousScopeSelection | undefined,
 ): Promise<KnowledgeScopeIds> {
   // Without an explicit placement the node shares its first record's rung, so the record is never
   // stranded on a node that its own readers cannot see.
   if (placement === undefined) return resolveWriteScopeIds(options, recordScope);
   if ((SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return resolveWriteScopeIds(options, placement as Exclude<SubconsciousScopeSelection, 'org'>);
+    return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection);
   }
   const frontier = knowledge.__getVisibleStructureScopes(options.scopeAddresses ?? []);
   const scope = frontier.some(visible => visible.address === placement)
@@ -117,7 +118,7 @@ export function createKnowledgeWriteTools(
           kind: string;
           text: string;
           nodeScope?: string;
-          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
+          scope?: SubconsciousScopeSelection;
           when?: string;
         };
         const knowledge = getKnowledge(memory);
@@ -156,7 +157,7 @@ export function createKnowledgeWriteTools(
         const value = input as {
           node: string;
           text: string;
-          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
+          scope?: SubconsciousScopeSelection;
           when?: string;
         };
         const knowledge = getKnowledge(memory);
@@ -327,7 +328,7 @@ export function createKnowledgeWriteTools(
         const value = input as {
           recordId: string;
           expectedVersion: number;
-          scope: Exclude<SubconsciousScopeSelection, 'org'>;
+          scope: SubconsciousScopeSelection;
         };
         const knowledge = getKnowledge(memory);
         return knowledge.setRecordScopes({
@@ -394,7 +395,7 @@ export function createKnowledgeWriteTools(
           name: string;
           kind?: string;
           content: string;
-          scope?: Exclude<SubconsciousScopeSelection, 'org'>;
+          scope?: SubconsciousScopeSelection;
           expectedVersion?: number;
         };
         const name = value.name.trim();
