@@ -678,6 +678,20 @@ describe('createToolCallStep background task stream replay', () => {
       resume: vi.fn(async () => {
         if (terminalTask.status !== 'cancelled') {
           setTimeout(async () => {
+            registeredContext.onChunk({
+              type: terminalTask.status === 'completed' ? 'background-task-completed' : 'background-task-failed',
+              payload: {
+                taskId: terminalTask.id,
+                toolCallId: 'call-resumed-awaited',
+                toolName: 'background-tool',
+                agentId: 'agent-1',
+                runId: 'current-run',
+                ...(terminalTask.status === 'completed'
+                  ? { result: terminalTask.result }
+                  : { error: terminalTask.error }),
+                completedAt: new Date(),
+              },
+            });
             await registeredContext.onResult({
               taskId: terminalTask.id,
               toolCallId: 'call-resumed-awaited',
@@ -702,12 +716,13 @@ describe('createToolCallStep background task stream replay', () => {
       updateToolInvocation: vi.fn(() => true),
       updateMessageMetadataByToolCallId: vi.fn(),
     } as unknown as MessageList;
+    const controller = { enqueue: vi.fn() };
     const toolCallStep = createToolCallStep({
       tools: {
         'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
       } as any,
       messageList,
-      controller: { enqueue: vi.fn() },
+      controller,
       runId: 'current-run',
       streamState: { serialize: vi.fn() },
       _internal: {
@@ -728,11 +743,11 @@ describe('createToolCallStep background task stream replay', () => {
       }),
     );
 
-    return { result, backgroundTaskManager };
+    return { result, backgroundTaskManager, controller };
   };
 
   it('awaits a resumed awaited task until its authoritative result is reconciled', async () => {
-    const { result, backgroundTaskManager } = await runResumedAwaitedTask({
+    const { result, backgroundTaskManager, controller } = await runResumedAwaitedTask({
       id: 'task-resumed-awaited',
       status: 'completed',
       result: { authoritative: true },
@@ -747,6 +762,7 @@ describe('createToolCallStep background task stream replay', () => {
     expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-resumed-awaited'], {
       abortSignal: undefined,
     });
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
   });
 
   it.each([
@@ -760,10 +776,13 @@ describe('createToolCallStep background task stream replay', () => {
       task: { id: 'task-resumed-cancelled', status: 'cancelled' as const },
       message: 'Background task cancelled: task-resumed-cancelled',
     },
-  ])('returns a resumed awaited $status task without hanging', async ({ task, message }) => {
-    const { result } = await runResumedAwaitedTask(task);
+  ])('returns a resumed awaited $status task without hanging', async ({ status, task, message }) => {
+    const { result, controller } = await runResumedAwaitedTask(task);
 
     expect(result as any).toMatchObject({ error: expect.objectContaining({ message }) });
+    if (status === 'failed') {
+      expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-error' }));
+    }
   });
 
   it('awaits the exact background task until its authoritative result is reconciled', async () => {

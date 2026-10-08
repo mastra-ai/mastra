@@ -988,6 +988,34 @@ describe('expectEngineParity', () => {
     };
   }
 
+  it('emits one tool result for an awaited background tool on every engine', async () => {
+    const difference: EngineDifference = {
+      reason:
+        'COR-1390: taskId is a per-engine stubbed UUID, and wrapped engines strip the LLM-only _background override.',
+      ignore: ['chunkPayloads', 'requests'],
+    };
+    const results = await expectEngineParity(
+      backgroundScenario({
+        model: {
+          tapes: [
+            toolCallTape('research', { topic: 'AI', _background: { disposition: 'awaited' } }),
+            textOnlyTape('Done.'),
+          ],
+        },
+        host: { backgroundTasks: { enabled: true } },
+        differences: { durable: difference, evented: difference },
+      }),
+    );
+
+    for (const engine of ENGINES) {
+      const turn = results[engine]!.turns[0]!;
+      expect(chunksOfType(turn, 'tool-result')).toBe(1);
+      expect(turn.toolResults).toEqual([
+        { toolCallId: 'parity-call-1', toolName: 'research', result: { summary: 'Research on AI' } },
+      ]);
+    }
+  });
+
   it('dispatches a deferred tool in the background when the scenario enables it, and not otherwise', async () => {
     // A deferred dispatch is only comparable with the chunk and result fields
     // declared: the wrapped engines stream an extra `background-task-progress`
