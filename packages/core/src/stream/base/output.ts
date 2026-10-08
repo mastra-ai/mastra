@@ -215,7 +215,13 @@ export type FullOutput<OUTPUT = undefined> = {
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
  */
-function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
+function resolveOutputTextSkippingCompletionChecks(
+  messageList: MessageList,
+  {
+    iterationLocal = false,
+    stepBoundarySource = messageList,
+  }: { iterationLocal?: boolean; stepBoundarySource?: MessageList } = {},
+): string | undefined {
   const responseDbMessages = messageList.get.response.db();
   const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
   const lastRealMessage = hasCompletionCheckMessages
@@ -223,8 +229,8 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
     : responseDbMessages[responseDbMessages.length - 1];
   if (!lastRealMessage) return undefined;
   if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
-    const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
-    if (stepParts.some(p => p.type === 'tool-invocation')) {
+    const stepParts = stepBoundarySource.partsSinceStepBoundary(lastRealMessage);
+    if (iterationLocal || stepParts.some(p => p.type === 'tool-invocation')) {
       return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
     }
   }
@@ -1174,7 +1180,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
                   }
 
-                  const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  const stepBoundarySource = self.messageList;
+                  const stepTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList, {
+                    iterationLocal: true,
+                  });
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
@@ -1187,21 +1196,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  const stepText = resolveOutputTextSkippingCompletionChecks(self.messageList, {
+                    iterationLocal: true,
+                    stepBoundarySource,
+                  });
 
-                  // Only update the last step when result processing changed the response text.
-                  // The response message can contain text accumulated across loop iterations, while
-                  // step.text must remain iteration-local. Comparing the response before and after
-                  // processing avoids replacing the final step with unchanged run-level text.
-                  // Compare against undefined, not truthiness, so a processor clearing the text
-                  // to '' still overwrites the step text instead of leaking the original.
+                  // Only update the last step when result processing changed that iteration's text.
+                  // The full response can contain text accumulated across loop iterations, while
+                  // step.text must remain iteration-local. Compare against undefined, not truthiness,
+                  // so a processor clearing the text to '' still overwrites the original step text.
                   if (
                     self.#status !== 'canceled' &&
                     lastStep &&
-                    outputText !== undefined &&
-                    outputText !== outputTextBeforeProcessing &&
-                    outputText !== lastStepText
+                    stepText !== undefined &&
+                    stepText !== stepTextBeforeProcessing &&
+                    stepText !== lastStepText
                   ) {
-                    lastStep.text = outputText;
+                    lastStep.text = stepText;
                   }
 
                   // Use the processed text when a response message exists, even if the
