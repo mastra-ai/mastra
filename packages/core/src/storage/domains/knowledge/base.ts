@@ -517,6 +517,17 @@ export function assertKnowledgeDescriptionWithinBound(description: string | unde
  */
 export function assertKnowledgeScopeWithinCeiling(_scope: KnowledgeScope, _maxScope?: KnowledgeScopeLevel): void {}
 
+/**
+ * Knowledge v2 records have no scope ceiling to raise. Kept only so published store adapters
+ * that import it still load; it never throws.
+ *
+ * @deprecated No longer enforced. Remove calls.
+ */
+export function assertKnowledgeCeilingRaised(
+  _currentMaxScope: KnowledgeScopeLevel | undefined,
+  _maxScope: KnowledgeScopeLevel | undefined,
+): void {}
+
 export function parseKnowledgeWikilinks(text: string): string[] {
   const names: string[] = [];
   const seen = new Set<string>();

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as storage from '../../..';
 import {
+  assertKnowledgeCeilingRaised,
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
   expandKnowledgeScope,
@@ -39,21 +40,33 @@ describe('knowledge scopes', () => {
     expect(() => canonicalizeKnowledgeScope(['tenant:t1'])).toThrow('Invalid knowledge scope entry');
   });
 
-  it('keeps the deprecated ceiling assertion as a no-op for published memory versions', () => {
+  it('keeps the deprecated ceiling assertions as no-ops for published memory and store versions', () => {
     expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'resource')).not.toThrow();
     expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'thread')).not.toThrow();
+    expect(() => assertKnowledgeCeilingRaised('resource', 'thread')).not.toThrow();
   });
 
-  it('keeps every @mastra/core/storage export that published @mastra/memory 1.36.0 imports', () => {
+  it('keeps every Knowledge @mastra/core/storage export that published memory and store packages import', () => {
+    // Imported by @mastra/memory 1.36.0, @mastra/libsql 1.25.1, @mastra/pg 1.30.0,
+    // @mastra/mysql 0.12.1, and @mastra/mongodb 1.22.0.
     for (const name of [
       'InMemoryStore',
+      'KnowledgeConflictError',
+      'KnowledgeNotFoundError',
+      'KnowledgeStorage',
       'MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH',
+      'assertKnowledgeCeilingRaised',
       'assertKnowledgeScopeWithinCeiling',
       'canonicalizeKnowledgeScope',
       'createKnowledgeNodeCursor',
+      'createKnowledgeUlid',
       'expandKnowledgeScope',
       'isKnowledgeScopeVisible',
       'knowledgeScopeKey',
+      'knowledgeSemanticDocumentId',
+      'knowledgeSemanticIdempotencyKey',
+      'parseKnowledgeNodeCursor',
+      'parseKnowledgeWikilinks',
     ]) {
       expect(storage, name).toHaveProperty(name);
     }
