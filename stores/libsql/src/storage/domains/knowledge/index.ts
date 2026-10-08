@@ -311,16 +311,27 @@ const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
 export class KnowledgeLibSQL extends KnowledgeStorage {
-  readonly #client: Client;
-  readonly #db: LibSQLDB;
+  readonly #rawClient: Client;
+  readonly #rawDb: LibSQLDB;
+  #initError?: Error;
+
+  // A failed schema check latches: every operation rethrows it until init() succeeds or dangerouslyReset() runs.
+  get #client(): Client {
+    if (this.#initError) throw this.#initError;
+    return this.#rawClient;
+  }
+  get #db(): LibSQLDB {
+    if (this.#initError) throw this.#initError;
+    return this.#rawDb;
+  }
 
   constructor(config: LibSQLDomainConfig) {
     const client = resolveClient(config);
     const storageIsolationKey = config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, client);
     super({ storageIsolationKey });
-    this.#client = client;
-    this.#db = new LibSQLDB({
-      client: this.#client,
+    this.#rawClient = client;
+    this.#rawDb = new LibSQLDB({
+      client,
       maxRetries: config.maxRetries,
       initialBackoffMs: config.initialBackoffMs,
     });
@@ -335,6 +346,17 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    this.#initError = undefined;
+    try {
+      await this.#init();
+    } catch (error) {
+      const { KnowledgeSchemaError } = await loadKnowledgeCore();
+      if (error instanceof KnowledgeSchemaError) this.#initError = error;
+      throw error;
+    }
+  }
+
+  async #init(): Promise<void> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
     const existingTables = await this.#client.execute(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
@@ -517,6 +539,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
+    this.#initError = undefined;
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
         [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()].map(table => ({
