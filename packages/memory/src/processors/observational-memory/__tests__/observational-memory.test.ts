@@ -5450,7 +5450,7 @@ describe('ObservationalMemory Integration', () => {
         retrieval: true,
         observation: {
           messageTokens: 500,
-          previousObserverTokens: 40_000,
+          previousObserverTokens: false,
           maxRetries: 8,
           failurePolicy: 'abort',
         },

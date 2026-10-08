@@ -40,6 +40,7 @@ async function setup(
   scope: 'thread' | 'resource',
   previousObserverTokens?: number | false,
   observation: Record<string, unknown> = { messageTokens: 100, bufferTokens: false },
+  observations: string = previousObservations,
 ) {
   const storage = new InMemoryMemory({ db: new InMemoryDB() });
   await storage.saveThread({
@@ -59,8 +60,8 @@ async function setup(
   const record = await om.getOrCreateRecord(threadId, resourceId);
   await storage.updateActiveObservations({
     id: record.id,
-    observations: previousObservations,
-    tokenCount: tokenCounter.countObservations(previousObservations),
+    observations,
+    tokenCount: tokenCounter.countObservations(observations),
     lastObservedAt: new Date(t0 - 1000),
   });
   const messages = Array.from({ length: 6 }, (_, i) => message(`m${i}`, i % 2 ? 'assistant' : 'user', t0 + i * 1000));
@@ -96,19 +97,21 @@ describe('observation.previousObserverTokens reaches the Observer', () => {
     expect(result.record.activeObservations).toContain('New observation from this cycle');
   });
 
-  it('applies the 40,000-token default when the option is not set', async () => {
-    const { om, messages } = await setup('thread');
-    expect(om.config.observation.previousObserverTokens).toBe(40_000);
-    expect(tokenCounter.countObservations(previousObservations)).toBeLessThan(40_000);
+  it('sends the full previous observations by default, however large they are', async () => {
+    const largeObservations = Array.from(
+      { length: 6000 },
+      (_, i) => `- Observation line ${i} about project details and decisions`,
+    ).join('\n');
+    const { om, messages } = await setup('thread', undefined, undefined, largeObservations);
+    expect(om.config.observation.previousObserverTokens).toBe(false);
+    expect(tokenCounter.countObservations(largeObservations)).toBeGreaterThan(60_000);
     const call = stubObserverCall(om);
 
     await om.observe({ threadId, resourceId, messages });
 
-    // History under the default budget reaches the Observer untruncated.
     const [context, , , options] = call.mock.calls[0]!;
-    expect(context).toContain(OLDEST);
-    expect(context).toContain(NEWEST);
-    expect(options?.wasTruncated).toBeFalsy();
+    expect(context).toBe(largeObservations);
+    expect(options?.wasTruncated).toBe(false);
   });
 
   it('sends the full previous observations when the budget is disabled', async () => {
