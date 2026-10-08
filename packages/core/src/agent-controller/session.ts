@@ -449,6 +449,7 @@ export interface SessionMachinery {
   authorizeExecute?(requestContext?: RequestContext): Promise<void>;
   /** Persist the session's running token usage to thread metadata. */
   persistTokenUsage(): Promise<void>;
+  recordTokenUsage?(usage: TokenUsage, requestContext: RequestContext, runId?: string, stepKey?: string): Promise<void>;
   /** Generate a new id (thread ids, message ids) using the host's id strategy. */
   generateId(): string;
   /**
@@ -611,7 +612,6 @@ export class SessionThread {
         this.#resetThreadSelection();
         this.#session.resetThreadDerivedState();
       }
-      this.#session.resetTokenUsage();
     }
     return this.#bindingGeneration;
   }
@@ -657,7 +657,6 @@ export class SessionThread {
     if (this.#session) {
       this.#resetThreadSelection();
       this.#session.resetThreadDerivedState();
-      this.#session.resetTokenUsage();
     }
   }
 
@@ -1241,14 +1240,13 @@ export class SessionThread {
     const store = this.#store;
     const threadId = this.#threadId;
     const bindingGeneration = this.#bindingGeneration;
+    const sourceUsage = (session.state as SessionState).retain(undefined, false).usage;
     if (!threadId || !store?.hasStorage()) {
       session.resetThreadSelection();
       session.resetThreadDerivedState();
-      session.resetTokenUsage();
+      if (!sourceUsage.total) session.resetTokenUsage();
       return;
     }
-
-    if (!preserveTokenUsageOnFailure) session.resetTokenUsage();
 
     try {
       const thread = await store.getById({ threadId });
@@ -1260,7 +1258,7 @@ export class SessionThread {
       session.resetThreadDerivedState();
 
       const meta = thread?.metadata as Record<string, unknown> | undefined;
-      const savedUsage = meta?.tokenUsage as TokenUsage | undefined;
+      const savedUsage = sourceUsage.total ?? (meta?.tokenUsage as TokenUsage | undefined);
       if (savedUsage) {
         session.setTokenUsage({
           ...createEmptyTokenUsage(),
@@ -1391,8 +1389,10 @@ export class SessionThread {
       }
     } catch {
       // Explicit same-thread refreshes preserve live thread-derived state on
-      // transient read failures. Lifecycle rebinds reset usage before loading
-      // so a prior thread's tally cannot leak into the new projection.
+      // transient read failures. New source views start without a usage tally.
+      if (!preserveTokenUsageOnFailure && !sourceUsage.total && this.#isCurrentBinding(threadId, bindingGeneration)) {
+        session.resetTokenUsage();
+      }
     }
   }
 }
@@ -2836,6 +2836,7 @@ type StateSource = {
   threadId: string | null;
   preferences: Record<string, unknown>;
   writtenKeys: Set<string>;
+  usage: { total?: TokenUsage };
   references: number;
   persistSetting?: PersistSettingFn;
   selection?: { modeId: string; modelId: string };
@@ -2879,6 +2880,7 @@ class SessionState<TState = unknown> {
       ...this.#getBinding(),
       preferences: Object.fromEntries(threadDerivedStateKeys(state).map(key => [key, state[key]])),
       writtenKeys: new Set(),
+      usage: { total: state.tokenUsage as TokenUsage | undefined },
       references: 0,
       persistSetting: this.#capturePersistSetting?.(),
     };
@@ -2948,6 +2950,12 @@ class SessionState<TState = unknown> {
     return {
       resourceId: source.resourceId,
       threadId: source.threadId,
+      get usage() {
+        return retainedSource.usage;
+      },
+      set usage(value) {
+        retainedSource.usage = value;
+      },
       isActive: () => retainedSource === this.#source,
       selection: () => (retainedSource === this.#source ? this.getSelection() : retainedSource.selection!),
       setSelection: (selection: { modeId: string; modelId: string }) => {
@@ -3958,7 +3966,13 @@ export class Session<TState = unknown> {
   /** Individual tool names granted "allow", bucketed by thread id (or the session-wide bucket). */
   readonly #grantedTools = new Map<string, Set<string>>();
   /** Running token-usage tally for the active thread. */
-  #tokenUsage: TokenUsage = createEmptyTokenUsage();
+  get #tokenUsage(): TokenUsage {
+    const usage = (this.state as SessionState<TState>).retain(undefined, false).usage;
+    return usage.total ?? createEmptyTokenUsage();
+  }
+  set #tokenUsage(total: TokenUsage) {
+    (this.state as SessionState<TState>).retain(undefined, false).usage.total = total;
+  }
   /** Whether the in-flight abort teardown must stay local to this process. */
   #localOnlyAbort = false;
   #deferredAbortOrigin: { bindingGeneration: number; localOnly: boolean } | undefined;
@@ -5749,6 +5763,7 @@ export class Session<TState = unknown> {
           if (subscription.__getCurrentRunRequestContext?.()?.get(markerKey) !== attempt) continue;
           if (chunk.runId && chunk.runId !== address.runId) continue;
           dispatched = true;
+          if (chunk.type === 'step-finish') await this.runEngine.processStepUsage(chunk, requestContext);
           if (chunk.type === 'tool-call-approval') {
             if (context.isThreadActive?.()) return;
             const next = { ...address, toolCallId: chunk.payload.toolCallId };
@@ -6091,16 +6106,18 @@ export class Session<TState = unknown> {
 
   /** Fold a single step's usage into the running tally. */
   addUsage(stepUsage: TokenUsage): void {
-    this.#tokenUsage.promptTokens += stepUsage.promptTokens;
-    this.#tokenUsage.completionTokens += stepUsage.completionTokens;
-    this.#tokenUsage.totalTokens += stepUsage.totalTokens;
-    addOptionalUsageField(this.#tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
-    addOptionalUsageField(this.#tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
-    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
-    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens5m', stepUsage.cacheCreationInputTokens5m);
-    addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens1h', stepUsage.cacheCreationInputTokens1h);
+    const usage = this.#tokenUsage;
+    usage.promptTokens += stepUsage.promptTokens;
+    usage.completionTokens += stepUsage.completionTokens;
+    usage.totalTokens += stepUsage.totalTokens;
+    addOptionalUsageField(usage, 'reasoningTokens', stepUsage.reasoningTokens);
+    addOptionalUsageField(usage, 'cachedInputTokens', stepUsage.cachedInputTokens);
+    addOptionalUsageField(usage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
+    addOptionalUsageField(usage, 'cacheCreationInputTokens5m', stepUsage.cacheCreationInputTokens5m);
+    addOptionalUsageField(usage, 'cacheCreationInputTokens1h', stepUsage.cacheCreationInputTokens1h);
     if (stepUsage.raw !== undefined) {
-      this.#tokenUsage.raw = stepUsage.raw;
+      usage.raw = stepUsage.raw;
     }
+    this.#tokenUsage = usage;
   }
 }

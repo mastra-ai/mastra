@@ -5,6 +5,7 @@ import { createDurableAgent, globalRunRegistry } from '../../agent/durable';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
 import { InMemoryServerCache } from '../../cache';
 import { Mastra } from '../../mastra';
+import { createRunScope } from '../../mastra/run-scope';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
@@ -157,6 +158,138 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it('does not turn a usage read during hydration into an authoritative zero', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'usage-hydration');
+    const session = await controller.createSession({ ownerId: 'owner', resourceId: 'resource' });
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: {
+        id: 'unvisited',
+        resourceId: 'resource',
+        title: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { tokenUsage: { promptTokens: 30, completionTokens: 60, totalTokens: 90 } },
+      },
+    });
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const get = memory.getThreadById.bind(memory);
+    const read = vi.spyOn(memory, 'getThreadById').mockImplementation(async args => {
+      if (args.threadId === 'unvisited' && session.thread.getId() === 'unvisited') {
+        entered.resolve();
+        await release.promise;
+      }
+      return get(args);
+    });
+    const switching = session.thread.switch({ threadId: 'unvisited' });
+    await entered.promise;
+    expect(session.getTokenUsage().totalTokens).toBe(0);
+    release.resolve();
+    await switching;
+    read.mockRestore();
+    expect(session.getTokenUsage().totalTokens).toBe(90);
+    const context = await session.machinery.buildRequestContext(undefined, { runId: 'hydrated', execution: true });
+    await session.machinery.recordTokenUsage!(
+      { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      context,
+      'hydrated',
+      'one',
+    );
+    expect(session.getTokenUsage().totalTokens).toBe(120);
+    await expect(session.thread.getSetting({ key: 'tokenUsage' })).resolves.toMatchObject({ totalTokens: 120 });
+  });
+  it('shares measured usage across scoped sessions observing the same run in alternating order', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'usage-listeners');
+    const first = await controller.createSession({ ownerId: 'owner', resourceId: 'resource', scope: 'first' });
+    const threadId = first.thread.getId()!;
+    const second = await controller.createSession({
+      ownerId: 'owner',
+      resourceId: 'resource',
+      scope: 'second',
+      threadId,
+    });
+    expect(second).not.toBe(first);
+    const scopes = new Map([
+      ['shared', createRunScope()],
+      ['parked', createRunScope()],
+    ]);
+    vi.spyOn(first.machinery, 'getRunScope').mockImplementation(id => scopes.get(id));
+    vi.spyOn(second.machinery, 'getRunScope').mockImplementation(id => scopes.get(id));
+    const parked = await second.machinery.buildRequestContext(undefined, { runId: 'parked', execution: true });
+    const a = await first.machinery.buildRequestContext(undefined, { runId: 'shared', execution: true });
+    const b = await second.machinery.buildRequestContext(undefined, { runId: 'shared', execution: true });
+    const usage = { promptTokens: 10, completionTokens: 20, totalTokens: 30 };
+    await first.machinery.recordTokenUsage!(usage, a, 'shared', 'one');
+    await second.machinery.recordTokenUsage!(usage, b, 'shared', 'one');
+    expect(first.getTokenUsage().totalTokens).toBe(30);
+    expect(second.getTokenUsage().totalTokens).toBe(30);
+    await second.machinery.recordTokenUsage!(usage, b, 'shared', 'two');
+    await first.machinery.recordTokenUsage!(usage, a, 'shared', 'two');
+    expect(first.getTokenUsage().totalTokens).toBe(60);
+    expect(second.getTokenUsage().totalTokens).toBe(60);
+    await expect(first.thread.getSettingOn({ threadId, key: 'tokenUsage' })).resolves.toMatchObject({
+      totalTokens: 60,
+    });
+    await second.machinery.recordTokenUsage!(usage, parked, 'parked', 'one');
+    await first.machinery.recordTokenUsage!(usage, a, 'shared', 'three');
+    await second.machinery.recordTokenUsage!(usage, b, 'shared', 'three');
+    expect(first.getTokenUsage().totalTokens).toBe(120);
+    expect(second.getTokenUsage().totalTokens).toBe(120);
+    await expect(first.thread.getSettingOn({ threadId, key: 'tokenUsage' })).resolves.toMatchObject({
+      totalTokens: 120,
+    });
+  });
+  it.each(['read', 'write'] as const)(
+    'retains measured usage across %s failures and interleaved runs',
+    async failure => {
+      const storage = new InMemoryStore();
+      const controller = await createSettingsController(storage, `usage-${failure}`);
+      const session = await controller.createSession({ ownerId: 'owner', resourceId: 'resource' });
+      const threadId = session.thread.getId()!;
+      const scopes = new Map([
+        ['first', createRunScope()],
+        ['second', createRunScope()],
+      ]);
+      vi.spyOn(session.machinery, 'getRunScope').mockImplementation(runId => scopes.get(runId));
+      const first = await session.machinery.buildRequestContext(undefined, { runId: 'first', execution: true });
+      const second = await session.machinery.buildRequestContext(undefined, { runId: 'second', execution: true });
+      const memory = (await storage.getStore('memory'))!;
+      const failed = vi.spyOn(memory, failure === 'read' ? 'getThreadById' : 'saveThread');
+      failed.mockRejectedValueOnce(new Error('temporary metadata failure'));
+      const usage = { promptTokens: 10, completionTokens: 20, totalTokens: 30 };
+      const events: AgentControllerEvent[] = [];
+      const unsubscribe = session.subscribe(event => {
+        events.push(event);
+      });
+      try {
+        await session.machinery.recordTokenUsage!(usage, first, 'first', 'step-one');
+        expect(session.getTokenUsage()).toMatchObject(usage);
+        expect(events.filter(event => event.type === 'usage_update')).toHaveLength(1);
+        await session.thread.create({ id: 'usage-away' });
+        expect(session.getTokenUsage().totalTokens).toBe(0);
+        await session.thread.switch({ threadId });
+        expect(session.getTokenUsage()).toMatchObject(usage);
+        await session.machinery.recordTokenUsage!(usage, second, 'second', 'step-one');
+        await session.machinery.recordTokenUsage!(usage, first, 'first', 'step-two');
+        // A second consumer of the original step must neither add nor emit again.
+        const replay = await session.machinery.buildRequestContext(first, { runId: 'first', execution: true });
+        await session.machinery.recordTokenUsage!(usage, replay, 'first', 'step-one');
+        expect(session.getTokenUsage()).toMatchObject({ promptTokens: 30, completionTokens: 60, totalTokens: 90 });
+        expect(events.filter(event => event.type === 'usage_update')).toHaveLength(3);
+        await expect(session.thread.getSettingOn({ threadId, key: 'tokenUsage' })).resolves.toMatchObject({
+          promptTokens: 30,
+          completionTokens: 60,
+          totalTokens: 90,
+        });
+      } finally {
+        unsubscribe();
+        failed.mockRestore();
+      }
+    },
+  );
   it.each([false, true])(
     'builds inactive source contexts without borrowing active preferences (storage: %s)',
     async stored => {
@@ -204,6 +337,15 @@ describe('AgentController thread-derived session state', () => {
           }),
         ).rejects.toThrow('Source thread is missing');
       }
+      await session.machinery.recordTokenUsage!(
+        { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+        context,
+        'inactive',
+        'one',
+      );
+      expect(session.getTokenUsage().totalTokens).toBe(0);
+      await session.thread.switch({ threadId: source.id });
+      expect(session.getTokenUsage().totalTokens).toBe(30);
       session.stream.detach();
     },
   );
@@ -1013,7 +1155,8 @@ describe('AgentController thread-derived session state', () => {
     });
 
     await session.thread.switch({ threadId: threadA.id });
-    expect(session.getTokenUsage()).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(reads).toBeGreaterThanOrEqual(2);
+    expect(session.getTokenUsage()).toMatchObject({ promptTokens: 10, completionTokens: 20, totalTokens: 30 });
   });
 
   it.each([false, true])(
