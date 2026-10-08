@@ -1207,6 +1207,12 @@ function executeStreamWithFallbackModels<T>(
   };
 }
 
+function countResponseStepStarts(messageList: MessageList): number {
+  return messageList.get.response.aiV5
+    .ui()
+    .reduce((count, message) => count + message.parts.filter(part => part.type === 'step-start').length, 0);
+}
+
 export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
@@ -1454,6 +1460,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Undefined on the first iteration, and on any iteration with no open assistant message to
       // append to — both roll the message back whole, which is what the rejection means there.
       const iterationBoundary = currentIteration > 1 ? messageList.openStepBoundary().boundary : undefined;
+      let currentStepContentIndex: number | undefined;
 
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
@@ -1601,8 +1608,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const previousSteps = inputData.output?.steps || [];
         const lastPreviousStep = previousSteps[previousSteps.length - 1];
         if (lastPreviousStep) {
-          // modelContent is 1-indexed, so the last completed step is `length`.
-          const refreshedContent = messageList.get.response.aiV5.modelContent(previousSteps.length);
+          // modelContent is 1-indexed and counts surviving step-start markers. The last completed
+          // step ends at the boundary this iteration just opened, so its index is the marker count.
+          // Counted live rather than taken from `previousSteps.length` because Observational Memory
+          // can prune earlier response messages (and their markers) mid-run.
+          const markerCount = countResponseStepStarts(messageList);
+          const refreshedContent = messageList.get.response.aiV5.modelContent(
+            iterationBoundary ? markerCount : markerCount + 1,
+          );
           // Durable agents deserialize a fresh MessageList per workflow step, so
           // the re-extraction can legitimately come back empty there. Never let
           // that wipe content we already have.
@@ -1944,6 +1957,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : inputMessages;
           writeScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages', delegationMessages);
         }
+
+        // Index of this iteration's content for modelContent, fixed now that input-step processors
+        // (e.g. Observational Memory pruning response messages) are done reshaping the list.
+        currentStepContentIndex = countResponseStepStarts(messageList) + 1;
 
         if (downloadError) {
           // Use the existing error-processor and model-fallback path without calling
@@ -3065,9 +3082,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // Only include content from this iteration, not all accumulated content.
       // modelContent is 1-indexed and already scopes the result to the requested
-      // step, so the step being pushed is `steps.length + 1` and no further
-      // slicing is needed.
-      const currentIterationContent = messageList.get.response.aiV5.modelContent(steps.length + 1);
+      // step. The index is counted from surviving step-start markers rather than
+      // `steps.length + 1`, which points past the markers once earlier response
+      // messages have been pruned mid-run (issue #26357).
+      const currentIterationContent = messageList.get.response.aiV5.modelContent(
+        currentStepContentIndex ?? steps.length + 1,
+      );
 
       // Build tripwire data if this step is being rejected
       // This includes both retry scenarios and max retries exceeded

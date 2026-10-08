@@ -2885,7 +2885,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "warnings": [],
                 },
                 DefaultStepResult {
-                  "content": [],
+                  "content": [
+                    {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -3064,7 +3074,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "warnings": [],
                 },
                 DefaultStepResult {
-                  "content": [],
+                  "content": [
+                    {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
