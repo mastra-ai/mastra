@@ -924,8 +924,8 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL pairs the presence-only feedback comment with a text value', () => {
-    it('loads the traces without sending the invalid comment predicate', async () => {
+  describe('when the URL gives the feedback comment a text value', () => {
+    it('keeps the chip and sends the comment predicate', async () => {
       const bodies: unknown[] = [];
       setTracePageHandlers(metricsCapableCapabilities);
       server.use(
@@ -941,10 +941,13 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      expect(bodies.length).toBeGreaterThan(0);
-      expect(JSON.stringify(bodies)).not.toContain('"comment"');
+      expect(JSON.stringify(bodies)).toContain(
+        '{"op":"eq","left":{"path":"comment"},"right":{"literal":"wrong answer"}}',
+      );
       expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([]);
+      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
+        'Feedback commentiswrong answer',
+      ]);
     });
   });
 

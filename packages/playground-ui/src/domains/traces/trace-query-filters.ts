@@ -165,7 +165,7 @@ function tagsPredicate(operatorId: TraceFilterOperatorId, tags: string[]): Trace
 }
 
 /** Fields the query API can only test for presence; any other operator is rejected with a 422. */
-const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
+const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error']);
 
 function tokenToTraceQueryPredicate(
   token: TraceFilterToken,
