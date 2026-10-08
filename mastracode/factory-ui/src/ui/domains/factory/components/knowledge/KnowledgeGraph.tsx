@@ -84,7 +84,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
           markers (dot / line / junction). */}
       <div
         className={[
-          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200',
+          'flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center transition-shadow duration-200 motion-reduce:transition-none',
           border,
           selected ? 'ring-badge-purple-indicator ring-2' : '',
         ].join(' ')}
@@ -211,7 +211,7 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
       data-record-id={record.id}
       data-focused={focused || undefined}
       className={[
-        'flex items-center justify-center rounded-full border transition-shadow',
+        'flex items-center justify-center rounded-full border transition-shadow motion-reduce:transition-none',
         // White markers mimic the Mastra logo's nodes-and-edges M — records
         // read as knowledge points, distinct from nodes (purple) and pins
         // (amber).
@@ -370,7 +370,8 @@ function KnowledgeGraphInner({
   // node); clearing focus fits back to the full graph.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void reactFlow.fitView({ padding: focusedId ? 0.3 : 0.1, duration: 500 });
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      void reactFlow.fitView({ padding: focusedId ? 0.3 : 0.1, duration: reduceMotion ? 0 : 500 });
     });
     return () => cancelAnimationFrame(frame);
   }, [focusedId, reactFlow]);
@@ -539,18 +540,27 @@ function KnowledgeGraphInner({
       data-testid="knowledge-graph"
     >
       <style>{`
-        @keyframes knowledgeArrive {
-          0% { opacity: 0; transform: scale(0.4); }
-          60% { opacity: 1; transform: scale(1.08); }
-          100% { opacity: 1; transform: scale(1); }
-        }
         .knowledge-arrive [data-testid='knowledge-node'] {
-          animation: knowledgeArrive 0.9s ease-out;
           box-shadow: 0 0 0 2px var(--chart-purple) !important;
         }
         .react-flow__edge.knowledge-arrive path {
-          animation: knowledgeArrive 0.9s ease-out;
           stroke: var(--chart-purple) !important;
+        }
+        .react-flow__node:focus-visible [data-testid='knowledge-node'],
+        .react-flow__node:focus-visible [data-testid='knowledge-record-node'] {
+          outline: 2px solid var(--chart-purple);
+          outline-offset: 2px;
+        }
+        @media (prefers-reduced-motion: no-preference) {
+          @keyframes knowledgeArrive {
+            0% { opacity: 0; transform: scale(0.4); }
+            60% { opacity: 1; transform: scale(1.08); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+          .knowledge-arrive [data-testid='knowledge-node'],
+          .react-flow__edge.knowledge-arrive path {
+            animation: knowledgeArrive 0.9s ease-out;
+          }
         }
       `}</style>
       <TruncationBanner payload={payload} outOfWindowCount={outOfWindowCount} />
