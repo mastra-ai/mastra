@@ -7,8 +7,9 @@ import type {
   ListKnowledgeScopeNodesOutput,
 } from '@internal/core/knowledge-compat';
 import {
-  knowledgeScopeMembersLimit,
+  pageKnowledgeScopeMembers,
   pageKnowledgeScopeNodes,
+  parseListKnowledgeScopeMembersInput,
   parseListKnowledgeScopeNodesInput,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
@@ -267,7 +268,7 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
     id: String(row.id),
     type: 'node',
     name: String(row.name),
-    kind: String(row.kind),
+    kind: row.kind == null ? '' : String(row.kind),
     content: row.content == null ? undefined : String(row.content),
     description: row.description == null ? undefined : String(row.description),
     scope: parseJson(row.scopeJson ?? row.scope),
@@ -895,13 +896,20 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
-    const limit = knowledgeScopeMembersLimit(input.limit);
+    const { limit, after } = parseListKnowledgeScopeMembersInput(input);
+    const args: unknown[] = [input.scopeNodeId];
+    let keyset = '';
+    if (after) {
+      const updatedAt = postgresTimestamp(after.updatedAt);
+      keyset = ` AND (n."updatedAt" < ? OR (n."updatedAt" = ? AND (n.name > ? OR (n.name = ? AND n.id > ?))))`;
+      args.push(updatedAt, updatedAt, after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
     const result = await this.#readExecutor.execute({
-      sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId"=?) AND n."deletedAt" IS NULL AND n."mergedInto" IS NULL ORDER BY n."updatedAt" DESC, n.name ASC, n.id ASC LIMIT ?`,
-      args: [input.scopeNodeId, limit + 1],
+      sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId"=?) AND n."deletedAt" IS NULL AND n."mergedInto" IS NULL${keyset} ORDER BY n."updatedAt" DESC, n.name ASC, n.id ASC LIMIT ?`,
+      args,
     });
-    const members = (result.rows as Array<Record<string, unknown>>).map(parseNode);
-    return { members: members.slice(0, limit), hasMore: members.length > limit };
+    return pageKnowledgeScopeMembers((result.rows as Array<Record<string, unknown>>).map(parseNode), limit, input);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

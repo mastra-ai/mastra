@@ -54,19 +54,26 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(Object.values(scopes)).toEqual(expect.arrayContaining([features.id, mastra.id, memory.id]));
 
     // Child scopes are members of their parent, as in the persistent adapters.
-    const { members, hasMore } = await store.listScopeMembers({ scopeNodeId: mastra.id });
+    const { members, hasMore, nextCursor: memberCursor } = await store.listScopeMembers({ scopeNodeId: mastra.id });
     expect(hasMore).toBe(false);
+    expect(memberCursor).toBeNull();
     expect(members).toEqual([
       expect.objectContaining({ id: features.id, type: 'node', name: 'features', kind: 'domain', scope: null }),
     ]);
     await expect(store.listScopeMembers({ scopeNodeId: features.id })).resolves.toEqual({
       members: [expect.objectContaining({ id: memory.id, name: 'memory', kind: '', description: 'Memory scope' })],
       hasMore: false,
+      nextCursor: null,
     });
-    await expect(store.listScopeMembers({ scopeNodeId: memory.id })).resolves.toEqual({ members: [], hasMore: false });
+    await expect(store.listScopeMembers({ scopeNodeId: memory.id })).resolves.toEqual({
+      members: [],
+      hasMore: false,
+      nextCursor: null,
+    });
     await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
       members: [],
       hasMore: false,
+      nextCursor: null,
     });
 
     // A scope with more members than the limit reports the overflow instead of silently dropping it.
@@ -77,6 +84,20 @@ describe('InMemoryKnowledgeStorage', () => {
     const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
     expect(firstPage.members).toHaveLength(1);
     expect(firstPage.hasMore).toBe(true);
+    // The cursor continues where the first page stopped, so every member is read exactly once.
+    const secondPage = await store.listScopeMembers({
+      scopeNodeId: mastra.id,
+      limit: 1,
+      cursor: firstPage.nextCursor!,
+    });
+    expect(secondPage).toMatchObject({ hasMore: false, nextCursor: null });
+    expect([...firstPage.members, ...secondPage.members].map(member => member.name).sort()).toEqual([
+      'docs',
+      'features',
+    ]);
+    await expect(store.listScopeMembers({ scopeNodeId: features.id, cursor: firstPage.nextCursor! })).rejects.toThrow(
+      'Knowledge scope member cursor does not match this query.',
+    );
     await expect(store.listScopeMembers({ scopeNodeId: mastra.id, limit: 2 })).resolves.toMatchObject({
       hasMore: false,
     });

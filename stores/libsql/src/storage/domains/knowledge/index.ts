@@ -8,8 +8,9 @@ import type {
   ListKnowledgeScopeNodesOutput,
 } from '@internal/core/knowledge-compat';
 import {
-  knowledgeScopeMembersLimit,
+  pageKnowledgeScopeMembers,
   pageKnowledgeScopeNodes,
+  parseListKnowledgeScopeMembersInput,
   parseListKnowledgeScopeNodesInput,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
@@ -668,13 +669,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
-    const limit = knowledgeScopeMembersLimit(input.limit);
+    const { limit, after } = parseListKnowledgeScopeMembersInput(input);
+    const args: Array<string | number> = [input.scopeNodeId];
+    let keyset = '';
+    if (after) {
+      const updatedAt = after.updatedAt.toISOString();
+      keyset = ` AND (n.updatedAt < ? OR (n.updatedAt = ? AND (n.name > ? OR (n.name = ? AND n.id > ?))))`;
+      args.push(updatedAt, updatedAt, after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
     const result = await this.#client.execute({
-      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns.nodeId=n.id AND ns.scopeNodeId=?) AND n.deletedAt IS NULL AND n.mergedInto IS NULL ORDER BY n.updatedAt DESC, n.name ASC, n.id ASC LIMIT ?`,
-      args: [input.scopeNodeId, limit + 1],
+      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns.nodeId=n.id AND ns.scopeNodeId=?) AND n.deletedAt IS NULL AND n.mergedInto IS NULL${keyset} ORDER BY n.updatedAt DESC, n.name ASC, n.id ASC LIMIT ?`,
+      args,
     });
-    const members = result.rows.map(parseNode);
-    return { members: members.slice(0, limit), hasMore: members.length > limit };
+    return pageKnowledgeScopeMembers(result.rows.map(parseNode), limit, input);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

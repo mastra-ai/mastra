@@ -573,12 +573,30 @@ describe('PostgreSQL knowledge structured reconciliation', () => {
       expect(hasMore).toBe(false);
       expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
       expect(members.every(node => node.scope === null)).toBe(true);
+      // A scope reconciled without a kind reads back as an empty kind, as in every adapter.
+      expect(Object.fromEntries(members.map(node => [node.name, node.kind]))).toEqual({
+        features: 'domain',
+        'repo:mastra': '',
+      });
       const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
       expect(firstPage.members).toHaveLength(1);
       expect(firstPage.hasMore).toBe(true);
+      const secondPage = await store.listScopeMembers({
+        scopeNodeId: mastra.id,
+        limit: 1,
+        cursor: firstPage.nextCursor!,
+      });
+      expect(secondPage).toMatchObject({ hasMore: false, nextCursor: null });
+      expect([...firstPage.members, ...secondPage.members].map(node => node.id).sort()).toEqual(
+        [features.id, scopes['repo:mastra']!].sort(),
+      );
+      await expect(store.listScopeMembers({ scopeNodeId: features.id, cursor: firstPage.nextCursor! })).rejects.toThrow(
+        'Knowledge scope member cursor does not match this query.',
+      );
       await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
         members: [],
         hasMore: false,
+        nextCursor: null,
       });
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);

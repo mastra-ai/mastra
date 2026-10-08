@@ -104,15 +104,19 @@ export interface KnowledgeScopeMember {
 
 export interface ListKnowledgeScopeMembersInput {
   scopeNodeId: string;
+  /** `nextCursor` from the previous page for the same scope. */
+  cursor?: string;
   /** Members to return, 1–500 (default 500). */
   limit?: number;
 }
 
 export interface ListKnowledgeScopeMembersOutput {
-  /** Newest-first members, at most `limit`. */
+  /** Most recently updated members first (ties by name, then ID), at most `limit`. */
   members: KnowledgeScopeMember[];
   /** True when the scope has more members than were returned. */
   hasMore: boolean;
+  /** Pass as `cursor` to read the next page; `null` on the last page. */
+  nextCursor: string | null;
 }
 
 export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
@@ -121,6 +125,62 @@ export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
 export function knowledgeScopeMembersLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT;
   return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT);
+}
+
+/** Validates the page size and cursor of a `listScopeMembers` query; throws on a cursor from another scope. */
+export function parseListKnowledgeScopeMembersInput(input: ListKnowledgeScopeMembersInput): {
+  limit: number;
+  after: { updatedAt: Date; name: string; id: string } | null;
+} {
+  const limit = knowledgeScopeMembersLimit(input.limit);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope member cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const updatedAt = typeof parsed.updatedAt === 'string' ? new Date(parsed.updatedAt) : new Date(Number.NaN);
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope-member' ||
+    parsed.scopeNodeId !== input.scopeNodeId ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    Number.isNaN(updatedAt.getTime())
+  ) {
+    throw new Error('Knowledge scope member cursor does not match this query.');
+  }
+  return { limit, after: { updatedAt, name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` members in `listScopeMembers` order. */
+export function pageKnowledgeScopeMembers(
+  rows: KnowledgeScopeMember[],
+  limit: number,
+  input: ListKnowledgeScopeMembersInput,
+): ListKnowledgeScopeMembersOutput {
+  const members = rows.slice(0, limit);
+  const last = members.at(-1);
+  const hasMore = rows.length > limit;
+  return {
+    members,
+    hasMore,
+    nextCursor:
+      hasMore && last
+        ? encodeURIComponent(
+            JSON.stringify({
+              version: 1,
+              type: 'scope-member',
+              scopeNodeId: input.scopeNodeId,
+              updatedAt: last.updatedAt.toISOString(),
+              name: last.name,
+              id: last.id,
+            }),
+          )
+        : null,
+  };
 }
 
 /** A reconciled structural scope node with its containing scope nodes. */

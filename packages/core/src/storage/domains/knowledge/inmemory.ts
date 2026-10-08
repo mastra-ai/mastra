@@ -5,7 +5,8 @@ import {
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
-  knowledgeScopeMembersLimit,
+  pageKnowledgeScopeMembers,
+  parseListKnowledgeScopeMembersInput,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -275,7 +276,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
-    const limit = knowledgeScopeMembersLimit(input.limit);
+    const { limit, after } = parseListKnowledgeScopeMembersInput(input);
     const memberIds = new Set<string>();
     for (const edge of this.#structureParents) {
       const [scopeId, parentId] = edge.split('\u0000');
@@ -305,8 +306,20 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         updatedAt: scope.createdAt,
       });
     }
-    members.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    return { members: members.slice(0, limit), hasMore: members.length > limit };
+    const page = members
+      .sort(
+        (a, b) =>
+          b.updatedAt.getTime() - a.updatedAt.getTime() ||
+          (a.name === b.name ? (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) : a.name < b.name ? -1 : 1),
+      )
+      .filter(
+        member =>
+          !after ||
+          member.updatedAt < after.updatedAt ||
+          (member.updatedAt.getTime() === after.updatedAt.getTime() &&
+            (member.name > after.name || (member.name === after.name && member.id > after.id))),
+      );
+    return pageKnowledgeScopeMembers(page.slice(0, limit + 1), limit, input);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {

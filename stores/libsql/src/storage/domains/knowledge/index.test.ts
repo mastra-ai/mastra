@@ -540,9 +540,26 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(hasMore).toBe(false);
       expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
       expect(members.every(node => node.scope === null)).toBe(true);
+      // A scope reconciled without a kind reads back as an empty kind, as in every adapter.
+      expect(Object.fromEntries(members.map(node => [node.name, node.kind]))).toEqual({
+        features: 'domain',
+        'repo:mastra': '',
+      });
       const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
       expect(firstPage.members).toHaveLength(1);
       expect(firstPage.hasMore).toBe(true);
+      const secondPage = await store.listScopeMembers({
+        scopeNodeId: mastra.id,
+        limit: 1,
+        cursor: firstPage.nextCursor!,
+      });
+      expect(secondPage).toMatchObject({ hasMore: false, nextCursor: null });
+      expect([...firstPage.members, ...secondPage.members].map(node => node.id).sort()).toEqual(
+        [features.id, scopes['repo:mastra']!].sort(),
+      );
+      await expect(store.listScopeMembers({ scopeNodeId: features.id, cursor: firstPage.nextCursor! })).rejects.toThrow(
+        'Knowledge scope member cursor does not match this query.',
+      );
 
       // Content nodes never join structural scopes; deletion and unknown ids stay out of the read.
       await client.execute(`UPDATE mastra_knowledge_nodes SET deletedAt=? WHERE id=?`, [
@@ -554,6 +571,7 @@ describe('KnowledgeLibSQL initialization', () => {
       await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
         members: [],
         hasMore: false,
+        nextCursor: null,
       });
     } finally {
       client.close();
