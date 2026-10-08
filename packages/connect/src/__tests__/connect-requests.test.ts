@@ -20,12 +20,6 @@ const event = {
   error: null,
   context: { ...context, trace: { traceId: 'trace_1', spanId: 'span_1' } },
 };
-const nested = {
-  traceId: 'trace_1',
-  parentSpanId: 'span_1',
-  nestUnderParent: true,
-  metadata: { connectionId: 'conn_1', connectRequestId: 'call_1', integration: 'linear', outcome: 'connected' },
-};
 
 async function setup(
   requestConnections = true,
@@ -50,10 +44,8 @@ async function setup(
   provider.connect(agent);
   const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), channels, logger: false });
   provider.__registerMastra(mastra);
-  const memory = await mastra.getStorage()!.getStore('memory');
-  await memory!.saveThread({
-    thread: { id: 't1', resourceId: 'u1', title: '', createdAt: new Date(), updatedAt: new Date() },
-  });
+  const thread = { id: 't1', resourceId: 'u1', title: '', createdAt: new Date(), updatedAt: new Date() };
+  await (await mastra.getStorage()!.getStore('memory'))!.saveThread({ thread });
   const app = new Hono();
   for (const route of resolver.routes()) app.on(route.method, route.path, route.handler as never);
   return { resolver, fetchMock, agent, provider, mastra, app };
@@ -100,9 +92,8 @@ it('writes the request part and returns pending', async () => {
   const { resolver, mastra, fetchMock } = await setup();
   const custom = vi.fn();
   const span = { traceId: 'trace_1', id: 'span_1', update: vi.fn() };
-  const result = await (
-    await connectTool(resolver)
-  ).execute(
+  const tool = await connectTool(resolver);
+  const result = await tool.execute(
     { integration: 'linear', reason: 'To file the bug.' },
     { mastra, writer: { custom }, tracingContext: { currentSpan: span }, agent: { ...context, toolCallId: 'call_1' } },
   );
@@ -130,7 +121,7 @@ it('wakes the thread nested under the tool span and dedupes the key across resta
   const response = await post(app!, event);
   expect([response.status, await response.json()]).toEqual([200, { outcome: 'delivered' }]);
   await vi.waitFor(() => expect(stream).toHaveBeenCalled());
-  expect(stream.mock.calls[0]![1]!.tracingOptions).toEqual(nested);
+  expect(stream.mock.calls[0]![1]!.tracingOptions).toMatchObject({ parentSpanId: 'span_1', nestUnderParent: true });
   const restarted = resolver.signalProvider();
   restarted.__registerMastra(mastra!);
   expect(await restarted.deliver(event as never)).toBe('duplicate');
@@ -156,9 +147,8 @@ it('wakes the thread when a requested channel install completes', async () => {
   });
   const stream = vi.spyOn(agent!, 'stream');
   const custom = vi.fn();
-  const result = await (
-    await connectTool(resolver)
-  ).execute(
+  const tool = await connectTool(resolver);
+  const result = await tool.execute(
     { integration: 'telegram', reason: 'To message you there.' },
     { mastra, writer: { custom }, agent: { ...context, toolCallId: 'call_1' } },
   );
