@@ -210,8 +210,53 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     const fullOutput = await stream.getFullOutput();
 
     expect(await stream.text).toBe('FIRSTMORE');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'more']);
-    expect(fullOutput.text).toBe('firstmore');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
+    expect(fullOutput.text).toBe('firstMORE');
+  });
+
+  it('preserves destructive processing when collapsing a feedback continuation', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'SECRET'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'collapse-and-redact-continuation-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => {
+              if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
+
+              const text = message.content.parts
+                ?.map(part => (part.type === 'text' ? part.text.replace('SECRET', '[redacted]') : ''))
+                .join('');
+              return {
+                ...message,
+                content: {
+                  ...message.content,
+                  content: text,
+                  parts: [{ type: 'text', text }],
+                },
+              };
+            }),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Continue.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('first[redacted]');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', '[redacted]']);
+    expect(fullOutput.text).toBe('first[redacted]');
   });
 
   it('keeps feedback continuation steps iteration-local with an output processor', async () => {
