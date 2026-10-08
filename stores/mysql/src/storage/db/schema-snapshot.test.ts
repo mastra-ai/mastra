@@ -151,6 +151,36 @@ describe('operations consult and maintain the init snapshot', () => {
     expect(statements.some(sql => /^ALTER TABLE .* ADD COLUMN .*newCol/.test(sql))).toBe(true);
   });
 
+  it('dropNotNull skips nullable columns and relaxes NOT NULL ones, keeping the column type', async () => {
+    const experimentsCatalog = (isNullable: string): CatalogFixture => ({
+      tables: [{ TABLE_NAME: 'mastra_experiments' }],
+      columns: ['targetType', 'targetId'].map(column => ({
+        TABLE_NAME: 'mastra_experiments',
+        COLUMN_NAME: column,
+        IS_NULLABLE: isNullable,
+        COLUMN_TYPE: 'longtext',
+        CHARACTER_SET_NAME: 'utf8mb4',
+        COLLATION_NAME: 'utf8mb4_unicode_ci',
+      })),
+    });
+    const args = { tableName: 'mastra_experiments' as any, columns: ['targetType', 'targetId'] };
+
+    const converged = await opsWithSnapshot(experimentsCatalog('YES'));
+    await converged.ops.dropNotNull(args);
+    expect(converged.statements).toEqual([]);
+
+    const legacy = await opsWithSnapshot(experimentsCatalog('NO'));
+    await legacy.ops.dropNotNull(args);
+    expect(legacy.statements.filter(sql => /^ALTER TABLE/i.test(sql))).toEqual([
+      'ALTER TABLE `mastra`.`mastra_experiments` ' +
+        'MODIFY COLUMN `targetType` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL, ' +
+        'MODIFY COLUMN `targetId` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL',
+    ]);
+    legacy.statements.length = 0;
+    await legacy.ops.dropNotNull(args);
+    expect(legacy.statements).toEqual([]);
+  });
+
   it('falls back to probing when no snapshot is installed', async () => {
     const { pool, statements } = createMockPool(catalog);
     const ops = new StoreOperationsMySQL({ pool, database: 'mastra' });

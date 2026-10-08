@@ -656,6 +656,41 @@ export class LibSQLDB extends MastraBase {
     }
   }
 
+  /** Column and table-level constraint definitions for a CREATE TABLE statement. */
+  private getTableDefinitions(
+    tableName: TABLE_NAMES,
+    schema: Record<string, StorageColumn>,
+    compositePrimaryKey?: string[],
+  ): string {
+    const compositePKSet = compositePrimaryKey ? new Set(compositePrimaryKey) : null;
+
+    // Build column definitions
+    const columnDefinitions = Object.entries(schema).map(([colName, colDef]) => {
+      const type = this.getSqlType(colDef.type);
+      const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+      // Skip per-column PRIMARY KEY if column is part of composite PK
+      const primaryKey = colDef.primaryKey && !compositePKSet?.has(colName) ? 'PRIMARY KEY' : '';
+      return `"${colName}" ${type} ${nullable} ${primaryKey}`.trim();
+    });
+
+    // Add table-level constraints
+    const tableConstraints: string[] = [];
+
+    if (compositePrimaryKey) {
+      const pkCols = compositePrimaryKey.map(c => `"${c}"`).join(', ');
+      tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+    }
+
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      tableConstraints.push('UNIQUE (workflow_name, run_id)');
+    }
+    if (tableName === TABLE_SPANS) {
+      tableConstraints.push('UNIQUE (spanId, traceId)');
+    }
+
+    return [...columnDefinitions, ...tableConstraints].join(',\n  ');
+  }
+
   /**
    * Creates a table if it doesn't exist based on the provided schema.
    *
@@ -684,33 +719,7 @@ export class LibSQLDB extends MastraBase {
         }
       }
 
-      const compositePKSet = compositePrimaryKey ? new Set(compositePrimaryKey) : null;
-
-      // Build column definitions
-      const columnDefinitions = Object.entries(schema).map(([colName, colDef]) => {
-        const type = this.getSqlType(colDef.type);
-        const nullable = colDef.nullable === false ? 'NOT NULL' : '';
-        // Skip per-column PRIMARY KEY if column is part of composite PK
-        const primaryKey = colDef.primaryKey && !compositePKSet?.has(colName) ? 'PRIMARY KEY' : '';
-        return `"${colName}" ${type} ${nullable} ${primaryKey}`.trim();
-      });
-
-      // Add table-level constraints
-      const tableConstraints: string[] = [];
-
-      if (compositePrimaryKey) {
-        const pkCols = compositePrimaryKey.map(c => `"${c}"`).join(', ');
-        tableConstraints.push(`PRIMARY KEY (${pkCols})`);
-      }
-
-      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        tableConstraints.push('UNIQUE (workflow_name, run_id)');
-      }
-      if (tableName === TABLE_SPANS) {
-        tableConstraints.push('UNIQUE (spanId, traceId)');
-      }
-
-      const allDefinitions = [...columnDefinitions, ...tableConstraints].join(',\n  ');
+      const allDefinitions = this.getTableDefinitions(tableName, schema, compositePrimaryKey);
 
       const sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (\n  ${allDefinitions}\n)`;
 
@@ -1111,6 +1120,63 @@ export class LibSQLDB extends MastraBase {
       );
     } finally {
       // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(tableName);
+    }
+  }
+
+  /**
+   * Drops NOT NULL from `columns` where a table created by an older schema still has it.
+   * SQLite has no `ALTER COLUMN DROP NOT NULL`, so the table is rebuilt from `schema`
+   * (create shadow → copy → drop → rename) in one write batch. The rebuild drops the
+   * table's indexes, so call this before creating them.
+   */
+  async dropNotNull({
+    tableName,
+    schema,
+    columns,
+    compositePrimaryKey,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    columns: string[];
+    compositePrimaryKey?: string[];
+  }): Promise<void> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    try {
+      const tableInfo = await this.client.execute({
+        sql: `PRAGMA table_info("${parsedTableName}")`,
+      });
+      const rows = tableInfo.rows || [];
+      if (!rows.some((row: any) => columns.includes(row.name) && Number(row.notnull) === 1)) return;
+
+      const existingColumns = new Set(rows.map((row: any) => row.name as string));
+      const copyColumns = Object.keys(schema)
+        .filter(name => existingColumns.has(name))
+        .map(name => `"${name}"`)
+        .join(', ');
+      const shadow = `${parsedTableName}__nullable_rebuild`;
+      await this.client.batch(
+        [
+          `DROP TABLE IF EXISTS "${shadow}"`,
+          `CREATE TABLE "${shadow}" (\n  ${this.getTableDefinitions(tableName, schema, compositePrimaryKey)}\n)`,
+          `INSERT INTO "${shadow}" (${copyColumns}) SELECT ${copyColumns} FROM "${parsedTableName}"`,
+          `DROP TABLE "${parsedTableName}"`,
+          `ALTER TABLE "${shadow}" RENAME TO "${parsedTableName}"`,
+        ],
+        'write',
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'DROP_NOT_NULL', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    } finally {
       this.tableColumnsCache.delete(tableName);
     }
   }
