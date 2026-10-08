@@ -46,7 +46,10 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
-import { createProviderThinkingMiddleware } from '../providers/provider-thinking.js';
+import {
+  ModelRouterLanguageModelWithProviderOptions,
+  providerThinkingOptions,
+} from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
@@ -558,17 +561,10 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    const routerModel = new ModelRouterLanguageModel({
-      id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
-      apiKey: args.apiKey,
-      headers: args.headers,
-    });
-    const thinkingMiddleware = createProviderThinkingMiddleware(args.providerId, args.modelId, this.#thinkingLevel);
-    if (!thinkingMiddleware) return routerModel as unknown as GatewayLanguageModel;
-    return wrapLanguageModel({
-      model: routerModel as any,
-      middleware: [thinkingMiddleware],
-    }) as unknown as GatewayLanguageModel;
+    return new ModelRouterLanguageModelWithProviderOptions(
+      { id: `${args.providerId}/${args.modelId}`, apiKey: args.apiKey, headers: args.headers },
+      providerThinkingOptions(args.providerId, args.modelId, this.#thinkingLevel),
+    ) as unknown as GatewayLanguageModel;
   }
 
   #resolveAnthropicModel(args: {
