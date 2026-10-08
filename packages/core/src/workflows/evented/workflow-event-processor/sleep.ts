@@ -1,6 +1,7 @@
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
@@ -41,7 +42,7 @@ export async function processWorkflowWaitForEvent(
       stepResults: currentState?.context,
       prevResult,
       activeStepsPath: {},
-      requestContext: currentState?.requestContext,
+      requestContext: withoutAuthToken(currentState?.requestContext),
       // Known gap (deliberately deferred — PR #24569 review, Superagent P2):
       // the actor signal is not persisted in the workflow snapshot, so a run
       // continued from a waitForEvent only keeps the actor if the resuming

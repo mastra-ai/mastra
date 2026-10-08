@@ -3,6 +3,18 @@
  */
 
 import { TripWire } from '../../agent/trip-wire';
+import { MASTRA_AUTH_TOKEN_KEY } from '../../request-context';
+
+/**
+ * Drops the framework-managed bearer token from a serialized request context.
+ * The live token rides on workflow events so steps can use it, but it must never
+ * be written to (or restored from) a snapshot: a resumed request supplies its own.
+ */
+export function withoutAuthToken<T extends Record<string, any> | undefined>(requestContext: T): T {
+  if (!requestContext) return requestContext;
+  const { [MASTRA_AUTH_TOKEN_KEY]: _token, ...rest } = requestContext;
+  return rest as T;
+}
 
 /**
  * Interface for tripwire chunks in the stream.
