@@ -267,6 +267,26 @@ describe('KnowledgeLibSQL schema completion marker', () => {
       client.close();
     }
   });
+
+  it('rethrows the init schema error from domain methods until reset', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await client.execute('CREATE TABLE mastra_knowledge_nodes (id TEXT PRIMARY KEY, name TEXT)');
+      await client.execute("INSERT INTO mastra_knowledge_nodes (id, name) VALUES ('old', 'Old')");
+      const store = new KnowledgeLibSQL({ client });
+      const initError = await store.init().catch(error => error);
+      expect(initError).toBeInstanceOf(KnowledgeSchemaError);
+
+      await expect(store.createNode({ name: 'New', scopeIds: [] })).rejects.toBe(initError);
+      await expect(store.getNode('old')).rejects.toBe(initError);
+
+      await store.dangerouslyReset();
+      const node = await store.createNode({ name: 'New', scopeIds: [] });
+      expect(await store.getNode(node.id)).toMatchObject({ name: 'New' });
+    } finally {
+      client.close();
+    }
+  });
 });
 
 async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
