@@ -16,7 +16,12 @@ import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { WorkflowsStorage } from '../../storage';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
+import type {
+  ChunkType,
+  MastraOnFinishCallback,
+  MastraStreamTransformOptions,
+  ToolCallChunk,
+} from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
@@ -42,6 +47,7 @@ import type {
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
+  DurableToolCallInput,
   RegistryModelListEntry,
   RunRegistryEntry,
   SerializableModelListEntry,
@@ -943,6 +949,50 @@ export class DurableAgent<
     }
 
     return { snapshot, workflowInput };
+  }
+
+  async #loadSuspendedToolCalls(runId: string): Promise<ToolCallChunk[]> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const outerRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    if (!outerRun) return [];
+    const outerSnapshot: WorkflowRunState =
+      typeof outerRun.snapshot === 'string' ? JSON.parse(outerRun.snapshot) : outerRun.snapshot;
+    const iteration = outerSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION];
+    const nestedRunId = iteration?.metadata?.nestedRunId ?? runId;
+    const persisted = await workflowsStore?.getWorkflowRunById({
+      runId: nestedRunId,
+      workflowName: DurableStepIds.AGENTIC_EXECUTION,
+    });
+    if (!persisted) return [];
+
+    const snapshot =
+      typeof persisted.snapshot === 'string'
+        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+        : persisted.snapshot;
+    const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
+    if (llmStep?.status !== 'success') return [];
+    // The nested input holds completed iterations; the LLM output holds the
+    // current iteration, which has not reached the accumulator yet.
+    const toolCalls: DurableToolCallInput[] = [
+      ...(snapshot.context.input?.accumulatedSteps ?? []).flatMap(
+        (step: { toolCalls?: DurableToolCallInput[] }) => step.toolCalls ?? [],
+      ),
+      ...(llmStep.output.toolCalls ?? []),
+    ];
+
+    return toolCalls.map(toolCall => ({
+      type: 'tool-call',
+      runId,
+      from: ChunkFrom.AGENT,
+      payload: {
+        toolCallId: toolCall.toolCallId,
+        toolName: toolCall.toolName,
+        args: toolCall.args,
+        providerMetadata: toolCall.providerMetadata as ToolCallChunk['payload']['providerMetadata'],
+        providerExecuted: toolCall.providerExecuted,
+        output: toolCall.output,
+      },
+    }));
   }
 
   /**
@@ -2742,12 +2792,13 @@ export class DurableAgent<
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
 
-    // Settle the prior segment before taking its event offset. Otherwise a late
-    // suspension event can be replayed into the new segment and close it early.
+    // Settle the prior segment before reading its snapshot and event offset.
+    // The suspension chunk can arrive before the suspended snapshot is persisted.
     const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
+    const initialToolCalls = await this.#loadSuspendedToolCalls(runId);
 
     // Skip events already broadcast by the original run (e.g. the SUSPENDED
     // chunk that paused it). Without this, a resume that closes on suspend
@@ -2821,6 +2872,7 @@ export class DurableAgent<
       pubsub: this.pubsub,
       runId,
       messageId: crypto.randomUUID(),
+      initialToolCalls,
       model: {
         modelId: resumeModel?.modelId,
         provider: resumeModel?.provider,
