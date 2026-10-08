@@ -112,14 +112,13 @@ const FEEDBACK_FIELDS = {
   comment: { sql: 's.comment', parameterType: 'scalar' },
 } satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
 
+// Payload columns (metadata, input, output, error) are read after paging, by `compileDuckDBTracePagePayloads`.
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
   r.name AS name,
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
-  r.metadata AS metadata,
-  ${payloadColumnSql('r.input')} AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -687,58 +686,162 @@ LIMIT ?`,
   };
 }
 
+// The SQL previews below follow the `build{Input,Output,Error}Preview` helpers in core. Each returns
+// the full preview text cut to `max + 1` code points, or NULL; `previewText` adds the ellipsis.
+
+// JS `String.prototype.trim` whitespace, as an RE2 character class.
+const JS_WHITESPACE =
+  '[\\t\\n\\x{0B}\\f\\r \\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}\\x{FEFF}]';
+
+function jsTrimSql(text: string): string {
+  return `regexp_replace(${text}, '^${JS_WHITESPACE}+|${JS_WHITESPACE}+$', '', 'g')`;
+}
+
+function cutPreviewSql(text: string, maxLength: number): string {
+  return `NULLIF(substring(${text}, 1, ${maxLength + 1}), '')`;
+}
+
+/** A JSON array payload itself, or an object payload's `messages` array; NULL otherwise. */
+function messagesSql(payload: string): string {
+  return `CASE json_type(${payload})
+      WHEN 'ARRAY' THEN from_json(${payload}, '["JSON"]')
+      WHEN 'OBJECT' THEN from_json(${payload}, '{"messages":["JSON"]}').messages
+    END`;
+}
+
+/** Text of the `role` messages' content, joined by ' | '. Content is a string or a list of string and text parts. */
+function roleTextSql(messages: string, role: 'user' | 'assistant'): string {
+  const part = `CASE
+        WHEN json_type(p) = 'VARCHAR' THEN json_extract_string(p, '$')
+        WHEN json_extract_string(p, '$.type') = 'text' AND json_type(p, '$.text') = 'VARCHAR' THEN json_extract_string(p, '$.text')
+        ELSE ''
+      END`;
+  const content = `CASE json_type(m, '$.content')
+      WHEN 'VARCHAR' THEN json_extract_string(m, '$.content')
+      WHEN 'ARRAY' THEN array_to_string(list_filter(list_transform(from_json(json_extract(m, '$.content'), '["JSON"]'), lambda p: ${part}), lambda x: x <> ''), ' ')
+      ELSE ''
+    END`;
+  const text = `CASE WHEN json_extract_string(m, '$.role') = '${role}' THEN ${content} ELSE '' END`;
+  return `array_to_string(list_filter(list_transform(${messages}, lambda m: ${text}), lambda x: x <> ''), ' | ')`;
+}
+
+/** A JSON string previews unwrapped, other scalars as JSON text, and objects and arrays as `documentText`. */
+function payloadTextSql(payload: 'input' | 'output', documentText: string): string {
+  return `CASE
+      WHEN ${payload}Type = 'VARCHAR' THEN json_extract_string(${payload}, '$')
+      WHEN ${payload}Type IN ('OBJECT', 'ARRAY') THEN ${documentText}
+      ELSE CAST(${payload} AS VARCHAR)
+    END`;
+}
+
+/** Parses each payload once (type, message list, trimmed error fields) for the preview expressions. */
+function parsedPayloadColumns(payload: 'input' | 'output' | 'error'): string[] {
+  if (payload === 'error') {
+    return [
+      `json_type(error, ['$.message', '$.name']) AS errorTypes`,
+      `${jsTrimSql(`json_extract_string(error, '$.message')`)} AS errorMessage`,
+      `${jsTrimSql(`json_extract_string(error, '$.name')`)} AS errorName`,
+    ];
+  }
+  return [payload, `json_type(${payload}) AS ${payload}Type`, `${messagesSql(payload)} AS ${payload}Messages`];
+}
+
+/** User message text, or the payload's JSON text when it is not a message list. */
+const INPUT_PREVIEW_SQL = cutPreviewSql(
+  payloadTextSql(
+    'input',
+    `CASE WHEN inputMessages IS NOT NULL THEN ${roleTextSql('inputMessages', 'user')} ELSE CAST(input AS VARCHAR) END`,
+  ),
+  coreStorage.INPUT_PREVIEW_MAX_LENGTH,
+);
+
+// Empty lists and lists with a `role` member are messages; other arrays use the JSON text.
+const OUTPUT_IS_MESSAGES_SQL = `len(outputMessages) = 0 OR len(list_filter(outputMessages, lambda m: json_exists(m, '$.role'))) > 0`;
+
+/** Assistant message text, else a string `text` field, else the payload's JSON text. */
+const OUTPUT_PREVIEW_SQL = cutPreviewSql(
+  payloadTextSql(
+    'output',
+    `CASE
+      WHEN ${OUTPUT_IS_MESSAGES_SQL} THEN ${roleTextSql('outputMessages', 'assistant')}
+      WHEN json_type(output, '$.text') = 'VARCHAR' THEN json_extract_string(output, '$.text')
+      ELSE CAST(output AS VARCHAR)
+    END`,
+  ),
+  coreStorage.OUTPUT_PREVIEW_MAX_LENGTH,
+);
+
+const ERROR_LABEL_SQL = `CASE
+      WHEN errorTypes[2] = 'VARCHAR' AND errorName NOT IN ('', 'Error') AND NOT starts_with(errorMessage, errorName)
+      THEN errorName || ': '
+      ELSE ''
+    END`;
+
+/** The trimmed string `message`, prefixed with a string `name` other than `Error` it does not already start with. */
+const ERROR_PREVIEW_SQL = `CASE WHEN errorTypes[1] = 'VARCHAR' AND errorMessage <> '' THEN ${cutPreviewSql(
+  `${ERROR_LABEL_SQL} || errorMessage`,
+  coreStorage.ERROR_PREVIEW_MAX_LENGTH,
+)} END`;
+
 /**
- * Reads selected previews for the traces already on a page, so the candidate sorts never carry the
+ * Reads metadata and previews for the traces already on a page, so the candidate sorts never carry the
  * payloads. Keeps each trace's newest root event, the same row `current_roots` keeps. A root's events
  * are written at its `startedAt` and `endedAt`, so the time bounds always include that row and let the
  * scan skip unrelated blocks; a long `IN` list alone becomes a join that reads every root row.
  */
-export function compileDuckDBTraceRootPreviews(
+export function compileDuckDBTracePagePayloads(
   rows: Array<{ traceId: string; startedAt: string; endedAt: string }>,
   select: readonly TraceQuerySelectField[],
 ): CompiledDuckDBTraceQuery {
-  const columns = [
-    ...(select.includes('outputPreview') ? [`${payloadColumnSql('output')} AS output`] : []),
-    ...(select.includes('errorPreview') ? [`${payloadColumnSql('error')} AS selectedError`] : []),
+  const payloads: Array<'input' | 'output' | 'error'> = [
+    'input',
+    ...(select.includes('outputPreview') ? (['output'] as const) : []),
+    ...(select.includes('errorPreview') ? (['error'] as const) : []),
   ];
-  const startedAt = rows.map(row => row.startedAt).sort()[0]!;
-  const endedAt = rows
-    .map(row => row.endedAt)
-    .sort()
-    .at(-1)!;
+  const previews = [
+    `${INPUT_PREVIEW_SQL} AS inputPreview`,
+    ...(select.includes('outputPreview') ? [`${OUTPUT_PREVIEW_SQL} AS outputPreview`] : []),
+    ...(select.includes('errorPreview') ? [`${ERROR_PREVIEW_SQL} AS errorPreview`] : []),
+  ];
+  // Both ends of every row, so a root that ended before it started is still in range.
+  const times = rows.flatMap(row => [row.startedAt, row.endedAt]).sort();
   return {
-    sql: `SELECT traceId, ${columns.join(', ')}
+    sql: `SELECT traceId, metadata, ${previews.join(',\n  ')}
 FROM (
-  SELECT *, row_number() OVER (PARTITION BY traceId ORDER BY cursorId DESC) AS rootRank
-  FROM span_events
-  WHERE parentSpanId IS NULL
-    AND timestamp >= CAST(? AS TIMESTAMP)
-    AND timestamp <= CAST(? AS TIMESTAMP)
-    AND traceId IN (${rows.map(() => '?').join(', ')})
-)
-WHERE rootRank = 1`,
-    values: [startedAt, endedAt, ...rows.map(row => row.traceId)],
+  SELECT traceId, metadata, ${payloads.flatMap(parsedPayloadColumns).join(',\n    ')}
+  FROM (
+    SELECT traceId, metadata, ${payloads.map(payload => `${payloadColumnSql(payload)} AS ${payload}`).join(', ')},
+      row_number() OVER (PARTITION BY traceId ORDER BY cursorId DESC) AS rootRank
+    FROM span_events
+    WHERE parentSpanId IS NULL
+      AND timestamp >= CAST(? AS TIMESTAMP)
+      AND timestamp <= CAST(? AS TIMESTAMP)
+      AND traceId IN (${rows.map(() => '?').join(', ')})
+  )
+  WHERE rootRank = 1
+)`,
+    values: [times[0], times.at(-1), ...rows.map(row => row.traceId)],
   };
 }
 
-async function withSelectedPreviews(
+async function withPagePayloads(
   db: DuckDBConnection,
   plan: coreStorage.TrustedTraceQueryTracesPlan,
   rows: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
-  if (!plan.select?.length || rows.length === 0) return rows;
-  const query = compileDuckDBTraceRootPreviews(
+  if (rows.length === 0) return rows;
+  const query = compileDuckDBTracePagePayloads(
     rows.map(row => ({
       traceId: String(row.traceId),
       startedAt: asIsoTimestamp(row.startedAt),
       endedAt: asIsoTimestamp(row.endedAt),
     })),
-    plan.select,
+    plan.select ?? [],
   );
-  const previews = new Map(
+  const payloads = new Map(
     (await db.query<Record<string, unknown>>(query.sql, query.values)).map(row => [String(row.traceId), row]),
   );
-  return rows.map(row => ({ ...row, ...previews.get(String(row.traceId)) }));
+  return rows.map(row => ({ ...row, ...payloads.get(String(row.traceId)) }));
 }
 
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
@@ -918,6 +1021,15 @@ export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
+/**
+ * Adds the ellipsis the way the core `build*Preview` helpers do, to text SQL already cut to
+ * `maxLength + 1` code points. Kept local so the store still runs with older `@mastra/core`.
+ */
+function previewText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
 function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.TrustedTraceQueryTracesPlan) {
   return {
     traceId: String(row.traceId),
@@ -927,7 +1039,7 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: previewText(row.inputPreview, coreStorage.INPUT_PREVIEW_MAX_LENGTH),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -937,10 +1049,10 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
     ...(plan.select?.includes('outputPreview')
-      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      ? { outputPreview: previewText(row.outputPreview, coreStorage.OUTPUT_PREVIEW_MAX_LENGTH) }
       : {}),
     ...(plan.select?.includes('errorPreview')
-      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      ? { errorPreview: previewText(row.errorPreview, coreStorage.ERROR_PREVIEW_MAX_LENGTH) }
       : {}),
   };
 }
@@ -951,7 +1063,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
-    const pageRows = await withSelectedPreviews(
+    const pageRows = await withPagePayloads(
       db,
       plan,
       rows.filter(row => row.traceId != null),
@@ -991,7 +1103,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
-  const traces = (await withSelectedPreviews(db, plan, visibleRows)).map(row => traceRowToResult(row, plan));
+  const traces = (await withPagePayloads(db, plan, visibleRows)).map(row => traceRowToResult(row, plan));
   if (plan.paginationMode === 'delta') {
     const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
     const head = String(rows[0]?.streamHead ?? 0);

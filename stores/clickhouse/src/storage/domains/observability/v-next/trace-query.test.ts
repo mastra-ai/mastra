@@ -41,26 +41,35 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('ClickHouse advanced trace query', () => {
-  it('hydrates selected root previews after page selection', () => {
+  it('reads payloads only for the returned rows in every pagination mode', () => {
     const key = { traceId: 'trace', rootSpanId: 'root', startedAt: TIME_RANGE.from, endedAt: TIME_RANGE.to };
-    const keysetPlan = plan({ select: ['outputPreview', 'errorPreview'] });
-    const pagePlan = plan({ pagination: { page: 0, perPage: 25 }, select: ['outputPreview', 'errorPreview'] });
-    for (const selected of [keysetPlan, pagePlan]) {
-      const compiled = compileClickHouseTraceQuery(selected);
-      expect(compiled.query).not.toContain('r.output');
-      expect(compiled.query).not.toContain('selectedError');
+    const select = ['outputPreview', 'errorPreview'];
+    const plans = [
+      plan({ select }),
+      plan({ mode: 'delta', select }),
+      plan({ pagination: { page: 0, perPage: 25 }, select }),
+    ];
+    for (const selected of plans) {
+      // The candidate sort carries no payload columns.
+      expect(compileClickHouseTraceQuery(selected).query).not.toMatch(/\b(metadataRaw|input|output)\b/);
+
+      if (selected.result !== 'traces') throw new Error('Expected a trace plan');
+      const hydrate = compileClickHouseTraceRootPayloads([key], selected).query;
+      expect(hydrate).toContain('SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, ');
+      for (const alias of ['inputPreview', 'outputPreview', 'errorPreview']) expect(hydrate).toContain(` AS ${alias}`);
+      // Previews are cut in SQL, so only short text leaves the database.
+      expect(hydrate).toContain('substringUTF8(');
+      expect(hydrate).toMatch(
+        /WHERE startedAt >= \{\w+:DateTime64\(3, 'UTC'\)\} AND startedAt <= .+ AND endedAt >= .+ AND endedAt <= /,
+      );
     }
 
-    if (keysetPlan.result !== 'traces' || pagePlan.result !== 'traces') throw new Error('Expected trace plans');
-    expect(compileClickHouseTraceRootPayloads([key], keysetPlan).query).toContain(
-      'SELECT traceId, spanId AS rootSpanId, output, error AS selectedError\n',
-    );
-    expect(compileClickHouseTraceRootPayloads([key], pagePlan).query).toContain(
-      'SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input, output, error AS selectedError\n',
-    );
-    expect(compileClickHouseTraceRootPayloads([key], keysetPlan).query).toMatch(
-      /WHERE startedAt >= \{\w+:DateTime64\(3, 'UTC'\)\} AND startedAt <= .+ AND endedAt >= .+ AND endedAt <= /,
-    );
+    const unselected = plan();
+    if (unselected.result !== 'traces') throw new Error('Expected a trace plan');
+    const hydrate = compileClickHouseTraceRootPayloads([key], unselected).query;
+    expect(hydrate).toContain(' AS inputPreview\n');
+    expect(hydrate).not.toContain('outputPreview');
+    expect(hydrate).not.toContain('errorPreview');
   });
 
   it('compiles root duration predicates from root timestamps', () => {
@@ -135,14 +144,18 @@ describe('ClickHouse advanced trace query', () => {
             { ...traceRow('trace-b', TIME_RANGE.from), __delta_cursor: '8' },
             { ...traceRow('trace-c', TIME_RANGE.from), __delta_cursor: '8' },
           ],
-        });
+        })
+        .mockResolvedValueOnce({ json: async () => [payloadRow('trace-b')] });
       const result = await queryTraces(
         { query } as unknown as ClickHouseClient,
         plan({ mode: 'delta', after, limit: 1 }),
         15_000,
         'serial',
       );
-      expect(result).toMatchObject({ traces: [{ traceId: 'trace-b' }], delta: { limit: 1, hasMore: true } });
+      expect(result).toMatchObject({
+        traces: [{ traceId: 'trace-b', inputPreview: 'Help with my order' }],
+        delta: { limit: 1, hasMore: true },
+      });
       expect(result).not.toHaveProperty('page');
       query.mockResolvedValue({ json: async () => [] });
       const empty = await queryTraces(
@@ -841,18 +854,24 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('returns fixed records and computes the next cursor from the last visible row', async () => {
-    const json = vi
+    const query = vi
       .fn()
-      .mockResolvedValue([
-        traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
-        traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
-      ]);
-    const query = vi.fn().mockResolvedValue({ json });
+      .mockResolvedValueOnce({
+        json: async () => [
+          traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+          traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
+        ],
+      })
+      .mockResolvedValueOnce({ json: async () => [payloadRow('trace-a')] });
     const response = await queryTraces({ query } as unknown as ClickHouseClient, plan({ page: { limit: 1 } }), 15_000);
 
     expect(query).toHaveBeenCalledWith(
       expect.objectContaining({ clickhouse_settings: expect.objectContaining({ max_execution_time: 15 }) }),
     );
+    // Only the visible row's payloads are fetched, by its sort key.
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(Object.values(query.mock.calls[1]![0].query_params)).toContain('trace-a');
+    expect(Object.values(query.mock.calls[1]![0].query_params)).not.toContain('trace-b');
     expect(response).toMatchObject({
       traces: [{ traceId: 'trace-a', rootSpanId: 'root-trace-a', status: 'success' }],
       page: { next: expect.any(String) },
@@ -870,14 +889,14 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('returns null for absent optional root span details', async () => {
-    const row = {
-      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
-      entityId: null,
-      metadata: null,
-      input: null,
-    };
-    const json = vi.fn().mockResolvedValue([row]);
-    const query = vi.fn().mockResolvedValue({ json });
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: async () => [{ ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'), entityId: null }],
+      })
+      .mockResolvedValueOnce({
+        json: async () => [{ ...payloadRow('trace-a'), metadata: null, inputPreview: null }],
+      });
     const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
 
     expect(response.traces[0]).toMatchObject({
@@ -891,18 +910,15 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('returns exact list-compatible pagination metadata from one shared-snapshot query', async () => {
-    const { metadata, input, ...narrowRow } = traceRow('trace-c', '2026-01-01T10:00:00.000Z');
     const query = vi
       .fn()
       .mockResolvedValueOnce({
         json: async () => [
-          { ...narrowRow, total: '3', __metadata: 0 },
+          { ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: '3', __metadata: 0 },
           { total: '3', __metadata: 1 },
         ],
       })
-      .mockResolvedValueOnce({
-        json: async () => [{ traceId: 'trace-c', rootSpanId: 'root-trace-c', metadata, input }],
-      });
+      .mockResolvedValueOnce({ json: async () => [payloadRow('trace-c')] });
     const response = await queryTraces(
       { query } as unknown as ClickHouseClient,
       plan({ pagination: { page: 1, perPage: 2 } }),
@@ -937,7 +953,7 @@ describe('ClickHouse advanced trace query', () => {
       traces: [{ traceId: 'trace-c', metadata: { customer: { id: 'customer-1' }, count: 2 } }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
-    expect(response.traces?.[0]?.inputPreview).toBeTruthy();
+    expect(response.traces?.[0]?.inputPreview).toBe('Help with my order');
     expect(response).not.toHaveProperty('page');
   });
 
@@ -1006,8 +1022,6 @@ function traceRow(traceId: string, startedAt: string) {
     name: 'Agent run',
     entityId: 'agent-1',
     parentSpanId: null,
-    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
-    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
     threadId: null,
     resourceId: null,
     startedAt,
@@ -1016,5 +1030,15 @@ function traceRow(traceId: string, startedAt: string) {
     entityType: null,
     environment: null,
     status: 'success',
+  };
+}
+
+/** A hydrate-query row: metadata plus the SQL-built input preview. */
+function payloadRow(traceId: string) {
+  return {
+    traceId,
+    rootSpanId: `root-${traceId}`,
+    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    inputPreview: 'Help with my order',
   };
 }

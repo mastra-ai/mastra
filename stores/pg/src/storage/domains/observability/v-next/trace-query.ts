@@ -109,14 +109,13 @@ const FEEDBACK_FIELDS = {
   comment: 's."comment"',
 } satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
 
+// Trace-row columns without payloads: metadata and previews are added for the page rows only.
 const TRACE_SELECT = `
   r."traceId" AS "traceId",
   r."spanId" AS "rootSpanId",
   r."name" AS "name",
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
-  r."metadataRaw" AS "metadata",
-  r."input" AS "input",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
@@ -126,11 +125,125 @@ const TRACE_SELECT = `
   r."environment" AS "environment",
   ${TRACE_STATUS_SQL} AS "status"`;
 
-function traceSelect(plan: TrustedTraceQueryPlan): string {
-  if (plan.result !== 'traces') return TRACE_SELECT;
-  return `${TRACE_SELECT}${plan.select?.includes('outputPreview') ? ', r."output" AS "output"' : ''}${
-    plan.select?.includes('errorPreview') ? ', r."error" AS "selectedError"' : ''
-  }`;
+// Previews are built in SQL with the rules of the core `build*Preview` helpers, so only preview
+// text reaches Node. SQL returns the full preview text cut to max + 1 code points and
+// `finishPreview` adds the ellipsis. Input and output previews start with a tag: 't' for preview
+// text, 'j' for the JSON fallback, which is cut to 2 × (max + 1) because `jsonb::text` adds a space
+// after every ':' and ',' (`compactJsonbText` removes them again).
+
+/** JavaScript `trim()` whitespace as a `btrim` character list. */
+const JS_TRIM_CHARS_SQL = `E' \\t\\n\\r\\x0B\\f\\u00A0\\u1680\\u2000\\u2001\\u2002\\u2003\\u2004\\u2005\\u2006\\u2007\\u2008\\u2009\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF'`;
+
+/** The payload's message list (the payload itself or its `messages`), or NULL. */
+function messagesSql(payload: string): string {
+  return `CASE WHEN jsonb_typeof(${payload}) = 'array' THEN ${payload} WHEN jsonb_typeof(${payload} -> 'messages') = 'array' THEN ${payload} -> 'messages' END`;
+}
+
+/** A message's `content` text: the string, or its string and `{ type: 'text' }` parts joined by ' '. */
+function contentTextSql(message: string): string {
+  return `CASE jsonb_typeof(${message} -> 'content')
+      WHEN 'string' THEN ${message} ->> 'content'
+      WHEN 'array' THEN (
+        SELECT string_agg(part_text, ' ' ORDER BY part_ord)
+        FROM jsonb_array_elements(${message} -> 'content') WITH ORDINALITY AS parts(part, part_ord)
+        CROSS JOIN LATERAL (SELECT CASE
+          WHEN jsonb_typeof(part) = 'string' THEN part #>> '{}'
+          WHEN part -> 'type' = '"text"'::jsonb AND jsonb_typeof(part -> 'text') = 'string' THEN part ->> 'text'
+        END AS part_text) part_texts
+        WHERE part_text <> ''
+      )
+    END`;
+}
+
+/** Content text of the messages with `role`, joined by ' | ' (NULL when there is none). */
+function roleTextSql(messages: string, role: 'user' | 'assistant'): string {
+  return `(SELECT string_agg(message_text, ' | ' ORDER BY message_ord)
+    FROM jsonb_array_elements(${messages}) WITH ORDINALITY AS messages(message, message_ord)
+    CROSS JOIN LATERAL (SELECT ${contentTextSql('message')} AS message_text) message_texts
+    WHERE message -> 'role' = '"${role}"'::jsonb AND message_text <> '')`;
+}
+
+/** Tagged input or output preview of a jsonb payload (see `buildInputPreview`/`buildOutputPreview`). */
+function payloadPreviewSql(payload: string, kind: 'input' | 'output'): string {
+  const max = kind === 'input' ? coreStorage.INPUT_PREVIEW_MAX_LENGTH : coreStorage.OUTPUT_PREVIEW_MAX_LENGTH;
+  const text = (sql: string) => `'t' || left(${sql}, ${max + 1})`;
+  const messages = messagesSql(payload);
+  // Output: an empty list or one with a `{ role }` entry is messages; other arrays, such as a
+  // workflow's `[1, 2]`, use the JSON fallback.
+  const messageCases =
+    kind === 'input'
+      ? `WHEN ${messages} IS NOT NULL THEN ${text(roleTextSql(messages, 'user'))}`
+      : `WHEN jsonb_array_length(${messages}) = 0
+        OR EXISTS (SELECT 1 FROM jsonb_array_elements(${messages}) m WHERE jsonb_typeof(m) = 'object' AND m ? 'role')
+        THEN ${text(roleTextSql(messages, 'assistant'))}
+      WHEN jsonb_typeof(${payload} -> 'text') = 'string' THEN ${text(`${payload} ->> 'text'`)}`;
+  return `CASE
+      WHEN ${payload} IS NULL OR jsonb_typeof(${payload}) = 'null' THEN NULL
+      WHEN jsonb_typeof(${payload}) = 'string' THEN ${text(`${payload} #>> '{}'`)}
+      ${messageCases}
+      ELSE 'j' || left(${payload}::text, ${2 * (max + 1)})
+    END`;
+}
+
+/** Error preview of a jsonb error (see `buildErrorPreview`): `name: message` without the stack. */
+function errorPreviewSql(error: string): string {
+  const message = `btrim(${error} ->> 'message', ${JS_TRIM_CHARS_SQL})`;
+  const name = `btrim(${error} ->> 'name', ${JS_TRIM_CHARS_SQL})`;
+  const label = `CASE
+      WHEN jsonb_typeof(${error} -> 'name') = 'string' AND ${name} NOT IN ('', 'Error') AND NOT starts_with(${message}, ${name})
+      THEN ${name} || ': '
+      ELSE ''
+    END`;
+  return `CASE WHEN jsonb_typeof(${error} -> 'message') = 'string' AND ${message} <> ''
+    THEN left(${label} || ${message}, ${coreStorage.ERROR_PREVIEW_MAX_LENGTH + 1})
+  END`;
+}
+
+/** Metadata and the previews the plan selects, read from the page row's root span `r`. */
+function tracePayloadSelect(plan: coreStorage.TrustedTraceQueryTracesPlan): string {
+  const columns = ['r."metadataRaw" AS "metadata"', `${payloadPreviewSql('r."input"', 'input')} AS "inputPreview"`];
+  if (plan.select?.includes('outputPreview')) {
+    columns.push(`${payloadPreviewSql('r."output"', 'output')} AS "outputPreview"`);
+  }
+  if (plan.select?.includes('errorPreview')) columns.push(`${errorPreviewSql('r."error"')} AS "errorPreview"`);
+  return columns.join(',\n  ');
+}
+
+/**
+ * Removes the space `jsonb::text` prints after ':' and ',' so the JSON fallback matches
+ * `JSON.stringify`. Outside string literals those are the only spaces in `jsonb::text`.
+ */
+export function compactJsonbText(text: string): string {
+  let compact = '';
+  let inString = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]!;
+    if (inString) {
+      compact += char;
+      if (char === '\\') compact += text[++index] ?? '';
+      else if (char === '"') inString = false;
+    } else if (char !== ' ') {
+      compact += char;
+      if (char === '"') inString = true;
+    }
+  }
+  return compact;
+}
+
+/**
+ * Adds the ellipsis the way the core `build*Preview` helpers do, to text SQL already cut to
+ * `maxLength + 1` code points. Kept local so the store still runs with older `@mastra/core`.
+ */
+function finishPreview(text: unknown, maxLength: number): string | null {
+  if (typeof text !== 'string' || !text) return null;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
+/** Finishes a tagged SQL input or output preview (see `payloadPreviewSql`). */
+function finishPayloadPreview(tagged: unknown, maxLength: number): string | null {
+  if (typeof tagged !== 'string') return null;
+  const text = tagged.slice(1);
+  return finishPreview(tagged.startsWith('j') ? compactJsonbText(text) : text, maxLength);
 }
 
 function fieldSql<TField extends string>(
@@ -681,7 +794,7 @@ export function compilePostgresTraceQuery(
   const { ctes, values } = compilePostgresTraceCandidates(
     schema,
     plan,
-    `${traceSelect(plan)}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}`,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}`,
     deltaWindow,
   );
   const candidates = `WITH ${ctes.join(',\n')}`;
@@ -691,17 +804,6 @@ export function compilePostgresTraceQuery(
       text: `${candidates}
 SELECT COUNT(*)::text AS count
 FROM candidates`,
-      values,
-    };
-  }
-
-  if (plan.paginationMode === 'delta') {
-    values.push(plan.limit + 1);
-    return {
-      text: `${candidates}
-SELECT * FROM candidates
-ORDER BY "xactId" ASC, "cursorId" ASC
-LIMIT $${values.length}`,
       values,
     };
   }
@@ -722,16 +824,47 @@ LIMIT $${values.length}`,
     };
   }
 
+  // `page` sorts and limits the narrow candidates; only its rows join back to their root span (by
+  // primary key) to read metadata and build previews, so payloads never enter the sort. The join
+  // reads the span table, an index probe per page row, rather than `root_scope`, which would scan
+  // every root in the range again.
+  const payloadColumns = tracePayloadSelect(plan);
+  const withPayloads = (pageSql: string, orderBy: string) => `${candidates},
+page AS (
+${pageSql}
+)
+SELECT page.*,
+  ${payloadColumns}
+FROM page
+JOIN ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} r
+  ON r."traceId" = page."traceId" AND r."spanId" = page."rootSpanId" AND r."endedAt" = page."endedAt"
+ORDER BY ${orderBy}`;
+
+  if (plan.paginationMode === 'delta') {
+    values.push(plan.limit + 1);
+    return {
+      text: withPayloads(
+        `SELECT * FROM candidates
+ORDER BY "xactId" ASC, "cursorId" ASC
+LIMIT $${values.length}`,
+        'page."xactId" ASC, page."cursorId" ASC',
+      ),
+      values,
+    };
+  }
+
   const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
-      text: `${candidates}
-SELECT *
+      text: withPayloads(
+        `SELECT *
 FROM candidates
 ORDER BY ${orderField} ${direction}, "traceId" ASC
 LIMIT $${values.length - 1} OFFSET $${values.length}`,
+        `page.${orderField} ${direction}, page."traceId" ASC`,
+      ),
       values,
     };
   }
@@ -747,12 +880,14 @@ LIMIT $${values.length - 1} OFFSET $${values.length}`,
   values.push(plan.limit + 1);
 
   return {
-    text: `${candidates}
-SELECT *
+    text: withPayloads(
+      `SELECT *
 FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, "traceId" ASC
 LIMIT $${values.length}`,
+      `page.${orderField} ${direction}, page."traceId" ASC`,
+    ),
     values,
   };
 }
@@ -999,7 +1134,7 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: row.metadata ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: finishPayloadPreview(row.inputPreview, coreStorage.INPUT_PREVIEW_MAX_LENGTH),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -1008,14 +1143,11 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
-    // The driver parses jsonb, so a string output loses its quotes; re-encode it like the other stores' JSON text.
     ...(plan.select?.includes('outputPreview')
-      ? {
-          outputPreview: coreStorage.buildOutputPreview(row.output == null ? null : JSON.stringify(row.output)) ?? null,
-        }
+      ? { outputPreview: finishPayloadPreview(row.outputPreview, coreStorage.OUTPUT_PREVIEW_MAX_LENGTH) }
       : {}),
     ...(plan.select?.includes('errorPreview')
-      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      ? { errorPreview: finishPreview(row.errorPreview, coreStorage.ERROR_PREVIEW_MAX_LENGTH) }
       : {}),
   };
 }

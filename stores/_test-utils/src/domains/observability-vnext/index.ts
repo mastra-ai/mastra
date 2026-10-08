@@ -5,6 +5,9 @@ export * from './trace-query-discovery';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import {
+  buildErrorPreview,
+  buildInputPreview,
+  buildOutputPreview,
   parseGetTraceQueryFieldsArgs,
   parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
@@ -22,6 +25,7 @@ import type {
   CreateSpanRecord,
   ObservabilityStorage,
   TraceQueryRequest,
+  TraceQueryTrace,
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
@@ -182,6 +186,7 @@ export async function writeTraceQueryFixture(
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
+      input: span.input,
       output: span.output,
     }));
   for (const span of records) await storage.createSpan({ span });
@@ -575,6 +580,134 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         if (!('traces' in plain)) throw new Error('Expected traces');
         expect(plain.traces[0]).not.toHaveProperty('outputPreview');
         expect(plain.traces[0]).not.toHaveProperty('errorPreview');
+      });
+
+      it('builds input, output and error previews like the preview helpers in every pagination mode', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const long = 'word '.repeat(60).trim();
+          // Each case stresses one rule: message parts, the cut point (an emoji pair straddles it),
+          // JSON-looking text, empty message lists, JSON fallback text and trimmed error fields.
+          const cases: Array<{ input: unknown; output: unknown; error: unknown }> = [
+            {
+              input: {
+                messages: [
+                  { role: 'system', content: 'sys' },
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'part one' }, { type: 'image', image: 'x' }, 'part two'],
+                  },
+                  { role: 'user', content: 'second' },
+                ],
+              },
+              output: [
+                { role: 'user', content: 'q' },
+                { role: 'assistant', content: [{ type: 'text', text: 'a1' }] },
+                { role: 'assistant', content: 'a2' },
+              ],
+              error: { name: 'TypeError', message: 'preview failure', stack: 'TypeError: preview failure\n    at x' },
+            },
+            {
+              input: [{ role: 'user', content: `a${'😀'.repeat(60)}` }],
+              output: { text: long },
+              error: { name: 'Error', message: ` ${long} ${long} ` },
+            },
+            {
+              input: '[1] cited source',
+              output: [1, 2],
+              error: { name: 'AI_APICallError', message: 'AI_APICallError: model missing' },
+            },
+            { input: { messages: [] }, output: [], error: { name: '  Custom  ', message: '  spaced  ' } },
+            { input: { query: 'a, b: c' }, output: { text: 5 }, error: { name: 'RangeError', message: '   ' } },
+            { input: '   ', output: 'Blue.', error: { message: 'only message' } },
+          ];
+          const spans = cases.map((testCase, index) => ({
+            ...template,
+            ...testCase,
+            traceId: `preview-case-${index}`,
+            spanId: `preview-case-${index}`,
+            entityName: 'preview-cases',
+          }));
+          const expected = spans
+            .map(span => ({
+              traceId: span.traceId,
+              inputPreview: buildInputPreview(JSON.stringify(span.input)) ?? null,
+              outputPreview: buildOutputPreview(JSON.stringify(span.output)) ?? null,
+              errorPreview: buildErrorPreview(span.error) ?? null,
+            }))
+            .sort((left, right) => left.traceId.localeCompare(right.traceId));
+          const request = {
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            where: { op: 'eq' as const, left: { path: 'entityName' }, right: { literal: 'preview-cases' } },
+            select: ['outputPreview', 'errorPreview'],
+          };
+          const previews = (traces: TraceQueryTrace[]) =>
+            traces
+              .map(({ traceId, inputPreview, outputPreview, errorPreview }) => ({
+                traceId,
+                inputPreview,
+                outputPreview,
+                errorPreview,
+              }))
+              .sort((left, right) => left.traceId.localeCompare(right.traceId));
+
+          const bootstrap = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ ...request, mode: 'delta', limit: 2 })),
+          );
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          await writeTraceQueryFixture(
+            storage,
+            { spans, scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+
+          const numbered = await waitFor(
+            () =>
+              storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest({ ...request, pagination: { page: 0, perPage: 25 } })),
+              ),
+            result => 'traces' in result && result.traces.length === cases.length,
+          );
+          if (!('traces' in numbered)) throw new Error('Expected traces');
+          expect(previews(numbered.traces)).toEqual(expected);
+
+          const keysetTraces: TraceQueryTrace[] = [];
+          let after: string | null = null;
+          for (let index = 0; index < 10; index++) {
+            const page = await storage.queryTraces(
+              planTraceQuery(parseTraceQueryRequest({ ...request, page: { limit: 2, after } })),
+            );
+            if (!('page' in page) || !('traces' in page)) throw new Error('Expected a keyset trace page');
+            keysetTraces.push(...page.traces);
+            if (!page.page.next) break;
+            after = page.page.next;
+          }
+          expect(previews(keysetTraces)).toEqual(expected);
+
+          const delta = await waitFor(
+            async () => {
+              let cursor = bootstrap.deltaCursor;
+              const traces: TraceQueryTrace[] = [];
+              for (let index = 0; index < 10; index++) {
+                const batch = await storage.queryTraces(
+                  planTraceQuery(parseTraceQueryRequest({ ...request, mode: 'delta', limit: 2, after: cursor })),
+                );
+                if (!('delta' in batch)) throw new Error('Expected delta');
+                traces.push(...batch.traces);
+                cursor = batch.deltaCursor;
+                if (!batch.delta.hasMore) break;
+              }
+              return traces;
+            },
+            traces => traces.length === cases.length,
+          );
+          expect(previews(delta)).toEqual(expected);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
       });
 
       it('matches advanced predicate conformance when polling trace deltas', async () => {

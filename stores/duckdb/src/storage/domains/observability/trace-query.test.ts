@@ -17,7 +17,7 @@ import type { DuckDBConnection } from '../../db/index';
 import {
   compileDuckDBThreadQuery,
   compileDuckDBTraceQuery,
-  compileDuckDBTraceRootPreviews,
+  compileDuckDBTracePagePayloads,
   compileDuckDBTraceQueryValues,
   getTraceQueryObservedFields,
   queryThreads,
@@ -37,27 +37,38 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
-  it('reads selected previews only for the rows on the page', () => {
+  it('keeps payload columns out of the main query in every pagination mode', () => {
     for (const selected of [
       plan({ select: ['outputPreview', 'errorPreview'] }),
       plan({ pagination: { page: 0, perPage: 25 }, select: ['outputPreview', 'errorPreview'] }),
+      plan({ mode: 'delta', select: ['outputPreview', 'errorPreview'] }),
     ]) {
       const compiled = compileDuckDBTraceQuery(selected);
-      expect(compiled.sql).not.toContain('r.output');
-      expect(compiled.sql).not.toContain('selectedError');
+      expect(compiled.sql).not.toContain('metadata');
+      expect(compiled.sql).not.toContain('input');
+      expect(compiled.sql).not.toContain('output');
+      expect(compiled.sql).not.toContain('Preview');
     }
+  });
 
-    const previews = compileDuckDBTraceRootPreviews(
-      [
-        { traceId: 'trace-a', startedAt: '2026-08-02T00:00:00.000Z', endedAt: '2026-08-02T00:00:05.000Z' },
-        { traceId: 'trace-b', startedAt: '2026-08-01T00:00:00.000Z', endedAt: '2026-08-01T00:00:01.000Z' },
-      ],
-      ['errorPreview'],
-    );
-    expect(previews.sql).toContain("SELECT traceId, NULLIF(error, 'null') AS selectedError\n");
-    expect(previews.sql).toContain('timestamp >= CAST(? AS TIMESTAMP)');
-    expect(previews.sql).toContain('traceId IN (?, ?)');
-    expect(previews.values).toEqual(['2026-08-01T00:00:00.000Z', '2026-08-02T00:00:05.000Z', 'trace-a', 'trace-b']);
+  it('reads metadata and previews only for the rows on the page', () => {
+    const rows = [
+      { traceId: 'trace-a', startedAt: '2026-08-02T00:00:00.000Z', endedAt: '2026-08-02T00:00:05.000Z' },
+      // Ended before it started (clock skew): both ends still bound the scan.
+      { traceId: 'trace-b', startedAt: '2026-08-01T00:00:02.000Z', endedAt: '2026-08-01T00:00:01.000Z' },
+    ];
+    const plain = compileDuckDBTracePagePayloads(rows, []);
+    expect(plain.sql).toContain('SELECT traceId, metadata, ');
+    expect(plain.sql).toContain('AS inputPreview');
+    expect(plain.sql).not.toContain('outputPreview');
+    expect(plain.sql).not.toContain('errorPreview');
+    expect(plain.sql).toContain('timestamp >= CAST(? AS TIMESTAMP)');
+    expect(plain.sql).toContain('traceId IN (?, ?)');
+    expect(plain.values).toEqual(['2026-08-01T00:00:01.000Z', '2026-08-02T00:00:05.000Z', 'trace-a', 'trace-b']);
+
+    const selected = compileDuckDBTracePagePayloads(rows, ['errorPreview']);
+    expect(selected.sql).toContain('AS errorPreview');
+    expect(selected.sql).not.toContain('outputPreview');
   });
 
   it('compiles root duration predicates from root timestamps', () => {
@@ -573,10 +584,11 @@ describe('DuckDB advanced trace query', () => {
   it('returns fixed records and computes the next cursor from the last visible row', async () => {
     const query = vi
       .fn()
-      .mockResolvedValue([
+      .mockResolvedValueOnce([
         traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
         traceRow('trace-b', '2026-01-01T11:00:00.000Z'),
-      ]);
+      ])
+      .mockResolvedValueOnce([payloadRow('trace-a')]);
     const response = await queryTraces({ query } as unknown as DuckDBConnection, plan({ page: { limit: 1 } }));
 
     expect(response).toMatchObject({
@@ -594,16 +606,36 @@ describe('DuckDB advanced trace query', () => {
       inputPreview: 'Help with my order',
     });
     expect(response.traces[0]).not.toHaveProperty('input');
+    // The lookahead row is not on the page, so its payloads are never read.
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[1]![1]).toContain('trace-a');
+    expect(query.mock.calls[1]![1]).not.toContain('trace-b');
+  });
+
+  it('finishes SQL preview text with the shared truncation', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([traceRow('trace-a', '2026-01-01T12:00:00.000Z')])
+      .mockResolvedValueOnce([
+        { ...payloadRow('trace-a'), inputPreview: 'i'.repeat(101), outputPreview: 'o'.repeat(100), errorPreview: '' },
+      ]);
+    const response = await queryTraces(
+      { query } as unknown as DuckDBConnection,
+      plan({ select: ['outputPreview', 'errorPreview'] }),
+    );
+
+    expect(response.traces[0]).toMatchObject({
+      inputPreview: `${'i'.repeat(100)}…`,
+      outputPreview: 'o'.repeat(100),
+      errorPreview: null,
+    });
   });
 
   it('returns null for absent optional root span details', async () => {
-    const row = {
-      ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
-      entityId: null,
-      metadata: null,
-      input: null,
-    };
-    const query = vi.fn().mockResolvedValue([row]);
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([{ ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'), entityId: null }])
+      .mockResolvedValueOnce([{ traceId: 'trace-a', metadata: null, inputPreview: null }]);
     const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
 
     expect(response.traces[0]).toMatchObject({
@@ -616,16 +648,19 @@ describe('DuckDB advanced trace query', () => {
     expect(response.page.next).toBeNull();
   });
 
-  it('returns exact list-compatible pagination metadata from one statement', async () => {
-    const query = vi.fn().mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }]);
+  it('returns exact list-compatible pagination metadata with the page rows', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }])
+      .mockResolvedValueOnce([payloadRow('trace-c')]);
     const response = await queryTraces(
       { query } as unknown as DuckDBConnection,
       plan({ pagination: { page: 1, perPage: 2 } }),
     );
 
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
     expect(response).toMatchObject({
-      traces: [{ traceId: 'trace-c' }],
+      traces: [{ traceId: 'trace-c', inputPreview: 'Help with my order' }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
     expect(response).not.toHaveProperty('page');
@@ -671,8 +706,6 @@ function traceRow(traceId: string, startedAt: string) {
     name: 'Agent run',
     entityId: 'agent-1',
     parentSpanId: null,
-    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
-    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),
@@ -681,5 +714,13 @@ function traceRow(traceId: string, startedAt: string) {
     entityType: null,
     environment: null,
     status: 'success',
+  };
+}
+
+function payloadRow(traceId: string) {
+  return {
+    traceId,
+    metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
+    inputPreview: 'Help with my order',
   };
 }

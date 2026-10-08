@@ -1,6 +1,7 @@
 import { coreFeatures } from '@mastra/core/features';
 import {
   buildErrorPreview,
+  buildInputPreview,
   buildOutputPreview,
   compareTraceQueryStrings,
   encodeTraceQueryCursor,
@@ -65,6 +66,7 @@ export interface RawTraceQuerySpan {
   userId?: string | null;
   sessionId?: string | null;
   experimentId?: string | null;
+  input?: unknown;
   output?: unknown;
 }
 
@@ -3139,7 +3141,8 @@ function toTraceQueryTrace(
     parentSpanId: root.parentSpanId,
     createdAt: root.startedAt,
     metadata: root.metadata,
-    inputPreview: null,
+    // Stores preview the stored JSON text, so a string keeps its quotes here too.
+    inputPreview: buildInputPreview(root.input == null ? null : JSON.stringify(root.input)) ?? null,
     threadId: root.threadId,
     resourceId: root.resourceId,
     startedAt: root.startedAt,

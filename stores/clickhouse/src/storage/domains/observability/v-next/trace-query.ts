@@ -114,14 +114,16 @@ const FEEDBACK_FIELDS = {
   comment: { sql: 's.comment', parameterType: 'String' },
 } satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
 
+/**
+ * Candidate columns carried through the page sort. Payload blobs (metadata, input, output, error)
+ * are read for the returned rows only (compileClickHouseTraceRootPayloads).
+ */
 const TRACE_SELECT = `
   r.traceId AS traceId,
   r.spanId AS rootSpanId,
   r.name AS name,
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
-  r.metadataRaw AS metadata,
-  r.input AS input,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -130,23 +132,6 @@ const TRACE_SELECT = `
   r.entityType AS entityType,
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
-
-/** Candidate columns carried through the page-mode window sort (no payload blobs). */
-const TRACE_PAGE_COLUMNS = [
-  'traceId',
-  'rootSpanId',
-  'name',
-  'entityId',
-  'parentSpanId',
-  'threadId',
-  'resourceId',
-  'startedAt',
-  'endedAt',
-  'entityName',
-  'entityType',
-  'environment',
-  'status',
-];
 
 export class ParameterBuilder {
   readonly params: QueryParams = {};
@@ -599,16 +584,14 @@ LIMIT ${limit}`,
     const pageEnd = parameters.add((plan.page + 1) * plan.perPage, 'UInt64');
     // One pass over `candidates`: CTEs are inlined, so separate page and total
     // subqueries would re-run the root dedupe and relation scans for each. The
-    // window sorts every candidate, so it only carries narrow columns; the
-    // metadata/input payloads of the page rows are fetched afterwards
-    // (compileClickHouseTraceRootPayloads). The first row doubles as the
-    // metadata row (carrying `total`) when the requested page is past the end.
+    // first row doubles as the metadata row (carrying `total`) when the
+    // requested page is past the end.
     const onPage = `__row_position > ${offset} AND __row_position <= ${pageEnd}`;
     return {
       query: `${candidates},
 page_rows AS (
   SELECT
-    ${TRACE_PAGE_COLUMNS.join(',\n    ')},
+    *,
     row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position,
     count() OVER () AS total
   FROM candidates
@@ -641,27 +624,90 @@ LIMIT ${limit}`,
   };
 }
 
+// The whitespace JS `String.prototype.trim` removes, as an RE2 class body; backslashes are doubled for the SQL string literal.
+const JS_TRIM_WHITESPACE =
+  '\\\\t\\\\n\\\\x{0B}\\\\f\\\\r \\\\x{A0}\\\\x{1680}\\\\x{2000}-\\\\x{200A}\\\\x{2028}\\\\x{2029}\\\\x{202F}\\\\x{205F}\\\\x{3000}\\\\x{FEFF}';
+
+// Two anchored patterns: RE2 matches each from its anchor, while `^…|…$` scans the whole payload (~20x slower).
+function jsTrimSql(text: string): string {
+  const leading = `replaceRegexpOne(${text}, '^[${JS_TRIM_WHITESPACE}]+', '')`;
+  return `replaceRegexpOne(${leading}, '[${JS_TRIM_WHITESPACE}]+$', '')`;
+}
+
+/** Text of the `role` messages joined by ` | `; content is a string or its string/text parts joined by spaces. */
+function messagesTextSql(messages: string, role: 'user' | 'assistant'): string {
+  const part = `multiIf(JSONType(p) = 'String', JSONExtractString(p), JSONType(p) = 'Object' AND JSONExtractString(p, 'type') = 'text', JSONExtractString(p, 'text'), '')`;
+  const content = `multiIf(
+    JSONType(m, 'content') = 'String', JSONExtractString(m, 'content'),
+    JSONType(m, 'content') = 'Array', arrayStringConcat(arrayFilter(x -> x != '', arrayMap(p -> ${part}, JSONExtractArrayRaw(m, 'content'))), ' '),
+    '')`;
+  return `arrayStringConcat(arrayFilter(x -> x != '', arrayMap(m -> if(JSONExtractString(m, 'role') = '${role}', ${content}, ''), ${messages})), ' | ')`;
+}
+
+/** Full preview text cut to one code point past `maxLength`, so `preview` adds the same ellipsis. */
+function cutPreviewSql(text: string, maxLength: number): string {
+  return `nullIf(substringUTF8(${text}, 1, ${maxLength + 1}), '')`;
+}
+
 /**
- * Fetches the payloads of the rows already on a page: metadata/input for page-mode rows, plus
- * any selected previews. Looks rows up by the trace_roots sort-key prefix `(startedAt, traceId)`,
- * so only the page's granules are read. A root can have unmerged versions in different `endedAt`
- * partitions, so `endedAt` is part of the key: the payload comes from the same version as the
- * candidate row.
+ * `buildInputPreview` / `buildOutputPreview` in SQL. JSON functions run on `ifNull(column, '')`:
+ * on a Nullable column they return Nullable arrays, which ClickHouse rejects.
+ */
+function payloadPreviewSql(column: 'input' | 'output'): string {
+  const raw = `ifNull(${column}, '')`;
+  const trimmed = jsTrimSql(raw);
+  const isMessages = `(JSONType(${trimmed}) = 'Array' OR JSONType(${trimmed}, 'messages') = 'Array')`;
+  const messages = `multiIf(JSONType(${trimmed}) = 'Array', JSONExtractArrayRaw(${trimmed}), JSONType(${trimmed}, 'messages') = 'Array', JSONExtractArrayRaw(${trimmed}, 'messages'), [])`;
+  // A parsed object or array: message text, then (output only) a string `text`, then the JSON itself.
+  const json =
+    column === 'input'
+      ? `if(${isMessages}, ${messagesTextSql(messages, 'user')}, ${trimmed})`
+      : `multiIf(
+    ${isMessages} AND (length(${messages}) = 0 OR arrayExists(m -> JSONType(m) = 'Object' AND JSONHas(m, 'role'), ${messages})), ${messagesTextSql(messages, 'assistant')},
+    JSONType(${trimmed}) = 'Object' AND JSONType(${trimmed}, 'text') = 'String', JSONExtractString(${trimmed}, 'text'),
+    ${trimmed})`;
+  const text = `multiIf(
+    ${column} IS NULL OR ${trimmed} = '', NULL,
+    startsWith(${trimmed}, '{') OR startsWith(${trimmed}, '['), if(isValidJSON(${trimmed}), ${json}, NULL),
+    startsWith(${trimmed}, '"'), if(isValidJSON(${trimmed}), JSONExtractString(${trimmed}), ${raw}),
+    ${raw})`;
+  return cutPreviewSql(
+    text,
+    column === 'input' ? coreStorage.INPUT_PREVIEW_MAX_LENGTH : coreStorage.OUTPUT_PREVIEW_MAX_LENGTH,
+  );
+}
+
+/** `buildErrorPreview` in SQL: `name: message` from the error JSON; the stack never leaves the database. */
+function errorPreviewSql(): string {
+  const raw = `ifNull(error, '')`;
+  const message = jsTrimSql(`JSONExtractString(${raw}, 'message')`);
+  const name = jsTrimSql(`JSONExtractString(${raw}, 'name')`);
+  const label = `if(JSONType(${raw}, 'name') = 'String' AND ${name} != '' AND ${name} != 'Error' AND NOT startsWith(${message}, ${name}), concat(${name}, ': '), '')`;
+  const valid = `error IS NOT NULL AND isValidJSON(${raw}) AND JSONType(${raw}) = 'Object' AND JSONType(${raw}, 'message') = 'String' AND ${message} != ''`;
+  return `if(${valid}, ${cutPreviewSql(`concat(${label}, ${message})`, coreStorage.ERROR_PREVIEW_MAX_LENGTH)}, NULL)`;
+}
+
+/**
+ * Fetches the payloads of the rows already on a page: metadata, the input preview, and any
+ * selected output/error previews. Previews are built in SQL so only short text is returned.
+ * Looks rows up by the trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
+ * granules are read. A root can have unmerged versions in different `endedAt` partitions, so
+ * `endedAt` is part of the key: the payload comes from the same version as the candidate row.
  */
 export function compileClickHouseTraceRootPayloads(
   keys: Array<{ traceId: string; rootSpanId: string; startedAt: string; endedAt: string }>,
-  plan?: coreStorage.TrustedTraceQueryTracesPlan,
+  plan: coreStorage.TrustedTraceQueryTracesPlan,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const tuples = keys.map(
     key =>
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
-  // Keyset and delta rows already carry metadata/input; page-mode rows only carry narrow columns.
   const columns = [
-    ...(plan && plan.paginationMode !== 'page' ? [] : ['metadataRaw AS metadata', 'input']),
-    ...(plan?.select?.includes('outputPreview') ? ['output'] : []),
-    ...(plan?.select?.includes('errorPreview') ? ['error AS selectedError'] : []),
+    'metadataRaw AS metadata',
+    `${payloadPreviewSql('input')} AS inputPreview`,
+    ...(plan.select?.includes('outputPreview') ? [`${payloadPreviewSql('output')} AS outputPreview`] : []),
+    ...(plan.select?.includes('errorPreview') ? [`${errorPreviewSql()} AS errorPreview`] : []),
   ];
   // Plain min/max bounds let partition and primary-key pruning work without analysing the tuple set.
   const bounds = (['startedAt', 'endedAt'] as const).map(column => {
@@ -884,6 +930,15 @@ export async function getTraceQueryValues(
   });
 }
 
+/**
+ * Adds the ellipsis the way the core `build*Preview` helpers do, to text SQL already cut to
+ * `maxLength + 1` code points. Kept local so the store still runs with older `@mastra/core`.
+ */
+function preview(text: unknown, maxLength: number): string | null {
+  if (typeof text !== 'string' || !text) return null;
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+}
+
 function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.TrustedTraceQueryTracesPlan) {
   return {
     traceId: String(row.traceId),
@@ -893,7 +948,7 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: preview(row.inputPreview, coreStorage.INPUT_PREVIEW_MAX_LENGTH),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -903,12 +958,37 @@ function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.Truste
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
     ...(plan.select?.includes('outputPreview')
-      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      ? { outputPreview: preview(row.outputPreview, coreStorage.OUTPUT_PREVIEW_MAX_LENGTH) }
       : {}),
     ...(plan.select?.includes('errorPreview')
-      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      ? { errorPreview: preview(row.errorPreview, coreStorage.ERROR_PREVIEW_MAX_LENGTH) }
       : {}),
   };
+}
+
+/** Merges each page row with its payloads (compileClickHouseTraceRootPayloads). */
+async function withRootPayloads(
+  client: ClickHouseClient,
+  rows: Record<string, unknown>[],
+  plan: coreStorage.TrustedTraceQueryTracesPlan,
+  remaining: () => number,
+): Promise<Record<string, unknown>[]> {
+  if (rows.length === 0) return rows;
+  const payloadRows = await runWithClickHouseTraceQueryTimeout(
+    client,
+    { timeoutMs: remaining() },
+    compileClickHouseTraceRootPayloads(
+      rows.map(row => ({
+        traceId: String(row.traceId),
+        rootSpanId: String(row.rootSpanId),
+        startedAt: asIsoTimestamp(row.startedAt),
+        endedAt: asIsoTimestamp(row.endedAt),
+      })),
+      plan,
+    ),
+  );
+  const payloads = new Map(payloadRows.map(payload => [`${payload.traceId}\u0000${payload.rootSpanId}`, payload]));
+  return rows.map(row => ({ ...row, ...payloads.get(`${row.traceId}\u0000${row.rootSpanId}`) }));
 }
 
 export async function queryTraces(
@@ -961,26 +1041,7 @@ export async function queryTraces(
     );
     const total = Number(rows.at(-1)?.total ?? 0);
     const pageRows = rows.filter(row => Number(row.__metadata) === 0);
-    const payloads = new Map<string, Record<string, unknown>>();
-    if (pageRows.length > 0) {
-      const payloadRows = await runWithClickHouseTraceQueryTimeout(
-        client,
-        { timeoutMs: remaining() },
-        compileClickHouseTraceRootPayloads(
-          pageRows.map(row => ({
-            traceId: String(row.traceId),
-            rootSpanId: String(row.rootSpanId),
-            startedAt: asIsoTimestamp(row.startedAt),
-            endedAt: asIsoTimestamp(row.endedAt),
-          })),
-          plan,
-        ),
-      );
-      for (const payload of payloadRows) payloads.set(`${payload.traceId}\u0000${payload.rootSpanId}`, payload);
-    }
-    const traces = pageRows
-      .map(row => ({ ...row, ...payloads.get(`${row.traceId}\u0000${row.rootSpanId}`) }))
-      .map(row => traceRowToResult(row, plan));
+    const traces = (await withRootPayloads(client, pageRows, plan, remaining)).map(row => traceRowToResult(row, plan));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       ...(deltaHead
@@ -1016,27 +1077,7 @@ export async function queryTraces(
     });
   }
 
-  // Previews are read for the visible rows only, so the candidate sort never carries them.
-  const previews = new Map<string, Record<string, unknown>>();
-  if (plan.select?.length && visibleRows.length > 0) {
-    const previewRows = await runWithClickHouseTraceQueryTimeout(
-      client,
-      { timeoutMs: remaining() },
-      compileClickHouseTraceRootPayloads(
-        visibleRows.map(row => ({
-          traceId: String(row.traceId),
-          rootSpanId: String(row.rootSpanId),
-          startedAt: asIsoTimestamp(row.startedAt),
-          endedAt: asIsoTimestamp(row.endedAt),
-        })),
-        plan,
-      ),
-    );
-    for (const preview of previewRows) previews.set(`${preview.traceId}\u0000${preview.rootSpanId}`, preview);
-  }
-  const traces = visibleRows.map(row =>
-    traceRowToResult({ ...row, ...previews.get(`${row.traceId}\u0000${row.rootSpanId}`) }, plan),
-  );
+  const traces = (await withRootPayloads(client, visibleRows, plan, remaining)).map(row => traceRowToResult(row, plan));
   const last = traces.at(-1);
   if (plan.paginationMode === 'delta') {
     const lastRow = visibleRows.at(-1);
