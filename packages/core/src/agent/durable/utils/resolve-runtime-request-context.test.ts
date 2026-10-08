@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ProcessorState } from '../../../processors/runner';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
 import { globalRunRegistry } from '../run-registry';
 import { rebuildRunToolsFromMastra } from './resolve-runtime';
@@ -23,6 +24,75 @@ function makeAgent() {
 }
 
 describe('rebuildRunToolsFromMastra request context', () => {
+  it.each(['empty', 'placeholder', 'authoritative'] as const)(
+    'shares the winning processor pipeline during concurrent %s hydration',
+    async registryState => {
+      const runId = `concurrent-hydration-${registryState}`;
+      const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+      const bothStarted = Promise.withResolvers<void>();
+      const pipelines = [[{ id: 'first' }], [{ id: 'second' }]];
+      const contexts: RequestContext[] = [];
+      const agent = {
+        ...makeAgent(),
+        getToolsForExecution: vi.fn().mockResolvedValue({ rebuilt: {} }),
+        listOutputProcessors: vi.fn().mockImplementation(async (requestContext: RequestContext) => {
+          const index = agent.listOutputProcessors.mock.calls.length - 1;
+          contexts[index] = requestContext;
+          requestContext.set('hydration', index);
+          if (index === 1) bothStarted.resolve();
+          await gates[index]!.promise;
+          return pipelines[index];
+        }),
+      };
+      const snapshot = {};
+      if (registryState === 'placeholder') {
+        globalRunRegistry.set(runId, { isPlaceholder: true, tools: {} } as any);
+      }
+      const rebuild = () =>
+        rebuildRunToolsFromMastra({
+          mastra: makeMastra(agent),
+          runId,
+          agentId: 'agent-1',
+          state: {} as any,
+          rehydrateProcessors: true,
+        });
+      const firstCall = rebuild();
+      const secondCall = rebuild();
+      try {
+        await bothStarted.promise;
+        if (registryState === 'authoritative') {
+          globalRunRegistry.set(runId, { model: {}, tools: snapshot } as any);
+        }
+        gates[0]!.resolve();
+        const first = await firstCall;
+        const published = globalRunRegistry.get(runId)!;
+        const state = new ProcessorState();
+        state.customState.processedChunks = 1;
+        published.processorStates!.set('first', state);
+        gates[1]!.resolve();
+        const second = await secondCall;
+
+        expect(globalRunRegistry.get(runId)).toBe(published);
+        expect(first?.outputProcessors).toBe(pipelines[0]);
+        expect(second?.outputProcessors).toBe(first?.outputProcessors);
+        expect(second?.processorStates).toBe(first?.processorStates);
+        expect(second?.processorStates).toBe(published.processorStates);
+        expect(second?.processorStates?.get('first')).toBe(state);
+        expect(state.customState.processedChunks).toBe(1);
+        expect(published.requestContext).toBe(contexts[0]);
+        expect(published.requestContext?.get('hydration')).toBe(0);
+        if (registryState === 'authoritative') {
+          expect(published.tools).toBe(snapshot);
+          expect(published.tools).toEqual({});
+        }
+      } finally {
+        gates.forEach(gate => gate.resolve());
+        await Promise.allSettled([firstCall, secondCall]);
+        globalRunRegistry.delete(runId);
+      }
+    },
+  );
+
   it('rebuilds the save queue without resolving processors for persistence-only callers', async () => {
     const runId = 'persistence-only-rebuild';
     const memory = {};

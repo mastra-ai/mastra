@@ -469,7 +469,7 @@ export async function rebuildRunToolsFromMastra(options: {
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
     const saveQueueManager = makeSaveQueueManager(memory, mastra);
-    const existing = globalRunRegistry.get(runId);
+    let existing = globalRunRegistry.get(runId);
     const rebuiltProcessors: Partial<Awaited<ReturnType<typeof rebuildProcessorPipeline>>> =
       !options.rehydrateProcessors
         ? {}
@@ -501,8 +501,14 @@ export async function rebuildRunToolsFromMastra(options: {
       ...rebuiltProcessors,
       ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
     };
+    // A sibling may have published during construction. Keep lookup, merge and return synchronous.
+    existing = globalRunRegistry.get(runId);
     if (existing) {
-      if (options.rehydrateProcessors && (existing.isPlaceholder || !existing.requestContext)) {
+      const needsProcessorPipeline = !existing.outputProcessors || !existing.processorStates;
+      if (
+        options.rehydrateProcessors &&
+        ((existing.isPlaceholder && needsProcessorPipeline) || !existing.requestContext)
+      ) {
         existing.requestContext = resolveRequestContext;
       }
       const registryModel = existing.model as { __metadataOnly?: boolean } | undefined;
@@ -521,7 +527,8 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.errorProcessors ??= rebuiltProcessors.errorProcessors;
       existing.processorStates ??= rebuiltProcessors.processorStates;
     } else {
-      globalRunRegistry.set(runId, patch as RunRegistryEntry);
+      existing = patch as RunRegistryEntry;
+      globalRunRegistry.set(runId, existing);
     }
 
     return {
@@ -529,7 +536,11 @@ export async function rebuildRunToolsFromMastra(options: {
       workspace,
       memory,
       saveQueueManager,
-      ...rebuiltProcessors,
+      inputProcessors: existing.inputProcessors,
+      llmRequestInputProcessors: existing.llmRequestInputProcessors,
+      outputProcessors: existing.outputProcessors,
+      errorProcessors: existing.errorProcessors,
+      processorStates: existing.processorStates,
       requestContext: resolveRequestContext,
     };
   } catch (error) {
