@@ -496,6 +496,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
     examples: [
       {
+        description: 'Set the command that runs once in the workspace root after every repository is set up',
         command: `mastra api factory project environment update <project-id> '{"workspaceSetupCommand":"pnpm -r build"}'`,
       },
     ],
