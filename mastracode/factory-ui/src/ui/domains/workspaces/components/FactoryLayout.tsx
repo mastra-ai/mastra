@@ -3,7 +3,7 @@ import { createContext, useContext } from 'react';
 import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
-import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
+import { AuthPendingSkeleton } from '../../auth/components/AuthPendingSkeleton';
 import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 import type { FactoryProject } from '../services/github';
