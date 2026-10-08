@@ -403,17 +403,19 @@ export interface SessionEnvironment {
   workspaceSetupCommand: string | undefined;
   /** Only an absolute root is passed on; the templates reject anything else. */
   workingDirectory: string | undefined;
-  /** vCPUs and memory; null leaves the provider default (identity-bearing in the template). */
+  /** The project's stored provider settings document, `{}` when nothing was set. */
+  settings: Record<string, unknown>;
 }
 
 /**
  * Resolve the factory environment a session boots from: the project's
  * settings plus every `inEnvironment` link of the project under this
  * source-control integration, ordered by position. `undefined` when the
- * session carries no factory, the project is gone, or no link is in the
- * environment, which keeps the single-repository sandbox of the session's
- * own link. A link whose repository row is missing is skipped with a warning
- * rather than failing every start of the session.
+ * session carries no factory or the project is gone. With no link in the
+ * environment `repos` is empty and the session keeps the single-repository
+ * sandbox of its own link, still booted with the project's settings. A link
+ * whose repository row is missing is skipped with a warning rather than
+ * failing every start of the session.
  */
 async function resolveSessionEnvironment(
   projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
@@ -468,12 +470,12 @@ async function resolveSessionEnvironment(
       teardownCommand: link.teardownCommand ?? undefined,
     });
   }
-  if (repos.length === 0) return undefined;
   const workdir = project.sandboxWorkdir?.trim();
   return {
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
+    settings: project.sandboxSettings ?? {},
   };
 }
 
@@ -572,9 +574,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       registerGithubRefreshTarget(requestContext, { orgId: session.orgId, repositoryId: repository.id });
     // The factory environment: every `inEnvironment` link of the session's
     // factory in position order, with the project's settings. Absent when the
-    // factory has none (or the session predates `factoryProjectId`), which
-    // keeps the single-repository sandbox of the session's own link.
+    // session predates `factoryProjectId`; the settings apply to every boot of
+    // a factory session, list form or single repository.
     const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    const sandboxSettings = resolvedEnvironment?.settings ?? {};
     // The session's own link must be part of the environment: it is the
     // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
     // whose link left the environment keeps its single-repository sandbox.
@@ -717,8 +720,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
-        // Settings are the environment's stored document; segment 3 wires the
-        // stored settings through, so the provider sees an empty document here.
+        // The provider reads resources (cpu, memory, idle timeout) from the
+        // project's stored settings document, never from the context.
         const sandbox = factorySandbox.create(
           {
             sessionId: session.id,
@@ -763,7 +766,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                     }),
                 }),
           },
-          {},
+          sandboxSettings,
         );
         // Attached inside the construction closure, so exactly once per
         // instance — `constructSessionEntry` runs on every open and would

@@ -3,8 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalSandbox } from '@mastra/core/workspace';
-import type { LocalFilesystem } from '@mastra/core/workspace';
+import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
+import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -3085,6 +3085,16 @@ describe('FactorySkillSource layering', () => {
 });
 
 describe('factory environment sandbox context', () => {
+  /** Records every `create(ctx, settings)` call and hands the sandbox construction to the shared mock. */
+  class RecordingFactorySandbox extends FactorySandbox<Record<string, unknown>> {
+    readonly provider = 'recording';
+    readonly calls: Array<{ ctx: FactorySandboxContext; settings: Record<string, unknown> }> = [];
+    create(ctx: FactorySandboxContext, settings: Record<string, unknown>) {
+      this.calls.push({ ctx, settings });
+      return mocks.createSandbox(ctx);
+    }
+  }
+
   /**
    * A factory with ordered environment links. The session's own link
    * (`project-1`, the D1 bridge) is the position-1 repository; the fixture
@@ -3130,12 +3140,13 @@ describe('factory environment sandbox context', () => {
       ...options.project,
     };
     const projects = { get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)) };
+    const sandbox = new RecordingFactorySandbox();
     const resolver = createWorkspaceFactory({
-      sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
+      sandbox,
       github: github as any,
       projects: projects as any,
     });
-    return { resolver, projects };
+    return { resolver, projects, sandbox };
   }
 
   const twoLinks = [
@@ -3152,7 +3163,10 @@ describe('factory environment sandbox context', () => {
   ];
 
   it('builds the list-form context from every inEnvironment link in position order', async () => {
-    const { resolver } = environmentFixture({ links: [...twoLinks].reverse() });
+    const { resolver, sandbox } = environmentFixture({
+      links: [...twoLinks].reverse(),
+      project: { sandboxSettings: { cpuCount: 2, idleTimeoutMinutes: 45 } },
+    });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
 
@@ -3167,9 +3181,13 @@ describe('factory environment sandbox context', () => {
       continueOnSetupFailure: true,
       workingDirectory: '/workspace',
     });
-    // Resources are environment settings the provider reads through create(ctx, settings), never context keys.
+    // Resources are the stored settings document handed to create(ctx, settings), never context keys.
     expect('cpuCount' in ctx).toBe(false);
     expect('memoryMB' in ctx).toBe(false);
+    expect('idleTimeoutMinutes' in ctx).toBe(false);
+    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls[0]!.ctx).toBe(ctx);
+    expect(sandbox.calls[0]!.settings).toEqual({ cpuCount: 2, idleTimeoutMinutes: 45 });
     // Mutually exclusive for the template: the key is present and undefined.
     expect('getRepositoryAccess' in ctx).toBe(true);
     expect(ctx.getRepositoryAccess).toBeUndefined();
@@ -3188,7 +3206,7 @@ describe('factory environment sandbox context', () => {
   });
 
   it('passes no working directory or workspace setup when the project leaves them unset', async () => {
-    const { resolver } = environmentFixture({
+    const { resolver, sandbox } = environmentFixture({
       links: twoLinks,
       project: {
         sandboxWorkdir: '~/relative',
@@ -3205,11 +3223,14 @@ describe('factory environment sandbox context', () => {
     expect('workingDirectory' in ctx).toBe(false);
     expect('workspaceSetupCommand' in ctx).toBe(false);
     expect(ctx.repos).toHaveLength(2);
+    // No stored document: the provider receives an empty one and applies its own defaults.
+    expect(sandbox.calls[0]!.settings).toEqual({});
   });
 
   it('keeps the single-repository context when no link is in the environment or the session has no factory', async () => {
-    const { resolver } = environmentFixture({
+    const { resolver, sandbox } = environmentFixture({
       links: twoLinks.map(link => ({ ...link, inEnvironment: false })),
+      project: { sandboxSettings: { memoryMb: 4096 } },
     });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
@@ -3225,6 +3246,9 @@ describe('factory environment sandbox context', () => {
       expect('repos' in ctx).toBe(false);
       expect('cpuCount' in ctx).toBe(false);
     }
+    // The settings belong to the project: the factory session boots with them
+    // in single-repository form too; a session without a factory gets none.
+    expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);
   });
 
   describe('environment boot', () => {
