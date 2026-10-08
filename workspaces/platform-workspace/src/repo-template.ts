@@ -84,8 +84,7 @@ export interface PlatformRepoTemplateOptions {
    * `<workingDirectory>/<repo>` and runs its own `setupCommand` inside its
    * clone, with the same clone → pin → setup layering as the single form.
    * Public repositories (no `authorization`) are built before private ones in
-   * caller order within each group, so their layers can outlive credential
-   * rotation. Each repository writes `.mastra-sandbox/repos/<repo>`
+   * caller order within each group. Each repository writes `.mastra-sandbox/repos/<repo>`
    * (`setupMarkerContent` of its commands) once every step for it ran.
    *
    * Every credential is a build env visible to every build step, so any
