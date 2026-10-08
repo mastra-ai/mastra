@@ -6,6 +6,7 @@ import type { Arrivals } from './graphDiff';
 import type { KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
 import type { KnowledgeFlowNode } from './knowledgeStyles';
 import { fitKnowledgeViewport } from './knowledgeViewport';
+import { readKnowledgeDuration } from './knowledgeMotion';
 import { createKnowledgeScene, getVisibleKnowledgeIds, getKnowledgeArrivalScene } from './knowledgeScene';
 
 export function KnowledgeGraphController({
@@ -42,15 +43,20 @@ export function KnowledgeGraphController({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const visibleIds = getVisibleKnowledgeIds(payload, filters, focusedId);
-    const cameraIds = focusedId && visibleIds.has(focusedId) ? [focusedId] : [...visibleIds];
-    fitKnowledgeViewport(flow, canvas, cameraIds, Boolean(focusedId));
+    // Frame connected context together with the selected node, preserving positions.
+    fitKnowledgeViewport(flow, canvas, [...visibleIds], Boolean(focusedId));
   });
 
   // Focus and filters move the camera; polling, hovering, dragging and record
   // expansion do not. Effect Events read the latest scene without subscribing to it.
   useEffect(() => {
-    const frame = requestAnimationFrame(fitScene);
-    return () => cancelAnimationFrame(frame);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Give the context fade a brief lead before camera travel.
+    const delay = focusedId && !reducedMotion ? readKnowledgeDuration(canvas, '--duration-normal') : 0;
+    const timer = window.setTimeout(fitScene, delay);
+    return () => window.clearTimeout(timer);
   }, [focusedId, filters]);
 
   return null;

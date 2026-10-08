@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit:factory-ui",
     "test:msw": "vitest run --project msw:factory-ui",
-    "test:knowledge-performance": "vite --config src/vite.config.ts build && node --test --test-concurrency=1 e2e/browser/knowledge-click-latency.test.mjs e2e/browser/knowledge-hover.test.mjs"
+    "test:knowledge-performance": "vite --config src/vite.config.ts build && node --test --test-concurrency=1 e2e/browser/knowledge-click-latency.test.mjs e2e/browser/knowledge-hover.test.mjs e2e/browser/knowledge-focus.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",

@@ -1,9 +1,9 @@
 .knowledge-canvas,
 .knowledge-details {
-  /* A slower local composition of the design system's motion token. */
-  --knowledge-motion-scale: 2.4;
+  /* Responsive travel with a gentle landing, scoped to the knowledge view. */
+  --knowledge-motion-scale: 1.6;
   --knowledge-motion-duration: calc(var(--duration-slow) * var(--knowledge-motion-scale));
-  --knowledge-motion-ease: cubic-bezier(0.333333, 0, 0.666667, 1);
+  --knowledge-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .knowledge-canvas {
@@ -28,7 +28,7 @@
 .knowledge-canvas [data-testid='knowledge-node'],
 .knowledge-canvas [data-testid='knowledge-record-node'] {
   transition:
-    transform var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    transform var(--duration-normal) var(--knowledge-motion-ease),
     box-shadow var(--knowledge-motion-duration) var(--knowledge-motion-ease);
 }
 
@@ -93,7 +93,9 @@
   transition:
     stroke var(--knowledge-motion-duration) var(--knowledge-motion-ease),
     stroke-width var(--knowledge-motion-duration) var(--knowledge-motion-ease),
-    opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+    opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    stroke-opacity var(--duration-fast) var(--knowledge-motion-ease);
+  stroke-opacity: 1;
 }
 
 .knowledge-canvas .react-flow__edge:hover .react-flow__edge-path {
@@ -113,7 +115,7 @@
 }
 
 .knowledge-canvas .react-flow__node[data-knowledge-hidden] > [data-testid='knowledge-node'] {
-  transform: scale(0.92);
+  transform: translateY(6px);
 }
 
 .knowledge-canvas .react-flow__node[data-knowledge-focused] .knowledge-circle {
@@ -195,11 +197,56 @@
   }
 }
 
-/* Focus changes presentation, never node positions or mount identity. */
-.knowledge-canvas .react-flow__node,
+/* Fade stroke paint without allocating a large blending surface per SVG edge. */
 .knowledge-canvas .react-flow__edge,
+.knowledge-canvas .react-flow__edge[data-knowledge-hidden] {
+  opacity: 1;
+}
+
+.knowledge-canvas .react-flow__edge[data-knowledge-hidden] .react-flow__edge-path {
+  stroke-opacity: 0;
+}
+
+.knowledge-canvas .react-flow__node,
 .knowledge-canvas [data-knowledge-edge-id] {
-  transition: opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+  transition: opacity var(--duration-normal) var(--knowledge-motion-ease);
+}
+
+/* Marker paint is cheap to interpolate; hundreds of opacity layers are not. */
+.knowledge-canvas .react-flow__node-knowledgeRecord {
+  transition: none;
+}
+
+.knowledge-canvas .react-flow__node-knowledgeRecord[data-knowledge-hidden] {
+  opacity: 1;
+}
+
+.knowledge-canvas [data-testid='knowledge-record-node'] {
+  transition:
+    background-color var(--duration-fast) var(--knowledge-motion-ease),
+    border-color var(--duration-fast) var(--knowledge-motion-ease),
+    box-shadow var(--duration-fast) var(--knowledge-motion-ease),
+    transform var(--duration-normal) var(--knowledge-motion-ease);
+}
+
+.knowledge-canvas [data-testid='knowledge-record-node'] > svg {
+  transition: color var(--duration-fast) var(--knowledge-motion-ease);
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-hidden] [data-testid='knowledge-record-node'] {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-hidden] [data-testid='knowledge-record-node'] > svg {
+  color: transparent;
+}
+
+.knowledge-canvas [data-testid='knowledge-node'] {
+  transition:
+    transform var(--duration-normal) var(--knowledge-motion-ease),
+    box-shadow var(--duration-normal) var(--knowledge-motion-ease);
 }
 
 .knowledge-details {
@@ -280,8 +327,8 @@
   transform: translateY(6px) scale(0.97);
   transform-origin: top left;
   transition:
-    width calc(var(--resize-dur) * 1.6) var(--resize-ease),
-    height calc(var(--resize-dur) * 1.6) var(--resize-ease),
+    width var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease),
     transform var(--duration-slow) var(--ease-out-custom);
 }
 
@@ -304,17 +351,17 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .knowledge-hover-content {
-    animation: knowledge-hover-content-enter calc(var(--duration-slow) * 1.6) var(--ease-out-custom) both;
+    animation: knowledge-hover-content-enter var(--duration-normal) var(--knowledge-motion-ease) both;
   }
 
   .knowledge-hover-outgoing {
-    animation: knowledge-hover-content-exit var(--duration-fast) var(--ease-out-custom) both;
+    animation: knowledge-hover-content-exit calc(var(--duration-fast) * 2 / 3) var(--knowledge-motion-ease) both;
   }
 
   .knowledge-hover:not([data-state='open']) .knowledge-hover-content {
     opacity: 0;
-    filter: blur(4px);
-    transform: translateY(4px);
+    filter: blur(3px);
+    transform: translateY(3px);
     animation: none;
     transition:
       opacity var(--duration-normal) var(--ease-out-custom),
@@ -338,8 +385,8 @@
 @keyframes knowledge-hover-content-enter {
   from {
     opacity: 0;
-    filter: blur(4px);
-    transform: translateY(4px);
+    filter: blur(3px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -356,7 +403,7 @@
   }
   to {
     opacity: 0;
-    filter: blur(4px);
-    transform: translateY(-4px);
+    filter: blur(3px);
+    transform: translateY(-3px);
   }
 }

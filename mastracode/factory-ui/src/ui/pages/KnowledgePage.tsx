@@ -136,7 +136,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(
       () => setSelected(null),
-      (surface ? getKnowledgeMotionDuration(surface) : 720) + 100,
+      (surface ? getKnowledgeMotionDuration(surface) : 480) + 100,
     );
   };
   useEffect(() => () => clearTimeout(closeTimer.current), []);

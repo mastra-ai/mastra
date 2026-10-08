@@ -2,14 +2,12 @@ import { getViewportForBounds } from '@xyflow/react';
 import type { FitViewOptions, ReactFlowInstance } from '@xyflow/react';
 import type { KnowledgeFlowEdge } from './graphModel';
 import type { KnowledgeFlowNode } from './knowledgeStyles';
+import { easeKnowledgeMotion, readKnowledgeDuration } from './knowledgeMotion';
 
 export function getKnowledgeMotionDuration(canvas: HTMLElement): number {
   const style = getComputedStyle(canvas);
-  const token = style.getPropertyValue('--duration-slow').trim();
-  const value = parseFloat(token);
-  // Production CSS minification can normalize 300ms to .3s.
-  const duration = Number.isFinite(value) ? value * (token.endsWith('ms') ? 1 : 1000) : 300;
-  const scale = parseFloat(style.getPropertyValue('--knowledge-motion-scale')) || 2.4;
+  const duration = readKnowledgeDuration(canvas, '--duration-slow');
+  const scale = parseFloat(style.getPropertyValue('--knowledge-motion-scale')) || 1.6;
   return duration * scale;
 }
 
@@ -26,8 +24,7 @@ export function getKnowledgeFitOptions(canvas: HTMLElement, focused: boolean): F
     },
     maxZoom: focused ? 1.4 : 1,
     duration: reducedMotion ? 0 : getKnowledgeMotionDuration(canvas),
-    // Match the CSS smoothstep curve, without zooming away before approaching.
-    ease: progress => progress * progress * (3 - 2 * progress),
+    ease: easeKnowledgeMotion,
     interpolate: 'linear',
   };
 }

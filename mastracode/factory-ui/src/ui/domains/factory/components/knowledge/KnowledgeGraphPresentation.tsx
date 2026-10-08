@@ -50,9 +50,23 @@ export function KnowledgeGraphPresentation({
     });
     const finishFade = (event: TransitionEvent) => {
       const element = event.target;
+      if (event.propertyName === 'stroke-opacity' && element instanceof SVGElement) {
+        const edge = element.closest('.react-flow__edge');
+        if (edge?.hasAttribute('data-knowledge-hidden')) edge.setAttribute('data-knowledge-hidden-settled', '');
+        return;
+      }
+      if (
+        event.propertyName === 'background-color' &&
+        element instanceof HTMLElement &&
+        element.matches("[data-testid='knowledge-record-node']")
+      ) {
+        const record = element.closest('.react-flow__node');
+        if (record?.hasAttribute('data-knowledge-hidden')) record.setAttribute('data-knowledge-hidden-settled', '');
+        return;
+      }
       if (
         event.propertyName === 'opacity' &&
-        element instanceof Element &&
+        element instanceof HTMLElement &&
         element.matches(ELEMENTS) &&
         element.hasAttribute('data-knowledge-hidden')
       )
@@ -62,8 +76,8 @@ export function KnowledgeGraphPresentation({
     observer.observe(canvas, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
-      cancelPresentation.current?.();
       canvas.removeEventListener('transitionend', finishFade);
+      cancelPresentation.current?.();
     };
   }, [canvasRef]);
   return null;

@@ -19,8 +19,8 @@ export function KnowledgeGraphControls({
   function fitView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const cameraIds = focusedId && visibleIds.has(focusedId) ? [focusedId] : [...visibleIds];
-    fitKnowledgeViewport(flow, canvas, cameraIds, Boolean(focusedId));
+    // Frame connected context together with the selected node, preserving positions.
+    fitKnowledgeViewport(flow, canvas, [...visibleIds], Boolean(focusedId));
   }
   return (
     <Controls position="bottom-right" showInteractive={false} showFitView={false}>
