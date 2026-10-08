@@ -53,9 +53,7 @@ describe('FactoryProjectsStorage', () => {
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
     expect(project).toMatchObject({
       sandboxWorkdir: null,
-      sandboxCpuCount: null,
-      sandboxMemoryMb: null,
-      sandboxIdleTimeoutMinutes: null,
+      sandboxSettings: null,
       workspaceSetupCommand: null,
       activeTemplateId: null,
       activeTemplateHeads: null,
@@ -63,9 +61,7 @@ describe('FactoryProjectsStorage', () => {
 
     const environment = {
       sandboxWorkdir: '/home/user/workspace',
-      sandboxCpuCount: 8,
-      sandboxMemoryMb: 16384,
-      sandboxIdleTimeoutMinutes: 30,
+      sandboxSettings: { cpuCount: 8, memoryMb: 16384 },
       workspaceSetupCommand: 'touch .ready',
       activeTemplateId: 'tpl-1',
       activeTemplateHeads: { 'mastra-ai/mastra': 'abc123' },
@@ -77,9 +73,7 @@ describe('FactoryProjectsStorage', () => {
 
     const cleared = {
       sandboxWorkdir: null,
-      sandboxCpuCount: null,
-      sandboxMemoryMb: null,
-      sandboxIdleTimeoutMinutes: null,
+      sandboxSettings: null,
       workspaceSetupCommand: null,
       activeTemplateId: null,
       activeTemplateHeads: null,

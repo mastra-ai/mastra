@@ -77,12 +77,22 @@ const environmentRepositorySchema = z.object({
   lastBuiltAt: z.string().nullable(),
 });
 
+/** The configured FactorySandbox as factory describes it: provider id, JSON Schema of its settings, capabilities. */
+export const environmentSandboxSchema = z.object({
+  provider: z.string(),
+  settingsSchema: z.record(z.string(), z.unknown()),
+  capabilities: z.object({
+    template: z.boolean(),
+    builds: z.object({ available: z.boolean(), history: z.boolean() }),
+  }),
+});
+
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
+    sandbox: environmentSandboxSchema,
+    /** The stored settings document; only keys the user set. */
+    settings: z.record(z.string(), z.unknown()),
     sandboxWorkdir: z.string().nullable(),
-    sandboxCpuCount: z.number().int().nullable(),
-    sandboxMemoryMb: z.number().int().nullable(),
-    sandboxIdleTimeoutMinutes: z.number().int().nullable(),
     workspaceSetupCommand: z.string().nullable(),
     activeTemplateId: z.string().nullable(),
     activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
@@ -103,10 +113,8 @@ export const updateProjectEnvironmentBodySchema = z
     sandboxWorkdir: nullableTrimmed(1_000)
       .refine(value => value === null || value.startsWith('/'), { message: 'sandboxWorkdir must be absolute' })
       .optional(),
-    // Never null: the backfill reads a null cpu as "not yet backfilled".
-    sandboxCpuCount: z.number().int().min(1).max(64).nullable().optional(),
-    sandboxMemoryMb: z.number().int().min(512).max(65_536).nullable().optional(),
-    sandboxIdleTimeoutMinutes: z.number().int().min(1).max(1_440).nullable().optional(),
+    /** Partial settings merged onto the stored document; null removes a key. Validated by the FactorySandbox. */
+    settings: z.record(z.string(), z.unknown().nullable()).optional(),
     workspaceSetupCommand: nullableTrimmed(2_000).optional(),
     repositories: z
       .array(environmentRepositoryPatchSchema)

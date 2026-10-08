@@ -242,10 +242,8 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "repositories",
-      "sandboxCpuCount",
-      "sandboxIdleTimeoutMinutes",
-      "sandboxMemoryMb",
       "sandboxWorkdir",
+      "settings",
       "workspaceSetupCommand"
     ],
     "hasQuery": false,
@@ -963,46 +961,64 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "environment": {
           "type": "object",
           "properties": {
+            "sandbox": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "settingsSchema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "type": "boolean"
+                    },
+                    "builds": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "history": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "history"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "template",
+                    "builds"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "settingsSchema",
+                "capabilities"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
             "sandboxWorkdir": {
               "type": [
                 "string",
                 "null"
-              ]
-            },
-            "sandboxCpuCount": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "sandboxMemoryMb": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "sandboxIdleTimeoutMinutes": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                {
-                  "type": "null"
-                }
               ]
             },
             "workspaceSetupCommand": {
@@ -1118,10 +1134,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           },
           "required": [
+            "sandbox",
+            "settings",
             "sandboxWorkdir",
-            "sandboxCpuCount",
-            "sandboxMemoryMb",
-            "sandboxIdleTimeoutMinutes",
             "workspaceSetupCommand",
             "activeTemplateId",
             "activeTemplateHeads",
@@ -1419,20 +1434,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "sandboxWorkdir": {
           "$ref": "#/$defs/__schema0"
         },
-        "sandboxCpuCount": {
+        "settings": {
           "$ref": "#/$defs/__schema3"
         },
-        "sandboxMemoryMb": {
+        "workspaceSetupCommand": {
           "$ref": "#/$defs/__schema4"
         },
-        "sandboxIdleTimeoutMinutes": {
-          "$ref": "#/$defs/__schema5"
-        },
-        "workspaceSetupCommand": {
-          "$ref": "#/$defs/__schema6"
-        },
         "repositories": {
-          "$ref": "#/$defs/__schema7"
+          "$ref": "#/$defs/__schema5"
         }
       },
       "$defs": {
@@ -1454,42 +1463,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "null"
         },
         "__schema3": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 64
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          }
         },
         "__schema4": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 512,
-              "maximum": 65536
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "__schema5": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 1440
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "__schema6": {
           "anyOf": [
             {
               "type": "string",
@@ -1500,14 +1487,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema7": {
+        "__schema5": {
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema8"
+            "$ref": "#/$defs/__schema6"
           }
         },
-        "__schema8": {
+        "__schema6": {
           "type": "object",
           "properties": {
             "projectRepositoryId": {
@@ -1558,46 +1545,64 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "environment": {
           "type": "object",
           "properties": {
+            "sandbox": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "settingsSchema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "type": "boolean"
+                    },
+                    "builds": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "history": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "available",
+                        "history"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "template",
+                    "builds"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "settingsSchema",
+                "capabilities"
+              ]
+            },
+            "settings": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
             "sandboxWorkdir": {
               "type": [
                 "string",
                 "null"
-              ]
-            },
-            "sandboxCpuCount": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "sandboxMemoryMb": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "sandboxIdleTimeoutMinutes": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                {
-                  "type": "null"
-                }
               ]
             },
             "workspaceSetupCommand": {
@@ -1713,10 +1718,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           },
           "required": [
+            "sandbox",
+            "settings",
             "sandboxWorkdir",
-            "sandboxCpuCount",
-            "sandboxMemoryMb",
-            "sandboxIdleTimeoutMinutes",
             "workspaceSetupCommand",
             "activeTemplateId",
             "activeTemplateHeads",

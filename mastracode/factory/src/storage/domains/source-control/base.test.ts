@@ -619,8 +619,7 @@ describe('SourceControlStorage', () => {
       expect(await linkRow(fourth.id)).toMatchObject({ position: 4, in_environment: false });
       expect(await projects.getById({ id: project.id })).toMatchObject({
         sandboxWorkdir: '/workspace/oldest',
-        sandboxCpuCount: null,
-        sandboxMemoryMb: null,
+        sandboxSettings: null,
       });
     });
 
@@ -648,9 +647,7 @@ describe('SourceControlStorage', () => {
       const withoutLink = await createProject({ name: 'without link' });
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
         sandboxWorkdir: null,
-        sandboxCpuCount: null,
-        sandboxMemoryMb: null,
-        sandboxIdleTimeoutMinutes: null,
+        sandboxSettings: null,
         workspaceSetupCommand: null,
         activeTemplateId: null,
         activeTemplateHeads: null,
@@ -667,13 +664,11 @@ describe('SourceControlStorage', () => {
 
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
         sandboxWorkdir: '/workspace/linked',
-        sandboxCpuCount: null,
-        sandboxMemoryMb: null,
+        sandboxSettings: null,
       });
       expect(await projects.getById({ id: withoutLink.id })).toMatchObject({
         sandboxWorkdir: null,
-        sandboxCpuCount: null,
-        sandboxMemoryMb: null,
+        sandboxSettings: null,
       });
     });
 
@@ -693,7 +688,7 @@ describe('SourceControlStorage', () => {
 
         await Promise.all([sourceControl.init(), projectsDomain.init()]);
         const created = await projectsDomain.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Late' } });
-        expect(created.sandboxCpuCount).toBeNull();
+        expect(created.sandboxSettings).toBeNull();
       } finally {
         await fresh.close();
       }
@@ -704,14 +699,14 @@ describe('SourceControlStorage', () => {
       await domain.init();
       await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxWorkdir: '/workspace/custom' } });
       await gitlab.projectRepositories.update({ orgId: 'org-1', id: second.id, input: { inEnvironment: true } });
-      await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxCpuCount: 2 } });
+      await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 2 } } });
       await backend.ops.updateMany('factory_projects', { id: project.id }, { environment_backfilled_at: null });
 
       await domain.init();
 
       expect(await projects.getById({ id: project.id })).toMatchObject({
         sandboxWorkdir: '/workspace/custom',
-        sandboxCpuCount: 2,
+        sandboxSettings: { cpuCount: 2 },
       });
       expect(await gitlab.projectRepositories.get({ orgId: 'org-1', id: second.id })).toMatchObject({
         position: 2,

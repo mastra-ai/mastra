@@ -487,14 +487,19 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('environment')
     .description('Manage a Factory project sandbox environment');
   addAction(factoryEnvironment, 'get', FACTORY_API_ROUTE_CATALOG.projectEnvironmentGet, {
-    description: 'Get the sandbox environment of a Factory project: resources and its repositories in order',
+    description: 'Get the sandbox environment of a Factory project: provider settings and its repositories in order',
     routePlacement: 'origin',
   });
   addAction(factoryEnvironment, 'update', FACTORY_API_ROUTE_CATALOG.projectEnvironmentUpdate, {
-    description: 'Update the sandbox environment of a Factory project: resources, repository order and setup',
+    description: 'Update the sandbox environment of a Factory project: provider settings, repository order and setup',
     input: 'required',
     routePlacement: 'origin',
     examples: [
+      {
+        description:
+          'Set a provider setting; the settings object is merged onto the stored document and null removes a key',
+        command: `mastra api factory project environment update <project-id> '{"settings":{"cpuCount":2}}'`,
+      },
       {
         description: 'Set the command that runs once in the workspace root after every repository is set up',
         command: `mastra api factory project environment update <project-id> '{"workspaceSetupCommand":"pnpm -r build"}'`,
