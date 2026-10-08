@@ -27,7 +27,7 @@ describe('OnboardingInlineComponent full-screen layout', () => {
     expect(lines.every(line => line.length === 100)).toBe(true);
     const text = lines.join('\n');
     expect(text).toContain('⣴⣾⣿⣷⣦');
-    expect(text).toMatch(/● Welcome {3}○ Sign in {3}○ Models {3}○ Memory {3}○ Approval/);
+    expect(text).toMatch(/● Welcome {3}○ Sign in {3}○ Models {3}○ Approval/);
     expect(text).toContain('Welcome to Mastra Code');
     expect(text).not.toContain('👋');
     // Centered: the step indicator starts well away from the left edge.
