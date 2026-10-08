@@ -10,8 +10,13 @@ import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
+  noRootDurationCapabilities,
+  traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
+  traceQueryFieldsWithTags,
+  traceQueryTagValues,
+  traceQueryWithoutDiscoveryCapabilities,
   traceQueryPage,
   traceQueryRegionValues,
   traceQuerySpanModelValues,
@@ -875,9 +880,14 @@ describe('Traces page filter bar', () => {
     });
   });
 
-  describe('when the URL carries filterTraceId, filterEnvironment and a legacy filterTags', () => {
-    it('renders one chip per query-supported filter in URL order, ignoring tags', async () => {
+  describe('when the URL carries filterTraceId, filterTags and filterEnvironment', () => {
+    it('renders one chip per filter in URL order, including tags', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+      );
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
       await waitFor(() => {
@@ -885,10 +895,58 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      // Tags cannot be filtered by the trace query API, so no chip advertises them.
+      const chips = Array.from(getFilterChips(), chip => chip.textContent).slice(1);
+      expect(chips).toHaveLength(3);
+      expect(chips[0]).toBe('Trace IDistrace-a');
+      expect(chips[1]).toContain('Tags');
+      expect(chips[1]).toContain('alpha');
+      expect(chips[2]).toBe('Environmentisprod');
+    });
+
+    it('sends the tag as an includes predicate to the trace query API', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+      );
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      renderPage('/traces?filterTags=alpha');
+
+      await waitFor(() => expect(JSON.stringify(bodies)).toContain('{"op":"includes","path":"tags","value":"alpha"}'));
+    });
+  });
+
+  describe('when the URL gives the feedback comment a text value', () => {
+    it('keeps the chip and sends the comment predicate', async () => {
+      const bodies: unknown[] = [];
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          bodies.push(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?filterFeedbackComment=wrong%20answer');
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(JSON.stringify(bodies)).toContain(
+        '{"op":"eq","left":{"path":"comment"},"right":{"literal":"wrong answer"}}',
+      );
+      expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
       expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
-        'Trace IDistrace-a',
-        'Environmentisprod',
+        'Feedback commentiswrong answer',
       ]);
     });
   });
@@ -1131,6 +1189,113 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the server declares traceQueryRootDuration', () => {
+    const renderRootDuration = async (entry = '/traces') => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry);
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+      return { onQuery, queryClient };
+    };
+    const rootGt = (literal: number) => JSON.stringify({ op: 'gt', left: { path: 'durationMs' }, right: { literal } });
+
+    it('sends a top-level durationMs predicate for filterDurationMs=1000 with gt', async () => {
+      const { onQuery } = await renderRootDuration('/traces?filterDurationMs=1000&filterDurationMs.op=gt');
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(rootGt(1000));
+      expect(body).not.toContain('"spans"');
+    });
+
+    it('offers Duration (ms) in the field step', async () => {
+      await renderRootDuration();
+
+      focusFilterInput();
+      expect(await screen.findByRole('option', { name: 'Duration (ms)' })).toBeTruthy();
+    });
+
+    it('writes the filter to the URL and queries it when the user picks Duration (ms) › greater than › 2000', async () => {
+      const { onQuery, queryClient } = await renderRootDuration();
+
+      focusFilterInput();
+      typeInFilter('Duration (ms)');
+      await screen.findByRole('option', { name: 'Duration (ms)' });
+      pressInFilter('Enter');
+      typeInFilter('greater than');
+      await screen.findByRole('option', { name: 'greater than' });
+      pressInFilter('Enter');
+      typeInFilter('2000');
+      pressInFilter('Enter');
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toContain('filterDurationMs=2000&filterDurationMs.op=gt'),
+      );
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(rootGt(2000));
+    });
+  });
+
+  describe('when the server does not declare traceQueryRootDuration', () => {
+    const renderWithoutRootDuration = async (entry = '/traces') => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(noRootDurationCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry);
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+      return onQuery;
+    };
+
+    it('does not offer Duration (ms) in the field step', async () => {
+      await renderWithoutRootDuration();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Duration (ms)' })).toBeNull();
+    });
+
+    it('sends no durationMs predicate for a filterDurationMs URL param', async () => {
+      const onQuery = await renderWithoutRootDuration('/traces?filterDurationMs=1000&filterDurationMs.op=gt');
+
+      expect(onQuery).toHaveBeenCalled();
+      expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).not.toContain('durationMs');
+    });
+
+    it('drops durationMs conditions from a filterGroup and keeps the rest of the group', async () => {
+      const group = {
+        id: 'g1',
+        logic: 'or',
+        nodes: [
+          { id: 'n1', fieldId: 'durationMs', value: '1000', operatorId: 'gt' },
+          { id: 'n2', fieldId: 'status', value: 'error' },
+        ],
+      };
+      const onQuery = await renderWithoutRootDuration(
+        `/traces?filterGroup=${encodeURIComponent(JSON.stringify(group))}`,
+      );
+
+      expect(onQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+        where: { op: 'and', args: [{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }] },
+      });
+    });
+  });
+
   describe('when the URL carries filterSpanError with the exists operator', () => {
     const renderExists = async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
@@ -1247,6 +1412,62 @@ describe('Traces page filter bar', () => {
       expect(screen.queryByRole('option', { name: 'Primitive name' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
+    });
+  });
+});
+
+describe('Agent traces page opened from a conversation', () => {
+  const SAVED_FILTERS_KEY = 'mastra:traces:saved-filters:agent:weather-agent';
+
+  const renderFromConversation = async () => {
+    setTracePageHandlers(metricsCapableCapabilities);
+    const result = renderPage('/agents/weather-agent/traces?filterThreadId=thread-1', {
+      scopedEntityId: 'weather-agent',
+      scopedEntityType: EntityType.AGENT,
+    });
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(result.queryClient.isFetching()).toBe(0);
+    });
+    return result;
+  };
+
+  describe('when the agent has saved filters', () => {
+    it('shows only the conversation filter as a removable chip', async () => {
+      window.localStorage.setItem(SAVED_FILTERS_KEY, 'status=error');
+      await renderFromConversation();
+
+      const chips = [...getFilterChips()].slice(1);
+      expect(chips.map(chip => chip.textContent)).toEqual(['Thread IDisthread-1']);
+      expect(within(chips[0]!).getByRole('button', { name: /remove/i })).toBeTruthy();
+      expect(screen.getByTestId('location').textContent).not.toContain('status=');
+    });
+  });
+
+  describe('when the user removes the conversation filter', () => {
+    it('lists all of the agent traces', async () => {
+      await renderFromConversation();
+
+      fireEvent.click(within([...getFilterChips()][1]!).getByRole('button', { name: /remove/i }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterThreadId'));
+      expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
+    });
+  });
+
+  describe('when the user changes another filter', () => {
+    it('does not remember the conversation for the next visit', async () => {
+      await renderFromConversation();
+
+      fireEvent.click(within([...getFilterChips()][0]!).getByRole('button', { name: 'Value: Last 7 days' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
+      const saved = window.localStorage.getItem(SAVED_FILTERS_KEY) ?? '';
+      expect(saved).toContain('datePreset=last-24h');
+      expect(saved).not.toContain('filterThreadId');
+      expect(screen.getByTestId('location').textContent).toContain('filterThreadId=thread-1');
     });
   });
 });
@@ -1475,6 +1696,80 @@ describe('Traces side panel span search', () => {
 
       await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
       expect(screen.getByText('weather tool')).toBeTruthy();
+    });
+  });
+});
+
+describe('Traces page tags filter', () => {
+  const renderAndSettle = async (path = '/traces') => {
+    const { queryClient } = renderPage(path);
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
+  };
+
+  describe('when the store supports trace query and discovery describes tags', () => {
+    it('offers Tags in the field step', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+      );
+      await renderAndSettle();
+
+      focusFilterInput();
+      expect(await screen.findByRole('option', { name: 'Tags' })).toBeTruthy();
+    });
+
+    it('suggests the tag values the store knows about', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () =>
+          HttpResponse.json(traceQueryFieldsWithTags),
+        ),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/values`, () =>
+          HttpResponse.json(traceQueryTagValues),
+        ),
+      );
+      await renderAndSettle();
+
+      focusFilterInput();
+      fireEvent.click(await screen.findByRole('option', { name: 'Tags' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'is any of' }));
+      expect(await screen.findByRole('option', { name: 'production' })).toBeTruthy();
+      expect(screen.getByRole('option', { name: 'manual-review' })).toBeTruthy();
+    });
+  });
+
+  describe('when the store supports trace query but not discovery', () => {
+    it('never calls the fields endpoint and does not offer Tags', async () => {
+      let fieldRequests = 0;
+      setTracePageHandlers(traceQueryWithoutDiscoveryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () => {
+          fieldRequests++;
+          return HttpResponse.json(traceQueryFieldsWithTags);
+        }),
+      );
+      await renderAndSettle();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Tags' })).toBeNull();
+      expect(fieldRequests).toBe(0);
+    });
+  });
+
+  describe('when the store only supports the legacy list', () => {
+    it('does not offer Tags', async () => {
+      setTracePageHandlers(legacyTraceCapabilities);
+      await renderAndSettle();
+
+      focusFilterInput();
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Tags' })).toBeNull();
     });
   });
 });

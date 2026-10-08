@@ -334,6 +334,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           const abortMessage = abortSignal?.aborted
             ? 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
+          // A tripwire skips output processors, so end the turn here to save the user message and
+          // finished steps. The step that failed never reached the model, so nothing blocked is saved.
+          const failedTurn = this.turn;
+          await failedTurn.end().catch(() => {});
+          if (this.turn === failedTurn) {
+            this.turn = undefined;
+          }
+          state.__omTurn = undefined;
           if (typeof abort === 'function') {
             abort(abortMessage);
           }

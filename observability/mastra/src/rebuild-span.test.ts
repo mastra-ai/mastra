@@ -35,6 +35,23 @@ describe('rebuildSpan internal status', () => {
     expect(await ended()).toEqual([]);
   });
 
+  it('keeps a nested run nested after export/rebuild', () => {
+    const { tracing } = setup();
+    const span = tracing.startSpan({
+      type: SpanType.WORKFLOW_RUN,
+      name: 'nested',
+      tracingOptions: {
+        traceId: '0123456789abcdef0123456789abcdef',
+        parentSpanId: '0123456789abcdef',
+        nestUnderParent: true,
+      },
+    });
+    const rebuilt = tracing.rebuildSpan(JSON.parse(JSON.stringify(span.exportSpan())));
+    expect(rebuilt.exportSpan()?.nestedUnderParent).toBe(true);
+    expect(rebuilt.exportSpan()?.externalParentSpanId).toBe('0123456789abcdef');
+    rebuilt.end();
+  });
+
   it('leaves non-internal spans unchanged', async () => {
     const { tracing, agent, ended } = setup();
     const span = tracing.startSpan({ type: SpanType.WORKFLOW_STEP, name: 'normal', parent: agent });

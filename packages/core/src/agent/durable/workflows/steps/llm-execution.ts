@@ -28,14 +28,14 @@ import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic
 import type { Mastra } from '../../../../mastra';
 import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import { getRootExportSpan } from '../../../../observability/utils';
+import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
-import { execute } from '../../../../stream/aisdk/v5/execute';
+import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
@@ -57,6 +57,7 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { durableOptionsSchema } from '../shared/schemas';
 
 /**
@@ -150,7 +151,8 @@ const durableLLMInputSchema = z.object({
  * validation is ever (re-)enabled — declare new output fields here.
  */
 const durableLLMOutputSchema = z.object({
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
   text: z.string().optional(),
   // Element shape mirrors DurableToolCallInput / the tool-call step's input schema.
   toolCalls: z.array(
@@ -232,7 +234,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         mastra: mastra as Mastra,
         runId,
         agentId,
-        input: typedInput,
+        input: { ...typedInput, messageListState: readMessageListState(params.state, typedInput) },
         requestContext,
         logger,
       });
@@ -311,7 +313,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
 
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           text: '',
           toolCalls: [],
           stepResult: {
@@ -341,7 +343,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           return emitFatalErrorBail(earlyTimeout, typedInput.modelConfig?.modelId ?? 'unknown');
         }
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           text: '',
           toolCalls: [],
           stepResult: {
@@ -387,7 +389,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
 
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           text: '',
           toolCalls: [],
           stepResult: {
@@ -757,7 +759,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // predicate will see isContinued: false and stop the loop,
                   // then emitFinishEvent will emit reason: 'tripwire'.
                   return {
-                    messageListState: messageList.serialize(),
+                    ...(await storeMessageListState(params, messageList.serialize())),
                     text: '',
                     toolCalls: [],
                     stepResult: {
@@ -910,7 +912,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     });
                   }
                   return {
-                    messageListState: messageList.serialize(),
+                    ...(await storeMessageListState(params, messageList.serialize())),
                     text: '',
                     toolCalls: [],
                     stepResult: {
@@ -1144,6 +1146,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   toolChoice: currentToolChoice,
                   activeTools: currentActiveTools,
                   specificationVersion: currentModel.specificationVersion,
+                  stripToolsWhenNone: sendsNativeResponseFormat(structuredOutput, currentModel),
                 })
               : undefined;
             modelSpanTracker?.setInferenceContext?.({
@@ -1254,42 +1257,51 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const releaseModelCallActivity = markRunActive(runId);
               try {
                 inferenceStartedAt = Date.now();
-                modelResult = execute({
-                  runId,
-                  model: currentModel,
-                  providerOptions: currentProviderOptions,
-                  inputMessages,
-                  tools: currentTools,
-                  toolChoice: currentToolChoice,
-                  activeTools: currentActiveTools,
-                  options: { abortSignal: executionAbortSignal },
-                  headers: mergeLlmCallHeaders({
-                    memoryHeaders: buildMemoryHeaders({
-                      threadId: typedInput.state?.threadId,
-                      resourceId: typedInput.state?.resourceId,
+                modelResult = executeWithContextSync({
+                  span: modelSpanTracker?.getTracingContext()?.currentSpan,
+                  fn: () =>
+                    execute({
+                      runId,
+                      model: currentModel,
+                      providerOptions: currentProviderOptions,
+                      inputMessages,
+                      tools: currentTools,
+                      toolChoice: currentToolChoice,
+                      activeTools: currentActiveTools,
+                      options: { abortSignal: executionAbortSignal },
+                      headers: mergeLlmCallHeaders({
+                        memoryHeaders: buildMemoryHeaders({
+                          threadId: typedInput.state?.threadId,
+                          resourceId: typedInput.state?.resourceId,
+                        }),
+                        modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
+                        callTimeHeaders:
+                          registryEntry?.callTimeHeaders || currentModelSettings?.headers
+                            ? {
+                                ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                                ...(currentModelSettings?.headers as Record<string, string> | undefined),
+                              }
+                            : undefined,
+                      }),
+                      modelSettings: {
+                        ...currentModelSettings,
+                        maxRetries: 0,
+                      },
+                      includeRawChunks: execOptions.includeRawChunks,
+                      methodType: 'stream',
+                      structuredOutput: structuredOutput as any,
+                      onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
+                        warnings = w || [];
+                        request = r || {};
+                        rawResponse = rr || {};
+                        modelSpanTracker?.updateStep?.({
+                          request,
+                          inputMessages,
+                          warnings,
+                          messageId: currentMessageId,
+                        });
+                      },
                     }),
-                    modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
-                    callTimeHeaders:
-                      registryEntry?.callTimeHeaders || currentModelSettings?.headers
-                        ? {
-                            ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
-                            ...(currentModelSettings?.headers as Record<string, string> | undefined),
-                          }
-                        : undefined,
-                  }),
-                  modelSettings: {
-                    ...currentModelSettings,
-                    maxRetries: 0,
-                  },
-                  includeRawChunks: execOptions.includeRawChunks,
-                  methodType: 'stream',
-                  structuredOutput: structuredOutput as any,
-                  onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
-                    warnings = w || [];
-                    request = r || {};
-                    rawResponse = rr || {};
-                    modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
-                  },
                 });
               } finally {
                 releaseModelCallActivity();
@@ -1958,7 +1970,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // isContinued: false and stop the loop. The FINISH event
                 // (emitted by the finalization block) will carry reason: 'abort'.
                 return {
-                  messageListState: messageList.serialize(),
+                  ...(await storeMessageListState(params, messageList.serialize())),
                   text: textDeltas.join(''),
                   toolCalls: [],
                   stepResult: {
@@ -2042,7 +2054,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // Persist already-streamed partial output (#22593).
                 materializeStreamedMessages();
                 return {
-                  messageListState: messageList.serialize(),
+                  ...(await storeMessageListState(params, messageList.serialize())),
                   text: textDeltas.join(''),
                   toolCalls: [],
                   stepResult: {
@@ -2080,7 +2092,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 });
               }
               return {
-                messageListState: messageList.serialize(),
+                ...(await storeMessageListState(params, messageList.serialize())),
                 text: textDeltas.join(''),
                 toolCalls: [],
                 stepResult: {
@@ -2139,7 +2151,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     });
                   }
                   return {
-                    messageListState: messageList.serialize(),
+                    ...(await storeMessageListState(params, messageList.serialize())),
                     text: textDeltas.join(''),
                     toolCalls: [],
                     stepResult: {
@@ -2249,8 +2261,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               processorRetryCount < typedInput.options.maxProcessorRetries;
             const shouldRetry = retryRequested && canRetry;
 
-            // Remove the rejected response so the retry doesn't send it back to the model.
-            if (shouldRetry) {
+            // Remove the rejected response so the retry doesn't send it back to the model, and
+            // so a rejection that ends the run isn't persisted or returned (issue #26048).
+            if (processOutputStepTripwire) {
               messageList.rollbackToStepBoundary(materializationMessageId);
             }
 
@@ -2321,7 +2334,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 15. Build output
             const output: DurableLLMStepOutput = {
-              messageListState: messageList.serialize(),
+              ...(await storeMessageListState(params, messageList.serialize())),
               text: textDeltas.join(''),
               // A rejected response's tool calls never run.
               toolCalls: processOutputStepTripwire ? [] : toolCalls,
@@ -2420,7 +2433,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // land here without passing through the inner catch.
               materializeStreamedMessages?.();
               return {
-                messageListState: messageList.serialize(),
+                ...(await storeMessageListState(params, messageList.serialize())),
                 text: textDeltas.join(''),
                 toolCalls: [],
                 stepResult: {

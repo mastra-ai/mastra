@@ -1172,6 +1172,48 @@ describe('createMastraCode', () => {
     expect(updateThreadPeerAdvertisementMock).toHaveBeenCalledTimes(2);
   });
 
+  it('releases every live session thread claim on releaseThreadClaims without deleting the session', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    const result = await createMastraCode({ crossAgentSignals: true });
+
+    const onSessionCreatedListeners = controllerOnSessionCreatedMock.mock.calls.map(
+      call => call[0] as (session: any) => void | Promise<void>,
+    );
+    const unsubscribeSessionEvents = vi.fn();
+    const unsubscribeClaims = [vi.fn(), vi.fn()];
+    claimThreadOwnershipMock
+      .mockResolvedValueOnce({ claimed: true, unsubscribe: unsubscribeClaims[0] })
+      .mockResolvedValueOnce({ claimed: true, unsubscribe: unsubscribeClaims[1] });
+    let handleSessionEvent: ((event: any) => void) | undefined;
+    const session = {
+      subscribe: (handler: (event: any) => void) => {
+        handleSessionEvent = handler;
+        return unsubscribeSessionEvents;
+      },
+      identity: { getResourceId: () => 'project-resource' },
+      machinery: { buildStreamOptions: vi.fn(async () => ({})) },
+      thread: {
+        getId: () => 'thread-1',
+        getById: vi.fn(async ({ threadId }: { threadId: string }) => ({ id: threadId })),
+      },
+    };
+    for (const listener of onSessionCreatedListeners) await listener(session);
+    // A thread the session moved away from stays claimed until shutdown.
+    handleSessionEvent!({ type: 'thread_changed', threadId: 'thread-2' });
+    await vi.waitFor(() => expect(claimThreadOwnershipMock).toHaveBeenCalledTimes(2));
+
+    expect(unsubscribeClaims[0]).not.toHaveBeenCalled();
+    result.releaseThreadClaims();
+
+    expect(unsubscribeClaims[0]).toHaveBeenCalledOnce();
+    expect(unsubscribeClaims[1]).toHaveBeenCalledOnce();
+    expect(unsubscribeSessionEvents).toHaveBeenCalledOnce();
+    // Idempotent: shutdown paths may call it more than once.
+    result.releaseThreadClaims();
+    expect(unsubscribeClaims[0]).toHaveBeenCalledOnce();
+  });
+
   it('omits cross-agent signals unless experimental cross-agent communication is enabled', async () => {
     const { AgentConnectionsSignalProvider } = await import('../agent-connections/signal-provider.js');
     const { createMastraCode } = await import('../index.js');

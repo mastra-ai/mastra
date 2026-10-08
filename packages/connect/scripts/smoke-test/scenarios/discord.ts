@@ -38,6 +38,7 @@ export const discordScenario: Scenario = {
           ['discord_list_channels', { guild_id: guild.id }],
           ['discord_list_roles', { guild_id: guild.id }],
           ['discord_list_guild_members', { guild_id: guild.id, limit: 5 }],
+          ['discord_search_members', { guild_id: guild.id, query: 'a', limit: 5 }],
         ],
         tools,
       )),
