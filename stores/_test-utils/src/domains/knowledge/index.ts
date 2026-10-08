@@ -1195,5 +1195,27 @@ export function createKnowledgeStorageTests(
         accessEpoch: 1,
       });
     });
+
+    it('claims semantic outbox entries for a document only after its earlier entries complete', async () => {
+      const node = await store.createNode({ name: 'Rescoped subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({ node, text: 'Moves scopes', scopeIds: [PROJECT_SCOPE_ID] });
+      const now = new Date(Date.now() + 60_000);
+      for (let claimed; (claimed = await store.claimSemanticOutbox({ workerId: 'drain', limit: 1000, now })).length;)
+        await store.completeSemanticOutbox({ ids: claimed.map(entry => entry.id), workerId: 'drain' });
+
+      await store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [OTHER_SCOPE_ID] });
+      const documentId = knowledgeSemanticDocumentId('record', record.id);
+      const claimFor = async (workerId: string) =>
+        (await store.claimSemanticOutbox({ workerId, limit: 100, now })).filter(
+          entry => entry.documentId === documentId,
+        );
+
+      const first = await claimFor('w1');
+      expect(first.map(entry => entry.operation)).toEqual(['delete']);
+      expect(await claimFor('w2')).toEqual([]);
+
+      await store.completeSemanticOutbox({ ids: first.map(entry => entry.id), workerId: 'w1' });
+      expect((await claimFor('w2')).map(entry => entry.operation)).toEqual(['upsert']);
+    });
   });
 }
