@@ -242,12 +242,14 @@ function FilterChip({
   active,
   onClick,
   accent,
+  scopeClass,
   icon,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
   accent?: boolean;
+  scopeClass?: string;
   icon: React.ReactNode;
 }) {
   return (
@@ -260,7 +262,7 @@ function FilterChip({
         active
           ? accent
             ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
-            : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
+            : scopeClass
           : 'border-border bg-card text-muted-foreground hover:text-foreground',
       )}
     >
@@ -488,6 +490,7 @@ function KnowledgeGraphInner({
           <FilterChip
             key={rung}
             label={RUNG_LABELS[rung]}
+            scopeClass={knowledgeScopes[rung].filterClass}
             icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
             active={filters.rungs.size === 0 || filters.rungs.has(rung)}
             onClick={() => toggleRung(rung)}
