@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
 import { MemoryRunState } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -729,6 +730,54 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].content).toContain(workingMemoryData);
       expect(resultMessages[0].content).not.toContain('updateWorkingMemory');
     });
+
+    it.each(
+      (['thread', 'resource'] as const).flatMap(scope =>
+        [
+          { configured: false, override: undefined, readOnly: true },
+          { configured: true, override: false, readOnly: true },
+          { configured: false, override: true, readOnly: false },
+          { configured: undefined, override: undefined, readOnly: false },
+        ].map(config => ({ scope, ...config })),
+      ),
+    )(
+      'uses agentManaged=$configured with override=$override for $scope-scoped memory',
+      async ({ scope, configured, override, readOnly }) => {
+        const memory = new MockMemory({
+          options: { workingMemory: { enabled: true, scope, agentManaged: configured } },
+        });
+        const threadId = 'thread-123';
+        const resourceId = 'resource-1';
+        const workingMemoryData = '# User Info\n- Name: Jane';
+        const thread = await memory.createThread({
+          threadId,
+          resourceId,
+          metadata: { workingMemory: workingMemoryData },
+        });
+        await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: workingMemoryData });
+        requestContext.set('MastraMemory', {
+          thread,
+          resourceId,
+          ...(override === undefined ? {} : { memoryConfig: { workingMemory: { agentManaged: override } } }),
+        });
+        const processors = await memory.getInputProcessors([], requestContext);
+        const processor = processors.find(p => p instanceof WorkingMemory) as WorkingMemory;
+        expect(processor).toBeInstanceOf(WorkingMemory);
+        const messageList = new MessageList();
+        await processor.processInput({ messages: [], messageList, abort: vi.fn(), requestContext });
+
+        const prompt = messageList.get.all.aiV5.prompt();
+        expect(prompt).toHaveLength(1);
+        expect(prompt[0].content).toContain(workingMemoryData);
+        if (readOnly) {
+          expect(prompt[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+          expect(prompt[0].content).not.toContain('updateWorkingMemory');
+        } else {
+          expect(prompt[0].content).toContain('updateWorkingMemory');
+          expect(prompt[0].content).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+        }
+      },
+    );
 
     it('should show fallback message when readOnly and no working memory data exists', async () => {
       const processor = new WorkingMemory({
