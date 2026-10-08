@@ -206,6 +206,30 @@ const RETIRED_KNOWLEDGE_CURSOR_COLLECTION = 'mastra_knowledge_cursors';
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
 
+/** Keeps only nodes with at least one membership in `scopeIds`, using the (nodeId, scopeNodeId) index. */
+function nodeMembershipStages(scopeIds: KnowledgeScopeIds, alias: string): Document[] {
+  return [
+    {
+      $lookup: {
+        from: TABLE_KNOWLEDGE_NODE_SCOPES,
+        let: { nodeId: '$id' },
+        pipeline: [
+          { $match: { $expr: { $and: [{ $eq: ['$nodeId', '$$nodeId'] }, { $in: ['$scopeNodeId', scopeIds] }] } } },
+          { $limit: 1 },
+          { $project: { _id: 0, nodeId: 1 } },
+        ],
+        as: alias,
+      },
+    },
+    { $match: { [`${alias}.0`]: { $exists: true } } },
+    { $unset: alias },
+  ];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export class KnowledgeMongoDB extends KnowledgeStorage {
   static readonly MANAGED_COLLECTIONS = [
     TABLE_KNOWLEDGE_NODES,
@@ -1044,58 +1068,59 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
 
   async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeNode | null> {
     const vouched = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (vouched.length === 0) return null;
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_NODES)
     )
-      .find({ canonicalName: canonicalName(input.name), deletedAt: { $exists: false } })
+      .aggregate([
+        { $match: { canonicalName: canonicalName(input.name), deletedAt: { $exists: false } } },
+        ...nodeMembershipStages(vouched, '__visible'),
+        { $limit: 2 },
+      ])
       .toArray();
-    const candidates: KnowledgeNode[] = [];
-    for (const row of rows) {
-      const node = nodeFromDocument(row);
-      if (isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(node.id), vouched)) candidates.push(node);
-    }
-    return candidates.length === 1 ? candidates[0]! : null;
+    return rows.length === 1 ? nodeFromDocument(rows[0]!) : null;
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) return [];
+    const membershipScopeIds = input.membershipScopeIds
+      ? canonicalizeKnowledgeScopeIds(input.membershipScopeIds)
+      : undefined;
+    if (membershipScopeIds?.length === 0) return [];
+    const match: Document = { deletedAt: { $exists: false } };
+    const nameFilters: Document[] = [];
+    if (input.name) nameFilters.push({ canonicalName: canonicalName(input.name) });
+    if (input.namePrefix)
+      nameFilters.push({ canonicalName: { $regex: `^${escapeRegExp(canonicalName(input.namePrefix))}` } });
+    if (nameFilters.length) match.$and = nameFilters;
+    if (input.kind) match.kind = input.kind;
+    if (input.isScope !== undefined) match.isScope = input.isScope;
+    if (input.cursor) {
+      const cursor = parseKnowledgeNodeCursor(input.cursor, {
+        name: input.name,
+        namePrefix: input.namePrefix,
+        kind: input.kind,
+        isScope: input.isScope,
+      });
+      match.$or = [
+        { updatedAt: { $lt: cursor.updatedAt } },
+        { updatedAt: cursor.updatedAt, name: { $gt: cursor.name } },
+        { updatedAt: cursor.updatedAt, name: cursor.name, id: { $gt: cursor.id } },
+      ];
+    }
     const rows = await (
       await this.#collection(TABLE_KNOWLEDGE_NODES)
     )
-      .find({ deletedAt: { $exists: false } })
-      .sort({ updatedAt: -1, name: 1, id: 1 })
+      .aggregate([
+        { $match: match },
+        { $sort: { updatedAt: -1, name: 1, id: 1 } },
+        ...nodeMembershipStages(scopeIds, '__visible'),
+        ...(membershipScopeIds ? nodeMembershipStages(membershipScopeIds, '__member') : []),
+        { $limit: Math.min(Math.max(input.limit ?? 100, 1), 100) },
+      ])
       .toArray();
-    const cursor = input.cursor
-      ? parseKnowledgeNodeCursor(input.cursor, {
-          name: input.name,
-          namePrefix: input.namePrefix,
-          kind: input.kind,
-          isScope: input.isScope,
-        })
-      : undefined;
-    const result: KnowledgeNode[] = [];
-    for (const row of rows) {
-      const node = nodeFromDocument(row);
-      const memberships = await this.#getNodeScopeIds(node.id);
-      if (!isKnowledgeNodeVisible(node, memberships, scopeIds)) continue;
-      if (input.membershipScopeIds && !isKnowledgeScopeVisible(memberships, input.membershipScopeIds)) continue;
-      if (input.name && canonicalName(node.name) !== canonicalName(input.name)) continue;
-      if (input.namePrefix && !canonicalName(node.name).startsWith(canonicalName(input.namePrefix))) continue;
-      if (input.kind && node.kind !== input.kind) continue;
-      if (input.isScope !== undefined && node.isScope !== input.isScope) continue;
-      if (
-        cursor &&
-        !(
-          node.updatedAt.getTime() < cursor.updatedAt.getTime() ||
-          (node.updatedAt.getTime() === cursor.updatedAt.getTime() &&
-            (node.name > cursor.name || (node.name === cursor.name && node.id > cursor.id)))
-        )
-      )
-        continue;
-      result.push(node);
-      if (result.length >= Math.min(Math.max(input.limit ?? 100, 1), 100)) break;
-    }
-    return result;
+    return rows.map(nodeFromDocument);
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
