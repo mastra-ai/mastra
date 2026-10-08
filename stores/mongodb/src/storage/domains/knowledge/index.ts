@@ -2613,6 +2613,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         },
         { ...sessionOptions(session), returnDocument: 'after' },
       );
+      await states.deleteMany(
+        { importerId: input.importerId, binding, key: { $in: [input.leaseKey, input.payloadKey ?? input.leaseKey] } },
+        sessionOptions(session),
+      );
       return result ? importRunFromDocument(result) : null;
     });
   }
@@ -2639,6 +2643,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         sessionOptions(session),
       );
       const completedAt = input.queuedAt ?? new Date();
+      await states.deleteMany(
+        { importerId: run.importerId, binding: run.binding, key: { $in: [input.leaseKey, input.payloadKey] } },
+        sessionOptions(session),
+      );
       await runs.updateOne(
         { id: input.id, status: 'running' },
         {
