@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed evented workflow sleeps so they continue after a process restart.
+Fixed evented workflows to recover sleeps after a process restart by replaying the sleeping path without rerunning completed steps.
