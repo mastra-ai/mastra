@@ -166,6 +166,18 @@ describe('MCPServer tracing', () => {
       expect(requestSpans()[1].input).toEqual({ name: 'echoTool', arguments: { message: 'hi' } });
     });
 
+    it.each([
+      ['`tracestate` and `baggage` without `traceparent`', { tracestate: 'vendor=1', baggage: 'userId=alice' }],
+      ['a non-string `traceparent`', { traceparent: 5, baggage: 'userId=alice' }],
+      ['a malformed `traceparent`', { traceparent: 'garbage', baggage: 'userId=alice' }],
+    ])('records the request input without the trace fields for %s', async (_label, traceFields) => {
+      await callEcho(client, { ...traceFields, custom: true });
+
+      const span = requestSpans()[0];
+      expect(span.input).toEqual({ name: 'echoTool', arguments: { message: 'hi' }, _meta: { custom: true } });
+      expect(span.links).toBeUndefined();
+    });
+
     it('links to the span named by the HTTP `traceparent` header', async () => {
       const headerClient = await connectClient(served.url, {}, { traceparent: traceparent() });
       try {

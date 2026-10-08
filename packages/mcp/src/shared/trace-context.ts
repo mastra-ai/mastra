@@ -45,19 +45,26 @@ export function traceContextToMeta(traceContext: MCPTraceContext): Record<string
 }
 
 /**
- * Request params without the W3C trace fields in `_meta`. The request span
- * already records the caller's span as a link, so the fields are not repeated
- * in its input.
+ * Request params without the W3C trace fields in `_meta`. They are removed
+ * whenever present, valid or not: a valid caller span is recorded as a link,
+ * and `tracestate` and `baggage` are untrusted data the span doesn't need.
  */
 export function withoutTraceContext(params: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-  const meta = params?._meta as Record<string, unknown> | undefined;
-  if (!traceContextFromMeta(meta)) return params;
+  const meta = params?._meta;
+  if (
+    !meta ||
+    typeof meta !== 'object' ||
+    Array.isArray(meta) ||
+    ![TRACEPARENT_META_KEY, TRACESTATE_META_KEY, BAGGAGE_META_KEY].some(key => key in meta)
+  ) {
+    return params;
+  }
   const {
     [TRACEPARENT_META_KEY]: _traceparent,
     [TRACESTATE_META_KEY]: _tracestate,
     [BAGGAGE_META_KEY]: _baggage,
     ...restMeta
-  } = meta!;
+  } = meta as Record<string, unknown>;
   const { _meta, ...rest } = params!;
   return Object.keys(restMeta).length > 0 ? { ...rest, _meta: restMeta } : rest;
 }
