@@ -290,6 +290,9 @@ describe('setupKeyboardShortcuts', () => {
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'resume')?.description).toBe(
       'Alias for /threads',
     );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'upgrade')?.description).toBe(
+      'Alias for /update',
+    );
     expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as

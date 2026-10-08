@@ -106,6 +106,16 @@ Launchers that can only pass environment variables through, such as an editor pa
 
 Piped stdin is added after a plain-text prompt in the same first message, and is skipped with the prompt when `--tui-initial-prompt` resumes a conversation. A prompt that is a slash command or starts with `!` can't be combined with piped stdin. To run a task without the interactive UI and exit, use [headless mode](/headless).
 
+## Update Mastra Code
+
+Run `mastracode update` (or its alias `mastracode upgrade`) to install the latest version with the package manager that installed Mastra Code. It exits with code `1` if the update fails or the running install doesn't change, and prints the command to run manually:
+
+```sh
+mastracode update
+```
+
+Inside the TUI, use `/update` instead.
+
 ## Slash commands
 
 Mastra Code provides built-in slash commands for managing sessions and settings:
@@ -157,6 +167,7 @@ After exit, run `mastracode resume <thread-id>` to continue the same thread dire
 | `/theme` | Switch color theme (auto/dark/light) |
 | `/browser` | Configure browser automation |
 | `/update` | Check for and install updates |
+| `/upgrade` | Alias for `/update` |
 | `/hooks` | Show/reload configured hooks |
 | `/mcp` | Show/reload MCP connections, disable or enable servers |
 | `/help` | Show available commands |

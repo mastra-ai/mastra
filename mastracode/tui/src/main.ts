@@ -39,6 +39,7 @@ import { resolveTuiSubagents } from './subagent-settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
+import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
@@ -414,6 +415,14 @@ async function main() {
   if (process.argv[2] === 'prune') {
     const { runPruneCommand } = await import('@mastra/code-sdk/utils/prune-cli');
     return process.exit(await runPruneCommand(process.argv.slice(3)));
+  }
+
+  // Also checked before the headless branch, which would send the bare word as a prompt.
+  const updateArgs = getUpdateCommandArgs(process.argv);
+  if (updateArgs) {
+    const code = await runUpdateCommand({ args: updateArgs, currentVersion: getCurrentVersion() });
+    await new Promise(resolve => process.stdout.write('', resolve));
+    return process.exit(code);
   }
 
   const loginIndex = process.argv.findIndex(

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   handleCloneCommand: vi.fn().mockResolvedValue(undefined),
   handleThreadsCommand: vi.fn().mockResolvedValue(undefined),
   handleNameCommand: vi.fn().mockResolvedValue(undefined),
+  handleUpdateCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -65,7 +66,7 @@ vi.mock('../commands/index.js', () => ({
   handleSetupCommand: vi.fn(),
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
-  handleUpdateCommand: vi.fn(),
+  handleUpdateCommand: mocks.handleUpdateCommand,
   handleMastraGatewayCommand: mocks.handleMastraGatewayCommand,
   handleApiKeysCommand: vi.fn(),
   handlePluginsCommand: mocks.handlePluginsCommand,
@@ -214,6 +215,16 @@ describe('dispatchSlashCommand routing', () => {
     expect(mocks.handleThreadsCommand).toHaveBeenCalledTimes(2);
     expect(mocks.handleThreadsCommand).toHaveBeenNthCalledWith(1, ctx);
     expect(mocks.handleThreadsCommand).toHaveBeenNthCalledWith(2, ctx);
+  });
+
+  it('routes /update and its /upgrade alias to the update handler', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    expect(await dispatchSlashCommand('/update', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/upgrade', state, () => ctx)).toBe(true);
+    expect(mocks.handleUpdateCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleUpdateCommand).toHaveBeenNthCalledWith(2, ctx);
   });
 
   it('routes /name and its /rename alias to the thread name handler', async () => {

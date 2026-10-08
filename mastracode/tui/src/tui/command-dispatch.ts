@@ -286,6 +286,7 @@ export async function dispatchSlashCommand(
       await handleThemeCommand(ctx, args);
       return true;
     case 'update':
+    case 'upgrade':
       await handleUpdateCommand(ctx);
       return true;
     case 'gateway':
