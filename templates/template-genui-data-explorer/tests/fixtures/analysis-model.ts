@@ -6,33 +6,41 @@ type Options = Parameters<Model["doGenerate"]>[0];
 /** Exercises Mastra's real model loop and tools without a provider key or network. */
 export function analysisModel(
   plans: readonly unknown[],
-  options: { repeat?: boolean; fail?: boolean; stall?: boolean; text?: string } = {},
+  options: {
+    repeat?: boolean;
+    fail?: boolean;
+    stall?: boolean;
+    text?: string;
+    batchSize?: number;
+  } = {},
 ) {
   const calls: Options[] = [];
   const generate: Model["doGenerate"] = async (call) => {
     calls.push(call);
     if (options.fail) throw new Error("Synthetic provider outage, credential=not-a-real-secret");
     if (options.stall) return new Promise(() => {});
-    const plan =
-      plans[options.repeat ? 0 : call.prompt.filter((message) => message.role === "tool").length];
+    const offset = options.repeat
+      ? 0
+      : call.prompt
+          .filter((message) => message.role === "tool")
+          .reduce((sum, message) => sum + message.content.length, 0);
+    const batch = plans.slice(offset, offset + (options.batchSize ?? 1));
     return {
       content:
-        plan === undefined
+        batch.length === 0
           ? [
               {
                 type: "text",
                 text: options.text ?? "Untrusted model claims growth was 999999 percent.",
               },
             ]
-          : [
-              {
-                type: "tool-call",
-                toolCallId: `call-${calls.length}`,
-                toolName: "analyze",
-                input: JSON.stringify(plan),
-              },
-            ],
-      finishReason: plan === undefined ? "stop" : "tool-calls",
+          : batch.map((plan, index) => ({
+              type: "tool-call" as const,
+              toolCallId: `call-${calls.length}-${index}`,
+              toolName: "analyze",
+              input: JSON.stringify(plan),
+            })),
+      finishReason: batch.length === 0 ? "stop" : "tool-calls",
       usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
       warnings: [],
     };

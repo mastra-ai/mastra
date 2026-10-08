@@ -36,7 +36,7 @@ export function benchmarkBudget(input: unknown) {
       "Verify current official pricing for this exact model within seven days before the benchmark. No paid call was made.",
     );
   const inputTokensPerCall = options.maxInputBytes * 2 + 8192;
-  const calls = 24 * LIMITS.steps;
+  const calls = 24 * LIMITS.modelRounds;
   const upperBoundUsd =
     (calls *
       (inputTokensPerCall * options.inputUsdPerMillion +

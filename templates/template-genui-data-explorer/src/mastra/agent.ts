@@ -16,7 +16,19 @@ import type { ComponentDeclaration } from "../components/catalog.ts";
 
 import { LIMITS, representationSchema, representation } from "../analysis/contracts.ts";
 import { sessionFrom } from "../analysis/workflow.ts";
-import type { analyticalWorkflow } from "../analysis/workflow.ts";
+import type { Session, analyticalWorkflow } from "../analysis/workflow.ts";
+
+/** Every tool consumes the same tool budget, independently of model rounds. */
+function consumeToolCall(session: Session) {
+  if (session.failure) throw session.failure;
+  if (++session.toolCalls > LIMITS.toolCalls) {
+    session.failure = new SourceError(
+      "budget-exceeded",
+      "The analysis reached its tool-call limit. Ask a smaller question.",
+    );
+    throw session.failure;
+  }
+}
 
 export function explorerAgent(
   workflow: ReturnType<typeof analyticalWorkflow>,
@@ -33,13 +45,7 @@ export function explorerAgent(
     outputSchema: representationSchema,
     execute: async (inputData, context) => {
       const session = sessionFrom(context?.requestContext);
-      if (++session.steps > LIMITS.steps) {
-        session.failure = new SourceError(
-          "budget-exceeded",
-          "The analysis reached its model/tool step limit. Ask a smaller question.",
-        );
-        throw session.failure;
-      }
+      consumeToolCall(session);
       try {
         const run = await workflow.createRun({
           runId: randomUUID(),
@@ -94,8 +100,7 @@ export function explorerAgent(
       outputSchema: compositionSchema,
       execute: async (input, context) => {
         const session = sessionFrom(context?.requestContext);
-        if (++session.steps > LIMITS.steps)
-          throw new SourceError("budget-exceeded", "The composition exceeded the step limit.");
+        consumeToolCall(session);
         try {
           session.composition = validateComposition(input, session.results, catalog);
           return session.composition;
@@ -142,7 +147,7 @@ export function explorerAgent(
     tools: { analyze, ...(options.catalog ? { compose: compose() } : {}) },
     ...(options.memory ? { memory: options.memory } : {}),
     defaultOptions: ({ requestContext }) => ({
-      maxSteps: LIMITS.steps,
+      maxSteps: LIMITS.modelRounds,
       toolCallConcurrency: 1,
       modelSettings: {
         maxOutputTokens: LIMITS.responseTokens,
@@ -166,7 +171,7 @@ export function explorerAgent(
           ...(typeof usage.outputTokens === "number" ? { outputTokens: usage.outputTokens } : {}),
         });
         if (finishReason === "length" || finishReason === "tool-calls")
-          session.failure = new SourceError(
+          session.failure ??= new SourceError(
             "budget-exceeded",
             "The model exhausted its response or step budget. Ask a smaller question.",
           );
@@ -185,10 +190,11 @@ export function explorerAgent(
       prepareStep: ({ tools }) => {
         const session = sessionFrom(requestContext);
         session.controller.signal.throwIfAborted();
-        if (++session.steps > LIMITS.steps) {
+        if (session.failure) throw session.failure;
+        if (++session.modelRounds > LIMITS.modelRounds) {
           session.failure = new SourceError(
             "budget-exceeded",
-            "The analysis reached its model/tool step limit.",
+            "The analysis reached its model-round limit. Ask a smaller question.",
           );
           throw session.failure;
         }

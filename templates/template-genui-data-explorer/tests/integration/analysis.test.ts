@@ -300,7 +300,8 @@ it("Sales worker distinguishes invalid requests from unreadable result data", as
 
 it("analysis_limits_and_dependency_recovery_are_observable", async () => {
   expect(LIMITS).toEqual({
-    steps: 8,
+    modelRounds: 8,
+    toolCalls: 8,
     responseTokens: 1024,
     queryMs: 5000,
     analysisMs: 60000,
@@ -340,7 +341,7 @@ it("analysis_limits_and_dependency_recovery_are_observable", async () => {
     status: "failed",
     code: "budget-exceeded",
   });
-  expect(repeat.provider.calls.length).toBeLessThanOrEqual(8);
+  expect(repeat.provider.calls).toHaveLength(8);
   expect(publishRepeated).not.toHaveBeenCalled();
   for (const change of [
     (result: AnalysisResult) => ({
@@ -440,6 +441,48 @@ it("analysis_limits_and_dependency_recovery_are_observable", async () => {
   expect(await stalledRun).toMatchObject({ status: "failed", code: "timeout", results: [] });
   vi.useRealTimers();
 });
+
+it("allows the final acknowledgement on the eighth model round", async () => {
+  const fixture = fixtureSource((result) => result);
+  const { explorer, provider } = explorerFor(
+    fixture.source,
+    Array.from({ length: 7 }, () => booking),
+  );
+  const publish = vi.fn();
+  const outcome = await explorer.analyze(question(), { onComplete: publish });
+  expect(outcome.status).toBe("complete");
+  expect(provider.calls).toHaveLength(8);
+  expect(fixture.attempts()).toBe(7);
+  expect(publish).toHaveBeenCalledOnce();
+});
+
+it.each([8, 9])(
+  "bounds a batch of %i analysis tools independently of model rounds",
+  async (count) => {
+    const fixture = fixtureSource((result) => result);
+    const { explorer, provider } = explorerFor(
+      fixture.source,
+      Array.from({ length: count }, () => booking),
+      { batchSize: count },
+    );
+    const publish = vi.fn();
+    const outcome = await explorer.analyze(question(), { onComplete: publish });
+    expect(fixture.attempts()).toBe(8);
+    if (count === 8) {
+      expect(outcome.status).toBe("complete");
+      expect(provider.calls).toHaveLength(2);
+      expect(publish).toHaveBeenCalledOnce();
+    } else {
+      expect(outcome).toMatchObject({
+        status: "failed",
+        code: "budget-exceeded",
+        message: expect.stringContaining("tool-call limit"),
+      });
+      expect(publish).not.toHaveBeenCalled();
+      expect(provider.calls).toHaveLength(1);
+    }
+  },
+);
 
 it("source_contract_reuses_workflow_with_non_sql_adapter", async () => {
   const directory = await scratch();

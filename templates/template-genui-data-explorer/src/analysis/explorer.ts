@@ -195,7 +195,8 @@ export class DataExplorer {
       results: [],
       cleanups: [],
       emit,
-      steps: 0,
+      modelRounds: 0,
+      toolCalls: 0,
       telemetry: this.telemetry,
       ...(options.filters ? { filters: options.filters } : {}),
     };

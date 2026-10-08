@@ -48,6 +48,19 @@ Do not replace it with an unguarded agent route: that would bypass the accepted-
 The catalog is a controlled, application-owned GenUI contract. It is not an A2UI catalog:
 the Mastra `compose` tool selects registered views and the server validates their bindings.
 
+## Execution limits
+
+Each question has separate budgets of eight model rounds and eight tool calls. Both `analyze`
+and `compose` consume the tool-call budget, including multiple calls requested in one model round.
+A sequential three-period comparison uses five model rounds and four tool calls, including the
+final acknowledgement. Exceeding either budget fails the request and preserves the last accepted
+workspace revision.
+
+The existing bounds remain: 1,024 generated tokens per response, a five-second source timeout,
+a 60-second analysis deadline, 1,000 result rows and 1 MiB of result data. Only an explicitly
+retryable read may retry once; paid model calls are never automatically retried. Live benchmark
+estimates use the model-round ceiling, not the sum of model rounds and tool calls.
+
 ## Separate servers
 
 ### Production authentication

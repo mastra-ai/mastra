@@ -24,7 +24,8 @@ export interface Session {
   results: VerifiedResult[];
   cleanups: Promise<void>[];
   emit: (event: Omit<AnalysisEvent, "requestId" | "workspaceId" | "traceId">) => void;
-  steps: number;
+  modelRounds: number;
+  toolCalls: number;
   filters?: AnalysisRequest["filters"];
   composition?: import("../components/catalog.ts").Composition;
   accepted?: import("./composition.ts").AcceptedWorkspace;

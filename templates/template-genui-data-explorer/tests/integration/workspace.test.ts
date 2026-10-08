@@ -357,80 +357,146 @@ it("a verified scalar cannot complete a visual request without composition", asy
   }
 });
 
-it("OpenAI compares September sales in both years without retrying successful plans", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "sales-comparison-"));
-  const path = join(dir, "sales.sqlite");
-  const fixture = referenceFixture(path);
-  fixture.db.exec(`
-    INSERT INTO opportunities VALUES (6,1,'2025-09-01'),(7,1,'2026-09-01');
+it.each([2, 3])(
+  "OpenAI compares %i periods without charging tools against model rounds",
+  async (periodCount) => {
+    const dir = await mkdtemp(join(tmpdir(), "sales-comparison-"));
+    const path = join(dir, "sales.sqlite");
+    const fixture = referenceFixture(path);
+    fixture.db.exec(`
+    INSERT INTO opportunities VALUES (6,1,'2025-09-01'),(7,1,'2026-09-01'),(8,1,'2026-08-01');
     INSERT INTO opportunity_history VALUES
       (6,'2025-09-15','won',12000,'2025-09-15',1,'SMB'),
-      (7,'2026-09-15','won',18000,'2026-09-15',1,'SMB');
+      (7,'2026-09-15','won',18000,'2026-09-15',1,'SMB'),
+      (8,'2026-08-15','won',15000,'2026-08-15',1,'SMB');
   `);
-  fixture.db.close();
-  const provider = deterministicOpenAI({
-    plans: [
-      { metric: "bookings", period: { start: "2025-09-01", end: "2025-10-01" } },
-      { metric: "bookings", period: { start: "2026-09-01", end: "2026-10-01" } },
-    ],
+    fixture.db.close();
+    const provider = deterministicOpenAI({
+      plans: [
+        { metric: "bookings", period: { start: "2025-09-01", end: "2025-10-01" } },
+        { metric: "bookings", period: { start: "2026-09-01", end: "2026-10-01" } },
+        ...(periodCount === 3
+          ? [{ metric: "bookings", period: { start: "2026-08-01", end: "2026-09-01" } }]
+          : []),
+      ],
+    });
+    await new Promise<void>((resolve) => provider.server.listen(0, "127.0.0.1", resolve));
+    const address = provider.server.address();
+    if (!address || typeof address === "string") throw new Error("Missing fixture address.");
+    const explorer = new DataExplorer(
+      new SalesSource(path),
+      {
+        providerId: "openai",
+        modelId: "gpt-4.1-mini",
+        apiKey: "synthetic-local-provider",
+        url: `http://127.0.0.1:${address.port}/v1`,
+        api: "chat",
+      },
+      { catalog: components },
+    );
+    try {
+      let views = 0;
+      let counters: { modelRounds: number; toolCalls: number } | undefined;
+      const question =
+        periodCount === 2
+          ? "Compare sales of september 2025 and 2026"
+          : "Compare sales of september 2025, september 2026 and august 2026";
+      const outcome = await explorer.analyze(
+        {
+          workspaceId,
+          threadId,
+          requestId: "september-comparison",
+          baseRevision: 0,
+          question,
+        },
+        {
+          signal: AbortSignal.timeout(5000),
+          execute: async (requestContext, session) => {
+            const stream = await explorer.agent.stream(question, {
+              requestContext,
+              abortSignal: session.controller.signal,
+            });
+            for await (const chunk of stream.fullStream) {
+              void chunk;
+            }
+            return { finishReason: await stream.finishReason };
+          },
+          onComplete: (session) => {
+            views = session.composition?.components.length ?? 0;
+            counters = { modelRounds: session.modelRounds, toolCalls: session.toolCalls };
+          },
+        },
+      );
+      expect(
+        outcome.status,
+        JSON.stringify({ message: outcome.message, stages: provider.stages }),
+      ).toBe("complete");
+      expect(
+        outcome.results.map((result) => result.data.value),
+        outcome.message,
+      ).toEqual(periodCount === 2 ? [12000, 18000] : [12000, 18000, 15000]);
+      expect(views).toBe(periodCount);
+      expect(counters).toEqual({ modelRounds: periodCount + 2, toolCalls: periodCount + 1 });
+      expect(provider.stages.map((stage) => stage.tools)).toEqual(
+        Array.from({ length: periodCount + 2 }, (_, index) => index),
+      );
+      expect(provider.analysisSchemas[1]).toEqual(provider.analysisSchemas[0]);
+    } finally {
+      await explorer.close();
+      provider.server.closeAllConnections();
+      await new Promise<void>((resolve) => provider.server.close(() => resolve()));
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+it("composition calls share the tool budget and cannot publish after exhaustion", async () => {
+  const provider = workspaceModel({
+    plan: { metric: "bookings", period: { start: "2025-03-01", end: "2025-04-01" } },
+    component: "metric",
+    properties: { title: "Bookings" },
   });
-  await new Promise<void>((resolve) => provider.server.listen(0, "127.0.0.1", resolve));
-  const address = provider.server.address();
-  if (!address || typeof address === "string") throw new Error("Missing fixture address.");
-  const explorer = new DataExplorer(
-    new SalesSource(path),
-    {
-      providerId: "openai",
-      modelId: "gpt-4.1-mini",
-      apiKey: "synthetic-local-provider",
-      url: `http://127.0.0.1:${address.port}/v1`,
-      api: "chat",
-    },
-    { catalog: components },
-  );
+  const generate = provider.model.doGenerate;
+  provider.model.doGenerate = async (options) => {
+    const response = await generate(options);
+    const tool = response.content[0];
+    if (tool?.type === "tool-call" && tool.toolName === "compose")
+      return {
+        ...response,
+        content: Array.from({ length: 8 }, (_, index) => ({
+          ...tool,
+          toolCallId: `compose-${index}`,
+        })),
+      };
+    return response;
+  };
+  const explorer = new DataExplorer(new ReferenceSource(), provider.model, { catalog: components });
+  let published = false;
   try {
-    let views = 0;
     const outcome = await explorer.analyze(
       {
         workspaceId,
         threadId,
-        requestId: "september-comparison",
+        requestId: "compose-budget",
         baseRevision: 0,
-        question: "Compare sales of september 2025 and 2026",
+        question: "Show March bookings",
       },
       {
-        signal: AbortSignal.timeout(5000),
-        execute: async (requestContext, session) => {
-          const stream = await explorer.agent.stream("Compare sales of september 2025 and 2026", {
-            requestContext,
-            abortSignal: session.controller.signal,
-          });
-          for await (const chunk of stream.fullStream) {
-            void chunk;
-          }
-          return { finishReason: await stream.finishReason };
-        },
-        onComplete: (session) => {
-          views = session.composition?.components.length ?? 0;
+        onComplete: () => {
+          published = true;
         },
       },
     );
-    expect(
-      outcome.status,
-      JSON.stringify({ message: outcome.message, stages: provider.stages }),
-    ).toBe("complete");
-    expect(
-      outcome.results.map((result) => result.data.value),
-      outcome.message,
-    ).toEqual([12000, 18000]);
-    expect(views).toBe(2);
-    expect(provider.stages.map((stage) => stage.tools)).toEqual([0, 1, 2, 3]);
-    expect(provider.analysisSchemas[1]).toEqual(provider.analysisSchemas[0]);
+    expect(outcome).toMatchObject({
+      status: "failed",
+      code: "budget-exceeded",
+      message: expect.stringContaining("tool-call limit"),
+    });
+    expect(provider.calls).toHaveLength(2);
+    expect(outcome.results).toHaveLength(1);
+    expect(published).toBe(false);
   } finally {
     await explorer.close();
-    provider.server.closeAllConnections();
-    await new Promise<void>((resolve) => provider.server.close(() => resolve()));
-    await rm(dir, { recursive: true, force: true });
   }
 });
 

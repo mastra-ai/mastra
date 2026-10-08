@@ -14,7 +14,8 @@ import type {
 } from "../../data-sources/source.ts";
 
 export const LIMITS = Object.freeze({
-  steps: 8,
+  modelRounds: 8,
+  toolCalls: 8,
   responseTokens: 1024,
   queryMs: 5000,
   analysisMs: 60000,
