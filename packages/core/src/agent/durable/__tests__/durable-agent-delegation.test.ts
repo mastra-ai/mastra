@@ -173,55 +173,64 @@ describe('DurableAgent delegation hooks', () => {
     cleanup();
   });
 
-  it('restores the LLM conversation on a cold foreach tool worker', async () => {
-    const runId = 'cold-delegation-context';
-    const subAgentModel = makeSubAgentModel('Finished');
-    const modelSpy = vi.spyOn(subAgentModel, 'doStream');
-    const supervisor = new Agent({
-      id: 'cold-supervisor',
-      name: 'cold-supervisor',
-      instructions: 'Delegate to worker.',
-      model: makeSupervisorModel('worker', 'go'),
-      agents: { worker: makeSubAgent('worker', 'Finished', subAgentModel) },
-    });
-    const messageList = new MessageList();
-    messageList.add({ role: 'user', content: 'Original user request' }, 'input');
-    messageList.add({ role: 'user', content: 'Processor-added parent history' }, 'input');
-    messageList.add(
-      {
-        id: 'om-continuation',
-        role: 'user',
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text', text: 'Processor-added parent history' }] },
-      },
-      'input',
-    );
-    const workflow = createWorkflow({
-      id: 'cold-delegation-workflow',
-      inputSchema: z.any(),
-      outputSchema: z.any(),
-    })
-      .then(
-        createStep({
-          id: DurableStepIds.LLM_EXECUTION,
-          inputSchema: z.any(),
-          outputSchema: z.any(),
-          execute: async () => ({ messageListState: messageList.serialize() }),
-        }),
-      )
-      .map(async () => [{ toolCallId: 'cold-call', toolName: 'agent-worker', args: { prompt: 'go' } }])
-      .foreach(createDurableToolCallStep())
-      .commit();
-    const mastra = new Mastra({ agents: { supervisor }, workflows: { workflow } });
-    expect(globalRunRegistry.has(runId)).toBe(false);
-    const run = await mastra.getWorkflow('workflow').createRun();
-    const result = await run.start({ inputData: { runId, agentId: supervisor.id, options: {}, state: {} } });
-    expect(result.status).toBe('success');
-    expect(modelSpy).toHaveBeenCalledTimes(1);
-    const prompt = JSON.stringify(modelSpy.mock.calls[0]?.[0].prompt);
-    expect(prompt).toContain('Original user request');
-    expect(prompt.split('Processor-added parent history')).toHaveLength(2);
-  });
+  it.each(['step-output', 'workflow-state'])(
+    'restores the LLM conversation from %s on a cold foreach tool worker',
+    async storage => {
+      const runId = `cold-delegation-context-${storage}`;
+      const subAgentModel = makeSubAgentModel('Finished');
+      const modelSpy = vi.spyOn(subAgentModel, 'doStream');
+      const supervisor = new Agent({
+        id: 'cold-supervisor',
+        name: 'cold-supervisor',
+        instructions: 'Delegate to worker.',
+        model: makeSupervisorModel('worker', 'go'),
+        agents: { worker: makeSubAgent('worker', 'Finished', subAgentModel) },
+      });
+      const messageList = new MessageList();
+      messageList.add({ role: 'user', content: 'Original user request' }, 'input');
+      messageList.add({ role: 'user', content: 'Processor-added parent history' }, 'input');
+      messageList.add(
+        {
+          id: 'om-continuation',
+          role: 'user',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Processor-added parent history' }] },
+        },
+        'input',
+      );
+      const workflow = createWorkflow({
+        id: 'cold-delegation-workflow',
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+      })
+        .then(
+          createStep({
+            id: DurableStepIds.LLM_EXECUTION,
+            inputSchema: z.any(),
+            outputSchema: z.any(),
+            execute: async ({ setState }) => {
+              if (storage === 'workflow-state') {
+                await setState({ messageListState: messageList.serialize() });
+                return {};
+              }
+              return { messageListState: messageList.serialize() };
+            },
+          }),
+        )
+        .map(async () => [{ toolCallId: 'cold-call', toolName: 'agent-worker', args: { prompt: 'go' } }])
+        .foreach(createDurableToolCallStep())
+        .commit();
+      const mastra = new Mastra({ agents: { supervisor }, workflows: { workflow } });
+      expect(globalRunRegistry.has(runId)).toBe(false);
+      const run = await mastra.getWorkflow('workflow').createRun();
+      const result = await run.start({ inputData: { runId, agentId: supervisor.id, options: {}, state: {} } });
+      expect(result.status).toBe('success');
+      expect(modelSpy).toHaveBeenCalledTimes(1);
+      const prompt = JSON.stringify(modelSpy.mock.calls[0]?.[0].prompt);
+      expect(prompt).toContain('Original user request');
+      expect(prompt.split('Processor-added parent history')).toHaveLength(2);
+    },
+  );
 
   it('converts cold-worker history in prompt mode before invoking the tool', async () => {
     const execute = vi.fn(async (_input: { prompt: string }, _context: ToolExecutionContext) => 'Finished');

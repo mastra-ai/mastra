@@ -134,16 +134,22 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const now = new Date();
+      const contextUpdate: Record<string, unknown> = { [stepId]: result };
+      if (state !== undefined) {
+        contextUpdate.__state = state;
+      }
 
       // Default snapshot structure for new entries
       const defaultSnapshot = {
@@ -178,7 +184,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                   // Merge the new context entry
                   {
                     context: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, { [stepId]: result }],
+                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, contextUpdate],
                     },
                   },
                   // Merge the new request context

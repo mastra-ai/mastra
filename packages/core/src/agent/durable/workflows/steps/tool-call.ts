@@ -60,6 +60,7 @@ import {
 } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { readMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable tool call step.
@@ -611,12 +612,13 @@ export function createDurableToolCallStep() {
       let messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
       if (!messageList) {
         const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
-        if (llmOutput?.messageListState) {
+        const messageListState = readMessageListState(params.state, llmOutput ?? {});
+        if (messageListState) {
           messageList = createRunMessageList({
             mastra,
             threadId: state?.threadId,
             resourceId: state?.resourceId,
-          }).deserialize(llmOutput.messageListState);
+          }).deserialize(messageListState);
         }
       }
 

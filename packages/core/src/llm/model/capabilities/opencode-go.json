@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "claude-haiku-5-5",
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4.1-flash",
     "glm-5.3-flash",
@@ -56,6 +57,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
+    "claude-haiku-5-5",
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
