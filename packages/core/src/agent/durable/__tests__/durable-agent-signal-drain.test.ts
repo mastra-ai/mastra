@@ -429,7 +429,7 @@ describe('EventedAgent inter-iteration signal drain', () => {
       },
     });
     const eventedAgent = createEventedAgent({ agent, pubsub });
-    new Mastra({
+    const mastra = new Mastra({
       logger: false,
       storage: new InMemoryStore(),
       pubsub,
@@ -455,13 +455,17 @@ describe('EventedAgent inter-iteration signal drain', () => {
       return entry;
     });
 
-    const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
-    for await (const _chunk of fullStream) {
-      // drain
-    }
-    cleanup?.();
+    try {
+      const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
+      for await (const _chunk of fullStream) {
+        // drain
+      }
+      cleanup?.();
 
-    expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
-    await pubsub.close();
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+    } finally {
+      await mastra.stopWorkers();
+      await pubsub.close();
+    }
   });
 });

@@ -1,5 +1,5 @@
 import type { WriteStream } from 'node:fs';
-import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
@@ -12,8 +12,11 @@ export class FileTransport extends LoggerTransport {
     this.path = path;
 
     if (!existsSync(this.path)) {
-      console.info(this.path);
       throw new Error('File path does not exist');
+    }
+
+    if (!statSync(this.path).isFile()) {
+      throw new Error(`File path must point to a file: ${this.path}`);
     }
 
     this.fileStream = createWriteStream(this.path, { flags: 'a' });

@@ -271,7 +271,8 @@ export class CloudflareSandboxBridgeClient {
         return;
       case 'exit': {
         const parsed = safeJsonParse(data);
-        onEvent({ type: 'exit', exitCode: typeof parsed?.exit_code === 'number' ? parsed.exit_code : 0 });
+        // A missing or malformed exit status is not proof of success.
+        onEvent({ type: 'exit', exitCode: typeof parsed?.exit_code === 'number' ? parsed.exit_code : -1 });
         return;
       }
       case 'error': {

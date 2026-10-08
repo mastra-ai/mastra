@@ -3,9 +3,10 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
 
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
+import { cardMatchesSourceFilters, hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { stageContentCount } from '../../domains/factory/boardCandidates';
-import type { IntakeSource } from '../../domains/factory/boardCandidates';
+import type { BoardCandidate, IntakeSource } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { BoardAutomationSettings } from '../../domains/factory/components/BoardAutomationSettings';
@@ -35,8 +36,9 @@ import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
 import type { DragPayload } from '../../domains/factory/boardDrag';
-import { cardMatchesSearch } from '../../domains/factory/boardItems';
+import { cardMatchesSearch, isPersistedCandidate } from '../../domains/factory/boardItems';
 import { orderWorkItemsForStage } from '../../domains/factory/boardOrder';
+import type { WorkItem } from '../../domains/factory/services/workItems';
 import { relatedWorkItemIndex } from '../../domains/factory/services/relationships';
 import { workItemHumanActorIds } from '../../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
@@ -46,6 +48,23 @@ import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
 import { BoardStages } from './BoardStages';
+import { isPullRequestSource } from '../../domains/factory/services/workItems';
+
+/** Count all available candidates before source filters so empty states can explain excluded cards. */
+function countUnfilteredCandidates({
+  sourceFiltered,
+  candidates,
+  participantCandidates,
+  knownSourceKeys,
+}: {
+  sourceFiltered: boolean;
+  candidates: readonly BoardCandidate[];
+  participantCandidates: readonly BoardCandidate[];
+  knownSourceKeys: ReadonlySet<string>;
+}): number {
+  if (!sourceFiltered) return candidates.length;
+  return participantCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate)).length;
+}
 
 export function BoardContent({
   factory,
@@ -117,7 +136,9 @@ export function BoardContent({
     definition,
     knownSourceKeys: items.knownSourceKeys,
     elsewhereSourceKeys: items.elsewhereSourceKeys,
+    sourceFilters: filters,
   });
+  const sourceFiltered = hasBoardSourceFilters(filters);
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
@@ -140,12 +161,13 @@ export function BoardContent({
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
   );
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
-  const filteredCandidates = intake.candidates.filter(
-    candidate =>
-      candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes) &&
-      candidateMatchesLabels(candidate, filters.labels) &&
-      cardMatchesViewSearch(candidate),
-  );
+  const candidateMatchesView = (candidate: BoardCandidate): boolean => {
+    if (!candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes)) return false;
+    if (!candidateMatchesLabels(candidate, filters.labels)) return false;
+    if (!cardMatchesSourceFilters(candidate, filters)) return false;
+    return cardMatchesViewSearch(candidate);
+  };
+  const filteredCandidates = intake.candidates.filter(candidateMatchesView);
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
       const next = new URLSearchParams(searchParams);
@@ -158,7 +180,9 @@ export function BoardContent({
     items.visible.filter(item => {
       if (!itemAppearsInStage(item, stage, stages)) return false;
       if (item.id === targetItemId) return true;
+      if (sourceFiltered) return true;
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
+      if (isPullRequestSource(item.source) || item.source === 'slack-thread') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
@@ -166,20 +190,18 @@ export function BoardContent({
       if (intake.active === 'incidentio') return item.source === 'incidentio-follow-up';
       return false;
     });
-  const workItemsForStage = (stage: (typeof stages)[number]['id']) =>
-    orderWorkItemsForStage(
-      unfilteredWorkItemsForStage(stage).filter(item => {
-        const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-        return (
-          workItemMatchesRelevance(item, activityPage, filters.participantIds, filters.relevanceTypes, liveCandidate) &&
-          workItemMatchesLabels(item, filters.labels, liveCandidate) &&
-          cardMatchesViewSearch(item)
-        );
-      }),
-      stage,
-      sort,
-      currentUserId,
-    );
+  const workItemMatchesView = (item: WorkItem): boolean => {
+    const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
+    if (!workItemMatchesRelevance(item, activityPage, filters.participantIds, filters.relevanceTypes, liveCandidate))
+      return false;
+    if (!workItemMatchesLabels(item, filters.labels, liveCandidate)) return false;
+    if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
+    return cardMatchesViewSearch(item);
+  };
+  const workItemsForStage = (stage: (typeof stages)[number]['id']) => {
+    const matchingItems = unfilteredWorkItemsForStage(stage).filter(workItemMatchesView);
+    return orderWorkItemsForStage(matchingItems, stage, sort, currentUserId);
+  };
   const workItemsByStage = new Map(stages.map(stage => [stage.id, workItemsForStage(stage.id)]));
   const boardWorkItems = [...workItemsByStage.values()].flat();
   const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
@@ -207,7 +229,13 @@ export function BoardContent({
   const visibleWorkItems = new Set(boardWorkItems);
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
-  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
+  const unfilteredCandidateCount = countUnfilteredCandidates({
+    sourceFiltered,
+    candidates: intake.candidates,
+    participantCandidates: intake.participantCandidates,
+    knownSourceKeys: items.knownSourceKeys,
+  });
+  const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
   const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
@@ -244,7 +272,7 @@ export function BoardContent({
         />
       ) : undefined,
       intakeSwitch:
-        stage.id === definition.initialPhase && intake.showSwitch ? (
+        stage.id === definition.initialPhase && intake.showSwitch && !sourceFiltered ? (
           <IntakeSourceSwitch available={intake.available} active={intake.active} onSelect={setIntakeSource} />
         ) : undefined,
       cards: (
@@ -328,7 +356,7 @@ export function BoardContent({
     <div className="flex min-h-0 flex-1 flex-col">
       {runs.repositorySelection && (
         <RepositoryPickerDialog
-          repositories={runs.repositories}
+          repositories={runs.repositoryChoices}
           onClose={runs.closeRepositorySelection}
           onSelect={runs.selectRepository}
         />

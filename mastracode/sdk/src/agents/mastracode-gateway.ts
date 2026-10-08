@@ -662,8 +662,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       if (storedCred?.type === 'oauth') {
         const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
-        const requestedLevel: ThinkingLevel = this.#thinkingLevel ?? 'medium';
-        const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+        const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
         const openai = createOpenAI({
@@ -688,7 +687,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     if (storedCred?.type === 'oauth') {
       const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: this.#thinkingLevel,
+        thinkingLevel: this.#thinkingLevel && getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel),
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;

@@ -97,7 +97,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
 
       {runs.repositorySelection && (
         <RepositoryPickerDialog
-          repositories={runs.repositories}
+          repositories={runs.repositoryChoices}
           onClose={runs.closeRepositorySelection}
           onSelect={async repository => {
             await runs.selectRepository(repository);

@@ -165,56 +165,73 @@ describe('evented mid-run state recording', () => {
     expect(nextB.mock.calls[0]![0].state).toEqual({ first: 1, second: 1 });
   });
 
-  it('records the state of each foreach iteration with its result', async () => {
+  it('restarts a crashed run with the state set by every foreach iteration', async () => {
     const storage = new MockStore();
     const workflowId = 'mid-run-state-foreach';
     const runId = `mid-run-state-foreach-${Date.now()}`;
 
-    const afterStarted = Promise.withResolvers<void>();
-    const body = createStep({
-      id: 'body',
-      inputSchema: z.number(),
-      outputSchema: z.number(),
-      stateSchema,
-      execute: async ({ inputData, state, setState }) => {
-        await setState({ ...state, first: state.first + inputData });
-        return inputData;
-      },
-    });
-    const toItems = createStep({
-      id: 'to-items',
-      inputSchema: looseObject,
-      outputSchema: z.array(z.number()),
-      execute: async () => [1, 2, 3],
-    });
-    const after = createStep({
-      id: 'after',
-      inputSchema: z.array(z.number()),
-      outputSchema: looseObject,
-      execute: async () => {
-        afterStarted.resolve();
-        await new Promise<never>(() => {});
-        return {};
-      },
-    });
-    const workflow = createWorkflow({
-      id: workflowId,
-      inputSchema: looseObject,
-      outputSchema: looseObject,
-      stateSchema,
-      steps: [toItems, body, after],
-    })
-      .then(toItems)
-      .foreach(body)
-      .then(after)
-      .commit();
+    const build = (afterExecute: StateStepExecute) => {
+      const body = createStep({
+        id: 'body',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema,
+        execute: async ({ inputData, state, setState }) => {
+          await setState({ ...state, first: state.first + inputData });
+          return inputData;
+        },
+      });
+      const toItems = createStep({
+        id: 'to-items',
+        inputSchema: looseObject,
+        outputSchema: z.array(z.number()),
+        execute: async () => [1, 2, 3],
+      });
+      const after = createStep({
+        id: 'after',
+        inputSchema: z.array(z.number()),
+        outputSchema: looseObject,
+        stateSchema,
+        execute: afterExecute as any,
+      });
+      return createWorkflow({
+        id: workflowId,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        stateSchema,
+        steps: [toItems, body, after],
+      })
+        .then(toItems)
+        .foreach(body)
+        .then(after)
+        .commit();
+    };
 
-    await makeHost(workflow, storage);
-    const run = await workflow.createRun({ runId });
-    run.start({ inputData: {}, initialState }).catch(() => {});
+    // ---- Host A: every iteration sets state, the following step hangs ----
+    const afterStarted = Promise.withResolvers<void>();
+    const workflowA = build(async () => {
+      afterStarted.resolve();
+      await new Promise<never>(() => {});
+      return {};
+    });
+    await makeHost(workflowA, storage);
+    const runA = await workflowA.createRun({ runId });
+    runA.start({ inputData: {}, initialState }).catch(() => {});
     await afterStarted.promise;
 
     const snapshot = await loadSnapshot(storage, workflowId, runId);
     expect((snapshot!.context as any).__state).toEqual({ first: 6, second: 0 });
+
+    // ---- Host B: restart over the SAME storage ----
+    const afterB = vi.fn<StateStepExecute>(async ({ state }) => ({ seen: state }));
+    const workflowB = build(afterB);
+    await makeHost(workflowB, storage);
+
+    const runB = await workflowB.createRun({ runId });
+    const result = await runB.restart();
+
+    expect(result.status).toBe('success');
+    expect(afterB).toHaveBeenCalledTimes(1);
+    expect(afterB.mock.calls[0]![0].state).toEqual({ first: 6, second: 0 });
   });
 });

@@ -25,6 +25,10 @@ describe('FileTransport', () => {
     fs.writeFileSync(testPath, ``);
   });
 
+  it('should reject a directory path', () => {
+    expect(() => new FileTransport({ path: testDir })).toThrow(/must point to a file/);
+  });
+
   it('should create a file stream when instantiated', () => {
     expect(fileLogger.fileStream).toBeDefined();
     expect(fileLogger.path).toBe(testPath);
