@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -82,5 +83,174 @@ describe('TemporalRun', () => {
     expect(getHandle).toHaveBeenCalledWith('test-run');
     expect(run.workflowRunStatus).toBe('pending');
     expect(run.abortController.signal.aborted).toBe(false);
+  });
+
+  describe('lifecycle hooks', () => {
+    const steps = {
+      increment: { status: 'success', payload: { value: 1 }, output: { ok: true }, startedAt: 1, endedAt: 2 },
+    };
+    const executionResult = (result: unknown) => ({ status: 'success', input: { value: 1 }, result, state: {}, steps });
+
+    function createHookedWorkflow(
+      options: Record<string, unknown>,
+      result: () => Promise<unknown>,
+      start = vi.fn().mockImplementation(async () => ({ result })),
+    ) {
+      const workflow = createWorkflow(
+        { id: 'hooked-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown(), options },
+        { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+      );
+      return { workflow, start };
+    }
+
+    it('runs onStart before dispatch and onFinish after a successful run', async () => {
+      const order: string[] = [];
+      const onStart = vi.fn(async () => {
+        order.push('onStart');
+      });
+      const onFinish = vi.fn(async () => {
+        order.push('onFinish');
+      });
+      const onError = vi.fn();
+      const start = vi.fn().mockImplementation(async () => {
+        order.push('dispatch');
+        return { result: async () => executionResult({ ok: true }) };
+      });
+      const { workflow } = createHookedWorkflow({ onStart, onFinish, onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1', resourceId: 'resource-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result).toEqual({ status: 'success', input: { value: 1 }, result: { ok: true }, state: {}, steps });
+      expect(order).toEqual(['onStart', 'dispatch', 'onFinish']);
+      expect(onStart).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'run-1', workflowId: 'hooked-workflow', resourceId: 'resource-1' }),
+      );
+      expect((onStart.mock.calls[0] as any)[0].getInitData()).toEqual({ value: 1 });
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'success', result: { ok: true }, steps, runId: 'run-1' }),
+      );
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('runs onFinish and onError when the Temporal workflow fails', async () => {
+      const failure = new Error('activity failed');
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(failure));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('runs onError when dispatching to Temporal fails', async () => {
+      const failure = new Error('Temporal service unavailable');
+      const onError = vi.fn();
+      const start = vi.fn().mockRejectedValue(failure);
+      const { workflow } = createHookedWorkflow({ onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.status).toBe('failed');
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('sends request context values set by onStart to Temporal', async () => {
+      const onStart = vi.fn(({ requestContext }: { requestContext: RequestContext }) => {
+        requestContext.set('tenant', 'acme');
+      });
+      const { workflow, start } = createHookedWorkflow({ onStart }, async () => executionResult({}));
+
+      await (await workflow.createRun({ runId: 'run-1' })).start({ inputData: { value: 1 } });
+      await (await workflow.createRun({ runId: 'run-2' })).startAsync({ inputData: { value: 1 } });
+
+      expect(start).toHaveBeenCalledTimes(2);
+      for (const [, options] of start.mock.calls) {
+        expect(options.args[0].requestContext).toEqual({ tenant: 'acme' });
+      }
+    });
+
+    it('runs terminal hooks and rejects when startAsync dispatch fails', async () => {
+      const failure = new Error('Temporal service unavailable');
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const start = vi.fn().mockRejectedValue(failure);
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toThrow(failure);
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('rejects start without dispatching when onStart throws', async () => {
+      const gate = new Error('quota exceeded');
+      const onFinish = vi.fn();
+      const { workflow, start } = createHookedWorkflow(
+        {
+          onStart: () => {
+            throw gate;
+          },
+          onFinish,
+        },
+        async () => ({}),
+      );
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.start({ inputData: { value: 1 } })).rejects.toThrow(gate);
+      await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toThrow(gate);
+      expect(start).not.toHaveBeenCalled();
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the run when onFinish or onError throw', async () => {
+      const onFinish = vi.fn().mockRejectedValue(new Error('onFinish broke'));
+      const onError = vi.fn().mockRejectedValue(new Error('onError broke'));
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(new Error('boom')));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledOnce();
+    });
+
+    it('runs onFinish in the background after startAsync returns', async () => {
+      let resolveResult!: (value: unknown) => void;
+      const onStart = vi.fn();
+      const onFinish = vi.fn();
+      const { workflow, start } = createHookedWorkflow(
+        { onStart, onFinish },
+        () => new Promise(resolve => (resolveResult = resolve)),
+      );
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'run-1' });
+      expect(onStart).toHaveBeenCalledOnce();
+      expect(start).toHaveBeenCalledOnce();
+      expect(onFinish).not.toHaveBeenCalled();
+
+      resolveResult(executionResult({ done: true }));
+      await vi.waitFor(() =>
+        expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', result: { done: true } })),
+      );
+    });
+
+    it('does not wait for the result in startAsync when no terminal hooks are registered', async () => {
+      const result = vi.fn(() => new Promise(() => {}));
+      const { workflow } = createHookedWorkflow({}, result);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await run.startAsync({ inputData: { value: 1 } });
+
+      expect(result).not.toHaveBeenCalled();
+    });
   });
 });
