@@ -1,5 +1,5 @@
 // Main class export
-export { MessageList } from './message-list';
+export { MessageList, markServerAppliedModelOutput } from './message-list';
 
 // Type exports
 export type {

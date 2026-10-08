@@ -151,13 +151,36 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * answer, since the provider, not the client, produces its outcome.
  */
 /**
+ * In-process marker set only by `applyClientToolModelOutput`. Not enumerable, so it
+ * does not survive JSON persistence or client-supplied providerMetadata. Reconciliation
+ * must see this before copying modelOutput — `modelOutputComputed` alone is forgeable.
+ */
+const SERVER_APPLIED_MODEL_OUTPUT = Symbol('mastra.serverAppliedModelOutput');
+
+/** Mark a tool part as having had toModelOutput applied by the server this process. */
+export function markServerAppliedModelOutput(part: MastraMessagePart): void {
+  Object.defineProperty(part, SERVER_APPLIED_MODEL_OUTPUT, {
+    value: true,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
+function hasServerAppliedModelOutput(part: MastraMessagePart): boolean {
+  return (part as Record<symbol, unknown>)[SERVER_APPLIED_MODEL_OUTPUT] === true;
+}
+
+/**
  * Carry only server-computed toModelOutput markers across memory reconciliation.
- * Arbitrary client providerMetadata is dropped (trust boundary); `modelOutputComputed`
- * is set exclusively by `applyClientToolModelOutput` on the server.
+ * Requires the in-process Symbol from `applyClientToolModelOutput` — not merely
+ * `providerMetadata.mastra.modelOutputComputed`, which a client can forge.
  */
 function trustedServerModelOutputMetadata(
   part: MastraMessagePart,
 ): MastraToolInvocationPart['providerMetadata'] | undefined {
+  if (!hasServerAppliedModelOutput(part)) {
+    return undefined;
+  }
   const mastra = part.providerMetadata?.mastra;
   if (!mastra || typeof mastra !== 'object' || !('modelOutputComputed' in mastra) || !mastra.modelOutputComputed) {
     return undefined;

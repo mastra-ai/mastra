@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed memory reconciliation dropping the mapped model output for client-executed tools.
+Fixed client tool results so the model receives the configured output after memory restores a pending call.
