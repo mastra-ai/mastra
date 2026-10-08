@@ -7,7 +7,6 @@ import type {
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   KnowledgeScope,
-  KnowledgeScopeLevel,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
   ListKnowledgeNodesInput,
@@ -179,10 +178,6 @@ export class Knowledge extends MastraBase {
 
   async rescopeKnowledge(input: { id: string; scope: KnowledgeScope }) {
     return (await this.getStorage()).rescopeKnowledge(input);
-  }
-
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }) {
-    return (await this.getStorage()).raiseKnowledgeCeiling(input);
   }
 
   async search(input: SearchKnowledgeInput) {
