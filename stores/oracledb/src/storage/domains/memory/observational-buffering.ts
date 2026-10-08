@@ -3,6 +3,7 @@ import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
   ObservationalMemoryRecord,
+  RunFence,
   SwapBufferedReflectionToActiveInput,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
@@ -29,7 +30,15 @@ import {
   OM_REFLECTED_OBSERVATION_LINE_COUNT,
   OM_UPDATED_AT,
 } from './schema';
-import { assertRowsAffected, numberOrZero, parseBufferedChunks, storageError, stringOrEmpty, table } from './utils';
+import {
+  assertMemoryFence,
+  assertRowsAffected,
+  numberOrZero,
+  parseBufferedChunks,
+  storageError,
+  stringOrEmpty,
+  table,
+} from './utils';
 import type { MemoryContext } from './utils';
 
 // Async buffering/reflection workflow: observations and reflections generated
@@ -39,9 +48,11 @@ import type { MemoryContext } from './utils';
 export async function updateBufferedObservations(
   ctx: MemoryContext,
   input: UpdateBufferedObservationsInput,
+  fence?: RunFence,
 ): Promise<void> {
   try {
-    await ctx.db.tx(async (_client, connection) => {
+    await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'updateBufferedObservations');
       const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_BUFFERED_OBSERVATIONS');
       const existingChunks = parseBufferedChunks(row.bufferedObservationChunks);
       // Buffer chunks let long observation cycles append safely without
@@ -93,9 +104,11 @@ export async function updateBufferedObservations(
 export async function swapBufferedToActive(
   ctx: MemoryContext,
   input: SwapBufferedToActiveInput,
+  fence?: RunFence,
 ): Promise<SwapBufferedToActiveResult> {
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'swapBufferedToActive');
       const row = await lockOMRow(ctx, connection, input.id, 'SWAP_BUFFERED_TO_ACTIVE');
       const chunks = input.bufferedChunks?.length
         ? input.bufferedChunks
@@ -153,9 +166,11 @@ export async function swapBufferedToActive(
 export async function updateBufferedReflection(
   ctx: MemoryContext,
   input: UpdateBufferedReflectionInput,
+  fence?: RunFence,
 ): Promise<void> {
   try {
-    await ctx.db.tx(async (_client, connection) => {
+    await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'updateBufferedReflection');
       const result = await connection.execute(
         `UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
            SET ${OM_BUFFERED_REFLECTION} = CASE
@@ -188,9 +203,11 @@ export async function updateBufferedReflection(
 export async function swapBufferedReflectionToActive(
   ctx: MemoryContext,
   input: SwapBufferedReflectionToActiveInput,
+  fence?: RunFence,
 ): Promise<ObservationalMemoryRecord> {
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'swapBufferedReflectionToActive');
       const row = await lockOMRow(ctx, connection, input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');
       const bufferedReflection = stringOrEmpty(row.bufferedReflection);
       if (!bufferedReflection) {

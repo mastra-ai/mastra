@@ -10,21 +10,29 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
+  RUN_FENCING_TABLE_SCHEMAS,
   createStorageErrorId,
+  isRunFenceConflictError,
+  resolveRunFence,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
+  RunFence,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   CreateIndexOptions,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
+import { assertRunFence, isRetriableRunFenceWrite, withRunFence } from '../../db/run-fencing';
+import type { Queryable } from '../../db/run-fencing';
 import { getTableName, getSchemaName } from '../utils';
 
 // Database row type that includes timezone-aware columns
@@ -85,6 +93,10 @@ export class MemoryDSQL extends MemoryStorage {
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
+    });
+    await this.#db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -150,6 +162,52 @@ export class MemoryDSQL extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_MESSAGES });
     await this.#db.clearTable({ tableName: TABLE_THREADS });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.#db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+  }
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  #runFencesTable(): string {
+    return getTableName({ indexName: TABLE_MEMORY_RUN_FENCES, schemaName: getSchemaName(this.#schema) });
+  }
+
+  /** Runs `write` behind the run's fence check when it carries a fence. */
+  #fenced<T>(fence: RunFence | undefined, operation: string, write: (q: Queryable) => Promise<T>): Promise<T> {
+    return withRunFence(this.#db.client, this.#runFencesTable(), resolveRunFence(this, fence), operation, write);
+  }
+
+  async raiseRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      // One statement: inserts the first fence, raises an older one, and
+      // re-affirms an identical one; any other existing fence is left alone
+      // and no row comes back.
+      const { result } = await withRetry(
+        () =>
+          this.#db.client.oneOrNone(
+            `INSERT INTO ${this.#runFencesTable()} AS f ("runId", generation, "ownerId")
+             VALUES ($1, $2, $3)
+             ON CONFLICT ("runId") DO UPDATE SET generation = EXCLUDED.generation, "ownerId" = EXCLUDED."ownerId"
+             WHERE f.generation < EXCLUDED.generation
+                OR (f.generation = EXCLUDED.generation AND f."ownerId" = EXCLUDED."ownerId")
+             RETURNING "runId"`,
+            [fence.runId, fence.generation, fence.ownerId],
+          ),
+        { isRetriable: isRetriableRunFenceWrite },
+      );
+      return result !== null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -320,15 +378,16 @@ export class MemoryDSQL extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const createdAt = toUtcISOString(thread.createdAt);
     const updatedAt = toUtcISOString(thread.updatedAt);
 
     await withRetry(
       async () => {
-        await this.#db.client.none(
-          `INSERT INTO ${tableName} (
+        await this.#fenced(fence, 'saveThread', q =>
+          q.none(
+            `INSERT INTO ${tableName} (
             id,
             "resourceId",
             title,
@@ -346,16 +405,17 @@ export class MemoryDSQL extends MemoryStorage {
             "createdAtZ" = EXCLUDED."createdAtZ",
             "updatedAt" = EXCLUDED."updatedAt",
             "updatedAtZ" = EXCLUDED."updatedAtZ"`,
-          [
-            thread.id,
-            thread.resourceId,
-            thread.title,
-            thread.metadata ? JSON.stringify(thread.metadata) : null,
-            createdAt,
-            createdAt,
-            updatedAt,
-            updatedAt,
-          ],
+            [
+              thread.id,
+              thread.resourceId,
+              thread.title,
+              thread.metadata ? JSON.stringify(thread.metadata) : null,
+              createdAt,
+              createdAt,
+              updatedAt,
+              updatedAt,
+            ],
+          ),
         );
       },
       {
@@ -364,6 +424,7 @@ export class MemoryDSQL extends MemoryStorage {
         },
       },
     ).catch(error => {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'SAVE_THREAD', 'FAILED'),
@@ -384,39 +445,51 @@ export class MemoryDSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
     const { result } = await withRetry(
-      async () => {
-        // Get the existing thread inside retry block to ensure fresh data on retry
-        const existingThread = await this.getThreadById({ threadId: id });
-        if (!existingThread) {
-          throw new MastraError({
-            id: createStorageErrorId('DSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Thread ${id} not found`,
-            details: {
-              threadId: id,
-              title: title ?? null,
-            },
-          });
-        }
+      () =>
+        // Read and update in the same fenced scope so a fenced update cannot
+        // merge metadata read before a newer owner's write.
+        this.#fenced(fence, 'updateThread', async q => {
+          const existingThread = await q.oneOrNone<{ metadata: unknown }>(
+            `SELECT metadata FROM ${threadTableName} WHERE id = $1`,
+            [id],
+          );
+          if (!existingThread) {
+            throw new MastraError({
+              id: createStorageErrorId('DSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Thread ${id} not found`,
+              details: {
+                threadId: id,
+                title: title ?? null,
+              },
+            });
+          }
 
-        // Merge the existing metadata with the new metadata
-        const mergedMetadata = {
-          ...existingThread.metadata,
-          ...metadata,
-        };
+          const existingMetadata =
+            typeof existingThread.metadata === 'string'
+              ? JSON.parse(existingThread.metadata)
+              : (existingThread.metadata as Record<string, unknown> | null);
 
-        const now = new Date().toISOString();
-        const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-          `UPDATE ${threadTableName}
+          // Merge the existing metadata with the new metadata
+          const mergedMetadata = {
+            ...existingMetadata,
+            ...metadata,
+          };
+
+          const now = new Date().toISOString();
+          return q.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+            `UPDATE ${threadTableName}
                       SET 
                           title = COALESCE($1, title),
                           metadata = $2,
@@ -425,18 +498,16 @@ export class MemoryDSQL extends MemoryStorage {
                       WHERE id = $5
                       RETURNING *
                   `,
-          [title ?? null, JSON.stringify(mergedMetadata), now, now, id],
-        );
-
-        return {
+            [title ?? null, JSON.stringify(mergedMetadata), now, now, id],
+          );
+        }).then(thread => ({
           id: thread.id,
           resourceId: thread.resourceId,
           title: thread.title,
           metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
           createdAt: thread.createdAtZ || thread.createdAt,
           updatedAt: thread.updatedAtZ || thread.updatedAt,
-        };
-      },
+        })),
       {
         onRetry: (error, attempt, delay) => {
           this.logger?.warn?.(`updateThread retry ${attempt} for ${id} after ${delay}ms: ${error.message}`);
@@ -510,7 +581,7 @@ export class MemoryDSQL extends MemoryStorage {
 
     const { result } = await withRetry(
       async () => {
-        // Aurora DSQL uses optimistic concurrency control: it has no SELECT ... FOR UPDATE, but
+        // Aurora DSQL uses optimistic concurrency control, so nothing blocks here, but
         // wrapping the thread read plus both updates in a single transaction means two concurrent
         // transfers of the same thread conflict at commit. The loser is aborted and retried by
         // withRetry against fresh state, so ownership can never end up split across resources.
@@ -882,7 +953,13 @@ export class MemoryDSQL extends MemoryStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence: explicitFence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
 
     const threadId = messages[0]?.threadId;
@@ -911,9 +988,12 @@ export class MemoryDSQL extends MemoryStorage {
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
+    const fence = resolveRunFence(this, explicitFence);
+
     await withRetry(
       async () => {
         await this.#db.client.tx(async t => {
+          if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'saveMessages');
           const messageInserts = messages.map(message => {
             if (!message.threadId) {
               throw new Error(
@@ -972,6 +1052,7 @@ export class MemoryDSQL extends MemoryStorage {
         },
       },
     ).catch(error => {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'SAVE_MESSAGES', 'FAILED'),
@@ -1002,6 +1083,7 @@ export class MemoryDSQL extends MemoryStorage {
 
   async updateMessages({
     messages,
+    fence: explicitFence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -1010,10 +1092,13 @@ export class MemoryDSQL extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) {
       return [];
     }
+
+    const fence = resolveRunFence(this, explicitFence);
 
     const messageIds = messages.map(m => m.id);
 
@@ -1041,6 +1126,7 @@ export class MemoryDSQL extends MemoryStorage {
     await withRetry(
       async () => {
         await this.#db.client.tx(async t => {
+          if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateMessages');
           const queries = [];
           const columnMapping: Record<string, string> = {
             threadId: 'thread_id',
@@ -1120,6 +1206,7 @@ export class MemoryDSQL extends MemoryStorage {
         },
       },
     ).catch(error => {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'UPDATE_MESSAGES', 'FAILED'),
@@ -1149,17 +1236,19 @@ export class MemoryDSQL extends MemoryStorage {
     });
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) {
       return;
     }
 
+    const fence = resolveRunFence(this, options?.fence);
     const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
     await withRetry(
       async () => {
         await this.#db.client.tx(async t => {
+          if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'deleteMessages');
           const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
           const messages = await t.manyOrNone(
             `SELECT DISTINCT thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
@@ -1188,6 +1277,7 @@ export class MemoryDSQL extends MemoryStorage {
         },
       },
     ).catch(error => {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'DELETE_MESSAGES', 'FAILED'),
@@ -1250,67 +1340,90 @@ export class MemoryDSQL extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
 
     const { result } = await withRetry(
-      async () => {
-        const existingResource = await this.getResourceById({ resourceId });
+      // Read and write in the same fenced scope so a fenced update cannot
+      // merge a resource read before a newer owner's write.
+      () =>
+        this.#fenced(fence, 'updateResource', async q => {
+          const row = await q.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
+            `SELECT * FROM ${tableName} WHERE id = $1`,
+            [resourceId],
+          );
 
-        if (!existingResource) {
-          const newResource: StorageResourceType = {
-            id: resourceId,
-            workingMemory,
-            metadata: metadata || {},
-            createdAt: new Date(),
+          if (!row) {
+            const now = new Date();
+            const newResource: StorageResourceType = {
+              id: resourceId,
+              workingMemory,
+              metadata: metadata || {},
+              createdAt: now,
+              updatedAt: now,
+            };
+            const nowIso = now.toISOString();
+            await q.none(
+              `INSERT INTO ${tableName} (id, "workingMemory", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [resourceId, workingMemory ?? null, JSON.stringify(newResource.metadata), nowIso, nowIso, nowIso, nowIso],
+            );
+            return newResource;
+          }
+
+          const existingResource: StorageResourceType = {
+            id: row.id,
+            createdAt: row.createdAtZ || row.createdAt,
+            updatedAt: row.updatedAtZ || row.updatedAt,
+            workingMemory: row.workingMemory,
+            metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+          };
+
+          const updatedResource = {
+            ...existingResource,
+            workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
+            metadata: {
+              ...existingResource.metadata,
+              ...metadata,
+            },
             updatedAt: new Date(),
           };
-          return this.saveResource({ resource: newResource });
-        }
 
-        const updatedResource = {
-          ...existingResource,
-          workingMemory: workingMemory !== undefined ? workingMemory : existingResource.workingMemory,
-          metadata: {
-            ...existingResource.metadata,
-            ...metadata,
-          },
-          updatedAt: new Date(),
-        };
+          const updates: string[] = [];
+          const values: any[] = [];
+          let paramIndex = 1;
 
-        const updates: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+          if (workingMemory !== undefined) {
+            updates.push(`"workingMemory" = $${paramIndex}`);
+            values.push(workingMemory);
+            paramIndex++;
+          }
 
-        if (workingMemory !== undefined) {
-          updates.push(`"workingMemory" = $${paramIndex}`);
-          values.push(workingMemory);
+          if (metadata) {
+            updates.push(`metadata = $${paramIndex}`);
+            values.push(JSON.stringify(updatedResource.metadata));
+            paramIndex++;
+          }
+
+          updates.push(`"updatedAt" = $${paramIndex}`);
+          values.push(updatedResource.updatedAt.toISOString());
           paramIndex++;
-        }
-
-        if (metadata) {
-          updates.push(`metadata = $${paramIndex}`);
-          values.push(JSON.stringify(updatedResource.metadata));
+          updates.push(`"updatedAtZ" = $${paramIndex}`);
+          values.push(updatedResource.updatedAt.toISOString());
           paramIndex++;
-        }
 
-        updates.push(`"updatedAt" = $${paramIndex}`);
-        values.push(updatedResource.updatedAt.toISOString());
-        paramIndex++;
-        updates.push(`"updatedAtZ" = $${paramIndex}`);
-        values.push(updatedResource.updatedAt.toISOString());
-        paramIndex++;
+          values.push(resourceId);
 
-        values.push(resourceId);
+          await q.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
-        await this.#db.client.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
-
-        return updatedResource;
-      },
+          return updatedResource;
+        }),
       {
         onRetry: (error, attempt, delay) => {
           this.logger?.warn?.(`updateResource retry ${attempt} for ${resourceId} after ${delay}ms: ${error.message}`);
