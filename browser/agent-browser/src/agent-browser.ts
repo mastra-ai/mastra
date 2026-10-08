@@ -818,7 +818,8 @@ export class AgentBrowser extends MastraBrowser {
       }
 
       // Count refs
-      const refs = snapshot.match(/@e\d+/g) || [];
+      // Includes refs inside iframes (e.g. @f1e2)
+      const refs = snapshot.match(/@(?:f\d+)?e\d+/g) || [];
       const elementCount = new Set(refs).size;
 
       return {
