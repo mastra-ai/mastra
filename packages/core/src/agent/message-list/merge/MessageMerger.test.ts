@@ -165,6 +165,81 @@ describe('MessageMerger insertion positions', () => {
   });
 });
 
+describe('MessageMerger new-step boundaries', () => {
+  const reasoning = (value: string): Part => ({
+    type: 'reasoning',
+    reasoning: value,
+    details: [{ type: 'text', text: value }],
+  });
+
+  it('inserts a step-start when a new step opens with a tool call', () => {
+    expectParts(merge([step, tool('c1')], [tool('c2')]), [step, tool('c1'), step, tool('c2')]);
+  });
+
+  it('inserts a step-start when a new step opens with reasoning', () => {
+    expectParts(merge([step, tool('c1')], [reasoning('Second thought')]), [
+      step,
+      tool('c1'),
+      step,
+      reasoning('Second thought'),
+    ]);
+  });
+
+  it('keeps parallel tool calls within one step together', () => {
+    expectParts(merge([step, tool('c1')], [tool('c2'), tool('c3')]), [step, tool('c1'), step, tool('c2'), tool('c3')]);
+  });
+
+  it('inserts a step-start when a tool call follows a completed tool result', () => {
+    expectParts(merge([step, tool('c1')], [tool('c1', true), tool('c3')]), [step, tool('c1', true), step, tool('c3')]);
+  });
+
+  it('keeps completed parallel tool calls with the same step together', () => {
+    const done = (id: string): Part => ({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        step: 1,
+        toolCallId: id,
+        toolName: 'lookup',
+        args: { id },
+        result: { value: id },
+      },
+    });
+    expectParts(merge([step, tool('c1')], [done('c2'), done('c3')]), [step, tool('c1'), step, done('c2'), done('c3')]);
+  });
+
+  it('keeps completed parallel tools without a shared step marker together', () => {
+    expectParts(merge([step, tool('c1')], [tool('c2', true), tool('c3', true)]), [
+      step,
+      tool('c1'),
+      step,
+      tool('c2', true),
+      tool('c3', true),
+    ]);
+  });
+
+  it('keeps sequential tool-call steps separate in the model prompt', () => {
+    const list = new MessageList();
+    const addStep = (parts: Part[], offset: number) =>
+      list.add({ ...message(parts), createdAt: new Date(createdAt.getTime() + offset) }, 'response');
+    addStep([step, tool('c1')], 0);
+    addStep([tool('c1', true)], 1000);
+    addStep([tool('c2')], 2000);
+    addStep([tool('c2', true)], 3000);
+
+    const prompt = list.get.all.aiV5.model();
+    expect(prompt.map(m => m.role)).toEqual(['assistant', 'tool', 'assistant', 'tool']);
+    const calls = prompt.flatMap(m =>
+      (typeof m.content === 'string' ? [] : m.content).map(p =>
+        p.type === 'tool-call' || p.type === 'tool-result'
+          ? `${p.type}:${(p as { toolCallId?: string }).toolCallId}`
+          : p.type,
+      ),
+    );
+    expect(calls).toEqual(['tool-call:c1', 'tool-result:c1', 'tool-call:c2', 'tool-result:c2']);
+  });
+});
+
 describe('MessageMerger tool updatedAt', () => {
   it('stamps updatedAt on the tool part when its state changes, keeping createdAt', () => {
     const list = merge([step, { ...tool('c1'), createdAt: 1 } as Part], [tool('c1', true)]);

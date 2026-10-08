@@ -326,14 +326,38 @@ export class MessageMerger {
     const newPartCount = newMessage.content.parts.filter(p => CacheKeyGenerator.fromDBParts([p]) === partKey).length;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
-      // Check if we need to add a step-start before text parts when merging assistant messages
-      // Only add after tool invocations, and only if the incoming message doesn't already have step-start
+      // Check if we need to add a step-start before a new step's first part when merging assistant messages
+      // (a text, tool-invocation, or reasoning part). Only add after tool invocations,
+      // and only if the incoming message doesn't already have step-start
       const partIndex = newMessage.content.parts.indexOf(part);
       const hasStepStartBefore = partIndex > 0 && newMessage.content.parts[partIndex - 1]?.type === 'step-start';
 
+      // A tool-invocation part that follows a completed tool call
+      // (state 'result') in the incoming message opens a new step even when it
+      // isn't the first part — e.g. merging [tool-result, tool-call] should not
+      // glue the new call onto the previous step. Parallel completed calls that
+      // share the same toolInvocation.step stay in one step (no boundary).
+      // Reasoning parts keep the original first-part-only rule so streamed
+      // reasoning after a result is not split into a new step.
+      const previousPart = partIndex > 0 ? newMessage.content.parts[partIndex - 1] : undefined;
+      // Parallel completed tools are results of the same step even when they
+      // carry no shared toolInvocation.step marker, so they never split.
+      const partIsToolResult = part.type === 'tool-invocation' && part.toolInvocation?.state === 'result';
+      const followsToolResult =
+        previousPart?.type === 'tool-invocation' &&
+        previousPart.toolInvocation?.state === 'result' &&
+        !partIsToolResult &&
+        !(
+          part.type === 'tool-invocation' &&
+          part.toolInvocation?.step !== undefined &&
+          part.toolInvocation.step === previousPart.toolInvocation?.step
+        );
+
       const needsStepStart =
         latestMessage.role === 'assistant' &&
-        part.type === 'text' &&
+        (part.type === 'text' ||
+          (part.type === 'tool-invocation' && (partIndex === 0 || followsToolResult)) ||
+          (part.type === 'reasoning' && partIndex === 0)) &&
         !hasStepStartBefore &&
         latestMessage.content.parts.length > 0 &&
         latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
