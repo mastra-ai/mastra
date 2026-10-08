@@ -989,6 +989,25 @@ export function createKnowledgeStorageTests(
       await expect(
         store.claimImportRun({ importerId: 'recovery-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
       ).resolves.toMatchObject({ id: 'zzz-recovery-replacement' });
+
+      const stateOf = (key: string) => store.getImportState({ importerId: 'recovery-runner', binding, key });
+      await expect(stateOf('lease/recovery-original')).resolves.toBeNull();
+      await expect(stateOf('payload/recovery-original')).resolves.toBeNull();
+      await expect(stateOf('payload/recovery-replacement')).resolves.not.toBeNull();
+
+      await store.finalizeImportRun({
+        id: 'zzz-recovery-replacement',
+        importerId: 'recovery-runner',
+        binding,
+        state: [],
+        workerId: 'new-worker',
+        leaseKey: 'lease/zzz-recovery-replacement',
+        payloadKey: 'payload/recovery-replacement',
+        status: 'succeeded',
+      });
+      await expect(stateOf('lease/zzz-recovery-replacement')).resolves.toBeNull();
+      await expect(stateOf('payload/recovery-replacement')).resolves.toBeNull();
+      await expect(stateOf('payload/recovery-successor')).resolves.not.toBeNull();
     });
 
     it('rejects malformed importer bindings', async () => {
