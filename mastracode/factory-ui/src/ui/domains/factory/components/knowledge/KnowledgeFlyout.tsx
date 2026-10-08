@@ -1,12 +1,10 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { X } from 'lucide-react';
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import { KnowledgeRungBadge as RungBadge } from './KnowledgeRungBadge';
-import { KnowledgeNodeDetails } from './KnowledgeNodeDetails';
+import { KnowledgeFlyoutBody } from './KnowledgeFlyoutBody';
 
 export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
@@ -66,28 +64,4 @@ export function KnowledgeFlyout({
       />
     </>
   );
-}
-
-function KnowledgeFlyoutBody({
-  query,
-  ...handlers
-}: { query: ReturnType<typeof useKnowledgeNode> } & Pick<
-  KnowledgeFlyoutProps,
-  'focusRecordId' | 'onSelectRecord' | 'onNodeRef' | 'onOpenThread'
->) {
-  if (query.isPending)
-    return (
-      <div className="flex flex-col gap-4 p-4" role="status" aria-label="Loading knowledge node">
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-    );
-  if (query.isError)
-    return (
-      <div className="p-4">
-        <Notice variant="destructive">Unable to load this knowledge node.</Notice>
-      </div>
-    );
-  return <KnowledgeNodeDetails key={query.data.node.id} details={query.data} {...handlers} />;
 }

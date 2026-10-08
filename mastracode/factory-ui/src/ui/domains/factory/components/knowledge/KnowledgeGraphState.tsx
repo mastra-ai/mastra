@@ -5,6 +5,7 @@ import type { useKnowledgeGraph } from '../../../../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import type { KnowledgeGraphPayload } from '../../services/knowledge';
 import { RequestError } from '../../services/request';
+import { KnowledgeGraphFallback } from './KnowledgeGraphFallback';
 
 export function KnowledgeGraphState({
   query,
@@ -20,38 +21,40 @@ export function KnowledgeGraphState({
   if (query.isError) {
     if (threadId && query.error instanceof RequestError && query.error.status === 404) {
       return (
-        <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 p-8">
-          <Txt tone="muted" as="p" variant="body">
-            This session's knowledge is no longer available.
-          </Txt>
-          <button type="button" className="text-badge-purple-indicator hover:underline" onClick={onBackToProject}>
-            <Txt as="span" variant="body">
-              Back to the project view
+        <KnowledgeGraphFallback>
+          <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2">
+            <Txt tone="muted" as="p" variant="body">
+              This session's knowledge is no longer available.
             </Txt>
-          </button>
-        </div>
+            <button type="button" className="text-badge-purple-indicator hover:underline" onClick={onBackToProject}>
+              <Txt as="span" variant="body">
+                Back to the project view
+              </Txt>
+            </button>
+          </div>
+        </KnowledgeGraphFallback>
       );
     }
     const message = query.error instanceof Error ? query.error.message : 'Unable to load the knowledge graph.';
     return (
-      <div className="p-4">
+      <KnowledgeGraphFallback>
         <Notice variant="destructive">{message}</Notice>
-      </div>
+      </KnowledgeGraphFallback>
     );
   }
   if (query.isPending)
     return (
-      <div className="p-4">
+      <KnowledgeGraphFallback>
         <SkeletonRows label="Loading knowledge graph" rows={6} />
-      </div>
+      </KnowledgeGraphFallback>
     );
   if (query.data.nodes.length === 0)
     return (
-      <div className="p-8">
+      <KnowledgeGraphFallback>
         <Txt tone="muted" as="p" variant="body">
           No knowledge captured yet — the graph fills in as factory sessions work.
         </Txt>
-      </div>
+      </KnowledgeGraphFallback>
     );
   return children(query.data);
 }

@@ -259,6 +259,21 @@ describe('KnowledgePage', () => {
     expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
   });
 
+  it('keeps a valid keyboard search selection when a filter removes the active result', async () => {
+    stubKnowledgeRoute({ ...graphFixture, records: [], edges: [] });
+    const user = userEvent.setup();
+    renderRoute();
+    const search = await screen.findByRole('combobox', { name: 'Find a node' });
+    await user.type(search, 'e');
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'Deploy Runbook' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('button', { name: 'Pinned' }));
+    await user.click(search);
+    expect(screen.getByRole('option', { name: 'Payments Service' })).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('heading', { name: 'Payments Service' })).toBeVisible();
+  });
+
   it('shows the truncation banner when the payload window was capped', async () => {
     stubKnowledgeRoute({
       ...graphFixture,
@@ -292,6 +307,7 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     expect(await screen.findByText(/No knowledge captured yet/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Knowledge Graph', level: 1 })).toBeVisible();
   });
 
   it('surfaces a load error as a notice', async () => {
@@ -302,6 +318,7 @@ describe('KnowledgePage', () => {
     expect(
       await screen.findByText('The knowledge storage domain is not configured.', undefined, { timeout: 8000 }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Knowledge Graph', level: 1 })).toBeVisible();
   }, 15000);
 
   it('shows the snapshot description in the hover card without fetching node details', async () => {
@@ -422,6 +439,22 @@ describe('KnowledgePage', () => {
     expect(screen.queryByText(/session thread-a/)).not.toBeInTheDocument();
   });
 
+  it('expands and collapses a record card with Space and exposes its expanded state', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+    fireEvent.click((await screen.findAllByTestId('knowledge-node'))[0]!);
+    const record = (await screen.findAllByTestId('knowledge-record'))[0]!;
+    const card = within(record).getByRole('button', { expanded: false });
+    card.focus();
+    await user.keyboard(' ');
+    expect(await within(record).findByTestId('knowledge-record-detail')).toBeInTheDocument();
+    expect(card).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard(' ');
+    expect(within(record).queryByTestId('knowledge-record-detail')).not.toBeInTheDocument();
+    expect(card).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('pushes wikilink hops onto the breadcrumb trail and clicks back through it (A7)', async () => {
     stubKnowledgeRoute();
     renderRoute();
@@ -442,6 +475,19 @@ describe('KnowledgePage', () => {
     await user.click(within(breadcrumb).getByRole('button', { name: 'Payments Service' }));
     await waitFor(() => expect(breadcrumb).not.toHaveTextContent('Deploy Runbook'));
     expect(breadcrumb).toHaveTextContent('Payments Service');
+  });
+
+  it('follows a record wikilink with Enter without toggling its surrounding card', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+    fireEvent.click((await screen.findAllByTestId('knowledge-node'))[0]!);
+    const record = (await screen.findAllByTestId('knowledge-record'))[0]!;
+    within(record).getByRole('button', { name: 'Deploy Runbook' }).focus();
+    await user.keyboard('{Enter}');
+    const breadcrumb = screen.getByRole('navigation', { name: 'Knowledge scope' });
+    expect(breadcrumb).toHaveTextContent('Deploy Runbook');
+    expect(screen.queryByTestId('knowledge-record-detail')).not.toBeInTheDocument();
   });
 
   it('renders the calm not-available state for a stale thread deep link', async () => {

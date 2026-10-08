@@ -6,7 +6,9 @@ function setVisibility({ element, hidden }: VisibilityTarget, settled: boolean) 
   if (!hidden) element.removeAttribute('data-knowledge-hidden-settled');
   element.toggleAttribute('data-knowledge-hidden', hidden);
   element.toggleAttribute('data-knowledge-hidden-settled', hidden && settled);
-  element.setAttribute('tabindex', hidden ? '-1' : '0');
+  if (hidden) element.setAttribute('tabindex', '-1');
+  else if (element.matches('.react-flow__node, .react-flow__edge')) element.setAttribute('tabindex', '0');
+  else element.removeAttribute('tabindex');
   element.setAttribute('aria-hidden', String(hidden));
 }
 

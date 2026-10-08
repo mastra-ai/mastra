@@ -21,7 +21,9 @@ export function KnowledgeNodeSearch({
   const matches = nodes.filter(node => node.name.toLocaleLowerCase().includes(term));
   const results = matches.slice(0, 8);
   const showResults = open && term.length > 0;
-  const active = results[activeIndex];
+  // Filters and live snapshots can shrink the list while the query stays open.
+  const selectedIndex = Math.min(activeIndex, Math.max(0, results.length - 1));
+  const active = results[selectedIndex];
 
   function select(node: KnowledgeGraphNode) {
     setOpen(false);
@@ -73,8 +75,8 @@ export function KnowledgeNodeSearch({
                 key={node.id}
                 id={`${listId}-${node.id}`}
                 role="option"
-                aria-selected={index === activeIndex}
-                variant={index === activeIndex ? 'default' : 'ghost'}
+                aria-selected={index === selectedIndex}
+                variant={index === selectedIndex ? 'default' : 'ghost'}
                 className="w-full justify-start"
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => select(node)}
