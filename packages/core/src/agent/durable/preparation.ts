@@ -571,7 +571,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        throw new MastraError(
+        const inputProcessorError = new MastraError(
           {
             id: 'AGENT_INPUT_PROCESSOR_ERROR',
             domain: ErrorDomain.AGENT,
@@ -580,6 +580,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           },
           error,
         );
+        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        throw inputProcessorError;
       }
     }
   }
