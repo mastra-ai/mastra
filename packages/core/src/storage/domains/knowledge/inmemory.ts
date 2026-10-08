@@ -434,7 +434,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const canonicalName = name.trim().toLocaleLowerCase();
     const visible = [...this.#db.knowledgeNodes.values()]
       .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
-      .filter(node => node.mergedInto || isKnowledgeScopeVisible(node.scope, canonical))
       .map(node => this.#resolveTerminalNode(node.id)!)
       .filter(node => isKnowledgeNodeVisible(node, this.#nodeScopeIds(node.id), canonical))
       .sort((left, right) => this.#nodeScopeIds(right.id).length - this.#nodeScopeIds(left.id).length);
