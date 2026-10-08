@@ -281,6 +281,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           ? displayInputTransform.transformed
           : chunk.payload.args,
         ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
+        ...(chunk.payload.toolMetadata ? { toolMetadata: chunk.payload.toolMetadata } : {}),
       };
     case 'tool-call-approval':
       return {
@@ -354,6 +355,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         providerMetadata: chunk.payload.providerMetadata,
         providerExecuted: chunk.payload.providerExecuted,
         ...(chunk.payload.observability ? { observability: chunk.payload.observability as any } : {}),
+        ...(chunk.payload.toolMetadata ? { toolMetadata: chunk.payload.toolMetadata } : {}),
       };
     case 'tool-call-input-streaming-end':
       return {
@@ -799,12 +801,14 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     case 'tool-input-start': {
+      const toolMetadata = (part as { toolMetadata?: Record<string, unknown> }).toolMetadata;
       return {
         type: 'tool-input-start',
         toolCallId: part.id,
         toolName: part.toolName,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+        ...(toolMetadata != null ? { toolMetadata } : {}),
       };
     }
 
@@ -818,6 +822,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'tool-call': {
       const observability = (part as { observability?: unknown }).observability;
+      const toolMetadata = (part as { toolMetadata?: Record<string, unknown> }).toolMetadata;
       return {
         type: 'tool-input-available',
         toolCallId: part.toolCallId,
@@ -826,10 +831,11 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
-        ...(observability != null
+        ...(observability != null || toolMetadata != null
           ? {
               toolMetadata: {
-                __mastraObservability: observability,
+                ...toolMetadata,
+                ...(observability != null ? { __mastraObservability: observability } : {}),
               },
             }
           : {}),

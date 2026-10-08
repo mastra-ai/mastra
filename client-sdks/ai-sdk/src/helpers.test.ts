@@ -504,3 +504,42 @@ describe('transient data chunks', () => {
     expect(convert({ type: 'data-preview', data: 1 })).toEqual({ type: 'data-preview', data: 1 });
   });
 });
+
+describe('MCP App pointer', () => {
+  const app = { resourceUri: 'ui://weather/view', serverId: 'weather', mimeType: 'text/html;profile=mcp-app' };
+  const toUI = (chunk: any) =>
+    convertFullStreamChunkToUIMessageStream({
+      part: convertMastraChunkToAISDKv6({
+        chunk: { runId: 'r', from: ChunkFrom.AGENT, metadata: {}, ...chunk },
+      }) as any,
+      onError: String,
+    }) as any;
+
+  it('emits toolMetadata.app on tool-input-start and tool-input-available', () => {
+    const start = toUI({
+      type: 'tool-call-input-streaming-start',
+      payload: { toolCallId: 'c1', toolName: 't', toolMetadata: { app } },
+    });
+    const available = toUI({
+      type: 'tool-call',
+      payload: { toolCallId: 'c1', toolName: 't', args: {}, toolMetadata: { app } },
+    });
+    expect(start).toMatchObject({ type: 'tool-input-start', toolMetadata: { app } });
+    expect(available).toMatchObject({ type: 'tool-input-available', toolMetadata: { app } });
+    expect(available.providerMetadata).toBeUndefined();
+  });
+
+  it('merges the pointer with observability metadata', () => {
+    const carrier = { traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' };
+    const available = toUI({
+      type: 'tool-call',
+      payload: { toolCallId: 'c1', toolName: 't', args: {}, toolMetadata: { app }, observability: carrier },
+    });
+    expect(available.toolMetadata).toEqual({ app, __mastraObservability: carrier });
+  });
+
+  it('omits toolMetadata when there is nothing to carry', () => {
+    const available = toUI({ type: 'tool-call', payload: { toolCallId: 'c1', toolName: 't', args: {} } });
+    expect(available).not.toHaveProperty('toolMetadata');
+  });
+});
