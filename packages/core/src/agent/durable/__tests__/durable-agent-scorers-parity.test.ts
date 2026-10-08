@@ -9,7 +9,8 @@
  * The harness waits for the score with a 250 ms polling loop (up to `SCORE_WAIT_MS`) because scoring
  * is fire-and-forget and this port may not sleep. Instead the host's scores store is wrapped so the
  * `saveScore` write itself resolves the wait for its run, and the throwing variant waits on the
- * scorer's own completion, after which nothing is ever written.
+ * scorer's own completion, after which nothing is ever written. Each wait is bounded, so an engine
+ * that never settles fails with its name instead of running to the test timeout.
  *
  * One deliberate fidelity gap: the harness registers the scorer on the host too (`ctx.mastra({
  * scorers })`), not only on the agent. The parity helper builds the `Mastra` instance itself with
@@ -95,6 +96,24 @@ async function scoreRows(storages: InMemoryStore[], runId: string) {
   }
 
   return rows;
+}
+
+/**
+ * Bounds a wait so an engine that never settles or never writes fails with its name, rather than
+ * running to the suite's 120 s test timeout with no indication of which engine stalled.
+ */
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out`)), 10_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** `done` counts how many completed steps the prompt already carries (harness `toolResults(prompt)`). */
@@ -186,8 +205,8 @@ async function runT50(mode: ScorerMode) {
         // (which is why `pass` waits on `written` as well), and immediately before the throw on the
         // `throws` path, where the hook catches the failure and persists nothing, so `settled` is
         // the whole signal.
-        await state.settled;
-        if (mode === 'pass') await written;
+        await withTimeout(state.settled, `${handle.engine}: scorer settle`);
+        if (mode === 'pass') await withTimeout(written, `${handle.engine}: score write`);
       } finally {
         SCORE_WRITES.delete(runId);
       }
@@ -221,7 +240,7 @@ describe('T50 scorer parity', () => {
       // harness: `score stored` + `stored under the run id` — one score of 1 under this run id.
       expect(rows, `${engine}: stored scores`).toHaveLength(1);
       expect(rows[0]!.score, `${engine}: stored score`).toBe(1);
-      expect(rows[0]!.runId, `${engine}: score run id`).toMatch(/^t50-run-/);
+      expect(rows[0]!.runId, `${engine}: score run id`).toBe(runId);
 
       contracts.set(engine, {
         starts: state.starts,
