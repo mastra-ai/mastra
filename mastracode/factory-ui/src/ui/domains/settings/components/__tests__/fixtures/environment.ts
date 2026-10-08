@@ -26,10 +26,20 @@ export function environmentRepository(
 
 export function environmentPayload(overrides: Partial<FactoryEnvironmentPayload> = {}): FactoryEnvironmentPayload {
   return {
+    sandbox: {
+      provider: 'platform',
+      settingsSchema: {
+        type: 'object',
+        properties: {
+          cpuCount: { type: 'integer', title: 'CPU', minimum: 1, maximum: 64 },
+          memoryMb: { type: 'integer', title: 'Memory (MB)', minimum: 512, maximum: 65536 },
+        },
+        additionalProperties: false,
+      },
+      capabilities: { template: true, builds: { available: true, history: false } },
+    },
+    settings: { cpuCount: 2, memoryMb: 4096 },
     sandboxWorkdir: '/workspace',
-    sandboxCpuCount: 2,
-    sandboxMemoryMb: 4096,
-    sandboxIdleTimeoutMinutes: 30,
     workspaceSetupCommand: null,
     activeTemplateId: null,
     activeTemplateHeads: null,

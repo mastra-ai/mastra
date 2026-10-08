@@ -2,9 +2,9 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
-import { CommittedInput, wholeNumber, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
-/** The sandbox every session boots: provider, size, idle timeout and working directory. */
+/** The sandbox every session boots: its working directory. Provider settings render from the schema (segment 4). */
 export function ResourcesBlock({
   environment,
   disabled,
@@ -20,71 +20,6 @@ export function ResourcesBlock({
         Resources
       </Txt>
       <SettingsContainer>
-        <SettingsRow
-          label="CPU"
-          description="Cores reserved for each sandbox (1 to 64). Empty uses the provider default."
-        >
-          <div className="w-full lg:max-w-32">
-            <CommittedInput
-              label="CPU cores"
-              type="number"
-              min={1}
-              max={64}
-              placeholder="default"
-              value={environment.sandboxCpuCount === null ? '' : String(environment.sandboxCpuCount)}
-              disabled={disabled}
-              onCommit={raw => {
-                if (raw === '') return onSave({ sandboxCpuCount: null });
-                const sandboxCpuCount = wholeNumber(raw, 1, 64);
-                return sandboxCpuCount === undefined ? Promise.resolve(false) : onSave({ sandboxCpuCount });
-              }}
-            />
-          </div>
-        </SettingsRow>
-        <SettingsRow
-          label="Memory"
-          description="Megabytes reserved for each sandbox (512 to 65536). Empty uses the provider default."
-        >
-          <div className="w-full lg:max-w-32">
-            <CommittedInput
-              label="Memory in megabytes"
-              type="number"
-              min={512}
-              max={65536}
-              placeholder="default"
-              value={environment.sandboxMemoryMb === null ? '' : String(environment.sandboxMemoryMb)}
-              disabled={disabled}
-              onCommit={raw => {
-                if (raw === '') return onSave({ sandboxMemoryMb: null });
-                const sandboxMemoryMb = wholeNumber(raw, 512, 65536);
-                return sandboxMemoryMb === undefined ? Promise.resolve(false) : onSave({ sandboxMemoryMb });
-              }}
-            />
-          </div>
-        </SettingsRow>
-        <SettingsRow
-          label="Idle timeout"
-          description="Minutes without activity before a sandbox stops. Empty uses the provider default."
-        >
-          <div className="w-full lg:max-w-32">
-            <CommittedInput
-              label="Idle timeout in minutes"
-              type="number"
-              min={1}
-              max={1440}
-              placeholder="default"
-              value={
-                environment.sandboxIdleTimeoutMinutes === null ? '' : String(environment.sandboxIdleTimeoutMinutes)
-              }
-              disabled={disabled}
-              onCommit={raw => {
-                if (raw === '') return onSave({ sandboxIdleTimeoutMinutes: null });
-                const minutes = wholeNumber(raw, 1, 1440);
-                return minutes === undefined ? Promise.resolve(false) : onSave({ sandboxIdleTimeoutMinutes: minutes });
-              }}
-            />
-          </div>
-        </SettingsRow>
         <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
           <div className="w-full lg:max-w-96">
             <CommittedInput

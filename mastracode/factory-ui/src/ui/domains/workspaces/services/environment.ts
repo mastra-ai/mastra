@@ -25,11 +25,18 @@ export interface FactoryEnvironmentRepository {
   lastBuiltAt: string | null;
 }
 
+/** The host's FactorySandbox as the route describes it: provider id, settings JSON Schema, capabilities. */
+export interface FactoryEnvironmentSandbox {
+  provider: string;
+  settingsSchema: Record<string, unknown>;
+  capabilities: { template: boolean; builds: { available: boolean; history: boolean } };
+}
+
 export interface FactoryEnvironmentPayload {
+  sandbox: FactoryEnvironmentSandbox;
+  /** Provider settings the user set; absent keys use the provider default. */
+  settings: Record<string, unknown>;
   sandboxWorkdir: string | null;
-  sandboxCpuCount: number | null;
-  sandboxMemoryMb: number | null;
-  sandboxIdleTimeoutMinutes: number | null;
   workspaceSetupCommand: string | null;
   activeTemplateId: string | null;
   activeTemplateHeads: Record<string, string> | null;
@@ -50,9 +57,8 @@ export interface FactoryEnvironmentRepositoryPatch {
 
 export interface FactoryEnvironmentPatch {
   sandboxWorkdir?: string | null;
-  sandboxCpuCount?: number | null;
-  sandboxMemoryMb?: number | null;
-  sandboxIdleTimeoutMinutes?: number | null;
+  /** Merged onto the stored settings; null removes a key. */
+  settings?: Record<string, unknown | null>;
   workspaceSetupCommand?: string | null;
   /** Positions, when given, must be a permutation of 1..n over the listed repositories. */
   repositories?: FactoryEnvironmentRepositoryPatch[];

@@ -83,11 +83,10 @@ describe('Environment settings', () => {
     expect(await screen.findByText('Failed to load environment (500)')).toBeInTheDocument();
   });
 
-  it('shows every stored value: resources, ordered repositories with status, workspace setup', async () => {
+  it('shows every stored value: working directory, ordered repositories with status, workspace setup', async () => {
     useFactory();
     useEnvironment(
       environmentPayload({
-        sandboxIdleTimeoutMinutes: null,
         workspaceSetupCommand: 'pnpm install',
         repositories: [
           environmentRepository({
@@ -105,10 +104,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('spinbutton', { name: 'CPU cores' })).toHaveValue(2);
-    expect(screen.getByRole('spinbutton', { name: 'Memory in megabytes' })).toHaveValue(4096);
-    expect(screen.getByRole('spinbutton', { name: 'Idle timeout in minutes' })).toHaveValue(null);
-    expect(screen.getByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');
+    expect(await screen.findByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');
     expect(screen.getByRole('textbox', { name: 'Workspace setup command' })).toHaveValue('pnpm install');
 
     // Rows follow `position`; a link whose repository is gone is not shown at all.
@@ -148,26 +144,6 @@ describe('Environment settings', () => {
     expect(screen.getAllByLabelText(/^Drag /)).toHaveLength(2);
   });
 
-  it('clears a resource back to the provider default and renders it as an empty field', async () => {
-    useFactory();
-    const environment = environmentPayload({ sandboxMemoryMb: null });
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    const memory = await screen.findByRole('spinbutton', { name: 'Memory in megabytes' });
-    expect(memory).toHaveValue(null);
-    expect(memory).toHaveAttribute('placeholder', 'default');
-
-    const cpu = screen.getByRole('spinbutton', { name: 'CPU cores' });
-    await user.clear(cpu);
-    await user.tab();
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ sandboxCpuCount: null });
-  });
-
   it('toggles a repository out of the environment', async () => {
     useFactory();
     const environment = environmentPayload();
@@ -203,51 +179,6 @@ describe('Environment settings', () => {
     expect(patches[0]?.repositories?.[1]).toMatchObject({ projectRepositoryId: 'link-api', setupCommand: null });
   });
 
-  it('patches one resource field at a time', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    const cpu = await screen.findByRole('spinbutton', { name: 'CPU cores' });
-    await user.clear(cpu);
-    await user.type(cpu, '4{Enter}');
-
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ sandboxCpuCount: 4 });
-
-    const idle = screen.getByRole('spinbutton', { name: 'Idle timeout in minutes' });
-    await user.clear(idle);
-    await user.tab();
-    await waitFor(() => expect(patches).toHaveLength(2));
-    expect(patches[1]).toEqual({ sandboxIdleTimeoutMinutes: null });
-  });
-
-  it('rejects a non-integer or out-of-range number without a PATCH', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    const cpu = await screen.findByRole('spinbutton', { name: 'CPU cores' });
-    await user.clear(cpu);
-    await user.type(cpu, '1.5{Enter}');
-    expect(await screen.findByText('Enter a whole number between 1 and 64')).toBeInTheDocument();
-    expect(cpu).toHaveValue(2);
-
-    await user.clear(cpu);
-    await user.type(cpu, '99{Enter}');
-    await waitFor(() => expect(screen.getAllByText('Enter a whole number between 1 and 64').length).toBeGreaterThan(0));
-    expect(cpu).toHaveValue(2);
-    expect(patches).toHaveLength(0);
-  });
-
   it('surfaces a failed save as a toast and shows the stored value again', async () => {
     useFactory();
     const environment = environmentPayload();
@@ -261,11 +192,11 @@ describe('Environment settings', () => {
     expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Include acme/api in the environment' })).toBeChecked();
 
-    const cpu = screen.getByRole('spinbutton', { name: 'CPU cores' });
-    await user.clear(cpu);
-    await user.type(cpu, '4{Enter}');
+    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
+    await user.clear(workdir);
+    await user.type(workdir, '/home/user{Enter}');
     await waitFor(() => expect(screen.getAllByText('Failed to save environment (500)').length).toBeGreaterThan(1));
-    await waitFor(() => expect(cpu).toHaveValue(2));
+    await waitFor(() => expect(workdir).toHaveValue('/workspace'));
   });
 
   it('saves the workspace setup command', async () => {
