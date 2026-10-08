@@ -91,18 +91,49 @@ describe('FileTransport', () => {
     });
   });
 
-  it('should handle errors in _transform', () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('should propagate synchronous write errors from _transform', async () => {
     const errorObj = new Error('Test error');
-
     vi.spyOn(fileLogger.fileStream, 'write').mockImplementationOnce(() => {
       throw errorObj;
     });
 
-    fileLogger._transform('test', 'utf8', error => {
-      expect(consoleSpy).toHaveBeenCalledWith('Error parsing log entry:', errorObj);
-      expect(error).toBeNull(); // Should not propagate error
-    });
+    const error = await new Promise(resolve => fileLogger._transform('test', 'utf8', err => resolve(err)));
+    expect(error).toBe(errorObj);
+  });
+
+  it('should propagate asynchronous write errors from _transform', async () => {
+    const errorObj = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' });
+    vi.spyOn(fileLogger.fileStream, 'write').mockImplementationOnce(((_chunk: any, cb: (err?: Error) => void) => {
+      setImmediate(() => cb(errorObj));
+      return true;
+    }) as any);
+
+    const callback = vi.fn();
+    const done = new Promise<void>(resolve =>
+      fileLogger._transform('test', 'utf8', (err, chunk) => {
+        callback(err, chunk);
+        resolve();
+      }),
+    );
+    expect(callback).not.toHaveBeenCalled();
+    await done;
+    expect(callback).toHaveBeenCalledWith(errorObj, undefined);
+  });
+
+  it('should return the chunk after a successful write in _transform', async () => {
+    const result = await new Promise<[Error | null, any]>(resolve =>
+      fileLogger._transform('ok\n', 'utf8', (err, chunk) => resolve([err, chunk])),
+    );
+    expect(result).toEqual([null, 'ok\n']);
+  });
+
+  it('should surface real filesystem errors on the transport instead of crashing', async () => {
+    const transport = new FileTransport({ path: testDir });
+    const writeError = new Promise<Error | null | undefined>(resolve => transport.write('line\n', resolve));
+    const transportError = new Promise<Error>(resolve => transport.once('error', resolve));
+
+    expect((await writeError)?.message).toMatch(/EISDIR/);
+    expect((await transportError).message).toMatch(/EISDIR/);
   });
 
   it('should flush remaining data when stream ends', () => {
