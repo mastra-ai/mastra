@@ -1805,33 +1805,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   /**
-   * Move a node's identity memberships from `from` to `to` without touching structural
-   * placements added by `#placeNodeInScopes`, which a scope change must not erase.
-   */
-  async #swapIdentityScopes(
-    executor: Executor,
-    nodeId: string,
-    from: KnowledgeScope,
-    to: KnowledgeScope,
-    addedAt: Date,
-  ): Promise<void> {
-    const next = await this.#resolveScopeNodeIds(executor, to);
-    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, from)) {
-      if (next.includes(scopeNodeId)) continue;
-      await executor.execute({
-        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
-        args: [nodeId, scopeNodeId],
-      });
-    }
-    for (const scopeNodeId of next) {
-      await executor.execute({
-        sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
-        args: [nodeId, scopeNodeId, addedAt.toISOString()],
-      });
-    }
-  }
-
-  /**
    * Additive structural placement: every address must resolve to a live scope node
    * (unlike identity membership, an unknown address is a caller error, not a lazy
    * materialization miss). Runs inside the caller's transaction, so a throw aborts

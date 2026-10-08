@@ -469,6 +469,22 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(second[0]!.id).not.toBe(first[0]!.id);
     });
 
+    it('keeps structural placement when an update omits memberships', async () => {
+      const structural = await store.createNode({ name: 'Features', isScope: true, scopeIds: [ORG_SCOPE_ID] });
+      const node = await store.createNode({ name: 'Inventory', scopeIds: [PROJECT_SCOPE_ID, structural.id] });
+      const placed = await store.getNodeScopeIds(node.id);
+
+      const described = await store.updateNode({
+        id: node.id,
+        version: node.version,
+        metadata: { description: 'Shared inventory service.' },
+      });
+      await store.updateNode({ id: node.id, version: described.version, kind: 'service' });
+
+      expect(await store.getNodeScopeIds(node.id)).toEqual(placed);
+      expect(placed).toContain(structural.id);
+    });
+
     it('updates node memberships with optimistic concurrency and refreshes record semantics', async () => {
       const node = await store.createNode({ name: 'Movable', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node, text: 'Attached record', scopeIds: [PROJECT_SCOPE_ID] });
