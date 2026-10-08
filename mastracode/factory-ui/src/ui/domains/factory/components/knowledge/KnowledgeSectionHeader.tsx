@@ -8,7 +8,7 @@ export function KnowledgeSectionHeader({ title, count }: { title: string; count?
         {title}
       </Txt>
       {count !== undefined ? (
-        <span className="bg-fill rounded-full px-1.5 py-0.5">
+        <span className="bg-fill inline-flex items-center rounded-full px-1.5 py-0.5">
           <Txt as="span" variant="meta" tone="muted">
             {count}
           </Txt>
