@@ -76,6 +76,14 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
   }
 }
 
+/** Copies the links whose IDs are valid hex trace and span IDs; `undefined` when none remain. */
+function validLinks(links: SpanLink[] | undefined): SpanLink[] | undefined {
+  const valid = links?.filter(
+    link => /^[0-9a-f]{1,32}$/i.test(link?.traceId ?? '') && /^[0-9a-f]{1,16}$/i.test(link?.spanId ?? ''),
+  );
+  return valid?.length ? valid.map(({ traceId, spanId }) => ({ traceId, spanId })) : undefined;
+}
+
 /**
  * Get the external parent span ID from CreateSpanOptions.
  *
@@ -103,10 +111,6 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
  * getExternalParentId(options); // 'span-456'
  * ```
  */
-function isValidLink(link: SpanLink | undefined): link is SpanLink {
-  return /^[0-9a-f]{1,32}$/i.test(link?.traceId ?? '') && /^[0-9a-f]{1,16}$/i.test(link?.spanId ?? '');
-}
-
 export function getExternalParentId(options: CreateSpanOptions<any>): string | undefined {
   if (!options.parent) {
     return undefined;
@@ -241,7 +245,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
-    this.addLinks(options.links);
+    this.links = validLinks(options.links);
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
@@ -533,15 +537,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     };
 
     return this.correlationContext;
-  }
-
-  /** Adds links with valid IDs that the span doesn't have yet. */
-  protected addLinks(links: SpanLink[] | undefined): void {
-    for (const link of links ?? []) {
-      if (!isValidLink(link)) continue;
-      if (this.links?.some(existing => existing.traceId === link.traceId && existing.spanId === link.spanId)) continue;
-      (this.links ??= []).push({ traceId: link.traceId, spanId: link.spanId });
-    }
   }
 
   /** Returns a lightweight span ready for export */

@@ -297,6 +297,63 @@ describe('OtelBridge', () => {
       });
     });
 
+    describe('with span links', () => {
+      const startLink = { traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '1a2b3c4d5e6f7081' };
+      const lateLink = { traceId: 'b1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '2a2b3c4d5e6f7081' };
+
+      it('starts the OpenTelemetry span with links to valid linked spans and keeps its own trace', () => {
+        const bridge = new OtelBridge();
+        const startSpan = vi.spyOn((bridge as any).otelTracer, 'startSpan');
+
+        const result = bridge.createSpan({
+          type: SpanType.MCP_SERVER_REQUEST,
+          name: 'tools/call weather',
+          attributes: {},
+          links: [startLink, { traceId: 'not-a-trace-id', spanId: 'nope' }],
+        });
+
+        const options = startSpan.mock.calls[0]![1] as { links?: Array<{ context: Record<string, unknown> }> };
+        expect(options.links).toEqual([{ context: { ...startLink, traceFlags: 1, isRemote: true } }]);
+        expect(result?.traceId).not.toBe(startLink.traceId);
+        expect(result?.externalParentSpanId).toBeUndefined();
+
+        startSpan.mockRestore();
+        bridge.shutdown();
+      });
+
+      it('adds links set after the span started when the span ends', async () => {
+        const bridge = new OtelBridge();
+        bridge.init({ config: { serviceName: 'late-links' } } as any);
+        const ids = bridge.createSpan({
+          type: SpanType.MCP_TOOL_CALL,
+          name: 'tool',
+          attributes: {},
+          links: [startLink],
+        })!;
+        const otelSpan = (bridge as any).otelSpanMap.get(ids.spanId).otelSpan;
+        const addLinks = vi.spyOn(otelSpan, 'addLinks');
+
+        await bridge.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: {
+            id: ids.spanId,
+            traceId: ids.traceId,
+            name: 'tool',
+            type: SpanType.MCP_TOOL_CALL,
+            startTime: new Date(),
+            endTime: new Date(),
+            isEvent: false,
+            isRootSpan: true,
+            links: [startLink, lateLink],
+          },
+        } as any);
+
+        expect(addLinks).toHaveBeenCalledTimes(1);
+        expect(addLinks.mock.calls[0]![0]).toEqual([{ context: { ...lateLink, traceFlags: 1, isRemote: true } }]);
+        await bridge.shutdown();
+      });
+    });
+
     // Regression tests for https://github.com/mastra-ai/mastra/issues/15589
     //
     // When no OTEL SDK / tracer provider is registered, `trace.getTracer(...)`

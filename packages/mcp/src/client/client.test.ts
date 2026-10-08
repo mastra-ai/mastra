@@ -2208,17 +2208,16 @@ describe('MastraMCPClient - Custom _meta', () => {
           vendor: true,
         },
       });
-      const update = vi.fn();
+      const existingLink = { traceId: '33333333333333333333333333333333', spanId: '4444444444444444' };
+      const span = callingSpan({ links: [existingLink] });
       const tools = await client.tools();
 
-      const output = await tools['echo']?.execute?.(
-        { msg: 'hi' },
-        { tracingContext: { currentSpan: callingSpan({ update }) } },
-      );
+      const output = await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
 
-      expect(update).toHaveBeenCalledWith({
-        links: [{ traceId: '11111111111111111111111111111111', spanId: '2222222222222222' }],
-      });
+      expect(span.links).toEqual([
+        existingLink,
+        { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' },
+      ]);
       expect((output as any)._meta).toEqual({ mastra: { other: 1 }, vendor: true });
     });
 
@@ -2232,12 +2231,12 @@ describe('MastraMCPClient - Custom _meta', () => {
         content: [{ type: 'text', text: 'ok' }],
         _meta: { mastra: { traceparent: 'garbage' } },
       });
-      const update = vi.fn();
+      const span = callingSpan();
       const tools = await client.tools();
 
-      await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: callingSpan({ update }) } });
+      await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
 
-      expect(update).not.toHaveBeenCalled();
+      expect(span.links).toBeUndefined();
     });
 
     it.each([

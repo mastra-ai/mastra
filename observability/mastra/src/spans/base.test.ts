@@ -421,16 +421,17 @@ describe('Span', () => {
       expect(invalidOnly.exportSpan()).not.toHaveProperty('links');
     });
 
-    it('adds links passed to update(), skipping duplicates and invalid IDs', () => {
+    it('exports links set on the span before it ends, without changing earlier exports', () => {
       const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'tool-call', links: [callerSpan] });
-      const before = span.exportSpan();
+      const started = span.exportSpan();
       const serverSpan = { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' };
 
-      span.update({ links: [serverSpan, callerSpan, { traceId: 'nope', spanId: 'nope' }] });
+      span.links = [...(span.links ?? []), serverSpan];
+      span.end();
 
-      expect(span.exportSpan().links).toEqual([callerSpan, serverSpan]);
-      // A span exported earlier keeps the links it had at that time.
-      expect(before.links).toEqual([callerSpan]);
+      const ended = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
+      expect(ended.links).toEqual([callerSpan, serverSpan]);
+      expect(started.links).toEqual([callerSpan]);
     });
 
     it('keeps links when a span is rebuilt from its exported form', () => {

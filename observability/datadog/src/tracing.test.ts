@@ -93,6 +93,7 @@ vi.mock('dd-trace', () => {
         exportSpan: (span: any) => ({ traceId: 'dd-trace-id', spanId: span?.id || 'dd-span-id' }),
       },
       _tracer: { started: false },
+      extract: (_format: string, carrier: { traceparent: string }) => ({ fromTraceparent: carrier.traceparent }),
       scope: () => ({
         activate: mockScopeActivate,
         active: mockScopeActive,
@@ -1827,6 +1828,38 @@ describe('DatadogExporter', () => {
       } as any);
 
       expect(mockSubmitEvaluation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DatadogExporter span links', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('passes links to llmobs.trace as Datadog contexts resolved from W3C traceparents', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        links: [
+          { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' },
+          { traceId: 'abc', spanId: 'def' },
+        ],
+      } as Partial<AnyExportedSpan>);
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockTrace.mock.calls[0]![0].links).toEqual([
+        { context: { fromTraceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' } },
+      ]);
+      await exporter.shutdown();
+    });
+
+    it('passes no links for a span without links', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, createMockSpan()));
+
+      expect(mockTrace.mock.calls[0]![0]).not.toHaveProperty('links');
+      await exporter.shutdown();
     });
   });
 });

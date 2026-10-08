@@ -34,7 +34,7 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
 import { formatUsageMetrics } from './metrics';
-import { ensureTracer, formatInput, formatOutput, kindFor, toDate } from './utils';
+import { ensureTracer, formatInput, formatOutput, kindFor, toDate, toDatadogLinks } from './utils';
 import type { DatadogSpanKind } from './utils';
 
 // These types model dd-trace internals, not its public API surface.
@@ -167,6 +167,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
   private config: Required<Pick<DatadogBridgeConfig, 'mlApp' | 'site'>> & DatadogBridgeConfig;
   private ddSpanMap = new Map<string, any>();
+  /** Keys of the links each dd span was started with, so links set later are added once at finish. */
+  private startLinkKeys = new WeakMap<object, Set<string>>();
   private traceContext = new Map<string, TraceContext>();
   private openSpanCounts = new Map<string, number>();
 
@@ -249,10 +251,15 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         llmobsParentDdSpan = apmParentDdSpan;
       }
 
+      const links = toDatadogLinks(options.links);
       const ddSpan = tracer.startSpan(options.name, {
         ...(apmParentDdSpan ? { childOf: apmParentDdSpan } : {}),
         ...(options.startTime ? { startTime: toDate(options.startTime).getTime() } : {}),
+        ...(links.length > 0 ? { links } : {}),
       });
+      if (options.links?.length) {
+        this.startLinkKeys.set(ddSpan, new Set(options.links.map(link => `${link.traceId}:${link.spanId}`)));
+      }
 
       const ddContext = ddSpan.context?.() as
         | {
@@ -490,6 +497,18 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         spanId: span.id,
         spanName: span.name,
       });
+    }
+
+    try {
+      // Links set after the span started, such as an MCP tool call's link to the
+      // server span that handled it
+      const startKeys = this.startLinkKeys.get(ddSpan);
+      const lateLinks = toDatadogLinks(span.links?.filter(link => !startKeys?.has(`${link.traceId}:${link.spanId}`)));
+      if (lateLinks.length > 0 && typeof ddSpan.addLinks === 'function') {
+        ddSpan.addLinks(lateLinks);
+      }
+    } catch (error) {
+      this.logger.error('[DatadogBridge] Failed to add span links', { error, spanId: span.id });
     }
 
     try {

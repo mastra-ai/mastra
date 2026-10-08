@@ -7,6 +7,21 @@ import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
 
 /**
+ * Datadog span links for Mastra span links, such as the caller of a served MCP
+ * request. Each link is resolved from a W3C `traceparent`, so only full-length
+ * W3C IDs are kept, and links dd-trace can't resolve are skipped.
+ */
+export function toDatadogLinks(links: { traceId: string; spanId: string }[] | undefined): { context: any }[] {
+  const ddLinks: { context: any }[] = [];
+  for (const link of links ?? []) {
+    if (!/^[0-9a-f]{32}$/.test(link.traceId) || !/^[0-9a-f]{16}$/.test(link.spanId)) continue;
+    const context = tracer.extract('text_map', { traceparent: `00-${link.traceId}-${link.spanId}-01` });
+    if (context) ddLinks.push({ context });
+  }
+  return ddLinks;
+}
+
+/**
  * Datadog LLM Observability span kinds.
  */
 export type DatadogSpanKind = 'llm' | 'agent' | 'workflow' | 'tool' | 'task' | 'retrieval' | 'embedding';

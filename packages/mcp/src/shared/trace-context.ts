@@ -1,5 +1,5 @@
-import { resolveExportedSpanId } from '@mastra/core/observability';
-import type { AnySpan } from '@mastra/core/observability';
+import { formatTraceparent, parseTraceparent, resolveExportedSpanId } from '@mastra/core/observability';
+import type { AnySpan, SpanLink } from '@mastra/core/observability';
 
 /**
  * W3C trace fields carried in MCP request `_meta` (SEP-414).
@@ -69,21 +69,54 @@ export function withoutTraceContext(params: Record<string, unknown> | undefined)
   return Object.keys(restMeta).length > 0 ? { ...rest, _meta: restMeta } : rest;
 }
 
-const TRACEPARENT_RE = /^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/;
-
-/** The span a `traceparent` names. */
-export interface TraceparentSpan {
-  traceId: string;
-  spanId: string;
+/** A caller's W3C trace context, read from a request that named a valid `traceparent`. */
+export interface CallerTraceContext {
+  /** The caller's span, as a link target. */
+  link: SpanLink;
+  /** The `traceparent` the caller sent. */
+  traceparent: string;
+  /** The `tracestate` sent with it, capped with {@link capTracestate}. */
+  tracestate?: string;
 }
 
-/** Parses a W3C `traceparent`. Malformed values and all-zero ids yield `undefined`. */
-export function parseTraceparent(value: unknown): TraceparentSpan | undefined {
-  const match = typeof value === 'string' ? TRACEPARENT_RE.exec(value.trim()) : null;
-  if (!match) return undefined;
-  const [, version, traceId, spanId] = match as unknown as [string, string, string, string];
-  if (version === 'ff' || /^0+$/.test(traceId) || /^0+$/.test(spanId)) return undefined;
-  return { traceId, spanId };
+/**
+ * Reads the caller's trace context from a `traceparent` and its `tracestate`.
+ * A `traceparent` that doesn't parse yields nothing, and its `tracestate` is
+ * ignored with it, as the W3C spec requires.
+ */
+export function callerTraceContext(traceparent: unknown, tracestate: unknown): CallerTraceContext | undefined {
+  const parts = parseTraceparent(traceparent);
+  if (!parts) return undefined;
+  const cappedTracestate = typeof tracestate === 'string' ? capTracestate(tracestate) : undefined;
+  return {
+    link: { traceId: parts.traceId, spanId: parts.spanId },
+    traceparent: (traceparent as string).trim(),
+    ...(cappedTracestate ? { tracestate: cappedTracestate } : {}),
+  };
+}
+
+const TRACESTATE_MAX_LENGTH = 512;
+const TRACESTATE_MAX_MEMBERS = 32;
+const TRACESTATE_LONG_MEMBER = 128;
+
+/**
+ * Caps a `tracestate` at 512 characters the way the W3C spec asks: keep at most
+ * 32 entries, drop entries longer than 128 characters first, then drop entries
+ * from the end. Entries are never cut in the middle.
+ * @see https://www.w3.org/TR/trace-context/#tracestate-limits
+ */
+export function capTracestate(value: string): string | undefined {
+  let members = value
+    .split(',')
+    .map(member => member.trim())
+    .filter(Boolean)
+    .slice(0, TRACESTATE_MAX_MEMBERS);
+  const length = () => members.join(',').length;
+  if (length() > TRACESTATE_MAX_LENGTH) {
+    members = members.filter(member => member.length <= TRACESTATE_LONG_MEMBER);
+  }
+  while (members.length > 0 && length() > TRACESTATE_MAX_LENGTH) members.pop();
+  return members.length > 0 ? members.join(',') : undefined;
 }
 
 /**
@@ -93,7 +126,7 @@ export function parseTraceparent(value: unknown): TraceparentSpan | undefined {
  */
 export function traceContextFromSpan(span: AnySpan | undefined): MCPTraceContext | undefined {
   if (!span?.isValid) return undefined;
-  const traceparent = `00-${span.traceId}-${resolveExportedSpanId(span)}-01`;
+  const traceparent = formatTraceparent(span.traceId, resolveExportedSpanId(span) ?? '', true);
   return parseTraceparent(traceparent) ? { traceparent } : undefined;
 }
 
@@ -129,7 +162,7 @@ export function withServerTraceContext<T>(result: T, span: AnySpan | undefined, 
  * Splits the server's span out of a reply: returns the span the server named in
  * its reply `_meta`, if any, and the reply without that key.
  */
-export function takeServerTraceContext<T>(result: T): { result: T; serverSpan?: TraceparentSpan } {
+export function takeServerTraceContext<T>(result: T): { result: T; serverSpan?: SpanLink } {
   const meta = (result as { _meta?: Record<string, unknown> } | undefined)?._meta;
   const mastraMeta = meta?.[MASTRA_META_KEY];
   if (!mastraMeta || typeof mastraMeta !== 'object' || !(SERVER_TRACEPARENT_KEY in mastraMeta)) return { result };
@@ -137,8 +170,9 @@ export function takeServerTraceContext<T>(result: T): { result: T; serverSpan?: 
   const { [MASTRA_META_KEY]: _mastra, ...restMeta } = meta!;
   const nextMeta = Object.keys(restMastra).length > 0 ? { ...restMeta, [MASTRA_META_KEY]: restMastra } : restMeta;
   const { _meta, ...rest } = result as Record<string, unknown>;
+  const parts = parseTraceparent(traceparent);
   return {
     result: (Object.keys(nextMeta).length > 0 ? { ...rest, _meta: nextMeta } : rest) as T,
-    serverSpan: parseTraceparent(traceparent),
+    ...(parts ? { serverSpan: { traceId: parts.traceId, spanId: parts.spanId } } : {}),
   };
 }

@@ -58,10 +58,11 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
+import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
   INPUT_KEY,
-  callerSpan,
+  callerTrace,
   hashArguments,
   principalOf,
   readContinuation,
@@ -545,16 +546,17 @@ export class MCPServer extends MCPServerBase {
   ): void {
     server.setRequestHandler(method, async (request, ctx) => {
       const params = request.params as Record<string, unknown> | undefined;
+      const caller = callerTrace(ctx);
       // A span can only be given its request context when it is created, so auth is
       // resolved first. A mapper that throws still leaves a failed span behind.
       let requestContext: RequestContext;
       try {
         requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
       } catch (error) {
-        this.startRequestSpan(method, params, { server, ctx })?.error({ error: error as Error });
+        this.startRequestSpan(method, params, { server, ctx, caller })?.error({ error: error as Error });
         throw error;
       }
-      const requestSpan = this.startRequestSpan(method, params, { server, ctx, requestContext });
+      const requestSpan = this.startRequestSpan(method, params, { server, ctx, caller, requestContext });
       let reportedError: Error | undefined;
       const result = await this.traceRequest(
         requestSpan,
@@ -568,8 +570,10 @@ export class MCPServer extends MCPServerBase {
           }),
         () => reportedError,
       );
-      // Added after the span recorded the result, so the span output stays the handler's own.
-      return withServerTraceContext(result, requestSpan, callerSpan(ctx) !== undefined);
+      // Only `tools/call` replies name the serving span: the client reads and removes
+      // the key on that path. Added after the span recorded the result, so the span
+      // output stays the handler's own.
+      return method === 'tools/call' ? withServerTraceContext(result, requestSpan, caller !== undefined) : result;
     });
   }
 
@@ -580,7 +584,7 @@ export class MCPServer extends MCPServerBase {
   private startRequestSpan(
     method: string,
     params: Record<string, unknown> | undefined,
-    connection?: { server?: Server; ctx?: ServerContext; requestContext?: RequestContext },
+    connection?: { server?: Server; ctx?: ServerContext; caller?: CallerTraceContext; requestContext?: RequestContext },
   ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
     // A stateless HTTP request carries its own envelope; a stdio connection
     // negotiates once and the instance holds what it agreed to.
@@ -591,7 +595,7 @@ export class MCPServer extends MCPServerBase {
       | undefined;
     const target = params?.name ?? params?.uri;
     const targetName = typeof target === 'string' ? target : undefined;
-    const caller = connection?.ctx ? callerSpan(connection.ctx) : undefined;
+    const caller = connection?.caller;
 
     return getOrCreateSpan({
       type: SpanType.MCP_SERVER_REQUEST,
@@ -608,11 +612,13 @@ export class MCPServer extends MCPServerBase {
         mcpProtocolVersion: typeof protocolVersion === 'string' ? protocolVersion : undefined,
         clientName: client?.name,
         clientVersion: client?.version,
+        callerTraceparent: caller?.traceparent,
+        callerTracestate: caller?.tracestate,
       },
       tracingContext: {},
       // The request keeps its own trace and links to the caller's span, so each
       // side keeps its own root and trace summary in every exporter.
-      links: caller && [caller],
+      links: caller && [caller.link],
       requestContext: connection?.requestContext,
       mastra: this.mastra,
     });

@@ -510,6 +510,10 @@ export interface MCPServerRequestAttributes extends AIBaseAttributes {
   clientName?: string;
   /** Client implementation version, when the client reported one */
   clientVersion?: string;
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string;
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string;
 }
 
 /**
@@ -1345,9 +1349,6 @@ export interface SpanErrorInfo {
 }
 
 /**
- * Base Span interface
- */
-/**
  * A reference to a span in another trace. Unlike a parent, a link does not put
  * the two spans in the same trace: each trace keeps its own root and summary.
  */
@@ -1358,6 +1359,9 @@ export interface SpanLink {
   spanId: string;
 }
 
+/**
+ * Base Span interface
+ */
 interface BaseSpan<TType extends SpanType> {
   /** Unique span identifier */
   id: string;
@@ -1913,12 +1917,6 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
   input?: SpanInput<TType>;
   /** Output data */
   output?: SpanOutput<TType>;
-  /**
-   * Links to spans in other traces, added to the links the span already has.
-   * Use it when the linked span is only known after the span started, such as
-   * the span that served a request this span sent. Links with invalid IDs are ignored.
-   */
-  links?: SpanLink[];
 }
 
 /** Options for recording an error on a span. */

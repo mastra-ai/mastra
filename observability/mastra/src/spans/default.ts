@@ -219,7 +219,6 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options.name !== undefined) {
       this.name = options.name;
     }
-    this.addLinks(options.links);
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options.metadata) {
       this.metadata = {

@@ -145,7 +145,10 @@ export class SpanConverter {
         }
       : undefined;
 
-    const links: Link[] = []; // fill if you add link support later
+    // Spans in other traces, such as the caller of a served MCP request.
+    const links: Link[] = (span.links ?? []).map(link => ({
+      context: { traceId: link.traceId, spanId: link.spanId, traceFlags: TraceFlags.SAMPLED, isRemote: true },
+    }));
 
     const readable: ReadableSpan = {
       name,

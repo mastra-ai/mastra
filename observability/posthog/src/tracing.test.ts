@@ -219,6 +219,44 @@ describe('PosthogExporter', () => {
   });
 
   // --- Distinct ID Resolution Tests ---
+  describe('MCP server request caller context', () => {
+    const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+
+    it('keeps the caller context on the $ai_trace event of a served MCP request', async () => {
+      exporter = new TestPosthogExporter(validConfig);
+      const span = createSpan({
+        type: SpanType.MCP_SERVER_REQUEST,
+        name: 'tools/call echo',
+        attributes: {
+          mcpMethod: 'tools/call',
+          mcpServer: 'orders',
+          callerTraceparent: traceparent,
+          callerTracestate: 'v=1',
+        },
+      } as Partial<AnyExportedSpan>);
+
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span });
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$ai_trace',
+          properties: expect.objectContaining({ callerTraceparent: traceparent, callerTracestate: 'v=1' }),
+        }),
+      );
+    });
+
+    it('adds no caller properties to other root spans', async () => {
+      exporter = new TestPosthogExporter(validConfig);
+      const span = createSpan({ type: SpanType.AGENT_RUN, attributes: { callerTraceparent: traceparent } as any });
+
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span });
+
+      expect(mockCapture.mock.calls[0]![0].properties).not.toHaveProperty('callerTraceparent');
+    });
+  });
+
   describe('Distinct ID Resolution', () => {
     it('should use userId from metadata if present', async () => {
       exporter = new TestPosthogExporter(validConfig);

@@ -1523,8 +1523,10 @@ export class InternalMastraMCPClient extends MastraBase {
                   { timeout: this.timeout, signal: context?.abortSignal },
                 ),
               );
-              // A Mastra server names the span that served the call; link the tool call to it.
-              if (serverSpan) context?.tracingContext?.currentSpan?.update({ links: [serverSpan] });
+              // A Mastra server names the span that served the call. The tool call span ends
+              // after this returns, and its end export carries the link.
+              const toolCallSpan = context?.tracingContext?.currentSpan;
+              if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
 
               // Per the MCP spec, tool *execution* failures are reported in-band with
               // `isError: true`. Map that onto Mastra's failed-tool-call path unless the

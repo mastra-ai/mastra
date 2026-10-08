@@ -928,6 +928,12 @@ interface MCPServerRequestAttributes {
 
   /** Client implementation version, when the client reported one */
   clientVersion?: string
+
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string
+
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string
 }
 ```
 
@@ -1185,9 +1191,6 @@ interface UpdateSpanOptions<TType extends SpanType> {
 
   /** Output data */
   output?: SpanOutput<TType>
-
-  /** Links to spans in other traces, added to the links the span already has */
-  links?: SpanLink[]
 }
 ```
 

@@ -128,6 +128,13 @@ export interface SentryExporterConfig extends BaseExporterConfig {
  * generation tracks the single MODEL_GENERATION for AGENT_RUN response attributes.
  * toolCalls tracks child tool calls for MODEL_GENERATION spans.
  */
+/** Sentry span links for Mastra span links. Only full-length W3C IDs are kept. */
+function toSentryLinks(links: { traceId: string; spanId: string }[] | undefined) {
+  return (links ?? [])
+    .filter(link => /^[0-9a-f]{32}$/.test(link.traceId) && /^[0-9a-f]{16}$/.test(link.spanId))
+    .map(link => ({ context: { traceId: link.traceId, spanId: link.spanId, traceFlags: 1 } }));
+}
+
 type SpanData = {
   span: Sentry.Span;
   spanType: SpanType;
@@ -141,6 +148,8 @@ type SpanData = {
     id?: string;
     type?: string;
   }>;
+  /** Keys of the links the span was started with, so links set later are added once at end. */
+  startLinkKeys?: Set<string>;
 };
 
 /** Config type with Sentry-specific fields resolved */
@@ -253,12 +262,14 @@ export class SentryExporter extends BaseExporter {
   private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
     const resolvedParentId = this.resolveParentSpanId(span.parentSpanId);
 
+    const links = toSentryLinks(span.links);
     const sentrySpan = Sentry.startInactiveSpan({
       op: this.getOperationType(span),
       name: getGenAISpanName(span, this.genAIOptions(span)),
       startTime: span.startTime.getTime(),
       forceTransaction: span.isRootSpan,
       parentSpan: resolvedParentId ? this.spanMap.get(resolvedParentId)?.span : undefined,
+      ...(links.length > 0 ? { links } : {}),
     });
 
     sentrySpan.setAttributes(this.buildSpanAttributes(span));
@@ -266,6 +277,9 @@ export class SentryExporter extends BaseExporter {
     this.spanMap.set(span.id, {
       span: sentrySpan,
       spanType: span.type,
+      ...(span.links?.length
+        ? { startLinkKeys: new Set(span.links.map(link => `${link.traceId}:${link.spanId}`)) }
+        : {}),
     });
 
     // Track tool calls as children of MODEL_GENERATION spans for gen_ai.response.tool_calls attribute
@@ -350,6 +364,15 @@ export class SentryExporter extends BaseExporter {
           },
         },
       });
+    }
+
+    // Links set after the span started, such as an MCP tool call's link to the
+    // server span that handled it
+    const lateLinks = toSentryLinks(
+      span.links?.filter(link => !spanData.startLinkKeys?.has(`${link.traceId}:${link.spanId}`)),
+    );
+    if (lateLinks.length > 0 && typeof sentrySpan.addLinks === 'function') {
+      sentrySpan.addLinks(lateLinks);
     }
 
     const endTime = span.endTime ? span.endTime.getTime() : undefined;
