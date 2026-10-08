@@ -4,10 +4,14 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  resolveRunFence,
   validateStorageMetadataFilter,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -21,10 +25,14 @@ import type {
   StorageListThreadsOutput,
   StorageMetadataFilter,
   CreateIndexOptions,
+  RunFence,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
+import { assertRunFence, claimTransaction, withRunFence } from '../../db/run-fencing';
+import type { Queryable } from '../../db/run-fencing';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
 function bindMssqlMetadataParams(request: sql.Request, params: Record<string, unknown>): void {
@@ -117,8 +125,74 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  get #runFencesTable(): string {
+    return getTableName({ indexName: TABLE_MEMORY_RUN_FENCES, schemaName: getSchemaName(this.schema) });
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const table = this.#runFencesTable;
+    try {
+      return await claimTransaction(this.pool, async transaction => {
+        const result = await transaction
+          .request()
+          .input('runId', fence.runId)
+          .query(`SELECT [generation], [ownerId] FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE [runId] = @runId`);
+        const row = result.recordset[0];
+        if (!row) {
+          await transaction
+            .request()
+            .input('runId', fence.runId)
+            .input('generation', sql.Int, fence.generation)
+            .input('ownerId', fence.ownerId)
+            .query(`INSERT INTO ${table} ([runId], [generation], [ownerId]) VALUES (@runId, @generation, @ownerId)`);
+          return true;
+        }
+        const generation = Number(row.generation);
+        if (generation < fence.generation) {
+          await transaction
+            .request()
+            .input('runId', fence.runId)
+            .input('generation', sql.Int, fence.generation)
+            .input('ownerId', fence.ownerId)
+            .query(`UPDATE ${table} SET [generation] = @generation, [ownerId] = @ownerId WHERE [runId] = @runId`);
+          return true;
+        }
+        return generation === fence.generation && String(row.ownerId) === fence.ownerId;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  /** Runs `write` behind its own fence, otherwise the one in scope for this store. */
+  #fenced<T>(fence: RunFence | undefined, operation: string, write: (q: Queryable) => Promise<T>): Promise<T> {
+    return withRunFence(this.pool, this.#runFencesTable, resolveRunFence(this, fence), operation, write);
+  }
+
+  /** The fence check for a write that already runs in its own transaction. */
+  async #assertFence(transaction: sql.Transaction, fence: RunFence | undefined, operation: string): Promise<void> {
+    const resolved = resolveRunFence(this, fence);
+    if (resolved) await assertRunFence(transaction, this.#runFencesTable, resolved, operation);
   }
 
   /**
@@ -181,6 +255,7 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.clearTable({ tableName: TABLE_MESSAGES });
     await this.db.clearTable({ tableName: TABLE_THREADS });
     await this.db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
   }
 
   async getThreadById({
@@ -389,7 +464,13 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  public async saveThread({
+    thread,
+    fence,
+  }: {
+    thread: StorageThreadType;
+    fence?: RunFence;
+  }): Promise<StorageThreadType> {
     try {
       const table = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
       const mergeSql = `MERGE INTO ${table} WITH (HOLDLOCK) AS target
@@ -404,22 +485,25 @@ export class MemoryMSSQL extends MemoryStorage {
         WHEN NOT MATCHED THEN
           INSERT (id, [resourceId], title, metadata, [createdAt], [updatedAt])
           VALUES (@id, @resourceId, @title, @metadata, @createdAt, @updatedAt);`;
-      const req = this.pool.request();
-      req.input('id', thread.id);
-      req.input('resourceId', thread.resourceId);
-      req.input('title', thread.title);
       const metadata = thread.metadata ? JSON.stringify(thread.metadata) : null;
-      if (metadata === null) {
-        req.input('metadata', sql.NVarChar, null);
-      } else {
-        req.input('metadata', metadata);
-      }
-      req.input('createdAt', sql.DateTime2, thread.createdAt);
-      req.input('updatedAt', sql.DateTime2, thread.updatedAt);
-      await req.query(mergeSql);
+      await this.#fenced(fence, 'saveThread', q => {
+        const req = q.request();
+        req.input('id', thread.id);
+        req.input('resourceId', thread.resourceId);
+        req.input('title', thread.title);
+        if (metadata === null) {
+          req.input('metadata', sql.NVarChar, null);
+        } else {
+          req.input('metadata', metadata);
+        }
+        req.input('createdAt', sql.DateTime2, thread.createdAt);
+        req.input('updatedAt', sql.DateTime2, thread.updatedAt);
+        return req.query(mergeSql);
+      });
       // Return the exact same thread object to preserve timestamp precision
       return thread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'SAVE_THREAD', 'FAILED'),
@@ -441,10 +525,12 @@ export class MemoryMSSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
@@ -473,12 +559,15 @@ export class MemoryMSSQL extends MemoryStorage {
             [updatedAt] = @updatedAt
         OUTPUT INSERTED.*
         WHERE id = @id`;
-      const req = this.pool.request();
-      req.input('id', id);
-      req.input('title', title ?? existingThread.title);
-      req.input('metadata', JSON.stringify(mergedMetadata));
-      req.input('updatedAt', new Date());
-      const result = await req.query(sql);
+      const result = await this.#fenced(fence, 'updateThread', q =>
+        q
+          .request()
+          .input('id', id)
+          .input('title', title ?? existingThread.title)
+          .input('metadata', JSON.stringify(mergedMetadata))
+          .input('updatedAt', new Date())
+          .query(sql),
+      );
       let thread = result.recordset && result.recordset[0];
       if (thread && 'seq_id' in thread) {
         const { seq_id, ...rest } = thread;
@@ -503,6 +592,7 @@ export class MemoryMSSQL extends MemoryStorage {
         updatedAt: thread.updatedAt,
       };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'UPDATE_THREAD', 'FAILED'),
@@ -985,7 +1075,13 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
     const threadId = messages[0]?.threadId;
     if (!threadId) {
@@ -1012,6 +1108,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const transaction = this.pool.transaction();
       await transaction.begin();
       try {
+        await this.#assertFence(transaction, fence, 'saveMessages');
         for (const message of messages) {
           if (!message.threadId) {
             throw new Error(
@@ -1070,6 +1167,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const list = new MessageList().add(messagesWithParsedContent as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'SAVE_MESSAGES', 'FAILED'),
@@ -1084,6 +1182,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
   async updateMessages({
     messages,
+    fence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -1092,6 +1191,7 @@ export class MemoryMSSQL extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (!messages || messages.length === 0) {
       return [];
@@ -1126,6 +1226,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
     try {
       await transaction.begin();
+      await this.#assertFence(transaction, fence, 'updateMessages');
       for (const existingMessage of existingMessages) {
         const updatePayload = messages.find(m => m.id === existingMessage.id);
         if (!updatePayload) continue;
@@ -1177,6 +1278,7 @@ export class MemoryMSSQL extends MemoryStorage {
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'UPDATE_MESSAGES', 'FAILED'),
@@ -1200,7 +1302,7 @@ export class MemoryMSSQL extends MemoryStorage {
     });
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) {
       return;
     }
@@ -1229,6 +1331,7 @@ export class MemoryMSSQL extends MemoryStorage {
       await transaction.begin();
 
       try {
+        await this.#assertFence(transaction, options?.fence, 'deleteMessages');
         // Delete all messages
         const deleteRequest = transaction.request();
         messageIds.forEach((id, idx) => {
@@ -1258,6 +1361,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
       // TODO: Delete from vector store if semantic recall is enabled
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'DELETE_MESSAGES', 'FAILED'),
@@ -1320,10 +1424,12 @@ export class MemoryMSSQL extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     try {
       const existingResource = await this.getResourceById({ resourceId });
@@ -1336,7 +1442,10 @@ export class MemoryMSSQL extends MemoryStorage {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        return this.saveResource({ resource: newResource });
+        await this.#fenced(fence, 'updateResource', q =>
+          this.db.insert({ tableName: TABLE_RESOURCES, record: newResource, transaction: q }),
+        );
+        return newResource;
       }
 
       const updatedResource = {
@@ -1350,28 +1459,31 @@ export class MemoryMSSQL extends MemoryStorage {
       };
 
       const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
-      const updates: string[] = [];
-      const req = this.pool.request();
+      await this.#fenced(fence, 'updateResource', q => {
+        const updates: string[] = [];
+        const req = q.request();
 
-      if (workingMemory !== undefined) {
-        updates.push('workingMemory = @workingMemory');
-        req.input('workingMemory', workingMemory);
-      }
+        if (workingMemory !== undefined) {
+          updates.push('workingMemory = @workingMemory');
+          req.input('workingMemory', workingMemory);
+        }
 
-      if (metadata) {
-        updates.push('metadata = @metadata');
-        req.input('metadata', JSON.stringify(updatedResource.metadata));
-      }
+        if (metadata) {
+          updates.push('metadata = @metadata');
+          req.input('metadata', JSON.stringify(updatedResource.metadata));
+        }
 
-      updates.push('updatedAt = @updatedAt');
-      req.input('updatedAt', updatedResource.updatedAt.toISOString());
+        updates.push('updatedAt = @updatedAt');
+        req.input('updatedAt', updatedResource.updatedAt.toISOString());
 
-      req.input('id', resourceId);
+        req.input('id', resourceId);
 
-      await req.query(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = @id`);
+        return req.query(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = @id`);
+      });
 
       return updatedResource;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'UPDATE_RESOURCE', 'FAILED'),
