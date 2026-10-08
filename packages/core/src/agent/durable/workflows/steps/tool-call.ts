@@ -609,12 +609,14 @@ export function createDurableToolCallStep() {
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       let threadExists = state?.threadExists ?? false;
 
-      let messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
-      if (!messageList) {
+      const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      // Recovered transcripts supply context only; persistence belongs to the live registry list.
+      let contextMessageList = messageList;
+      if (!contextMessageList) {
         const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = readMessageListState(params.state, llmOutput ?? {});
         if (messageListState) {
-          messageList = createRunMessageList({
+          contextMessageList = createRunMessageList({
             mastra,
             threadId: state?.threadId,
             resourceId: state?.resourceId,
@@ -1095,11 +1097,11 @@ export function createDurableToolCallStep() {
         : undefined;
 
       let delegationMessages = registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY);
-      if (isAgentTool && !delegationMessages && messageList) {
+      if (isAgentTool && !delegationMessages && contextMessageList) {
         // Cold workers must exclude synthetic context by ID before model conversion drops IDs.
         const delegationList = createRunMessageList({ mastra });
         delegationList.add(
-          messageList.get.all.db().filter(message => message.id !== 'om-continuation'),
+          contextMessageList.get.all.db().filter(message => message.id !== 'om-continuation'),
           'input',
         );
         delegationMessages = delegationList.get.all.aiV5.prompt();
@@ -1107,7 +1109,7 @@ export function createDurableToolCallStep() {
 
       const toolOptions = {
         toolCallId,
-        messages: isAgentTool ? (delegationMessages ?? []) : (messageList?.get.input.aiV5.model() ?? []),
+        messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
