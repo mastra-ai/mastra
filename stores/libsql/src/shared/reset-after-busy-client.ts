@@ -39,18 +39,23 @@ function firstOpen(hold: Hold | undefined): Hold | undefined {
  * doesn't wait: the reset waits for what its caller holds, so waiting would
  * deadlock. Reopened connections start from the pool's connection options,
  * so `afterReset` runs right after to restore any per-connection settings
- * applied after opening. Every other member passes through untouched.
+ * applied after opening, and calls that waited for the reset go on once it
+ * settles, even if it fails. It must use the client it was given, not the
+ * wrapper: calls through the wrapper would wait for the reset it is part of.
+ * Every other member passes through untouched.
  */
-export function resetConnectionsAfterBusy(client: Client, { afterReset }: { afterReset?: () => void } = {}): Client {
+export function resetConnectionsAfterBusy(
+  client: Client,
+  { afterReset }: { afterReset?: () => void | Promise<void> } = {},
+): Client {
   let inFlight = 0;
   // Set from a busy failure until the reset it calls for has run.
   let pendingReset: { done: Promise<void>; finish: () => void } | undefined;
   const holds = new AsyncLocalStorage<Hold>();
 
-  const finishReset = (beforeRelease?: () => void) => {
+  const finishReset = () => {
     const reset = pendingReset;
     pendingReset = undefined;
-    beforeRelease?.();
     reset?.finish();
   };
 
@@ -60,9 +65,15 @@ export function resetConnectionsAfterBusy(client: Client, { afterReset }: { afte
     if (!pendingReset || inFlight > 0) return;
     // Reopens the pool synchronously for local clients.
     client.reconnect();
-    // afterReset isn't awaited: its first statement runs ahead of the calls that
-    // waited, but later ones can run after them.
-    finishReset(afterReset);
+    if (!afterReset) return finishReset();
+    const reset = pendingReset;
+    void Promise.resolve()
+      .then(afterReset)
+      .catch(() => {})
+      .finally(() => {
+        // close() may have released the waiting calls already.
+        if (pendingReset === reset) finishReset();
+      });
   };
 
   const noteBusy = (error: unknown) => {
