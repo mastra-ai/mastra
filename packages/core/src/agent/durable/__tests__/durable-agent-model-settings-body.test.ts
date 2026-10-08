@@ -92,7 +92,7 @@ describe('T28 model settings body (plain, durable, evented)', () => {
     for (const engine of ENGINES) {
       expectSettled(results[engine]!.turns.at(-1));
       const call = firstCall(results[engine]!.requests);
-      expect(Object.keys(call.headers ?? {})).toContain('x-t28');
+      expect(call.headers?.['x-t28'], `${engine}: the configured header reaches the model call`).toBe('1');
     }
   });
 });
