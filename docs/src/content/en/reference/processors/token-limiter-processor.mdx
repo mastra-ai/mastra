@@ -1,9 +1,9 @@
 ---
-title: "Reference: TokenLimiterProcessor | Processors"
-description: "Use TokenLimiterProcessor to constrain message tokens during prompt, input, or output processing with configurable limits and strategies."
+title: 'Reference: TokenLimiterProcessor | Processors'
+description: 'Use TokenLimiterProcessor to constrain message tokens during prompt, input, or output processing with configurable limits and strategies.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # TokenLimiterProcessor
@@ -151,7 +151,7 @@ With the default `truncate` strategy, the first time output is withheld the proc
 ```typescript oxfmt:false
 for await (const part of stream.fullStream) {
   if (part.type === 'data-token-limit-reached') {
-    console.log('output truncated at', part.data.limit, 'tokens')
+    console.log('output truncated at', part.data.limit, 'tokens');
   }
 }
 ```
@@ -252,6 +252,12 @@ export const agent = new Agent({
 })
 ```
 
+## Large tool results
+
+A single tool result bigger than the remaining budget is dropped from the prompt together with its tool call. The model then can't see the result and may call the same tool again. Add [`ToolResultTokenLimiter`](/reference/processors/tool-result-token-limiter) as an output processor to cap each result the model reads. `TokenLimiterProcessor` counts the capped copy instead of the full result.
+
 ## Related
+
+- [`ToolResultTokenLimiter`](/reference/processors/tool-result-token-limiter)
 
 - [Guardrails](/docs/agents/guardrails)

@@ -562,7 +562,34 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
             } else if (invocation.state === 'result') {
               // Tool result - this will become a separate CoreMessage
               toolResultCount++;
-              if (invocation.result !== undefined) {
+              // The model reads the mapped/capped copy when one is stored, not the raw result.
+              const modelOutput = (part.providerMetadata?.mastra as { modelOutput?: unknown } | undefined)?.modelOutput;
+              if (modelOutput != null) {
+                const content = (modelOutput as { type?: string; value?: unknown }).value;
+                if ((modelOutput as { type?: string }).type === 'content' && Array.isArray(content)) {
+                  for (const entry of content as Array<Record<string, unknown>>) {
+                    if (typeof entry.text === 'string') {
+                      tokenString += entry.text;
+                    } else if (typeof entry.data === 'string') {
+                      const { data, ...rest } = entry;
+                      mediaTokens += estimateMediaTokens(data as string, entry.mediaType as string | undefined);
+                      tokenString += JSON.stringify(rest);
+                    } else {
+                      tokenString += JSON.stringify(entry);
+                    }
+                  }
+                  overhead -= 12;
+                } else if (
+                  ((modelOutput as { type?: string }).type === 'text' ||
+                    (modelOutput as { type?: string }).type === 'error-text') &&
+                  typeof content === 'string'
+                ) {
+                  tokenString += content;
+                } else {
+                  tokenString += JSON.stringify(content ?? modelOutput);
+                  overhead -= 12;
+                }
+              } else if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
                 } else if (isMediaPayload(invocation.result)) {
