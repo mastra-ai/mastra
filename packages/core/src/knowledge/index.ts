@@ -55,7 +55,7 @@ export class Knowledge extends MastraBase {
   #structure?: KnowledgeStructurePlan;
   #scopeTypes?: KnowledgeScopeTypesConfig;
   #importers = new KnowledgeImporterRegistry();
-  #importerRunner = new KnowledgeImporterRunner(this);
+  #importerRunner = new KnowledgeImporterRunner(this, () => this.logger);
   #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
   #materializePromises = new Map<
     string,
