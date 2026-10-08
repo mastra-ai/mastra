@@ -1,11 +1,9 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
-import { SkeletonRows } from '../ui/SkeletonRows';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -13,7 +11,7 @@ import { KnowledgeGraph } from '../domains/factory/components/knowledge/Knowledg
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
-import { RequestError } from '../domains/factory/services/request';
+import { KnowledgeGraphState } from '../domains/factory/components/knowledge/KnowledgeGraphState';
 import { useInteractionIdle } from '../domains/factory/components/knowledge/useInteractionIdle';
 
 /**
@@ -30,7 +28,7 @@ export function KnowledgePage() {
   const slots = useSidebarHeaderSlots();
   return (
     <PageLayout variant="fit" {...slots}>
-      <div className="flex min-h-0 flex-col p-4">
+      <div className="flex min-h-0 flex-col">
         <KnowledgeContent factoryProjectId={factory.id} />
       </div>
     </PageLayout>
@@ -155,110 +153,67 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
 
-  let body: React.ReactNode;
-  if (graphQuery.isError) {
-    if (threadId && graphQuery.error instanceof RequestError && graphQuery.error.status === 404) {
-      // Stale deep link or a session whose knowledge was since deleted —
-      // calm state with a way back, never an error toast.
-      body = (
-        <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
-          <Txt tone="muted" as="p" variant="body">
-            This session's knowledge is no longer available.
-          </Txt>
-          <button type="button" className="text-badge-purple-indicator hover:underline" onClick={backToProject}>
-            <Txt as="span" variant="body" className="block">
-              Back to the project view
-            </Txt>
-          </button>
-        </div>
-      );
-    } else {
-      const message =
-        graphQuery.error instanceof Error ? graphQuery.error.message : 'Unable to load the knowledge graph.';
-      body = <Notice variant="destructive">{message}</Notice>;
-    }
-  } else if (graphQuery.isPending) {
-    body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
-  } else if (graphQuery.data.nodes.length === 0) {
-    body = (
-      <Txt tone="muted" as="p" variant="body">
-        No knowledge captured yet — the graph fills in as factory sessions work.
-      </Txt>
-    );
-  } else {
-    body = (
-      <div
-        className="relative min-h-0 flex-1"
-        data-testid="knowledge-graph-container"
-        onPointerDownCapture={onActivity}
-        onPointerMoveCapture={onActivity}
-        onWheelCapture={onActivity}
-      >
-        <KnowledgeGraph
-          payload={graphQuery.data}
-          arrivals={arrivals}
-          focusedId={selected?.nodeId ?? null}
-          focusedRecordId={selected?.recordId ?? null}
-          onFocusChange={id => {
-            // A graph click starts a fresh trail; a pane click clears it.
-            if (!id) return setTrail([]);
-            const node = graphQuery.data?.nodes.find(entry => entry.id === id);
-            setTrail([{ nodeId: id, name: node?.name ?? id }]);
-          }}
-          onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
-          onEdgeClick={edge => {
-            // Selecting an edge selects AND expands the supporting knowledge record (A7).
-            const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
-          }}
-        />
-        {selected && factoryProjectId ? (
-          <KnowledgeFlyout
-            factoryProjectId={factoryProjectId}
-            nodeId={selected.nodeId}
-            threadId={threadId}
-            focusRecordId={selected.recordId}
-            onSelectRecord={recordId =>
-              // Bidirectional selection: expanding a card selects the knowledge record
-              // page-wide, so the graph lights its marker/edge up too.
-              setTrail(current =>
-                current.length === 0
-                  ? current
-                  : [...current.slice(0, -1), { ...current[current.length - 1]!, recordId: recordId ?? undefined }],
-              )
-            }
-            onClose={() => setTrail([])}
-            onOpenThread={openThread}
-            onNodeRef={name => {
-              // A clicked [[wikilink]] gets the full node-click treatment (A7):
-              // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
-              const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
-              if (target && target.id !== selected.nodeId)
-                setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
-            }}
-          />
-        ) : null}
-      </div>
-    );
-  }
-
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
-      <header className="shrink-0">
-        <Txt tone="ink" as="h1" variant="heading">
-          Knowledge Graph
-        </Txt>
-        <Txt tone="muted" as="p" variant="body" className="mt-1">
-          Explore nodes and the relationships captured by the agent over time.
-        </Txt>
-        <Breadcrumb
-          threadId={threadId}
-          trail={trail}
-          onProjectClick={backToProject}
-          onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
-        />
-      </header>
-      {body}
+    <section className="relative flex min-h-0 flex-1 flex-col" aria-label="Knowledge graph">
+      <KnowledgeGraphState query={graphQuery} threadId={threadId} onBackToProject={backToProject}>
+        {payload => (
+          <div
+            className="relative h-full min-h-0 flex-1"
+            data-testid="knowledge-graph-container"
+            onPointerDownCapture={onActivity}
+            onPointerMoveCapture={onActivity}
+            onWheelCapture={onActivity}
+          >
+            <KnowledgeGraph
+              key={`${factoryProjectId}:${threadId ?? 'project'}`}
+              payload={payload}
+              arrivals={arrivals}
+              focusedId={selected?.nodeId}
+              focusedRecordId={selected?.recordId}
+              onClearFocus={() => setTrail([])}
+              onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
+              onEdgeClick={edge => {
+                // Selecting an edge selects AND expands the supporting knowledge record (A7).
+                const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
+                setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
+              }}
+            >
+              <Breadcrumb
+                threadId={threadId}
+                trail={trail}
+                onProjectClick={backToProject}
+                onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
+              />
+            </KnowledgeGraph>
+            {selected && factoryProjectId ? (
+              <KnowledgeFlyout
+                factoryProjectId={factoryProjectId}
+                nodeId={selected.nodeId}
+                threadId={threadId}
+                focusRecordId={selected.recordId}
+                onSelectRecord={recordId =>
+                  // Bidirectional selection: expanding a card selects the knowledge record
+                  // page-wide, so the graph lights its marker/edge up too.
+                  setTrail(current =>
+                    current.length === 0
+                      ? current
+                      : [...current.slice(0, -1), { ...current[current.length - 1]!, recordId: recordId ?? undefined }],
+                  )
+                }
+                onClose={() => setTrail([])}
+                onOpenThread={openThread}
+                onNodeRef={name => {
+                  // A clicked [[wikilink]] gets the full node-click treatment (A7):
+                  // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
+                  const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
+                  if (target && target.id !== selected.nodeId)
+                    setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
+                }}
+              />
+            ) : null}
+          </div>
+        )}
+      </KnowledgeGraphState>
     </section>
   );
 }

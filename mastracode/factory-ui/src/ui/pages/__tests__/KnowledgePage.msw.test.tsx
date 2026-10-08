@@ -200,6 +200,41 @@ describe('KnowledgePage', () => {
     expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
   });
 
+  it('keeps node search available even for a single-node graph', async () => {
+    stubKnowledgeRoute({ ...graphFixture, nodes: [graphFixture.nodes[0]!], records: [], edges: [] });
+    renderRoute();
+    expect(await screen.findByRole('combobox', { name: 'Find a node' })).toBeVisible();
+  });
+
+  it('searches with the keyboard and opens the matching node without remounting the graph', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+    const search = await screen.findByRole('combobox', { name: 'Find a node' });
+    const originalNodes = await screen.findAllByTestId('knowledge-node');
+    await user.type(search, 'payments');
+    expect(await screen.findByRole('option', { name: 'Payments Service' })).toBeVisible();
+    await user.keyboard('{Enter}');
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByRole('heading', { name: 'Payments Service' })).toBeVisible();
+    expect(screen.getAllByTestId('knowledge-node')).toEqual(originalNodes);
+    await user.click(within(flyout).getByRole('button', { name: 'Close details' }));
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('knowledge-node')).toEqual(originalNodes);
+  });
+
+  it('dismisses search results with Escape and reports an empty search', async () => {
+    stubKnowledgeRoute();
+    const user = userEvent.setup();
+    renderRoute();
+    const search = await screen.findByRole('combobox', { name: 'Find a node' });
+    await user.type(search, 'not-in-this-graph');
+    expect(await screen.findByText('No matching nodes')).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+  });
+
   it('shows the truncation banner when the payload window was capped', async () => {
     stubKnowledgeRoute({
       ...graphFixture,

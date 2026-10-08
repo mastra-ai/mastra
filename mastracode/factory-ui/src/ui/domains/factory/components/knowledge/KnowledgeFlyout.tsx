@@ -259,7 +259,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-card shadow-overlay duration-normal absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform motion-reduce:transition-none"
+      className="knowledge-details bg-card shadow-overlay absolute top-4 right-4 bottom-16 z-20 flex w-95 max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl max-md:top-auto max-md:h-[45%]"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (

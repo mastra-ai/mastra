@@ -83,3 +83,45 @@
     opacity: 1;
   }
 }
+
+/* Focus changes presentation, never node positions or mount identity. */
+.knowledge-canvas .react-flow__node,
+.knowledge-canvas .react-flow__edge {
+  transition:
+    opacity var(--duration-slow) var(--ease-out-custom),
+    visibility 0s;
+}
+
+.knowledge-canvas .knowledge-excluded {
+  opacity: 0;
+  /* React Flow sets inline visibility after measuring nodes. */
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transition:
+    opacity var(--duration-slow) var(--ease-out-custom),
+    visibility 0s var(--duration-slow);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .knowledge-details {
+    animation: knowledge-details-enter var(--duration-slow) var(--ease-out-custom);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-canvas .react-flow__node,
+  .knowledge-canvas .react-flow__edge {
+    transition: none;
+  }
+}
+
+@keyframes knowledge-details-enter {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
