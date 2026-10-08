@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
@@ -189,7 +188,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   } else {
     body = (
       <div
-        className="relative flex min-h-0 flex-1 gap-3"
+        className="relative min-h-0 flex-1"
         data-testid="knowledge-graph-container"
         onPointerDownCapture={onActivity}
         onPointerMoveCapture={onActivity}
@@ -245,34 +244,19 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
-      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-        <div>
-          <Txt tone="ink" as="h1" variant="heading">
-            Knowledge Graph
-          </Txt>
-          <Txt tone="muted" as="p" variant="body" className="mt-1">
-            Explore the context, decisions, and connections your agents learn over time.
-          </Txt>
-          <Breadcrumb
-            threadId={threadId}
-            trail={trail}
-            onProjectClick={backToProject}
-            onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
-          />
-        </div>
-        {graphQuery.data ? (
-          <div className="flex items-center gap-2" aria-label="Knowledge totals">
-            <Badge variant="neutral" emphasis="subtle">
-              {graphQuery.data.nodes.length} nodes
-            </Badge>
-            <Badge variant="neutral" emphasis="subtle">
-              {graphQuery.data.records.length} records
-            </Badge>
-            <Badge variant="amber" emphasis="subtle">
-              {graphQuery.data.records.filter(record => record.pinned).length} pinned
-            </Badge>
-          </div>
-        ) : null}
+      <header className="shrink-0">
+        <Txt tone="ink" as="h1" variant="heading">
+          Knowledge Graph
+        </Txt>
+        <Txt tone="muted" as="p" variant="body" className="mt-1">
+          Explore nodes and the relationships captured by the agent over time.
+        </Txt>
+        <Breadcrumb
+          threadId={threadId}
+          trail={trail}
+          onProjectClick={backToProject}
+          onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
+        />
       </header>
       {body}
     </section>

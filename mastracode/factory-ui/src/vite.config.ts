@@ -8,7 +8,6 @@ import react from '@vitejs/plugin-react';
 import ts from 'typescript';
 import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
-import { knowledgePreviewPlugin } from './preview/knowledge-preview';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -284,13 +283,7 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(here, 'ui'),
     envDir,
-    plugins: [
-      react(),
-      tailwindcss(),
-      runtimeConfigPlugin(),
-      routesManifestPlugin(),
-      ...(env.MASTRACODE_KNOWLEDGE_PREVIEW === 'true' ? [knowledgePreviewPlugin()] : []),
-    ],
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
     resolve: {
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single

@@ -13,6 +13,7 @@ import {
   Background,
   BackgroundVariant,
   BaseEdge,
+  Controls,
   Handle,
   MiniMap,
   Position,
@@ -21,12 +22,11 @@ import {
   useInternalNode,
   useReactFlow,
   EdgeLabelRenderer,
-  useStore,
 } from '@xyflow/react';
 import type { EdgeProps, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { Pin, Scan, Plus, Minus, ArrowLeft } from 'lucide-react';
+import { Boxes, Globe, Pin } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { KnowledgeGraphNode, KnowledgeGraphPayload, KnowledgeRung } from '../../services/knowledge';
@@ -44,9 +44,6 @@ import {
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
 import { knowledgeScopes } from './knowledgeScope';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { KnowledgeSearch } from './KnowledgeSearch';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import './knowledge.css';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
@@ -55,7 +52,6 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
   const { node, size, degree, focused } = data;
   const labeled = focused || shouldShowLabel(degree);
   const large = size >= 88;
-
   return (
     // Outer wrapper is unclipped so the pin badge can straddle the rim;
     // only the inner circle clips (it must, to keep the label inside).
@@ -63,8 +59,8 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
       <div
-        className="knowledge-circle flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border text-center"
-        data-focused={focused || selected || undefined}
+        className="knowledge-circle flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
+        data-selected={selected || undefined}
         style={{ '--knowledge-color': knowledgeScopes[node.rung].color } as React.CSSProperties}
       >
         {labeled ? (
@@ -128,7 +124,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
         style={
           // A9: a pinned record marks the RELATIONSHIP — the amber accent
           // rides the edge, with a pin chip at the arc's midpoint. Edges
-          // touching a record marker stay quiet until the record is selected.
+          // touching a record marker use a quiet neutral color.
           // A selected record (open in the flyout) lights its edge up.
           data?.focused
             ? {
@@ -176,14 +172,13 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
       data-record-id={record.id}
       data-focused={focused || undefined}
       className={[
-        'flex items-center justify-center rounded-full border transition-shadow',
-        // Neutral markers distinguish records from scope-colored knowledge
-        // nodes and amber pins.
+        'flex items-center justify-center rounded-full border transition-shadow duration-fast motion-reduce:transition-none',
+        // Neutral records stay distinct from scope-colored nodes and amber pins.
         record.pinned
           ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground shadow-raised'
           : 'border-muted-foreground bg-muted-foreground',
         // The selected record (open in the flyout) glows hard.
-        focused ? (record.pinned ? 'ring-badge-amber-indicator ring-2' : 'ring-2 ring-foreground') : '',
+        focused ? (record.pinned ? 'ring-badge-amber-indicator ring-2' : 'ring-badge-blue-indicator ring-2') : '',
       ].join(' ')}
       style={{ width: size, height: size }}
     >
@@ -246,17 +241,34 @@ function FilterChip({
   label,
   active,
   onClick,
+  accent,
   icon,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  accent?: boolean;
   icon: React.ReactNode;
 }) {
   return (
-    <Button size="sm" variant={active ? 'default' : 'ghost'} aria-pressed={active} onClick={onClick} icon={icon}>
-      {label}
-    </Button>
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
+        active
+          ? accent
+            ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
+            : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
+          : 'border-border bg-card text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {icon}
+      <Txt as="span" variant="column" className="block">
+        {label}
+      </Txt>
+    </button>
   );
 }
 
@@ -310,21 +322,16 @@ function KnowledgeGraphInner({
   const lastSignature = useRef('');
   const [dragVersion, setDragVersion] = useState(0);
   const reactFlow = useReactFlow();
-  const canvasWidth = useStore(state => state.width);
-  const canvasHeight = useStore(state => state.height);
 
   // Amendment A6: selecting a node glides the camera to its cluster (the ego
   // view IS the cluster, so fitting the visible set centers the clicked
   // node); clearing focus fits back to the full graph.
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      void reactFlow.fitView({
-        padding: focusedId ? 0.3 : 0.1,
-        duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300,
-      });
+      void reactFlow.fitView({ padding: focusedId ? 0.3 : 0.1, duration: 500 });
     });
     return () => cancelAnimationFrame(frame);
-  }, [focusedId, filters, canvasWidth, canvasHeight, reactFlow]);
+  }, [focusedId, reactFlow]);
 
   const { nodes, edges } = useMemo(() => {
     // A11: records are the connection source of truth when the payload
@@ -472,156 +479,100 @@ function KnowledgeGraphInner({
 
   return (
     <div
-      className="knowledge-canvas border-border bg-background relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border"
+      className="knowledge-canvas border-border bg-background relative h-full w-full overflow-hidden rounded-xl border"
       data-testid="knowledge-graph"
     >
-      <div className="border-border bg-card relative z-10 flex shrink-0 flex-wrap items-center gap-2 border-b p-3">
-        <KnowledgeSearch
-          nodes={payload.nodes}
-          onSelect={node => {
-            setFocusedId(node.id);
-            setFilters(NO_FILTERS);
-            onNodeClick?.(node);
-          }}
-        />
-        <div className="flex flex-wrap items-center gap-1" aria-label="Filter knowledge scope">
-          {availableRungs.map(rung => (
-            <FilterChip
-              key={rung}
-              label={RUNG_LABELS[rung]}
-              icon={<span className={cn('block size-2 rounded-full', knowledgeScopes[rung].dot)} />}
-              active={filters.rungs.size === 0 || filters.rungs.has(rung)}
-              onClick={() => toggleRung(rung)}
-            />
-          ))}
+      <TruncationBanner payload={payload} />
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+        {availableRungs.map(rung => (
           <FilterChip
-            label="Pinned"
-            icon={<Pin size={13} />}
-            active={filters.pinnedOnly}
-            onClick={() => setFilters(current => ({ ...current, pinnedOnly: !current.pinnedOnly }))}
+            key={rung}
+            label={RUNG_LABELS[rung]}
+            icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
+            active={filters.rungs.size === 0 || filters.rungs.has(rung)}
+            onClick={() => toggleRung(rung)}
           />
-        </div>
-        {focusedId ? (
-          <Button variant="ghost" size="sm" icon={<ArrowLeft />} onClick={() => setFocusedId(null)}>
-            All knowledge
-          </Button>
-        ) : null}
-        <Badge variant="neutral" emphasis="subtle">
-          {nodes.filter(node => node.type === 'knowledgeNode').length} nodes
-        </Badge>
+        ))}
+        <FilterChip
+          label="Pinned"
+          accent
+          icon={<Pin size={13} />}
+          active={filters.pinnedOnly}
+          onClick={() => setFilters(current => ({ ...current, pinnedOnly: !current.pinnedOnly }))}
+        />
       </div>
-      <div className="relative min-h-0 flex-1">
-        <TruncationBanner payload={payload} />
 
-        <ReactFlow
-          aria-label="Interactive knowledge graph"
-          nodes={displayNodes}
-          edges={displayEdges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          fitView
-          minZoom={0.1}
-          proOptions={{ hideAttribution: true }}
-          nodesConnectable={false}
-          onNodeClick={(_, node) => {
-            // A11: a knowledge record marker click IS a knowledge record click — same behavior as
-            // clicking its edge (dot and stub are one unit).
-            if (node.type === 'knowledgeRecord') {
-              const record = (node as RecordFlowNode).data.record;
-              const [first = '', second] = record.nodeIds;
-              onEdgeClick?.({ source: first, target: second ?? first, recordId: record.id });
-              return;
-            }
-            setFocusedId(node.id);
-            onNodeClick?.((node as NodeFlowNode).data.node);
-          }}
-          onPaneClick={() => setFocusedId(null)}
-          onEdgeClick={(_, edge) => {
-            const flowEdge = edge as KnowledgeFlowEdge;
-            // Stub/spoke edges have a `record:` marker on one end — the flyout
-            // needs the knowledge-node end, never the synthetic record node id.
-            const nodeEnd = !flowEdge.source.startsWith('record:')
-              ? flowEdge.source
-              : !flowEdge.target.startsWith('record:')
-                ? flowEdge.target
-                : null;
-            if (!nodeEnd) return;
-            onEdgeClick?.({ source: nodeEnd, target: flowEdge.target, recordId: flowEdge.data?.recordId ?? '' });
-          }}
-          onNodeMouseEnter={(event, node) =>
+      <ReactFlow
+        nodes={displayNodes}
+        edges={displayEdges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        fitView
+        minZoom={0.1}
+        proOptions={{ hideAttribution: true }}
+        nodesConnectable={false}
+        onNodeClick={(_, node) => {
+          // A11: a knowledge record marker click IS a knowledge record click — same behavior as
+          // clicking its edge (dot and stub are one unit).
+          if (node.type === 'knowledgeRecord') {
+            const record = (node as RecordFlowNode).data.record;
+            const [first = '', second] = record.nodeIds;
+            onEdgeClick?.({ source: first, target: second ?? first, recordId: record.id });
+            return;
+          }
+          setFocusedId(node.id);
+          onNodeClick?.((node as NodeFlowNode).data.node);
+        }}
+        onPaneClick={() => setFocusedId(null)}
+        onEdgeClick={(_, edge) => {
+          const flowEdge = edge as KnowledgeFlowEdge;
+          // Stub/spoke edges have a `record:` marker on one end — the flyout
+          // needs the knowledge-node end, never the synthetic record node id.
+          const nodeEnd = !flowEdge.source.startsWith('record:')
+            ? flowEdge.source
+            : !flowEdge.target.startsWith('record:')
+              ? flowEdge.target
+              : null;
+          if (!nodeEnd) return;
+          onEdgeClick?.({ source: nodeEnd, target: flowEdge.target, recordId: flowEdge.data?.recordId ?? '' });
+        }}
+        onNodeMouseEnter={(event, node) =>
+          node.type === 'knowledgeRecord'
+            ? setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node as RecordFlowNode })
+            : setHover({ kind: 'node', x: event.clientX, y: event.clientY, node: node as NodeFlowNode })
+        }
+        onNodeMouseLeave={() => setHover(null)}
+        onEdgeMouseEnter={(event, edge) =>
+          setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge: edge as KnowledgeFlowEdge })
+        }
+        onEdgeMouseLeave={() => setHover(null)}
+        onNodeDragStop={(_, node) => {
+          // The layout pins CENTERS; node.position is the top-left corner.
+          const size = (node as NodeFlowNode).data.size;
+          pinnedPositions.current.set(node.id, { x: node.position.x + size / 2, y: node.position.y + size / 2 });
+          setDragVersion(version => version + 1);
+        }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
+        <MiniMap
+          position="bottom-left"
+          pannable
+          zoomable
+          style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}
+          nodeColor={node =>
             node.type === 'knowledgeRecord'
-              ? setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node as RecordFlowNode })
-              : setHover({ kind: 'node', x: event.clientX, y: event.clientY, node: node as NodeFlowNode })
+              ? (node.data as RecordFlowNode['data']).record.pinned
+                ? 'var(--chart-amber)'
+                : 'var(--muted-foreground)'
+              : knowledgeScopes[(node.data as NodeFlowNode['data']).node.rung].color
           }
-          onNodeMouseLeave={() => setHover(null)}
-          onEdgeMouseEnter={(event, edge) =>
-            setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge: edge as KnowledgeFlowEdge })
-          }
-          onEdgeMouseLeave={() => setHover(null)}
-          onNodeDragStop={(_, node) => {
-            // The layout pins CENTERS; node.position is the top-left corner.
-            const size = (node as NodeFlowNode).data.size;
-            pinnedPositions.current.set(node.id, { x: node.position.x + size / 2, y: node.position.y + size / 2 });
-            setDragVersion(version => version + 1);
-          }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--border-strong)" />
-          <MiniMap
-            className="hidden md:block"
-            position="bottom-left"
-            pannable
-            zoomable
-            style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}
-            nodeColor={node =>
-              node.type === 'knowledgeRecord'
-                ? (node.data as RecordFlowNode['data']).record.pinned
-                  ? 'var(--chart-amber)'
-                  : 'var(--muted-foreground)'
-                : knowledgeScopes[(node.data as NodeFlowNode['data']).node.rung].color
-            }
-            nodeStrokeColor="transparent"
-            nodeStrokeWidth={3}
-            nodeBorderRadius={999}
-            maskColor="var(--scrim)"
-          />
-        </ReactFlow>
-        {nodes.length === 0 ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <Txt variant="body" tone="muted">
-              No nodes match these filters.
-            </Txt>
-            <Button size="sm" onClick={() => setFilters(NO_FILTERS)}>
-              Clear filters
-            </Button>
-          </div>
-        ) : null}
-        <div className="absolute right-3 bottom-3 z-10 flex items-center gap-1">
-          <Button size="icon-sm" aria-label="Zoom out" tooltip="Zoom out" onClick={() => void reactFlow.zoomOut()}>
-            <Minus />
-          </Button>
-          <Button size="icon-sm" aria-label="Zoom in" tooltip="Zoom in" onClick={() => void reactFlow.zoomIn()}>
-            <Plus />
-          </Button>
-          <Button
-            size="icon-sm"
-            aria-label="Fit graph"
-            tooltip="Fit graph"
-            onClick={() =>
-              void reactFlow.fitView({
-                padding: 0.15,
-                duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300,
-              })
-            }
-          >
-            <Scan />
-          </Button>
-        </div>
-        <div className="pointer-events-none absolute right-3 bottom-14 hidden md:block">
-          <Txt variant="meta" tone="muted">
-            Drag to explore · Scroll to zoom · Select a node for details
-          </Txt>
-        </div>
-      </div>
+          nodeStrokeColor="transparent"
+          nodeStrokeWidth={3}
+          nodeBorderRadius={999}
+          maskColor="var(--scrim)"
+        />
+        <Controls position="bottom-right" showInteractive={false} />
+      </ReactFlow>
 
       {hover ? (
         <GraphHoverCard

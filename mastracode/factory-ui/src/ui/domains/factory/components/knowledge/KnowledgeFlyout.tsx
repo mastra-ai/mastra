@@ -110,10 +110,7 @@ function RecordCard({
     if (expanded) {
       // Bring the selected knowledge record into view — a clicked edge or marker may
       // back a knowledge record deep down the list.
-      cardRef.current?.scrollIntoView?.({
-        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-        block: 'center',
-      });
+      cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     }
   }, [expanded]);
   const reason = typeof record.metadata?.reason === 'string' ? record.metadata.reason : undefined;
@@ -124,7 +121,7 @@ function RecordCard({
       data-testid="knowledge-record"
       data-pinned={record.pinned || undefined}
       className={[
-        'rounded-lg border transition-[border-color] duration-fast motion-reduce:transition-none',
+        'rounded-lg border transition-colors duration-fast motion-reduce:transition-none',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
         record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
@@ -168,10 +165,7 @@ function RecordCard({
         </div>
       </div>
       {expanded ? (
-        <div
-          data-testid="knowledge-record-detail"
-          className="knowledge-record-detail border-border border-t px-3 py-2.5"
-        >
+        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5">
           <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
             <dt className={textStyle({ variant: 'body-sm' })}>Captured in session</dt>
             <dd>
@@ -270,7 +264,7 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="knowledge-flyout border-border bg-card shadow-overlay absolute inset-y-0 right-0 z-20 flex w-full max-w-96 flex-col overflow-hidden rounded-xl border md:relative md:w-96 md:shrink-0"
+      className="border-border bg-card shadow-overlay duration-normal absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform motion-reduce:transition-none"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (

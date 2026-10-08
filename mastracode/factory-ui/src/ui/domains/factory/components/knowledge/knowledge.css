@@ -2,6 +2,11 @@
   --xy-minimap-background-color: var(--card);
   --xy-minimap-mask-background-color: var(--scrim);
   --xy-node-boxshadow-hover-default: var(--shadow-raised);
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--fill);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
 }
 
 .knowledge-circle {
@@ -11,8 +16,8 @@
   transition: border-color var(--duration-fast) var(--ease-out-custom);
 }
 
-.knowledge-circle[data-focused='true'],
-.react-flow__node:focus-visible .knowledge-circle {
+.knowledge-circle[data-selected='true'],
+.knowledge-canvas .react-flow__node:focus-visible .knowledge-circle {
   border-color: var(--knowledge-color);
   outline: 2px solid var(--knowledge-color);
   outline-offset: 5px;
@@ -34,27 +39,22 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .knowledge-arrive [data-testid='knowledge-node'],
-  .knowledge-arrive [data-testid='knowledge-record-node'] {
+  .knowledge-canvas .knowledge-arrive [data-testid='knowledge-node'] {
     animation: knowledge-arrive var(--duration-slow) var(--ease-out-custom);
+  }
+
+  .knowledge-canvas .knowledge-arrive .knowledge-circle {
+    box-shadow: 0 0 0 2px var(--knowledge-color);
   }
 
   .knowledge-canvas .react-flow__edge.knowledge-arrive path {
     animation: knowledge-fade var(--duration-slow) var(--ease-out-custom);
-  }
-
-  .knowledge-flyout {
-    animation: knowledge-panel var(--duration-slow) var(--ease-out-custom);
-  }
-
-  .knowledge-record-detail {
-    animation: knowledge-fade var(--duration-normal) var(--ease-out-custom);
+    stroke: var(--chart-purple);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .knowledge-canvas *,
-  .knowledge-flyout * {
+  .knowledge-canvas * {
     transition: none;
   }
 }
@@ -62,11 +62,15 @@
 @keyframes knowledge-arrive {
   from {
     opacity: 0;
-    scale: 0.9;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
   }
   to {
     opacity: 1;
-    scale: 1;
+    transform: scale(1);
   }
 }
 
@@ -76,16 +80,5 @@
   }
   to {
     opacity: 1;
-  }
-}
-
-@keyframes knowledge-panel {
-  from {
-    opacity: 0;
-    translate: 16px 0;
-  }
-  to {
-    opacity: 1;
-    translate: 0 0;
   }
 }
