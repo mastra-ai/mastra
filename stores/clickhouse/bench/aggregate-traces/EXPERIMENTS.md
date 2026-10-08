@@ -80,6 +80,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X33 | prod       | Write-side facts for schema proposals (`prechecks.ts`, all tenants, 7 days)                                                | Roots rewritten (0.08% of traces, up to 263 copies); 0 duplicate token rows; span names never change; 4.3% of token rows after the root ends | done   |
 | X34 | prod+local | Integer keys for the token retry dedupe; what the dedupe costs                                                             | Dedupe memory follows the number of token rows, not key type or aggregate: −11% at largest                                                   | done   |
 | X35 | local      | One usage row per model call: separate table, span columns, `FINAL` read                                                   | Per-call table ×0.41 at largest; `FINAL` read adds a ~160 MiB floor (rejected)                                                               | done   |
+| X36 | prod       | Real Platform read traffic from `query_log` across compute groups (`traffic.ts`, 2.3 days)                                 | Cold reads are rare (≤5% of reads touch object storage, p99 1.6 s); the read-ahead floor makes 8% of 256 MiB-capped span reads fail          | done   |
 
 ## Entries
 
@@ -565,6 +566,35 @@ Isolating that step on prod (largest project, ~2.3M token rows): grouping alone 
 | E4   | 293–298    | 297–304   | 872–875        | 752–771       |
 | T1   | 303–305    | 289–292   | 845–854        | 766–768       |
 | T3   | 299–300    | 291       | 860–867        | 758–766       |
+
+### X36: real read traffic (prod, read-only, 2026-10-06 to 2026-10-08)
+
+`traffic.ts` reads `clusterAllReplicas('all_groups.default', system.query_log)`, which covers every compute group on
+the shared storage, so it sees the primary service's reads. The primary keeps about 2 days of `query_log`. Output is
+counts and percentiles only. Window: 226,523 reads on observability tables, all from one Platform user.
+
+| table read      | reads   | failed      | > 5 s | p50 / p99 ms | p50 / p99 MiB | touch object storage | mostly cold |
+| --------------- | ------- | ----------- | ----- | ------------ | ------------- | -------------------- | ----------- |
+| spans           | 147,046 | 1,423 (241) | 8     | 44 / 660     | 86 / 409      | 5.4%                 | 1.8%        |
+| roots           | 30,003  | 0           | 0     | 27 / 369     | 141 / 227     | 2.2%                 | 0.7%        |
+| logs            | 19,215  | 0           | 0     | 13 / 103     | 43 / 178      | 0.4%                 | 0.3%        |
+| scores/feedback | 18,720  | 0           | 0     | 5 / 39       | 5 / 88        | 0%                   | 0%          |
+| metrics         | 11,544  | 0           | 0     | 7 / 121      | 36 / 205      | 0.4%                 | 0.3%        |
+
+- **Cold reads are rare and short for today's shapes.** Mostly-cold span reads: p50 230 ms, p99 1.6 s; roots p99
+  2.2 s. 1 read over 10 s in 2.3 days, 0 timeouts (159). The forced-cold runs (filesystem cache off) overstate
+  both how often and how badly reads go cold. Caveat: `aggregateTraces()` is not live yet; 30-day aggregates touch
+  older parts, which are less likely to be cached than today's short list reads.
+- **The read-ahead floor is visible.** Small reads still sit at 140–200 MiB (roots p50 141 MiB reading ~2 MiB; a
+  grouped metrics shape p50 203 MiB reading 29 MiB). The primary runs `filesystem_prefetches_limit = 200`.
+- **It causes failures today.** Agent-learning trace reads (`traceReadSettings`: 256 MiB, 5 s, 2 threads) failed
+  with 241 (memory limit) 1,350 times out of 16,902 (8%), in bursts of ~400 per hour on 2026-10-07. They read
+  p50 2.4k rows. The read-ahead pool uses most of the 256 MiB before any query work, so a lower prefetch limit should
+  remove most of these. That is likely, but not yet verified on that query.
+- **The largest per-query memory is not observability reads.** The cleanup `/tenants` scan (`SELECT DISTINCT
+organizationId, projectId … UNION DISTINCT …`) reads 80–98M span rows and uses 1.5–3.5 GiB per call; it ran 973
+  times (~400/day, one identical first page 236 times).
+- **Concurrency:** peak 82 reads in one second, p99 26; peak memory in flight 11.4 GiB.
 
 ### X35: one usage row per model call (local, 2026-10-07)
 
