@@ -658,7 +658,7 @@ export interface ObservationalMemoryObservationConfig {
    * buffered reflections replace the raw observations they summarized.
    * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
    *
-   * @default undefined (disabled)
+   * @default 40000
    */
   previousObserverTokens?: number | false;
 

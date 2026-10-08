@@ -759,7 +759,7 @@ export class ObservationalMemory {
         this.observationBlockAfterSetting,
         config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
       ),
-      previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
+      previousObserverTokens: config.observation?.previousObserverTokens ?? 40_000,
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
       observeAttachments: config.observation?.observeAttachments ?? [
