@@ -308,7 +308,10 @@ describe('createToolCallStep background task resume with falsy payload', () => {
     return backgroundTaskManager;
   };
 
-  const runBackgroundDispatchOnResume = async (resumeData: unknown) => {
+  const runBackgroundDispatchOnResume = async (
+    resumeData: unknown,
+    terminalStatuses: Array<'completed' | 'failed'> = ['completed'],
+  ) => {
     const controller = { enqueue: vi.fn() };
     const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
     const messageList = createMessageList();
@@ -318,18 +321,35 @@ describe('createToolCallStep background task resume with falsy payload', () => {
       listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
       resume: vi.fn(),
       enqueue: vi.fn(async (_payload: any, context: any) => {
-        context.onChunk?.({
-          type: 'background-task-completed',
-          payload: {
-            taskId: 'task-1',
-            toolCallId: 'call-1',
-            toolName: 'background-tool',
-            agentId: 'agent-1',
-            runId: 'current-run',
-            result: { ok: true },
-            completedAt: new Date(),
-          },
-        });
+        for (const status of terminalStatuses) {
+          context.onChunk?.(
+            status === 'completed'
+              ? {
+                  type: 'background-task-completed',
+                  payload: {
+                    taskId: 'task-1',
+                    toolCallId: 'call-1',
+                    toolName: 'background-tool',
+                    agentId: 'agent-1',
+                    runId: 'current-run',
+                    result: { ok: true },
+                    completedAt: new Date(),
+                  },
+                }
+              : {
+                  type: 'background-task-failed',
+                  payload: {
+                    taskId: 'task-1',
+                    toolCallId: 'call-1',
+                    toolName: 'background-tool',
+                    agentId: 'agent-1',
+                    runId: 'current-run',
+                    error: new Error('background failed'),
+                    completedAt: new Date(),
+                  },
+                },
+          );
+        }
         return { task: { id: 'task-1' }, fallbackToSync: false };
       }),
       cancel: vi.fn(),
@@ -383,6 +403,18 @@ describe('createToolCallStep background task resume with falsy payload', () => {
           }),
         }),
       );
+    });
+  });
+
+  it('emits each synthetic terminal chunk once for deferred background tasks', async () => {
+    const completedController = await runBackgroundDispatchOnResume(undefined, ['completed']);
+    const failedController = await runBackgroundDispatchOnResume(undefined, ['failed']);
+
+    await vi.waitFor(() => {
+      const completedChunks = completedController.enqueue.mock.calls.map(([chunk]: [any]) => chunk);
+      const failedChunks = failedController.enqueue.mock.calls.map(([chunk]: [any]) => chunk);
+      expect(completedChunks.filter((chunk: any) => chunk.type === 'tool-result')).toHaveLength(1);
+      expect(failedChunks.filter((chunk: any) => chunk.type === 'tool-error')).toHaveLength(1);
     });
   });
 
