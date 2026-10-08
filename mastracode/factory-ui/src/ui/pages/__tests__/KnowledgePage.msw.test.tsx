@@ -994,6 +994,34 @@ describe('KnowledgePage', () => {
     expect(screen.queryByRole('button', { name: 'Load older activity' })).not.toBeInTheDocument();
   });
 
+  it('says when activity covers only part of a large scope', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/activity`, () =>
+        HttpResponse.json({
+          events: [
+            {
+              id: 'activity-covered',
+              action: 'record-created',
+              recordType: 'record',
+              recordId: 'record-covered',
+              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              node: { id: 'ent-covered', name: 'Covered Service', rung: 'resource' },
+              createdAt: '2026-08-13T03:00:00.000Z',
+            },
+          ],
+          truncated: true,
+        }),
+      ),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?scope=resource&view=activity`);
+
+    expect(await screen.findByRole('button', { name: 'Covered Service' })).toBeInTheDocument();
+    expect(
+      screen.getByText('This scope has more members than activity can cover; activity for some members is not shown.'),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the newest activity rows after paging back more than five pages', async () => {
     stubKnowledgeRoute();
     server.use(

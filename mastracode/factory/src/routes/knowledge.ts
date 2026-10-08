@@ -278,6 +278,8 @@ export interface KnowledgeActivityPayload {
     createdAt: string;
   }>;
   nextCursor?: string;
+  /** The scope has more members than the activity filter reads; events for the rest are omitted. */
+  truncated?: true;
 }
 
 interface VisibleKnowledgeActivity {
@@ -1354,6 +1356,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const scopeNodeId = loose(c).req.query('scopeNodeId');
           let view: ResolvedView;
           let memberIds: Set<string> | undefined;
+          let membersTruncated = false;
           if (scopeNodeId !== undefined) {
             if (!UUID_RE.test(scopeNodeId)) return c.json({ error: 'scope_not_found' }, 404);
             let scopeNode: KnowledgeScopeNodeSummary | undefined;
@@ -1370,7 +1373,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               scopeNodeId,
               limit: this.#limits.maxNodes + 1,
             });
-            memberIds = new Set(members.filter(member => !member.isScope).map(member => member.id));
+            membersTruncated = members.length > this.#limits.maxNodes;
+            memberIds = new Set(
+              members
+                .slice(0, this.#limits.maxNodes)
+                .filter(member => !member.isScope)
+                .map(member => member.id),
+            );
             view = resolved;
           } else {
             const selected = this.#selectedView(resolved, loose(c).req.query('scopeLevel'));
@@ -1412,6 +1421,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               : scanCursor
                 ? { nextCursor: scanCursor }
                 : {}),
+            ...(membersTruncated ? { truncated: true as const } : {}),
           };
           return c.json(payload);
         },

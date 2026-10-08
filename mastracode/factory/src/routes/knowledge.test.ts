@@ -1220,6 +1220,38 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(seen)).not.toContain('other-thread');
   });
 
+  it('flags structural-lens activity as truncated when the scope has more members than the route reads', async () => {
+    const seed = async (maxNodes: number) => {
+      const h = await createHarness({ limits: { maxNodes } });
+      const { scopes: ids } = await h.knowledge.reconcileStructure({
+        scopes: [
+          { address: `org:${ORG}`, name: 'mastra' },
+          { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
+        ],
+      });
+      for (const name of ['Alpha', 'Beta']) {
+        const member = await h.knowledge.createNode({
+          name,
+          kind: 'concept',
+          scope: h.projectScope,
+          scopeAddresses: ['features'],
+        });
+        await record(h.knowledge, member, `${name} evidence`, h.projectScope);
+      }
+      return activity(h, `?scopeNodeId=${ids['features']}`);
+    };
+
+    const truncated = await seed(1);
+    expect(truncated.status).toBe(200);
+    expect(truncated.body.truncated).toBe(true);
+    expect(new Set(truncated.body.events.map(event => event.node.name)).size).toBe(1);
+
+    const full = await seed(10);
+    expect(full.status).toBe(200);
+    expect(full.body.truncated).toBeUndefined();
+    expect(new Set(full.body.events.map(event => event.node.name))).toEqual(new Set(['Alpha', 'Beta']));
+  });
+
   it('reads each activity target node once per request', async () => {
     const h = await createHarness();
     const busy = await node(h.knowledge, 'Busy Service', h.projectScope);

@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 
 import { useKnowledgeActivity } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeActivityEvent, KnowledgeScopeNode, KnowledgeSelection } from '../../services/knowledge';
-import { knowledgeActivityLabel } from './activityLabel';
+import { knowledgeActivityLabel, KNOWLEDGE_ACTIVITY_TRUNCATED } from './activityLabel';
 
 interface KnowledgeScopeFlyoutProps {
   factoryProjectId: string;
@@ -33,6 +33,7 @@ export function KnowledgeScopeFlyout({
   const count = (value: number) => (countsTruncated ? `${value}+` : String(value));
   const activity = useKnowledgeActivity(factoryProjectId, selection, threadId);
   const recentActivity = activity.data?.pages[0]?.events.slice(0, 5) ?? [];
+  const activityTruncated = activity.data?.pages[0]?.truncated === true;
   const displayAddress =
     scope.address === `resource:${factoryProjectId}` ? `project:${factoryProjectId}` : scope.address;
   return (
@@ -103,6 +104,9 @@ export function KnowledgeScopeFlyout({
               ))}
             </ol>
           )}
+          {activityTruncated ? (
+            <p className="text-muted-foreground mt-2 text-xs">{KNOWLEDGE_ACTIVITY_TRUNCATED}</p>
+          ) : null}
         </section>
       </div>
     </aside>
