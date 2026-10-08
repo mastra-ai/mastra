@@ -439,7 +439,8 @@ describe('auditable classifier policy', () => {
             }
             // The native logging context is disabled, so this runtime cannot export log records.
             const nativeConfig = observability.getDefaultInstance()?.getConfig() as
-              { logging?: { enabled?: boolean } } | undefined;
+              | { logging?: { enabled?: boolean } }
+              | undefined;
             expect(nativeConfig?.logging?.enabled).toBe(false);
           },
         },

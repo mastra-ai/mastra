@@ -28,7 +28,8 @@ export function createClassifyPendingStep(context: StepContext) {
       let classifier: Classifier<typeof COMPETITOR_CHANGE_QUESTIONS> | undefined;
       const getClassifier = () => {
         classifier ??= mastra.getClassifierById(CLASSIFIER_ID) as
-          Classifier<typeof COMPETITOR_CHANGE_QUESTIONS> | undefined;
+          | Classifier<typeof COMPETITOR_CHANGE_QUESTIONS>
+          | undefined;
         return classifier;
       };
       const stopForCancellation = async (processed: (typeof inputData)[number]) => {
