@@ -286,6 +286,7 @@ export async function dispatchSlashCommand(
       await handleThemeCommand(ctx, args);
       return true;
     case 'update':
+    // Hidden alias: works when typed, but isn't listed in autocomplete or help.
     case 'upgrade':
       await handleUpdateCommand(ctx);
       return true;

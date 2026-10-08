@@ -67,7 +67,6 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/plugins', description: 'Manage Mastra Code plugins' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
-    { key: '/upgrade', description: 'Alias for /update' },
     { key: '/observability', description: 'Configure cloud observability' },
     { key: '/github', description: 'Subscribe in review/working mode or sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
