@@ -80,8 +80,8 @@ const environmentRepositorySchema = z.object({
 export const projectEnvironmentResponseSchema = z.object({
   environment: z.object({
     sandboxWorkdir: z.string().nullable(),
-    sandboxCpuCount: z.number().int(),
-    sandboxMemoryMb: z.number().int(),
+    sandboxCpuCount: z.number().int().nullable(),
+    sandboxMemoryMb: z.number().int().nullable(),
     sandboxIdleTimeoutMinutes: z.number().int().nullable(),
     workspaceSetupCommand: z.string().nullable(),
     activeTemplateId: z.string().nullable(),
@@ -104,8 +104,8 @@ export const updateProjectEnvironmentBodySchema = z
       .refine(value => value === null || value.startsWith('/'), { message: 'sandboxWorkdir must be absolute' })
       .optional(),
     // Never null: the backfill reads a null cpu as "not yet backfilled".
-    sandboxCpuCount: z.number().int().min(1).max(64).optional(),
-    sandboxMemoryMb: z.number().int().min(512).max(65_536).optional(),
+    sandboxCpuCount: z.number().int().min(1).max(64).nullable().optional(),
+    sandboxMemoryMb: z.number().int().min(512).max(65_536).nullable().optional(),
     sandboxIdleTimeoutMinutes: z.number().int().min(1).max(1_440).nullable().optional(),
     workspaceSetupCommand: nullableTrimmed(2_000).optional(),
     repositories: z

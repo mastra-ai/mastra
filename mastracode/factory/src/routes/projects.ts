@@ -4,7 +4,6 @@ import type { Context } from 'hono';
 
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import { DEFAULT_SANDBOX_CPU_COUNT, DEFAULT_SANDBOX_MEMORY_MB } from '../storage/domains/source-control/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -275,8 +274,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return {
       environment: {
         sandboxWorkdir: project.sandboxWorkdir,
-        sandboxCpuCount: project.sandboxCpuCount ?? DEFAULT_SANDBOX_CPU_COUNT,
-        sandboxMemoryMb: project.sandboxMemoryMb ?? DEFAULT_SANDBOX_MEMORY_MB,
+        sandboxCpuCount: project.sandboxCpuCount,
+        sandboxMemoryMb: project.sandboxMemoryMb,
         sandboxIdleTimeoutMinutes: project.sandboxIdleTimeoutMinutes,
         workspaceSetupCommand: project.workspaceSetupCommand,
         activeTemplateId: project.activeTemplateId,

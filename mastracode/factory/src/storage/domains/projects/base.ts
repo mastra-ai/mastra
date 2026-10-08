@@ -72,6 +72,8 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
+    /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
+    environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -95,6 +97,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   workspace_setup_command: string | null;
   active_template_id: string | null;
   active_template_heads: Record<string, string> | null;
+  environment_backfilled_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

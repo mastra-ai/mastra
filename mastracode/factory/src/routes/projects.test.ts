@@ -747,8 +747,8 @@ describe('ProjectRoutes', () => {
       const initial = (await read.json()) as { environment: Record<string, unknown> };
       expect(initial.environment).toMatchObject({
         sandboxWorkdir: null,
-        sandboxCpuCount: 4,
-        sandboxMemoryMb: 8192,
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
         sandboxIdleTimeoutMinutes: null,
         workspaceSetupCommand: null,
         activeTemplateId: null,
@@ -824,6 +824,14 @@ describe('ProjectRoutes', () => {
         inEnvironment: false,
         lastBuildStatus: 'unbuilt',
       });
+
+      // Clearing a resource hands it back to the provider default.
+      const cleared = await patch(app, project.id, { sandboxCpuCount: null, sandboxMemoryMb: null });
+      expect(cleared.status).toBe(200);
+      expect(((await cleared.json()) as { environment: Record<string, unknown> }).environment).toMatchObject({
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
+      });
     });
 
     it('rejects invalid payloads without writing anything', async () => {
@@ -832,7 +840,6 @@ describe('ProjectRoutes', () => {
 
       const cases: unknown[] = [
         {},
-        { sandboxCpuCount: null },
         { sandboxCpuCount: 0 },
         { sandboxCpuCount: 65 },
         { sandboxMemoryMb: 256 },

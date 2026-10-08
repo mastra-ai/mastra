@@ -970,14 +970,28 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               ]
             },
             "sandboxCpuCount": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sandboxMemoryMb": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sandboxIdleTimeoutMinutes": {
               "anyOf": [
@@ -1440,14 +1454,28 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "null"
         },
         "__schema3": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 64
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "__schema4": {
-          "type": "integer",
-          "minimum": 512,
-          "maximum": 65536
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 512,
+              "maximum": 65536
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "__schema5": {
           "anyOf": [
@@ -1537,14 +1565,28 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               ]
             },
             "sandboxCpuCount": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sandboxMemoryMb": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sandboxIdleTimeoutMinutes": {
               "anyOf": [
