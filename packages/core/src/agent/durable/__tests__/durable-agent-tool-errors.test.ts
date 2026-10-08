@@ -26,9 +26,10 @@
  * (COR-1417), which is what a failed tool lookup serialises to on the wrapped
  * engines, so it is asserted as an undeclared plain-vs-wrapped match. `throws`
  * still differs — the wrapped `error` keeps its serialised `stack`, and the
- * helper only drops a `stack` from `error` chunks — so the payload cannot be
- * pinned and the declaration keeps a field-level `ignore`; the two shapes are
- * asserted directly below.
+ * helper only drops a `stack` from `error` chunks (COR-1429 strips it from
+ * `tool-error` too, which is what retires this declaration) — so the payload
+ * cannot be pinned and the declaration keeps a field-level `ignore`; the two
+ * shapes are asserted directly below.
  *
  * The harness's engine comparison (chunk sequence, finish payload, usage,
  * getFullOutput and the requests the model saw) is covered by
@@ -175,6 +176,8 @@ const UNDEFINED_DIFFERENCE: EngineDifference = {
  * carries absolute paths from this checkout, so the payload value cannot be
  * pinned; every other field of the turn stays compared, and the difference
  * fails once the two shapes converge. The shape itself is asserted below.
+ * COR-1429 strips `stack` from a `tool-error` chunk the way the helper already
+ * strips it from an `error` chunk, which is what retires the `ignore`.
  */
 const THROWS_DIFFERENCE: EngineDifference = {
   reason:
@@ -182,7 +185,8 @@ const THROWS_DIFFERENCE: EngineDifference = {
     'MastraError envelope; the serialised stack embeds checkout-specific paths, so the payload cannot be pinned.',
   // Tried without this `ignore` on the COR-1417 helper: the wrapped payloads
   // still carry `stack` (an absolute checkout path) and drop plain's
-  // `category`/`cause`/`details`/`domain`, so the comparison still forces it.
+  // `category`/`cause`/`details`/`domain`, so the comparison still forces it
+  // until COR-1429 stops the helper comparing a `tool-error` stack.
   ignore: ['chunkPayloads'],
 };
 

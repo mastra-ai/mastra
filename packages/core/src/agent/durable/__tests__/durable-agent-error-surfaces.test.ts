@@ -23,7 +23,8 @@
  * so `staleKnownDifferences` fails the scenario before anything is compared. The
  * variant is therefore driven per engine, as it was before the helper could
  * record a failed run, and the engines are compared on the surfaces a consumer
- * sees.
+ * sees. COR-1429 makes the stale check scenario-aware, which is what lets this
+ * variant move onto `expectEngineParity`.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -51,6 +52,8 @@ const RESOURCE = 'resource-t37';
 /**
  * The model fails before producing any output: a fresh call throws, so nothing
  * is streamed and the caller sees the failure immediately.
+ *
+ * Driven per engine rather than through the helper — COR-1429 (see the header).
  */
 const MODEL_4XX: ModelScript = {
   respond: () => {
@@ -98,7 +101,7 @@ function turnsByEngine(results: EngineParityResults) {
 }
 
 // ---------------------------------------------------------------------------
-// model-4xx: driven per engine (see the file header for why)
+// model-4xx: driven per engine (see the header and COR-1429)
 // ---------------------------------------------------------------------------
 
 /** One engine's public failure surfaces, plus what the stream looked like. */
