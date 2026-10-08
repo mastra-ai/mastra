@@ -24,6 +24,8 @@ export interface KnowledgeSemanticIndexCoordinatorConfig {
   embedderOptions?: MastraEmbeddingOptions;
   workerId?: string;
   batchSize?: number;
+  /** How long another worker's claim must sit before this coordinator may reclaim it. Defaults to the storage adapter's timeout. */
+  claimTimeoutMs?: number;
 }
 
 interface KnowledgeSemanticDocument {
@@ -41,6 +43,7 @@ export class KnowledgeSemanticIndexCoordinator {
   readonly #embedderOptions?: MastraEmbeddingOptions;
   readonly #workerId: string;
   readonly #batchSize: number;
+  readonly #claimTimeoutMs: number | undefined;
   readonly #draining = new Map<string, Promise<number>>();
 
   constructor(config: KnowledgeSemanticIndexCoordinatorConfig) {
@@ -50,6 +53,7 @@ export class KnowledgeSemanticIndexCoordinator {
     this.#embedderOptions = config.embedderOptions;
     this.#workerId = config.workerId ?? `knowledge-index-${crypto.randomUUID()}`;
     this.#batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE;
+    this.#claimTimeoutMs = config.claimTimeoutMs;
   }
 
   async drain(scopeIds?: KnowledgeScopeIds): Promise<number> {
@@ -105,6 +109,7 @@ export class KnowledgeSemanticIndexCoordinator {
       const entries = await this.#knowledge.claimSemanticOutbox({
         workerId: this.#workerId,
         limit: this.#batchSize,
+        claimTimeoutMs: this.#claimTimeoutMs,
         scopeIds,
       });
       if (entries.length === 0) {

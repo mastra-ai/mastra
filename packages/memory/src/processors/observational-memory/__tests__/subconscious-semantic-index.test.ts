@@ -1,7 +1,7 @@
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../..';
 import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
@@ -91,5 +91,49 @@ describe('knowledge semantic index descriptions', () => {
     );
     await coordinator.drain(scopeIds);
     expect(embeddedTexts).toContain('Project Atlas\nNew synopsis.');
+  });
+});
+
+describe('knowledge semantic index claim timeout', () => {
+  it('passes a configured claim timeout to the storage claim', async () => {
+    const { store, scopeIds } = await fixture();
+    const { embedder, vector } = createFakes();
+    const claim = vi.spyOn(store, 'claimSemanticOutbox');
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector,
+      embedder,
+      claimTimeoutMs: 5_000,
+    });
+    await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    await coordinator.drain(scopeIds);
+    expect(claim).toHaveBeenCalledWith(expect.objectContaining({ claimTimeoutMs: 5_000 }));
+  });
+
+  it('leaves the adapter default in place when no timeout is configured', async () => {
+    const { store, scopeIds, coordinator } = await fixture();
+    const claim = vi.spyOn(store, 'claimSemanticOutbox');
+    await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    await coordinator.drain(scopeIds);
+    expect(claim).toHaveBeenCalled();
+    for (const [input] of claim.mock.calls) expect(input.claimTimeoutMs).toBeUndefined();
+  });
+
+  it('reclaims an abandoned claim once the configured timeout has passed', async () => {
+    const { store, scopeIds, coordinator: defaultCoordinator } = await fixture();
+    const { embedder, vector } = createFakes();
+    await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    const abandoned = await store.claimSemanticOutbox({ workerId: 'crashed', scopeIds });
+    expect(abandoned.length).toBeGreaterThan(0);
+    await new Promise(resolve => setTimeout(resolve, 60));
+
+    await expect(defaultCoordinator.drain(scopeIds)).rejects.toThrow('stale');
+    const coordinator = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector,
+      embedder,
+      claimTimeoutMs: 20,
+    });
+    await expect(coordinator.drain(scopeIds)).resolves.toBe(abandoned.length);
   });
 });
