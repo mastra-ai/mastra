@@ -98,18 +98,23 @@ describe('thinking model capabilities', () => {
       effort('low', 'high'),
       ['off', 'low', 'high'],
     ],
-    ['xAI offers no off its request cannot send', 'xai/grok-3-mini', effort('low', 'high'), ['low', 'high']],
     [
-      'Groq offers only the efforts its package accepts',
-      'groq/qwen/qwen3.8-27b',
-      effort('none', 'default', 'low', 'medium', 'high'),
+      'xAI offers only the efforts its package accepts',
+      'xai/grok-4.6',
+      effort('low', 'medium', 'high', 'xhigh'),
       ['off', 'low', 'medium', 'high'],
     ],
     [
-      'the Mastra gateway offers what OpenRouter can send',
-      'mastra/groq/openai/gpt-oss-20b',
-      effort('low', 'medium', 'high'),
-      ['low', 'medium', 'high'],
+      'Alibaba offers its thinking switch, not efforts its request cannot send',
+      'alibaba/qwen-plus',
+      [{ type: 'toggle' }, ...effort('low', 'high')],
+      ['off', 'high'],
+    ],
+    [
+      'a model whose thinking controls the request cannot send offers only off',
+      'mistral/magistral-x',
+      [{ type: 'toggle' }, ...effort('low')],
+      ['off'],
     ],
     ['OpenAI models listed without reasoning controls offer only off', 'openai/gpt-4o', [], ['off']],
     ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
@@ -131,24 +136,6 @@ describe('thinking model capabilities', () => {
       undefined,
       ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
     ],
-    [
-      'DeepSeek offers off through its thinking switch',
-      'deepseek/deepseek-v4-pro',
-      [{ type: 'toggle' }, ...effort('low', 'high', 'max')],
-      ['off', 'low', 'high', 'max'],
-    ],
-    [
-      'DeepSeek offers no off its request cannot send',
-      'deepseek/deepseek-v4-pro',
-      effort('none', 'high', 'max'),
-      ['high', 'max'],
-    ],
-    [
-      'DeepSeek offers only the efforts it runs distinctly',
-      'deepseek/deepseek-v4-pro',
-      [{ type: 'toggle' }, ...effort('low', 'medium', 'high', 'xhigh', 'max')],
-      ['off', 'low', 'high', 'max'],
-    ],
   ])('%s', (_, modelId, reasoningOptions, levels) => {
     expect(getAvailableThinkingLevelsForModel(modelId, reasoningOptions)).toEqual(levels);
   });
@@ -164,7 +151,6 @@ describe('thinking model capabilities', () => {
     ],
     ['low on a model with only high', 'openai/gpt-5-pro', 'low', effort('high'), 'high'],
     ['off anywhere', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
-    ['off on DeepSeek without its thinking switch', 'deepseek/deepseek-v4-pro', 'off', effort('none', 'high'), 'high'],
   ] as const)('runs %s as the closest level the request sends', (_, modelId, level, reasoningOptions, runLevel) => {
     expect(runThinkingLevel(modelId, level, reasoningOptions)).toBe(runLevel);
   });

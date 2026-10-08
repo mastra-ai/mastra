@@ -84,40 +84,25 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('xhigh', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('high');
   });
 
-  it('turns DeepSeek thinking off, which DeepSeek leaves on by default', async () => {
-    const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'));
-    expect(body.thinking).toEqual({ type: 'disabled' });
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
-
-  it('leaves a DeepSeek request untouched when no thinking level is set', async () => {
-    const body = await requestBody(resolve(undefined, 'deepseek', 'deepseek-v4-pro'));
-    expect(body).not.toHaveProperty('thinking');
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
-
   it('caps the effort at what the provider package accepts, so the request is not rejected', async () => {
     expect((await requestBody(resolve('max', 'mistral', 'zai-glm-5-2'))).reasoning_effort).toBe('high');
     expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.7'))).reasoning).toEqual({ effort: 'high' });
   });
 
-  it('runs off as the lowest effort on models that cannot turn thinking off, as the picker shows', async () => {
-    expect((await requestBody(resolve('off', 'groq', 'qwen/qwen3.8-27b'))).reasoning_effort).toBe('none');
-    expect((await requestBody(resolve('off', 'groq', 'openai/gpt-oss-20b'))).reasoning_effort).toBe('low');
-  });
-
-  it('passes Perplexity the listed effort', async () => {
-    expect((await requestBody(resolve('max', 'perplexity', 'sonar-reasoning-pro'))).reasoning_effort).toBe('high');
+  it.each([
+    ['perplexity', 'sonar-reasoning-pro'],
+    ['cerebras', 'gpt-oss-120b'],
+  ])('passes %s the closest listed effort', async (providerId, modelId) => {
+    expect((await requestBody(resolve('max', providerId, modelId))).reasoning_effort).toBe('high');
   });
 
   it.each([
     ['togetherai', 'Qwen/Qwen3.5-9B'],
     ['deepinfra', 'XiaomiMiMo/MiMo-V2.6-Pro'],
-  ])('switches thinking on and off on %s models that only toggle it', async (providerId, modelId) => {
+  ])('switches thinking on for %s models that only toggle it', async (providerId, modelId) => {
     const on = await requestBody(resolve('high', providerId, modelId));
     expect(on.reasoning).toEqual({ enabled: true });
     expect(on).not.toHaveProperty('reasoning_effort');
-    expect((await requestBody(resolve('off', providerId, modelId))).reasoning).toEqual({ enabled: false });
   });
 
   it.each([
@@ -127,17 +112,13 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('max', providerId, modelId))).reasoning_effort).toBe('high');
   });
 
-  it('switches Alibaba thinking on and off', async () => {
-    expect((await requestBody(resolve('off', 'alibaba', 'qwen-flash'))).enable_thinking).toBe(false);
+  it('switches Alibaba thinking on', async () => {
     expect((await requestBody(resolve('high', 'alibaba', 'qwen-flash'))).enable_thinking).toBe(true);
   });
 
   it("sends OpenRouter's reasoning setting", async () => {
     expect((await requestBody(resolve('max', 'openrouter', 'deepseek/deepseek-v4-pro'))).reasoning).toEqual({
       effort: 'xhigh',
-    });
-    expect((await requestBody(resolve('off', 'openrouter', 'deepseek/deepseek-v4-pro'))).reasoning).toEqual({
-      enabled: false,
     });
     expect((await requestBody(resolve('high', 'openrouter', 'bytedance-seed/seed-1.6-flash'))).reasoning).toEqual({
       enabled: true,
@@ -170,6 +151,7 @@ describe('MastraCodeGateway thinking level forwarding', () => {
   it.each([
     ['anthropic', 'claude-opus-4-7'],
     ['openai', 'gpt-5.5'],
+    ['deepseek', 'deepseek-v4-pro'],
   ])(
     'leaves %s through the Mastra gateway on its default at off, like the direct path',
     async (providerId, modelId) => {
@@ -177,12 +159,11 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     },
   );
 
-  it("keeps the caller's own DeepSeek thinking setting whole instead of mixing it with the level", async () => {
-    const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'), {
+  it("keeps the caller's own DeepSeek effort over the level", async () => {
+    const body = await requestBody(resolve('low', 'deepseek', 'deepseek-v4-pro'), {
       deepseek: { reasoningEffort: 'max' },
     });
     expect(body.reasoning_effort).toBe('max');
-    expect(body).not.toHaveProperty('thinking');
   });
 
   it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {
@@ -190,6 +171,18 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(await requestBody(resolve(level, 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
     const google = await requestBody(resolve(level, 'google', 'gemini-3-flash-preview'));
     expect(google.generationConfig?.thinkingConfig).toBeUndefined();
+    for (const [providerId, modelId] of [
+      ['deepseek', 'deepseek-v4-pro'],
+      ['groq', 'qwen/qwen3.8-27b'],
+      ['togetherai', 'Qwen/Qwen3.5-9B'],
+      ['alibaba', 'qwen-flash'],
+      ['openrouter', 'deepseek/deepseek-v4-pro'],
+    ] as const) {
+      const body = await requestBody(resolve(level, providerId, modelId));
+      for (const thinkingField of ['thinking', 'reasoning_effort', 'reasoning', 'enable_thinking']) {
+        expect(body).not.toHaveProperty(thinkingField);
+      }
+    }
   });
 
   it('leaves Gemini models without thinking support untouched', async () => {
