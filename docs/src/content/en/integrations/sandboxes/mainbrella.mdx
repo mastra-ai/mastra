@@ -1,0 +1,140 @@
+---
+title: "Mainbrella | Sandbox"
+description: "Run Mastra workspace commands and file operations in Mainbrella Linux containers with managed processes and generation-qualified cleanup."
+packages:
+  - "@mastra/mainbrella"
+---
+
+# Mainbrella
+
+`MainbrellaSandbox` runs commands in [Mainbrella](https://mainbrella.com) Linux containers. `MainbrellaFilesystem` reads and writes files in the same container over HTTP. Both work with [Mastra workspaces](/docs/sandbox/overview).
+
+## Installation and authentication
+
+```bash npm2yarn
+npm install @mastra/mainbrella
+```
+
+Create a named key in [Mainbrella API keys](https://mainbrella.com/api-keys/) and provision it on your server as `MAINBRELLA_API_KEY`. An API key requires an active account allowance to start containers. Keep the key out of client bundles and container environment variables.
+
+`MAINBRELLA_API_URL` optionally selects an API origin. The default is `https://api.mainbrella.com`. For a local backend, pass its credential and origin together:
+
+```typescript
+import { MainbrellaSandbox } from '@mastra/mainbrella'
+
+const sandbox = new MainbrellaSandbox({
+  apiKey: process.env.LOCAL_MAINBRELLA_API_KEY,
+  apiUrl: 'http://localhost:8787',
+})
+```
+
+## Create a workspace
+
+Use one sandbox for command execution and file operations:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { MainbrellaFilesystem, MainbrellaSandbox } from '@mastra/mainbrella'
+
+const sandbox = new MainbrellaSandbox({
+  catalogId: 'node',
+  size: 'lite',
+  workingDirectory: '/workspace',
+})
+const filesystem = new MainbrellaFilesystem({ sandbox, basePath: '/workspace' })
+const workspace = new Workspace({ sandbox, filesystem })
+
+try {
+  await workspace.init()
+  await filesystem.writeFile('/hello.txt', 'hello from mainbrella')
+  const result = await sandbox.executeCommand('cat', ['/workspace/hello.txt'])
+  console.log(result.stdout, result.exitCode)
+} finally {
+  await workspace.destroy()
+}
+```
+
+The expected output is `hello from mainbrella` with exit code `0`. Assign this workspace to an [agent](/docs/sandbox/overview) to enable workspace tools.
+
+Choose a `catalogId` advertised by the account's `GET /containers` response, or set `imageId` to an account-owned ready custom image. `catalogId`, `imageId`, and `workspaceId` are mutually exclusive. A custom working directory must already exist when commands run; filesystem initialization creates its `basePath` when writable.
+
+Stop and destroy discard unsaved files. Explicitly save a workspace through the underlying SDK before stopping if you need filesystem recovery. A later start after an explicit stop creates a fresh generation.
+
+## Commands and managed processes
+
+`executeCommand()` waits for a managed job to finish and returns stdout, stderr, exit code, and success. Arguments are passed as literal argument values. Without arguments, the command is a shell command.
+
+```typescript
+const result = await sandbox.executeCommand('node', ['--version'], {
+  timeout: 30_000,
+  cwd: '/workspace',
+  env: { NODE_ENV: 'test' },
+  onStdout: data => console.log(data),
+})
+```
+
+Manage a process with stdin or cancellation through `processes`:
+
+```typescript
+const handle = await sandbox.processes.spawn('cat', { timeout: 10_000 })
+await handle.sendStdin('hello\n')
+await handle.closeStdin()
+const result = await handle.wait()
+console.log(result.stdout)
+```
+
+For a process without input, use `stdinMode: 'ignore'`. Cancel with `handle.kill()`. Process IDs are retained Mainbrella execution IDs, rather than operating system process IDs. `processes.list()` lists those managed jobs.
+
+Streaming reconnects resume the same job from its last received sequence. An uncertain command or stdin request surfaces an error without replaying it. Timeouts, cancellation, interruption, and output-limit results report failure even when partial output is available.
+
+## Reconnection and cleanup
+
+Save both fields from `sandbox.container` after startup:
+
+```typescript
+await sandbox.start()
+const container = sandbox.container!
+
+const reconnected = new MainbrellaSandbox({ container })
+await reconnected.start()
+```
+
+A logical Mastra `id` alone doesn't reconnect a remote container. Every workload operation uses the remote `id` and `createdAt`. A stopped or replaced generation fails reconnection. Cleanup checks that exact generation and preserves any newer container in the same slot.
+
+For creation recovery across process restarts, persist `creationKey` and the creation options before calling `start()`. Retry the same key and options within 24 hours after an ambiguous creation response. An unresolved creation prevents the adapter from claiming successful cleanup; retain the recovery identity and reconcile it first.
+
+## Filesystem behavior
+
+Workspace paths resolve under `basePath`, which defaults to `/workspace`. A workspace path such as `/input/data.bin` maps to `/workspace/input/data.bin` in the guest. The filesystem supports binary reads and writes, append, copy, move, metadata, directories, and paginated listings.
+
+Symlinks and special files aren't followed. Directory checks aren't an isolation boundary against other code running in the same container. Append and copy use read/write operations. `overwrite` and `expectedMtime` write checks happen before transfer and aren't atomic against external writers. Moves never overwrite an existing destination. Destroying the filesystem alone doesn't stop the shared sandbox.
+
+## Configuration
+
+| Option | Behavior |
+| - | - |
+| `apiKey` | Defaults to `MAINBRELLA_API_KEY` |
+| `apiUrl` | Defaults to `MAINBRELLA_API_URL` or `https://api.mainbrella.com` |
+| `catalogId` | Defaults to `node` when no custom image or saved workspace is selected |
+| `imageId` | Account-owned ready custom image |
+| `workspaceId` | Saved filesystem to restore into a fresh generation |
+| `size` | `lite`, `small`, `medium`, `large`, or `xl`; account default when omitted |
+| `internet` | Creation-time outbound internet policy; disabling requires deployment support |
+| `timeout` | Default managed command timeout in milliseconds; defaults to `30000`, maximum `900000` |
+| `workingDirectory` | Default command directory; defaults to `/workspace` |
+| `env` | Command environment overlay; per-command values take precedence |
+| `container` | Exact `{ id, createdAt }` identity for reconnection |
+| `creationKey` | Stable creation recovery key; generated when omitted |
+| `startupTimeout` | Provisioning wait in milliseconds; defaults to `120000` |
+
+Register `mainbrellaSandboxProvider` in `MastraEditor.sandboxes` to make the provider available to editor-managed workspaces.
+
+## Limits and SDK access
+
+Managed jobs have a maximum timeout of 15 minutes and output limit of 1 MiB, within the container lease. Individual HTTP file transfers are limited to 1 MiB. Read the returned lease deadline from `(await sandbox.getInfo()).timeoutAt`; inactivity can stop the container earlier.
+
+The adapter doesn't provide FUSE cloud mounts, filesystem watchers, guest-wide process listing, or automatic checkpoints. `sandbox.getCapabilities()` reports deployment support for optional features.
+
+Access `sandbox.mainbrella` for Mainbrella SDK operations such as saved workspaces, portable exports, previews, signals, and programmatic terminals. Save/restore preserves filesystem state; processes and memory don't resume. See the [Mainbrella API reference](https://mainbrella.com/API.md) for recovery and retention rules.
+
+`sandbox.networking.getPortUrl(port)` issues and caches a temporary bearer preview link when supported. Keep that URL private. For expiration metadata and revocation controls, use `sandbox.mainbrella.previews.create()`, `list()`, and `revoke()`. Preview issuance failures require listing and revocation reconciliation before issuing another link.

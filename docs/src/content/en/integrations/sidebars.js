@@ -223,6 +223,11 @@ const sidebars = {
           customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
         },
         {
+          type: 'doc',
+          id: 'sandboxes/mainbrella',
+          label: 'Mainbrella',
+        },
+        {
           type: 'link',
           label: 'Mastra',
           href: '/reference/workspace/platform-sandbox',
