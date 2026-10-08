@@ -138,6 +138,7 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   perStep?: boolean;
 }
 
+/** Executes active parallel arms and checkpoints completed arms for restart. */
 export async function executeParallel(
   engine: DefaultExecutionEngine,
   params: ExecuteParallelParams,
@@ -224,6 +225,7 @@ export async function executeParallel(
   // still running does not re-run it on restart (#26214). Writes of one run are ordered by the
   // engine. Once the block has settled (for example a sibling threw) late arms must not write.
   let blockSettled = false;
+  /** Saves arm completion unless the block has already reached its final result. */
   const checkpointArm = async (armIndex: number) => {
     if (blockSettled) return;
     await engine.persistStepUpdate({
@@ -978,6 +980,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   perStep?: boolean;
 }
 
+/** Executes foreach items while preserving completed results across restart or resume. */
 export async function executeForeach(
   engine: DefaultExecutionEngine,
   params: ExecuteForeachParams,
@@ -1204,6 +1207,7 @@ export async function executeForeach(
     } as StepResult<any, any, any, any>;
   };
 
+  /** Saves accumulated item progress through the run's ordered snapshot queue. */
   const checkpointItem = (k: number) => {
     restoreProgress();
     return engine.persistStepUpdate({

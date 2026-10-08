@@ -166,6 +166,7 @@ export interface PersistStepUpdateParams {
   recordResumedStepStart?: boolean;
 }
 
+/** Persists a step snapshot in run order while honoring persistence and resume guards. */
 export async function persistStepUpdate(
   engine: DefaultExecutionEngine,
   params: PersistStepUpdateParams,

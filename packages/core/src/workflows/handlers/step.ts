@@ -71,6 +71,7 @@ export interface ExecuteStepParams extends ObservabilityContext {
   entryMetadata?: Record<string, any>;
 }
 
+/** Executes a step with lifecycle hooks and preserves foreach progress in its start snapshot. */
 export async function executeStep(
   engine: DefaultExecutionEngine,
   params: ExecuteStepParams,
