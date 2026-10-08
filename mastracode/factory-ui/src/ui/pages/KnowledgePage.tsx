@@ -404,9 +404,31 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           : { scopeLevel: 'resource' };
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
-  const [trail, setTrail] = useState<TrailEntry[]>([]);
+  // `?node=` deep-links the trail head; a stale or hidden handle renders the
+  // flyout's calm not-available state.
+  const [trail, setTrail] = useState<TrailEntry[]>(() => {
+    const nodeId = searchParams.get('node');
+    return nodeId ? [{ nodeId, name: searchParams.get('nodeName') ?? nodeId }] : [];
+  });
   const selected = trail.at(-1) ?? null;
   const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
+  useEffect(() => {
+    setSearchParams(
+      params => {
+        if ((params.get('node') ?? undefined) === selected?.nodeId) return params;
+        const copy = new URLSearchParams(params);
+        if (selected) {
+          copy.set('node', selected.nodeId);
+          copy.set('nodeName', selected.name);
+        } else {
+          copy.delete('node');
+          copy.delete('nodeName');
+        }
+        return copy;
+      },
+      { replace: true },
+    );
+  }, [selected?.nodeId, selected?.name, setSearchParams]);
 
   // Live updates hold while the user is exploring (moving, clicking,
   // zooming) and resume after 10s of stillness — the layout never shifts
