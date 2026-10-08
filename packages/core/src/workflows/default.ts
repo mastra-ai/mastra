@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { Buffer } from 'node:buffer';
 import { TripWire } from '../agent/trip-wire';
 import type { ActorSignal } from '../auth/ee';
 import { RequestContext } from '../di';
@@ -51,6 +52,7 @@ import type {
   StepTripwireInfo,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowRunState,
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
@@ -107,6 +109,36 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   /** Tail of the pending snapshot writes for each run in this process. */
   private persistTailByRun = new Map<string, Promise<void>>();
 
+  /** Running foreach snapshot bytes reserved in this execution attempt, shared by all its blocks. */
+  private foreachCheckpointBytesByRun = new Map<string, number>();
+
+  /**
+   * Bounds repeated full-snapshot writes without dropping completed-item checkpoints.
+   * Call inside the persistence queue, after pruning and before invoking storage.
+   * Failed writes still consume budget because the store may have committed before rejecting.
+   */
+  reserveForeachCheckpoint(runId: string, snapshot: WorkflowRunState): void {
+    const limit = this.options.maxForeachCheckpointBytes ?? 16 * 1024 * 1024;
+    if (!Number.isSafeInteger(limit) || limit <= 0) {
+      throw new Error('maxForeachCheckpointBytes must be a positive safe integer');
+    }
+    const used = this.foreachCheckpointBytesByRun.get(runId) ?? 0;
+    // Once exhausted, reject queued sibling writes without serializing their growing outputs again.
+    if (used >= limit) {
+      throw new Error(
+        `Foreach checkpoint budget exceeded (${limit} bytes). Increase maxForeachCheckpointBytes for this workflow or reduce its input/output size.`,
+      );
+    }
+    const bytes = Buffer.byteLength(JSON.stringify(snapshot), 'utf8');
+    if (bytes > limit - used) {
+      this.foreachCheckpointBytesByRun.set(runId, limit);
+      throw new Error(
+        `Foreach checkpoint budget exceeded (${limit} bytes). Increase maxForeachCheckpointBytes for this workflow or reduce its input/output size.`,
+      );
+    }
+    this.foreachCheckpointBytesByRun.set(runId, used + bytes);
+  }
+
   /**
    * Runs one snapshot write after every earlier write of the same run has settled.
    * Parallel arms and foreach items persist concurrently, and a store serializes the
@@ -129,6 +161,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   /** Clears the last-persisted-status entry for a run (used on run cleanup). */
   clearLastPersistedStatus(runId: string): void {
     this.lastPersistedStatusByRun.delete(runId);
+    this.foreachCheckpointBytesByRun.delete(runId);
   }
 
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */

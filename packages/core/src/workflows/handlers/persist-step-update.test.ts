@@ -14,6 +14,104 @@ import type { ExecutionContext, WorkflowRunStatus } from '../types';
 
 type PersistArgs = Parameters<Awaited<ReturnType<typeof getStore>>['persistWorkflowSnapshot']>[0];
 
+describe('foreach snapshot write budget', () => {
+  const write = (engine: DefaultExecutionEngine, runId: string, output: string) =>
+    engine.persistStepUpdate({
+      workflowId: 'wf',
+      runId,
+      stepResults: {
+        item: { status: 'running', startedAt: 1, payload: output },
+      },
+      serializedStepGraph: [],
+      executionContext: baseExecutionContext({ runId, foreachIndex: 0 }),
+      workflowStatus: 'running',
+      requestContext: new RequestContext(),
+    });
+
+  it('enforces the default budget across concurrent writes using UTF-8 bytes', async () => {
+    const { engine, store } = makeEngine(() => true);
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 100 }, () => write(engine, 'run-1', '\u00e9'.repeat(128 * 1024))),
+    );
+    const bytes = store.calls.reduce((total, call) => total + Buffer.byteLength(JSON.stringify(call.snapshot)), 0);
+    expect(bytes).toBeLessThanOrEqual(16 * 1024 * 1024);
+    expect(bytes).toBeGreaterThan(15 * 1024 * 1024);
+    expect(attempts.some(result => result.status === 'rejected')).toBe(true);
+    expect(store.calls.length).toBe(attempts.filter(result => result.status === 'fulfilled').length);
+  });
+
+  it('isolates runs and releases the budget after terminal cleanup', async () => {
+    const { engine, store } = makeEngine(() => true);
+    engine.options.maxForeachCheckpointBytes = 2048;
+    await write(engine, 'run-1', 'x'.repeat(1024));
+    await expect(write(engine, 'run-1', 'x'.repeat(1024))).rejects.toThrow('checkpoint budget exceeded');
+    await write(engine, 'run-2', 'x'.repeat(1024));
+    await persist(engine, 'run-1', 'failed');
+    engine.clearLastPersistedStatus('run-1');
+    await write(engine, 'run-1', 'x'.repeat(1024));
+    expect(store.calls.map(call => call.runId)).toEqual(['run-1', 'run-2', 'run-1', 'run-1']);
+  });
+
+  it('charges the pruned snapshot and leaves skipped writes outside the budget', async () => {
+    const { engine, store } = makeEngine(() => false);
+    engine.options.maxForeachCheckpointBytes = 2048;
+    await write(engine, 'run-1', 'x'.repeat(4096));
+    engine.options.shouldPersistSnapshot = () => true;
+    engine.options.pruneSnapshot = ({ snapshot }) => ({ ...snapshot, context: {} });
+    await write(engine, 'run-1', 'x'.repeat(4096));
+    expect(store.calls).toHaveLength(1);
+    expect(store.calls[0]!.snapshot.context).toEqual({});
+  });
+
+  it.each([0, -1, NaN, Infinity, 1.5])('rejects an invalid budget of %s before writing', async limit => {
+    const { engine, store } = makeEngine(() => true);
+    engine.options.maxForeachCheckpointBytes = limit;
+    await expect(write(engine, 'run-1', 'output')).rejects.toThrow('positive safe integer');
+    expect(store.calls).toHaveLength(0);
+  });
+
+  it('does not refund ambiguous storage failures', async () => {
+    const { engine, store } = makeEngine(() => true);
+    engine.options.maxForeachCheckpointBytes = 2048;
+    vi.mocked(store.persistWorkflowSnapshot).mockRejectedValueOnce(new Error('connection lost after commit'));
+    await expect(write(engine, 'run-1', 'x'.repeat(1024))).rejects.toThrow('connection lost');
+    await expect(write(engine, 'run-1', 'x'.repeat(1024))).rejects.toThrow('checkpoint budget exceeded');
+    expect(store.persistWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not prune or charge snapshots when no storage is configured', async () => {
+    const pruneSnapshot = vi.fn(({ snapshot }) => snapshot);
+    const engine = new DefaultExecutionEngine({
+      options: {
+        validateInputs: false,
+        shouldPersistSnapshot: () => true,
+        maxForeachCheckpointBytes: 1,
+        pruneSnapshot,
+      },
+    });
+    await write(engine, 'run-1', 'output');
+    expect(pruneSnapshot).not.toHaveBeenCalled();
+  });
+
+  it.each([null, undefined, { status: 'running', suspendPayload: { __workflow_meta: { foreachOutput: [] } } }])(
+    'does not interpret workflow input or state as a foreach result (%j)',
+    async input => {
+      const { engine, store } = makeEngine(() => true);
+      engine.options.maxForeachCheckpointBytes = 1;
+      await engine.persistStepUpdate({
+        workflowId: 'wf',
+        runId: 'run-1',
+        stepResults: { input, __state: input } as any,
+        serializedStepGraph: [],
+        executionContext: baseExecutionContext(),
+        workflowStatus: 'running',
+        requestContext: new RequestContext(),
+      });
+      expect(store.calls).toHaveLength(1);
+    },
+  );
+});
+
 interface FakeWorkflowsStore {
   persistWorkflowSnapshot: (args: PersistArgs) => Promise<void>;
   calls: PersistArgs[];

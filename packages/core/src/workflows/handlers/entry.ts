@@ -244,11 +244,30 @@ export async function persistStepUpdate(
       };
 
       const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+      const persistedSnapshot =
+        workflowsStore && engine.options?.pruneSnapshot
+          ? engine.options.pruneSnapshot({ snapshot, workflowStatus })
+          : snapshot;
+      // Include item starts and sibling writes carrying accumulated foreach progress.
+      // Final snapshots remain writable so a budget failure can save completed results.
+      const isForeachCheckpoint =
+        workflowStatus === 'running' &&
+        (executionContext.foreachIndex !== undefined ||
+          Object.entries(stepResults).some(
+            ([id, step]) =>
+              id !== 'input' &&
+              id !== '__state' &&
+              step?.status === 'running' &&
+              step.suspendPayload?.__workflow_meta?.foreachOutput,
+          ));
+      if (workflowsStore && isForeachCheckpoint) {
+        engine.reserveForeachCheckpoint(runId, persistedSnapshot);
+      }
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,
         resourceId,
-        snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+        snapshot: persistedSnapshot,
       });
       engine.setLastPersistedStatus(runId, workflowStatus);
     }),

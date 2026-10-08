@@ -550,6 +550,16 @@ export interface WorkflowOptions {
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
   /**
+   * Maximum cumulative UTF-8 JSON bytes of running foreach snapshots per execution
+   * attempt in the default engine. Defaults to 16 MiB. Must be a positive safe integer.
+   * Counts item starts and writes carrying accumulated progress after pruneSnapshot.
+   * Exhaustion fails the run instead of skipping checkpoints; its final snapshot
+   * can still preserve completed results. Terminal snapshots are outside this budget.
+   * Increase only in trusted workflow configuration for larger workloads. A fresh
+   * process or a new attempt after a terminal result gets a fresh budget.
+   */
+  maxForeachCheckpointBytes?: number;
+  /**
    * Evaluates `shouldPersistSnapshot` before entering the durable operation so a
    * false verdict does not consume a durable step.
    *

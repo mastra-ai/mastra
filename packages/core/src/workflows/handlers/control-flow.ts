@@ -223,7 +223,8 @@ export async function executeParallel(
   let execResults: any;
   // Arms finish in any order. Each finished arm is checkpointed so a crash while siblings are
   // still running does not re-run it on restart (#26214). Writes of one run are ordered by the
-  // engine. Once the block has settled (for example a sibling threw) late arms must not write.
+  // engine. Wait for started arms even if one rejects, then propagate the original failure.
+  // Once the block has settled, no arm may write a later running checkpoint.
   let blockSettled = false;
   /** Saves arm completion unless the block has already reached its final result. */
   const checkpointArm = async (armIndex: number) => {
@@ -240,58 +241,62 @@ export async function executeParallel(
       phase: `arm-end.${armIndex}`,
     });
   };
+  const arms = steps.map(async (step, i) => {
+    const stepId = getSingleStepEntryId(step);
+    const currStepResult = stepResults[stepId];
+    if (currStepResult && currStepResult.status !== 'running') {
+      return currStepResult;
+    }
+    if (!currStepResult && (perStep || timeTravel)) {
+      return {} as StepResult<any, any, any, any>;
+    }
+    const stepExecResult = await executeChildEntry(engine, step, {
+      workflowId,
+      runId,
+      resourceId,
+      prevOutput,
+      stepResults,
+      serializedStepGraph,
+      restart,
+      timeTravel,
+      resume,
+      executionContext: {
+        activeStepsPath: executionContext.activeStepsPath,
+        workflowId,
+        runId,
+        executionPath: [...executionContext.executionPath, i],
+        stepExecutionPath: executionContext.stepExecutionPath,
+        suspendedPaths: executionContext.suspendedPaths,
+        resumeLabels: executionContext.resumeLabels,
+        retryConfig: executionContext.retryConfig,
+        state: executionContext.state,
+        tracingIds: executionContext.tracingIds,
+      },
+      ...createObservabilityContext({ currentSpan: parallelSpan }),
+      pubsub,
+      abortController,
+      requestContext,
+      actor,
+      outputWriter,
+      disableScorers,
+      perStep,
+    });
+    // Apply context changes from parallel step execution
+    engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
+    Object.assign(stepResults, stepExecResult.stepResults);
+    if (stepExecResult.result.status === 'success' && !abortController?.signal?.aborted) {
+      await checkpointArm(i);
+    }
+    return stepExecResult.result;
+  });
   let results: StepResult<any, any, any, any>[];
   try {
-    results = await Promise.all(
-      steps.map(async (step, i) => {
-        const stepId = getSingleStepEntryId(step);
-        const currStepResult = stepResults[stepId];
-        if (currStepResult && currStepResult.status !== 'running') {
-          return currStepResult;
-        }
-        if (!currStepResult && (perStep || timeTravel)) {
-          return {} as StepResult<any, any, any, any>;
-        }
-        const stepExecResult = await executeChildEntry(engine, step, {
-          workflowId,
-          runId,
-          resourceId,
-          prevOutput,
-          stepResults,
-          serializedStepGraph,
-          restart,
-          timeTravel,
-          resume,
-          executionContext: {
-            activeStepsPath: executionContext.activeStepsPath,
-            workflowId,
-            runId,
-            executionPath: [...executionContext.executionPath, i],
-            stepExecutionPath: executionContext.stepExecutionPath,
-            suspendedPaths: executionContext.suspendedPaths,
-            resumeLabels: executionContext.resumeLabels,
-            retryConfig: executionContext.retryConfig,
-            state: executionContext.state,
-            tracingIds: executionContext.tracingIds,
-          },
-          ...createObservabilityContext({ currentSpan: parallelSpan }),
-          pubsub,
-          abortController,
-          requestContext,
-          actor,
-          outputWriter,
-          disableScorers,
-          perStep,
-        });
-        // Apply context changes from parallel step execution
-        engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-        Object.assign(stepResults, stepExecResult.stepResults);
-        if (stepExecResult.result.status === 'success' && !abortController?.signal?.aborted) {
-          await checkpointArm(i);
-        }
-        return stepExecResult.result;
-      }),
-    );
+    results = await Promise.all(arms);
+  } catch (error) {
+    // Promise.all rejects early, but siblings can still finish side effects.
+    // Keep their checkpoints enabled until they settle and preserve the first error.
+    await Promise.allSettled(arms);
+    throw error;
   } finally {
     blockSettled = true;
   }

@@ -32,6 +32,55 @@ function step(id: string, execute: Fn) {
 const never = () => new Promise<never>(() => {});
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
 
+describe('foreach checkpoint write budget', () => {
+  it.each([100, 200])('bounds accumulated snapshot bytes for %i caller-supplied items', async count => {
+    const budget = 32 * 1024;
+    const charge = step('charge', async ({ inputData }) => ({ charged: inputData, receipt: 'x'.repeat(512) }));
+    const workflow = createWorkflow({
+      id: 'foreach-budget',
+      inputSchema: anySchema,
+      outputSchema: anySchema,
+      options: { maxForeachCheckpointBytes: budget },
+    })
+      .foreach(charge.step, { concurrency: 1 })
+      .commit();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    let checkpointBytes = 0;
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      if (args.snapshot.status === 'running' && args.snapshot.context.charge?.status === 'running') {
+        checkpointBytes += Buffer.byteLength(JSON.stringify(args.snapshot), 'utf8');
+      }
+      return persist(args);
+    });
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: Array.from({ length: count }, (_, i) => i) });
+
+    expect(checkpointBytes).toBeLessThanOrEqual(budget);
+    expect(checkpointBytes).toBeGreaterThan(0);
+    expect(result.status).toBe('failed');
+    expect((result as any).error.message).toContain('maxForeachCheckpointBytes');
+    expect(charge.fn.mock.calls.length).toBeLessThan(count);
+    const saved = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    expect(saved?.status).toBe('failed');
+    const finished = saved!.context.charge.suspendPayload.__workflow_meta.foreachOutput;
+    for (const [{ inputData }] of charge.fn.mock.calls) {
+      expect(finished[inputData]).toMatchObject({ status: 'success', output: { charged: inputData } });
+    }
+
+    // A trusted operator can raise the budget and retry without charging finished items again.
+    workflow.executionEngine.options.maxForeachCheckpointBytes = 64 * 1024 * 1024;
+    const restarted = await run.timeTravel({ step: 'charge' });
+    expect(restarted.status, String((restarted as any).error?.message)).toBe('success');
+    expect(charge.fn.mock.calls.map(([{ inputData }]) => inputData)).toEqual(
+      Array.from({ length: count }, (_, i) => i),
+    );
+  });
+});
+
 /**
  * Runs `build()` once and returns the last checkpoint the engine saved after
  * `blocked()` reported that the blocked step was reached. The first run is left
@@ -752,31 +801,74 @@ describe('checkpoint writes are ordered with the step start writes', () => {
     },
   );
 
-  it('parallel: an arm that finishes after the block failed to persist does not write another checkpoint', async () => {
-    let releaseA!: () => void;
-    const gateA = new Promise<void>(resolve => (releaseA = resolve));
-    const build = () => {
-      const a = step('a', async () => {
-        await gateA;
-        return { a: true };
+  it.each(['dispatch', 'start checkpoint'])(
+    'parallel: saves late sibling success after a %s rejection before propagating the failure',
+    async failureKind => {
+      let releaseA!: () => void;
+      const gateA = new Promise<void>(resolve => (releaseA = resolve));
+      let sawFailure = false;
+      let restarted = false;
+      let propagatedError: unknown;
+      const failure = new Error('child dispatch or storage unavailable');
+      const build = () => {
+        const a = step('a', async () => {
+          await gateA;
+          return { a: true };
+        });
+        const b = step('b', async () => ({ b: true }));
+        const workflow = createWorkflow({ id: 'order-failed', inputSchema: anySchema, outputSchema: anySchema })
+          .parallel([a.step, b.step])
+          .commit();
+        const execute = workflow.executionEngine.executeStep.bind(workflow.executionEngine);
+        vi.spyOn(workflow.executionEngine, 'executeStep').mockImplementation(async params => {
+          if (!restarted && failureKind === 'dispatch' && params.step.id === 'b') {
+            sawFailure = true;
+            throw failure;
+          }
+          return execute(params);
+        });
+        const parallel = workflow.executionEngine.executeParallel.bind(workflow.executionEngine);
+        vi.spyOn(workflow.executionEngine, 'executeParallel').mockImplementation(async params => {
+          try {
+            return await parallel(params);
+          } catch (error) {
+            propagatedError = error;
+            throw error;
+          }
+        });
+        return { workflow, fns: { a: a.fn, b: b.fn } };
+      };
+      const { runId, writes, result, stored } = await runWithInterceptedStore(build, async (_snapshot, index) => {
+        if (failureKind === 'start checkpoint' && index === 2) {
+          sawFailure = true;
+          throw failure;
+        }
       });
-      const b = step('b', async () => ({ b: true }));
-      const workflow = createWorkflow({ id: 'order-failed', inputSchema: anySchema, outputSchema: anySchema })
-        .parallel([a.step, b.step])
-        .commit();
-      return { workflow, fns: {} };
-    };
-    // the start write of b fails, which ends the block while a is still running
-    const { writes, result } = await runWithInterceptedStore(build, async (_snapshot, index) => {
-      if (index === 2) throw new Error('storage unavailable');
-    });
-    await result;
-    const writesAtFailure = writes.length;
-    releaseA();
-    await sleep(300);
+      let returned = false;
+      void result.then(() => (returned = true));
+      try {
+        await vi.waitFor(() => expect(sawFailure).toBe(true));
+        await sleep(50);
+        expect(returned).toBe(false);
+        releaseA();
+        await result;
+        expect(propagatedError).toBe(failure);
+        await sleep(50);
+        expect(stored()!.context.a?.status).toBe('success');
+        const writesAtFailure = writes.length;
+        await sleep(50);
+        expect(writes).toHaveLength(writesAtFailure);
 
-    expect(writes).toHaveLength(writesAtFailure);
-  });
+        restarted = true;
+        const recovery = await restartFrom(build, runId, stored()!);
+        expect(recovery.restarted.status).toBe('success');
+        expect(recovery.fns.a).not.toHaveBeenCalled();
+        expect(recovery.fns.b).toHaveBeenCalledTimes(1);
+      } finally {
+        releaseA();
+      }
+    },
+  );
 });
 
 describe('restart when a foreach item with an undefined output finished before the crash', () => {
