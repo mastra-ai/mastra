@@ -1,8 +1,7 @@
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { IMastraAuthProvider } from '@mastra/core/server';
 
 import {
   ensureFactoryAuthUser,
