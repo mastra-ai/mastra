@@ -134,6 +134,31 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     });
   }
 
+  it('keeps feedback continuation steps iteration-local with an output processor', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'MORE'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [passThrough],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say MORE.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('firstMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
+    expect(fullOutput.text).toBe('firstMORE');
+  });
+
   for (const [label, rewrite, step, expected] of [
     ['redacts', '[REDACTED]', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], '[REDACTED]'],
     ['clears', '', [...textPart('t1', 'SECRET'), askCall('c1'), finish('tool-calls')], ''],

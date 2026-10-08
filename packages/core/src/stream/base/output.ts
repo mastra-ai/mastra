@@ -1150,9 +1150,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Run output processors when NOT in LLM execution step context
                   // (i.e., when this is the final MastraModelOutput for the agent)
 
-                  // Capture original text before processing for comparison
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  const originalText = lastStep?.text || '';
+                  const lastStepText = lastStep?.text || '';
 
                   const outputResult: OutputResult = {
                     text: self.#bufferedText.join(''),
@@ -1175,6 +1174,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
                   }
 
+                  const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     resolveObservabilityContext(options),
@@ -1187,15 +1188,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Get text from the latest response message (the last assistant message)
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
 
-                  // Only update the last step's text if output processors actually modified it
-                  // This preserves text from retry scenarios where step.text is already correct.
+                  // Only update the last step when result processing changed the response text.
+                  // The response message can contain text accumulated across loop iterations, while
+                  // step.text must remain iteration-local. Comparing the response before and after
+                  // processing avoids replacing the final step with unchanged run-level text.
                   // Compare against undefined, not truthiness, so a processor clearing the text
                   // to '' still overwrites the step text instead of leaking the original.
                   if (
                     self.#status !== 'canceled' &&
                     lastStep &&
                     outputText !== undefined &&
-                    outputText !== originalText
+                    outputText !== outputTextBeforeProcessing &&
+                    outputText !== lastStepText
                   ) {
                     lastStep.text = outputText;
                   }
@@ -1204,7 +1208,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // processor intentionally emptied it. Only fall back to the raw model
                   // text when there is no processed message at all.
                   this.resolvePromises({
-                    text: outputText ?? originalText,
+                    text: outputText ?? lastStepText,
                     finishReason: self.#finishReason,
                   });
 
