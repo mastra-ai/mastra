@@ -68,6 +68,8 @@ export interface FactorySandboxContext {
   cpuCount?: number;
   /** Memory in MB from the factory's environment settings. */
   memoryMB?: number;
+  /** Idle minutes before the sandbox may stop, from the environment settings; the provider default when absent. */
+  idleTimeoutMinutes?: number;
   /**
    * Resolves the commit a repository clone pins to, keyed by clone URL (the
    * repo templates' `resolveHead` option). Factory passes the heads it

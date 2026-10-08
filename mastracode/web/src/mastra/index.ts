@@ -383,6 +383,7 @@ export const factory = new MastraFactory({
         // resume reattaches the original VM instead of provisioning a replacement.
         sandboxId: ctx.sandboxId,
         template: createPlatformRepoTemplate(ctx),
+        ...(ctx.idleTimeoutMinutes ? { idleTimeoutMinutes: ctx.idleTimeoutMinutes } : {}),
       });
     }
 

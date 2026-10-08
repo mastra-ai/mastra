@@ -3137,6 +3137,7 @@ describe('factory environment sandbox context', () => {
       sandboxWorkdir: '/workspace',
       sandboxCpuCount: 8,
       sandboxMemoryMb: 16384,
+      sandboxIdleTimeoutMinutes: 45,
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
     };
@@ -3184,6 +3185,7 @@ describe('factory environment sandbox context', () => {
       workingDirectory: '/workspace',
       cpuCount: 8,
       memoryMB: 16384,
+      idleTimeoutMinutes: 45,
     });
     // Mutually exclusive for the template: the key is present and undefined.
     expect('getRepositoryAccess' in ctx).toBe(true);
@@ -3236,6 +3238,7 @@ describe('factory environment sandbox context', () => {
         sandboxWorkdir: '~/relative',
         sandboxCpuCount: null,
         sandboxMemoryMb: null,
+        sandboxIdleTimeoutMinutes: null,
         workspaceSetupCommand: null,
       },
     });
@@ -3249,6 +3252,7 @@ describe('factory environment sandbox context', () => {
     // Unset resources leave the provider default, so the keys are absent.
     expect('cpuCount' in ctx).toBe(false);
     expect('memoryMB' in ctx).toBe(false);
+    expect('idleTimeoutMinutes' in ctx).toBe(false);
     expect('workingDirectory' in ctx).toBe(false);
     expect('workspaceSetupCommand' in ctx).toBe(false);
     expect(ctx.repos).toHaveLength(2);
