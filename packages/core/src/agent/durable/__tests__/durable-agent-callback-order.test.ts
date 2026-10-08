@@ -15,11 +15,13 @@
  *     `tripwire`) differs from the wrapped engines' and is declared below against COR-1415; every
  *     other field of the stream is still compared exactly.
  *
- * One shape is held rather than weakened:
- *   - `error` (the model fails on the call after the first tool result) is unexpressible here. The
- *     failure reaches plain as a rejecting `getFullOutput()`, and the parity helper records a turn
- *     through that call, so the turn never lands in the observation and the run aborts the whole
- *     comparison — the same wall as T44/T45 `throws` and T47 `strict`, queued behind COR-1417.
+ *   - `error`  — one tool step, then the model call itself fails (`doStream` throws). The script model
+ *     is what makes this shape inexpressible to the parity helper: its recording model always turns a
+ *     tape into a stream, and a turn that fails on the model call leaves the helper's own
+ *     `finish.stepResult` declaration with nothing to strip, so `expectEngineParity` rejects the
+ *     scenario as a stale declaration before it compares anything. Each engine is therefore checked
+ *     directly here, with no per-scenario override, and the checks are the harness's own for this
+ *     shape — `onError` once, no `onFinish`, a step reported before the error.
  *
  * The engines also genuinely disagree on what the callbacks themselves see — the harness's own
  * recorded pairing for the callback contract is red, and the helper does not compare callbacks — so
@@ -27,11 +29,17 @@
  * divergences is ticketed: plain's `onFinish` payload carries keys the wrappers do not (COR-1390).
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type {
   CapturedRequest,
   EngineDifference,
@@ -52,9 +60,11 @@ const MAX_STEPS = 4;
 const STEP_COUNT = 2;
 /** The step the abort variant parks on, so the abort lands at an exact point. */
 const ABORT_BLOCK_AT = 1;
+/** What the failing model reports on the second call of the `error` shape (harness: `T36 model failure`). */
+const ERROR_MESSAGE = 'T36 model failure';
 
-type Variant = 'normal' | 'abort';
-const VARIANTS: readonly Variant[] = ['normal', 'abort'];
+/** The shapes that run through the parity helper; `error` is driven directly (see `runErrorDirect`). */
+type StreamedVariant = 'normal' | 'abort';
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -179,7 +189,7 @@ interface EngineCaseState {
   snapshot?: ParitySnapshot;
 }
 
-async function runT36(variant: Variant): Promise<{
+async function runT36(variant: StreamedVariant): Promise<{
   results: EngineParityResults;
   states: Map<ParityEngine, EngineCaseState>;
 }> {
@@ -465,6 +475,160 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
   },
 };
 
+/**
+ * What a direct run of the `error` shape recorded on one engine — the harness's `error` contract
+ * fields, read without the parity helper (see the file header for why this shape cannot go through
+ * it).
+ */
+interface ErrorCaseState {
+  /** Names of the non-`onChunk` callbacks, in the order they fired. */
+  names: string[];
+  /** Payload key sets (`Object.keys(payload).sort()`) per callback firing. */
+  payloadKeys: Array<{ name: string; keys: string[] }>;
+  /** Chunk types the public `onChunk` callback saw, in order. */
+  chunkTypes: string[];
+  /** Chunk types the public stream yielded, in order. */
+  publicChunkTypes: string[];
+  /** Model calls the run made. */
+  requests: number;
+  threw?: string;
+  /** Set when `getFullOutput()` rejected — the harness's `fullOutputError`. */
+  fullOutputError?: string;
+}
+
+/**
+ * Drives one engine through the `error` shape, mirroring what the parity helper does per engine
+ * (wrapper, host, one streamed turn), because the helper cannot run a model whose `doStream` throws.
+ */
+async function runErrorDirect(engine: ParityEngine): Promise<ErrorCaseState> {
+  const requests: unknown[] = [];
+  const model = new MockLanguageModelV2({
+    doStream: async (options: unknown) => {
+      requests.push(options);
+      // The harness's script model: one tool step, then the model call itself fails.
+      if (requests.length > 1) throw new Error(ERROR_MESSAGE);
+      return {
+        stream: convertArrayToReadableStream(toolCallTape(STEP_TOOL, { n: 1 }, 'step-1') as never[]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      };
+    },
+  });
+  const state: ErrorCaseState = {
+    names: [],
+    payloadKeys: [],
+    chunkTypes: [],
+    publicChunkTypes: [],
+    requests: 0,
+  };
+  const step = createTool({
+    id: STEP_TOOL,
+    description: 'Perform numbered step n.',
+    inputSchema: z.object({ n: z.number() }),
+    execute: async ({ n }) => ({ done: n }),
+  });
+  const agent = new Agent({
+    id: AGENT_ID,
+    name: AGENT_ID,
+    instructions: 'Follow the script.',
+    model: model as LanguageModelV2,
+    tools: { step },
+    memory: new MockMemory(),
+  });
+  const pubsub = new EventEmitterPubSub();
+  const runner =
+    engine === 'plain'
+      ? agent
+      : engine === 'durable'
+        ? createDurableAgent({ agent, pubsub })
+        : createEventedAgent({ agent });
+  const host = new Mastra({
+    agents: { [AGENT_ID]: runner } as never,
+    storage: new InMemoryStore(),
+    logger: false,
+  });
+
+  const record = (name: string, payload: unknown) => {
+    state.names.push(name);
+    state.payloadKeys.push({ name, keys: Object.keys((payload as object) ?? {}).sort() });
+  };
+  const options = {
+    maxSteps: MAX_STEPS,
+    runId: `t36-error-${engine}`,
+    memory: { thread: 'thread-t36', resource: 'resource-t36' },
+    onChunk: (chunk: { type: string }) => {
+      state.chunkTypes.push(chunk.type);
+    },
+    onStepFinish: (payload: unknown) => record('onStepFinish', payload),
+    onFinish: (payload: unknown) => record('onFinish', payload),
+    onError: (payload: unknown) => record('onError', payload),
+    onAbort: (payload: unknown) => record('onAbort', payload),
+  };
+
+  let cleanup: (() => Promise<void>) | undefined;
+  let output: { fullStream: AsyncIterable<{ type: string }>; getFullOutput: () => Promise<unknown> } | undefined;
+  try {
+    if (engine === 'plain') {
+      output = (await agent.stream('go', options)) as never;
+    } else {
+      // A settled stream is the harness's `the run settled` check: a run that hung would time out.
+      const result = await (
+        runner as unknown as {
+          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
+        }
+      ).stream('go', options);
+      output = result.output;
+      cleanup = result.cleanup;
+    }
+  } catch (error) {
+    state.threw = String((error as Error)?.message ?? error).slice(0, 200);
+  }
+  if (output) {
+    try {
+      for await (const chunk of output.fullStream) state.publicChunkTypes.push(chunk.type);
+    } catch (error) {
+      state.threw = state.threw ?? String((error as Error)?.message ?? error).slice(0, 200);
+    }
+    try {
+      await output.getFullOutput();
+    } catch (error) {
+      state.fullOutputError = String((error as Error)?.message ?? error).slice(0, 200);
+    }
+  }
+  state.requests = requests.length;
+  if (cleanup) await cleanup();
+  await host.shutdown();
+  return state;
+}
+
+/**
+ * The public stream all three engines produced for the `error` shape — the harness records these as
+ * `publicTypes`, and they agree engine to engine (plain pinned literally, as everywhere else here).
+ */
+const ERROR_PUBLIC_CHUNK_TYPES = [
+  'start',
+  'step-start',
+  'tool-call',
+  'tool-result',
+  'step-finish',
+  'step-start',
+  'error',
+  'step-finish',
+  'finish',
+];
+
+/** The `error` shape's `onChunk` and model-call contract, per engine (same run as the types above). */
+const ERROR_CONTRACTS: Record<ParityEngine, { onChunk: string[]; requests: number }> = {
+  plain: { onChunk: ['tool-call', 'tool-result'], requests: 2 },
+  durable: {
+    onChunk: ['start', 'tool-call', 'tool-result', 'step-finish', 'error', 'step-finish'],
+    requests: 2,
+  },
+  evented: {
+    onChunk: ['start', 'tool-call', 'tool-result', 'step-finish', 'error', 'step-finish'],
+    requests: 2,
+  },
+};
+
 describe('T36 callback order parity', () => {
   it('fires the lifecycle callbacks in order', async () => {
     const { results, states } = await runT36('normal');
@@ -542,5 +706,62 @@ describe('T36 callback order parity', () => {
     expect(results.plain!.turns.at(-1)!.finishReason, 'plain: finish reason').toBe('aborted');
     expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('tripwire');
     expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(2);
+  });
+
+  it('reports a failed model call through onError, and never onFinish, without a throw', async () => {
+    const states = new Map<ParityEngine, ErrorCaseState>();
+    for (const engine of ENGINES) states.set(engine, await runErrorDirect(engine));
+
+    for (const engine of ENGINES) {
+      const state = states.get(engine)!;
+      const contract = ERROR_CONTRACTS[engine];
+
+      // harness: `the run settled` (the awaited call above) and did not throw out of the stream.
+      expect(state.threw, `${engine}: stream did not throw`).toBeUndefined();
+
+      // harness: `onError fires exactly once, and no onFinish`.
+      expect(
+        state.names.filter(name => name === 'onError'),
+        `${engine}: onError once`,
+      ).toEqual(['onError']);
+      expect(state.names, `${engine}: no onFinish`).not.toContain('onFinish');
+
+      // harness: `a step is reported before the error is`.
+      expect(state.names.indexOf('onStepFinish'), `${engine}: a step finished before onError`).toBeGreaterThanOrEqual(
+        0,
+      );
+      expect(state.names.indexOf('onStepFinish'), `${engine}: a step finished before onError`).toBeLessThan(
+        state.names.indexOf('onError'),
+      );
+
+      // harness: `no model call after the failure` (one step tool call, then the failing call).
+      expect(state.requests, `${engine}: model calls`).toBe(contract.requests);
+
+      // harness: `onChunk types are an in-order subsequence of the public stream`.
+      expect(state.chunkTypes, `${engine}: onChunk chunk types`).toEqual(contract.onChunk);
+      expect(
+        isSubsequence(state.chunkTypes, state.publicChunkTypes),
+        `${engine}: onChunk chunk types are an in-order subsequence of the public stream (${state.chunkTypes.join()})`,
+      ).toBe(true);
+      expect(state.publicChunkTypes, `${engine}: public chunk types`).toEqual(ERROR_PUBLIC_CHUNK_TYPES);
+
+      // harness: `each callback received the recorded payload keys`. Keyed by callback name so the
+      // engines may report the same error at different points in the sequence (see the note below).
+      const stepFinishKeys = engine === 'plain' ? PLAIN_STEP_FINISH_KEYS : WRAPPED_STEP_FINISH_KEYS;
+      for (const entry of state.payloadKeys) {
+        expect(entry.keys, `${engine}: ${entry.name} payload keys`).toEqual(
+          entry.name === 'onError' ? ['error'] : stepFinishKeys,
+        );
+      }
+
+      // The failure reaches the output reads on every engine: the run cannot be read as a result.
+      expect(state.fullOutputError, `${engine}: getFullOutput rejects`).toContain(ERROR_MESSAGE);
+    }
+
+    // Plain's callback order, pinned literally (harness recording: `onStepFinish, onError,
+    // onStepFinish`). Durable and evented report the error after both steps instead — a divergence
+    // the harness does not check (it only requires a step before the error, asserted above) and for
+    // which no ticket exists, so it is recorded here and not pinned.
+    expect(states.get('plain')!.names, 'plain: callback names').toEqual(['onStepFinish', 'onError', 'onStepFinish']);
   });
 });
