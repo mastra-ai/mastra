@@ -760,16 +760,17 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     const nodes = await screen.findAllByTestId('knowledge-node');
-    const graphStyles = within(screen.getByTestId('knowledge-graph'))
-      .getByText((_, element) => element?.tagName === 'STYLE')
-      .textContent?.replace(/\s+/g, ' ');
+    const graphStyles = screen.getByTestId('knowledge-graph').querySelector('style')?.textContent?.replace(/\s+/g, ' ');
     const [beforeGuard, guarded] = graphStyles!.split('@media (prefers-reduced-motion: no-preference)');
     expect(beforeGuard).not.toMatch(/animation|@keyframes/);
     expect(guarded).toMatch(/@keyframes knowledgeArrive/);
-    expect(nodes[0]!.querySelector('.rounded-full')).toHaveClass('motion-reduce:transition-none');
+    expect(nodes[0]!.querySelector('[data-knowledge-circle]')).toHaveClass('motion-reduce:transition-none');
 
     fireEvent.click(nodes[0]!);
     expect(await screen.findByTestId('knowledge-flyout')).toHaveClass('motion-reduce:transition-none');
+    for (const card of await screen.findAllByTestId('knowledge-record')) {
+      expect(card).toHaveClass('motion-reduce:transition-none');
+    }
   });
 
   it('renders an explicitly selected thread view and returns via the breadcrumb', async () => {
