@@ -606,10 +606,12 @@ describe('MCPClient clientInfo', () => {
       clientInfo: { name: 'my-app', version: '2.3.4' },
       servers: {
         weather: { url: new URL('http://localhost:1234/mcp'), clientInfo: { version: '9.9.9' } },
+        stock: { url: new URL('http://localhost:5678/mcp'), clientInfo: { name: undefined, version: '1.2.3' } },
       },
     });
 
     expect(await sdkClientInfo(client, 'weather')).toEqual({ name: 'my-app', version: '9.9.9' });
+    expect(await sdkClientInfo(client, 'stock')).toEqual({ name: 'my-app', version: '1.2.3' });
   });
 
   it('keeps the server key as the tool namespace when clientInfo.name is set', async () => {

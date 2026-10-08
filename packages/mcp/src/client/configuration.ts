@@ -1492,7 +1492,10 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
-      clientInfo: { ...this.defaultClientInfo, ...config.clientInfo },
+      clientInfo: {
+        name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
+        version: config.clientInfo?.version ?? this.defaultClientInfo?.version,
+      },
     });
 
     mcpClient.__setLogger(this.logger);
