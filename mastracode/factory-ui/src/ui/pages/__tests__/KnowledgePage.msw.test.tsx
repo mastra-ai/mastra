@@ -940,6 +940,51 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).not.toMatch(/[?&]node=/);
   });
 
+  it('opens linkable scope details with counts and recent activity when a scope is selected', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('scopeId') !== 'scope:payments')
+          return HttpResponse.json(scopeTreeFixture);
+        return HttpResponse.json({
+          scope: {
+            id: 'scope:payments',
+            name: 'Payments',
+            kind: 'feature',
+            description: 'Checkout and billing.',
+            memberCount: 3,
+            memberCountTruncated: true,
+            contentNodeCount: 2,
+            childScopeCount: 1,
+          },
+          children: [],
+        } satisfies KnowledgeScopeTreePayload);
+      }),
+    );
+    const { router, unmount } = renderRoute();
+    const user = userEvent.setup();
+
+    const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
+    await user.click(await within(scopes).findByRole('button', { name: 'Payments' }));
+    const flyout = await screen.findByTestId('knowledge-scope-flyout');
+    await waitFor(() => expect(router.state.location.search).toContain('details=scope'));
+    expect(flyout).toHaveTextContent('Checkout and billing.');
+    expect(flyout).toHaveTextContent('Content nodes2+');
+    expect(flyout).toHaveTextContent('Child scopes1+');
+    expect(flyout).toHaveTextContent('Direct members3+');
+    expect(await within(flyout).findByText('new record')).toBeInTheDocument();
+    const link = `${router.state.location.pathname}${router.state.location.search}`;
+
+    await user.click(within(flyout).getByRole('button', { name: 'Close scope details' }));
+    expect(screen.queryByTestId('knowledge-scope-flyout')).not.toBeInTheDocument();
+    expect(router.state.location.search).toContain('scope=scope%3Apayments');
+    expect(router.state.location.search).not.toContain('details=');
+
+    unmount();
+    renderRoute(link);
+    expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('Payments');
+  });
+
   it('keeps the selected node addressable through ?node= and reopens it from the link', async () => {
     stubKnowledgeRoute();
     const { router, unmount } = renderRoute();
