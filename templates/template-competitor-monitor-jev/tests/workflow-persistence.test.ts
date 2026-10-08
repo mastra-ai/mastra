@@ -16,6 +16,7 @@ import type { DnsResolver, PinnedTransport } from '../src/mastra/lib/acquisition
 import { CLASSIFIER_ID, COMPETITOR_CHANGE_QUESTIONS } from '../src/mastra/lib/classification';
 import { diffContent, normalizeHtml } from '../src/mastra/lib/content';
 import { MonitorStore } from '../src/mastra/lib/store';
+import { RunConcurrencyLimiter } from '../src/mastra/workflows/competitor-monitor-steps/workflow-context';
 import { monitorInputSchema } from '../src/mastra/schemas';
 import { createCompetitorMonitorWorkflow } from '../src/mastra/workflows/competitor-monitor-workflow';
 
@@ -1025,4 +1026,49 @@ describe('native workflow and durable application store', () => {
       await frameworkStore.close();
     }
   });
+});
+
+it.each([false, true])('transfers a concurrency slot to a queued task after rejection=%s', async rejectFirst => {
+  const limiter = new RunConcurrencyLimiter();
+  let active = 0;
+  let maximum = 0;
+  let releaseFirst!: () => void;
+  let releaseSecond!: () => void;
+  const order: number[] = [];
+  const run = (id: number, wait?: () => Promise<void>) =>
+    limiter.run('shared-run', 1, async () => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      order.push(id);
+      try {
+        await wait?.();
+        if (id === 1 && rejectFirst) throw new Error('EXPECTED_TASK_FAILURE');
+      } finally {
+        active -= 1;
+      }
+    });
+  const first = run(
+    1,
+    () =>
+      new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      }),
+  ).catch(() => undefined);
+  const second = run(
+    2,
+    () =>
+      new Promise<void>(resolve => {
+        releaseSecond = resolve;
+      }),
+  );
+  releaseFirst();
+  await first;
+  const third = run(3);
+  expect(order).toEqual([1, 2]);
+  releaseSecond();
+  await Promise.all([second, third]);
+  await run(4);
+  expect(order).toEqual([1, 2, 3, 4]);
+  expect(maximum).toBe(1);
+  expect(active).toBe(0);
 });

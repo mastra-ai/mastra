@@ -48,13 +48,18 @@ export class RunConcurrencyLimiter {
     const state = this.runs.get(runId) ?? { active: 0, waiters: [] };
     this.runs.set(runId, state);
     if (state.active >= limit) await new Promise<void>(resolve => state.waiters.push(resolve));
-    state.active += 1;
+    else state.active += 1;
     try {
       return await task();
     } finally {
-      state.active -= 1;
-      state.waiters.shift()?.();
-      if (state.active === 0 && state.waiters.length === 0) this.runs.delete(runId);
+      const next = state.waiters.shift();
+      if (next) {
+        // Transfer the occupied slot without exposing it to a new arrival.
+        next();
+      } else {
+        state.active -= 1;
+        if (state.active === 0) this.runs.delete(runId);
+      }
     }
   }
 }
