@@ -568,6 +568,32 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
+      const emitStepFinish = async (isContinued: boolean) => {
+        if (state.lastStepResult) {
+          state.lastStepResult.isContinued = isContinued;
+        }
+
+        const deferredChunk = state.deferredStepFinishChunk as any;
+        state.deferredStepFinishChunk = undefined;
+        if (!deferredChunk) return;
+
+        try {
+          await this.emitChunk(rt, {
+            ...deferredChunk,
+            payload: {
+              ...deferredChunk.payload,
+              stepResult: {
+                ...deferredChunk.payload?.stepResult,
+                ...(state.lastStepResult?.reason ? { reason: state.lastStepResult.reason } : {}),
+                isContinued,
+              },
+            },
+          });
+        } catch (error) {
+          rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+        }
+      };
+
       // ── Abort check ────────────────────────────────────────────────
       // If the abort signal has fired, stop the loop immediately.
       // The llm-execution step may have already emitted the ABORT event
@@ -586,12 +612,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         const abortReason = getAbortReason(rt.abortSignal);
         const isTotalTimeout = isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total';
         if (isTotalTimeout && state.lastStepResult?.reason !== 'error') {
+          await emitStepFinish(true);
           return true;
         }
         if (state.lastStepResult) {
           state.lastStepResult.reason = isTotalTimeout ? 'error' : 'abort';
-          state.lastStepResult.isContinued = false;
         }
+        await emitStepFinish(false);
         return false;
       }
 
@@ -746,10 +773,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
-      if (decision.forceContinue && state.lastStepResult) {
-        state.lastStepResult.isContinued = true;
-      }
       const isFinal = decision.isFinal;
+      await emitStepFinish(!isFinal);
 
       // Each iteration's assistant response is a distinct message, mirroring
       // the non-durable agentic loop. The mutated state.messageId flows into
