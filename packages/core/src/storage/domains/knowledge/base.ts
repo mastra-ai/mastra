@@ -229,6 +229,8 @@ export interface FinalizeKnowledgeImportRunInput {
   binding: string;
   workerId: string;
   leaseKey: string;
+  /** Durable payload key deleted, with the lease, once the run is terminal. */
+  payloadKey?: string;
   status: 'succeeded' | 'failed';
   error?: string;
   transcriptThreadId?: string;

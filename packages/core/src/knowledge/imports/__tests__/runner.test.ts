@@ -229,6 +229,126 @@ describe('Knowledge importer runner', () => {
     await restarted.shutdownImporters();
   });
 
+  it('deletes durable payload and lease keys once runs reach a terminal state', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'import-runner-terminal-cleanup' }),
+      structure,
+      importers: [
+        {
+          id: 'calendar',
+          access: { 'project:$projectId': 'append' },
+          handler: async ctx => {
+            if ((ctx.payload as { fail?: boolean }).fail) throw new Error('boom');
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+    const importer = knowledge.getImporter('calendar')!;
+    const binding = knowledgeImporterBindingKey(one);
+
+    const succeeded = await importer.run(one, { fail: false });
+    const failed = await importer.run(one, { fail: true });
+    expect(succeeded.status).toBe('succeeded');
+    expect(failed.status).toBe('failed');
+    for (const run of [succeeded, failed]) {
+      for (const prefix of ['import-payload', 'import-lease']) {
+        expect(
+          await knowledge.getImportState({
+            importerId: 'calendar',
+            binding,
+            key: `__mastra_internal/${prefix}/${run.id}`,
+          }),
+        ).toBeNull();
+      }
+    }
+    await knowledge.shutdownImporters();
+  });
+
+  it('logs the lease wait and the recovery replay, then cleans up every recovered run', async () => {
+    const storage = new InMemoryStore({ id: 'import-runner-lease-wait' });
+    const applied: string[] = [];
+    const definition = {
+      id: 'calendar',
+      access: { 'project:$projectId': 'append' as const },
+      handler: async (context: { payload: unknown }) => {
+        applied.push((context.payload as { event: string }).event);
+      },
+    };
+    const seed = new Knowledge({ storage, structure, importers: [definition] });
+    await seed.reconcile();
+    const domain = await seed.getStorage();
+    const binding = knowledgeImporterBindingKey(one);
+    const heartbeatAt = new Date();
+    await domain.enqueueImportRun({
+      id: 'orphan-run',
+      importerId: 'calendar',
+      binding,
+      importKind: 'static',
+      triggerKind: 'programmatic',
+      payloadKey: '__mastra_internal/import-payload/orphan-run',
+      payload: JSON.stringify({ payload: { event: 'orphan' } }),
+      queuedAt: new Date(heartbeatAt.getTime() - 1_000),
+    });
+    await domain.claimImportRun({
+      importerId: 'calendar',
+      binding,
+      workerId: 'dead-worker',
+      leaseKey: '__mastra_internal/import-lease/',
+      timestamp: heartbeatAt,
+    });
+
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date', 'setInterval', 'clearInterval'] });
+    try {
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const live = new Knowledge({ storage, structure, importers: [definition] });
+      live.__setLogger(logger as never);
+      live.__registerMastra({} as never);
+      await live.reconcile();
+
+      const waiting = live.getImporter('calendar')!.run(one, { event: 'fresh' });
+      await vi.waitFor(() =>
+        expect(logger.debug).toHaveBeenCalledWith(
+          expect.stringContaining('leased by another worker'),
+          expect.objectContaining({
+            leasedRunId: 'orphan-run',
+            leaseHolder: 'dead-worker',
+            msUntilLeaseExpiry: expect.any(Number),
+          }),
+        ),
+      );
+      const [, waitContext] = logger.debug.mock.calls[0]!;
+      expect(waitContext.msUntilLeaseExpiry).toBeGreaterThan(0);
+      expect(waitContext.msUntilLeaseExpiry).toBeLessThanOrEqual(30_000);
+      expect(logger.info).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(40_000);
+      await expect(waiting).resolves.toMatchObject({ status: 'succeeded' });
+      await vi.waitFor(() => expect(applied).toEqual(['orphan', 'fresh']));
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('recovered a stale run'),
+        expect.objectContaining({ interruptedRunId: 'orphan-run', replacementRunId: expect.any(String) }),
+      );
+
+      const runs = (await live.listImportRuns({ importerId: 'calendar' })).runs;
+      expect(runs).toHaveLength(3);
+      expect(runs).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 'orphan-run', status: 'interrupted' })]),
+      );
+      expect(runs.filter(run => run.status === 'succeeded')).toHaveLength(2);
+      for (const run of runs) {
+        for (const prefix of ['import-payload', 'import-lease']) {
+          expect(
+            await live.getImportState({ importerId: 'calendar', binding, key: `__mastra_internal/${prefix}/${run.id}` }),
+          ).toBeNull();
+        }
+      }
+      await live.shutdownImporters();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('leaves aborted shutdown work recoverable instead of failing it', async () => {
     const started = deferred();
     const knowledge = new Knowledge({

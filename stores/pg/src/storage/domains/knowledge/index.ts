@@ -1796,6 +1796,10 @@ export class KnowledgePG extends KnowledgeStorage {
           input.id,
         ],
       });
+      await tx.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key IN (?,?)`,
+        args: [input.importerId, binding, input.leaseKey, input.payloadKey ?? input.leaseKey],
+      });
       return {
         ...parseImportRun(current.rows[0]),
         status: input.status,
@@ -1844,6 +1848,10 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       const recoveredAt = input.queuedAt ?? new Date();
       const replayQueuedAt = new Date(run.queuedAt.getTime() - 1);
+      await tx.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key IN (?,?)`,
+        args: [run.importerId, run.binding, input.leaseKey, input.payloadKey],
+      });
       if (!payload.rows[0]) {
         await tx.execute({
           sql: `UPDATE "${TABLE_KNOWLEDGE_IMPORT_RUNS}" SET status='failed',error=?,completedAt=? WHERE id=? AND status='running'`,
