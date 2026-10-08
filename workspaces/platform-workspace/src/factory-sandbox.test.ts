@@ -64,7 +64,7 @@ describe('PlatformFactorySandbox', () => {
       'memoryMb',
       'idleTimeoutMinutes',
     ]);
-    expect(description.capabilities).toEqual({ template: true, builds: { available: false, history: false } });
+    expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
   });
 
   it('builds the web host callback template sized by the 2 CPU / 1024 MB defaults', async () => {
@@ -130,5 +130,82 @@ describe('PlatformFactorySandbox', () => {
 
     const bare = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1' }).create(ctx, {});
     expect((bare as any)._idleTimeoutMinutes).toBe(5);
+  });
+
+  describe('builds', () => {
+    function buildFetch(
+      results: Array<{ status: 'ready' | 'pending' | 'failed'; templateId: string; error?: string }>,
+    ) {
+      const bodies: string[] = [];
+      const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        bodies.push(String(init?.body));
+        const result = results.length > 1 ? results.shift()! : results[0]!;
+        return new Response(JSON.stringify(result), { status: 200 });
+      });
+      return { fetchMock, bodies };
+    }
+
+    function buildSandbox(fetchMock: typeof fetch) {
+      return new PlatformFactorySandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_1',
+        environmentId: 'env_1',
+        env: { RUNTIME_ONLY: '1' },
+        fetch: fetchMock,
+      });
+    }
+
+    it('starts the current template build and polls it through the cached builder', async () => {
+      const { fetchMock, bodies } = buildFetch([
+        { status: 'pending', templateId: 'tpl_1' },
+        { status: 'ready', templateId: 'tpl_1' },
+      ]);
+      const sandbox = buildSandbox(fetchMock as unknown as typeof fetch);
+      const ctx = listContext();
+
+      const started = await sandbox.builds!.start(ctx, { cpuCount: 4 });
+      expect(started).toEqual({ buildId: 'tpl_1', templateId: 'tpl_1', status: 'pending' });
+      expect(String(fetchMock.mock.calls[0]![0])).toContain('/projects/proj_1/sandbox/templates/builds');
+      const sent = JSON.parse(bodies[0]!);
+      expect(sent.environmentId).toBe('env_1');
+      expect(JSON.stringify(sent.templateDefinition)).toContain('"cpuCount"');
+      expect(JSON.stringify(sent)).not.toContain('RUNTIME_ONLY');
+
+      const resolveCalls = (ctx.resolveHead as ReturnType<typeof vi.fn>).mock.calls.length;
+      const polled = await sandbox.builds!.get(ctx, { cpuCount: 4 }, 'tpl_1');
+      expect(polled).toEqual({ buildId: 'tpl_1', templateId: 'tpl_1', status: 'ready' });
+      // The cached builder is reused: no second head resolution.
+      expect((ctx.resolveHead as ReturnType<typeof vi.fn>).mock.calls.length).toBe(resolveCalls);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('recomputes the template after a restart and reports a moved template as unknown', async () => {
+      const { fetchMock } = buildFetch([{ status: 'failed', templateId: 'tpl_1', error: 'pnpm install exited 1' }]);
+      const fresh = buildSandbox(fetchMock as unknown as typeof fetch);
+      const ctx = listContext();
+
+      expect(await fresh.builds!.get(ctx, {}, 'tpl_1')).toEqual({
+        buildId: 'tpl_1',
+        templateId: 'tpl_1',
+        status: 'failed',
+        error: 'pnpm install exited 1',
+      });
+      expect(ctx.resolveHead).toHaveBeenCalled();
+
+      const moved = await fresh.builds!.get(ctx, {}, 'tpl_0');
+      expect(moved.status).toBe('unknown');
+      expect(moved.error).toContain('tpl_1');
+    });
+
+    it('builds the resources-only template for a session without repositories', async () => {
+      const { fetchMock, bodies } = buildFetch([{ status: 'ready', templateId: 'tpl_bare' }]);
+      const sandbox = buildSandbox(fetchMock as unknown as typeof fetch);
+      await expect(sandbox.builds!.start({ sessionId: 's', getRepositoryAccess: undefined }, {})).resolves.toEqual({
+        buildId: 'tpl_bare',
+        templateId: 'tpl_bare',
+        status: 'ready',
+      });
+      expect(JSON.stringify(JSON.parse(bodies[0]!).templateDefinition)).toContain('"memoryMB"');
+    });
   });
 });
