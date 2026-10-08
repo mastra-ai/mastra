@@ -61,13 +61,11 @@ When the thread has a running agent stream, `sendMessage()` becomes new input in
 
 In the default agent loop, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
 
-At the start of each step, Mastra batches pending input before per-step input processors (`processInputStep`) run. Messages and signals already queued when the first step starts join its first model request instead of receiving a separate response.
-
 Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. If the run reaches `maxSteps`, queued input may be saved without a response. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
 
 Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The next request uses the same logical step, so `maxSteps: 1` still allows a replacement response. Mastra doesn't set a separate interruption limit. Repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
 
-Already-streamed reasoning may remain visible until the client reloads history. Cancelling a model request also doesn't force a custom processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers, but doesn't undo processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
+Already-streamed reasoning may remain visible until the client reloads history. Input that arrives while per-step input processors (`processInputStep`) run doesn't stop them; it cancels the model request they prepare. Cancelling a model request also doesn't force a custom output processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers, but doesn't undo processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
 
 This reasoning interruption applies to the default loop, not the experimental durable or evented agents or the Inngest engine.
 

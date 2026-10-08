@@ -5813,8 +5813,8 @@ describe('Agent signals', () => {
         });
         await output.text;
         await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
-        expect(model.doStreamCalls).toHaveLength(1);
-        const prompt = model.doStreamCalls[0]?.prompt;
+        expect(model.doStreamCalls).toHaveLength(firstQueue === 'pre-run' ? 1 : 2);
+        const prompt = model.doStreamCalls.at(-1)?.prompt;
         expect(JSON.stringify(prompt).match(/Only handle A once/g)).toHaveLength(1);
         const { messages } = await memory.recall(scope);
         expect(
@@ -6111,9 +6111,9 @@ describe('Agent signals', () => {
         ),
       );
       expect(preserved).toEqual(['preserved A', 'preserved B']);
-      expect(model.doStreamCalls).toHaveLength(1);
-      expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('preserved A');
-      expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain('preserved B');
+      expect(model.doStreamCalls).toHaveLength(2);
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('preserved A');
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('preserved B');
     } finally {
       release();
       subscription.unsubscribe();
@@ -6211,8 +6211,8 @@ describe('Agent signals', () => {
       const output = await winning;
       await output.text;
       await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
-      expect(model.doStreamCalls).toHaveLength(1);
-      const prompt = JSON.stringify(model.doStreamCalls[0]?.prompt);
+      expect(model.doStreamCalls).toHaveLength(2);
+      const prompt = JSON.stringify(model.doStreamCalls[1]?.prompt);
       expect(prompt.match(/pending A/g)).toHaveLength(1);
       expect(prompt.match(/idle B/g)).toHaveLength(1);
       const { messages } = await memory.recall(scope);
@@ -6222,13 +6222,13 @@ describe('Agent signals', () => {
         ),
       );
       expect(delivered).toEqual(['pending A', 'idle B']);
-      expect(messages.filter(message => message.role === 'assistant')).toHaveLength(1);
+      expect(messages.filter(message => message.role === 'assistant')).toHaveLength(2);
       await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
       const next = await agent.stream('after handoff', {
         memory: { resource: scope.resourceId, thread: scope.threadId },
       });
       await next.text;
-      expect(model.doStreamCalls).toHaveLength(2);
+      expect(model.doStreamCalls).toHaveLength(3);
       await vi.waitFor(() => expect(pubsub.owners.get(key)).toBeUndefined());
     } finally {
       finishOwner();

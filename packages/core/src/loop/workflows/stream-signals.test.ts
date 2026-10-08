@@ -4,7 +4,7 @@ import { Agent } from '../../agent';
 import { createSignal } from '../../agent/signals';
 import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
 
-describe.each(['initial', 'pre-run', 'step-entry', 'drain-step', 'loop-predicate'] as const)(
+describe.each(['initial', 'pre-run', 'drain-step', 'loop-predicate'] as const)(
   'regular workflow signal producer: %s',
   producer => {
     beforeEach(() => agentThreadStreamRuntime.resetForTests());
@@ -35,13 +35,11 @@ describe.each(['initial', 'pre-run', 'step-entry', 'drain-step', 'loop-predicate
         const ready =
           producer === 'pre-run'
             ? scope === 'pre-run'
-            : producer === 'step-entry'
+            : producer === 'drain-step'
               ? pendingDrains === 1
-              : producer === 'drain-step'
+              : producer === 'loop-predicate'
                 ? pendingDrains === 2
-                : producer === 'loop-predicate'
-                  ? pendingDrains === 3
-                  : false;
+                : false;
         if (!emitted && ready) {
           emitted = true;
           return [signal];
@@ -56,7 +54,7 @@ describe.each(['initial', 'pre-run', 'step-entry', 'drain-step', 'loop-predicate
       for await (const chunk of output.fullStream) chunks.push(chunk);
       expect(chunks.filter(chunk => chunk.type === 'data-signal')).toHaveLength(excluded ? 0 : 1);
       expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
-      expect(model.doStreamCalls).toHaveLength(['initial', 'pre-run', 'step-entry'].includes(producer) ? 1 : 2);
+      expect(model.doStreamCalls).toHaveLength(producer === 'initial' || producer === 'pre-run' ? 1 : 2);
       expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain('producer reminder');
       if (producer !== 'initial') expect(emitted).toBe(true);
     });

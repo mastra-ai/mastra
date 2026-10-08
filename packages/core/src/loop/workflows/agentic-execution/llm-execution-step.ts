@@ -1486,9 +1486,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
       for (const signal of initialSignalEchoes) safeEnqueue(controller, signal.toDataPart());
       const drainPendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals');
+      // Pre-run signals join the first request, as before. After the first request, signals
+      // queued since the loop's last drain join this one: they arrived before this step
+      // subscribed, so they could not interrupt it, and this is the request they would restart.
       const queuedSignals = [
         ...((inputData.output?.steps?.length ?? 0) === 0 ? (drainPendingSignals?.(runId, 'pre-run') ?? []) : []),
-        ...(drainPendingSignals?.(runId, 'pending') ?? []),
+        ...(currentIteration > 1 ? (drainPendingSignals?.(runId, 'pending') ?? []) : []),
       ];
       if (queuedSignals.length) currentMessageId = rotateLoopResponseMessageId();
       for (const signal of queuedSignals) safeEnqueue(controller, messageList.addSignal(signal).toDataPart());
@@ -1705,7 +1708,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               structuredOutput: currentStep.structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
               writer: inputStepWriter,
-              abortSignal: modelOptions?.abortSignal,
+              abortSignal: options?.abortSignal,
             });
             const mergedStepInput = composeStepInput(
               {
@@ -1820,7 +1823,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               currentStep.tools = convertedTools as TOOLS;
             }
           } catch (error) {
-            throwIfInterrupted();
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
               logger?.warn('Streaming input processor tripwire triggered', {
@@ -1937,12 +1939,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               requestContext,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
               writer: requestStepWriter,
-              abortSignal: modelOptions?.abortSignal,
+              abortSignal: options?.abortSignal,
             });
             inputMessages = requestStepResult.prompt;
             cachedResponse = requestStepResult.response;
           } catch (error) {
-            throwIfInterrupted();
             if (error instanceof TripWire) {
               logger?.warn('Streaming request processor tripwire triggered', {
                 reason: error.message,

@@ -355,11 +355,13 @@ describe('queued signals preempt default-loop reasoning', () => {
     const entered = deferred<void>();
     const release = deferred<void>();
     let first = true;
+    let processorSignal: AbortSignal | undefined;
     const input: Processor = {
       id: 'late-signal',
-      async processInputStep({ messages, sendSignal }) {
+      async processInputStep({ messages, sendSignal, abortSignal }) {
         if (first) {
           first = false;
+          processorSignal = abortSignal;
           entered.resolve();
           await release.promise;
           await sendSignal({ type: 'reactive', contents: 'PROCESSOR_SIGNAL_AFTER_DISCARD' });
@@ -400,6 +402,8 @@ describe('queued signals preempt default-loop reasoning', () => {
       release.resolve();
       await consumption;
       await stream._waitUntilFinished();
+      // The signal cancels the request the processor prepared, never the processor itself.
+      expect(processorSignal?.aborted).not.toBe(true);
       expect(prompts).toHaveLength(1);
       expect(JSON.stringify(prompts[0])).toContain('PROCESSOR_SIGNAL_AFTER_DISCARD');
       expect(
@@ -413,6 +417,83 @@ describe('queued signals preempt default-loop reasoning', () => {
     } finally {
       release.resolve();
     }
+  });
+
+  it('restarts the interrupted model instead of falling through to the next fallback', async () => {
+    const started = deferred<void>();
+    const prompts: unknown[] = [];
+    const primary = vi.fn(async ({ prompt, abortSignal }: LanguageModelV2CallOptions) => {
+      prompts.push(prompt);
+      if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
+      started.resolve();
+      await new Promise((_, reject) =>
+        abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true }),
+      );
+      throw new Error('Unreachable');
+    });
+    const fallback = vi.fn(async () => ({ warnings: [], stream: convertArrayToReadableStream(answer('fallback')) }));
+    const agent = new Agent({
+      id: crypto.randomUUID(),
+      name: 'Fallback not consumed',
+      instructions: 'Test',
+      memory: new MockMemory(),
+      errorProcessorDefaults: false,
+      model: [
+        { model: new MockLanguageModelV2({ modelId: 'primary', doStream: primary }), maxRetries: 2 },
+        { model: new MockLanguageModelV2({ modelId: 'fallback', doStream: fallback }), maxRetries: 0 },
+      ],
+    });
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const stream = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+    const consumption = stream.consumeStream();
+    await started.promise;
+    const signal = await agent.sendSignal({ type: 'user-message', contents: 'PRIMARY_SIGNAL' }, scope);
+    await signal.accepted;
+    await consumption;
+    expect(primary).toHaveBeenCalledTimes(2);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(await stream.text).toBe('replacement answer');
+    expect(JSON.stringify(prompts[1])).toContain('PRIMARY_SIGNAL');
+  });
+
+  it('adds signals queued between the loop drain and the next step to that step request', async () => {
+    const prompts: unknown[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
+        return {
+          warnings: [],
+          stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+            { type: 'tool-call', toolCallId: 'call-1', toolName: 'probe', input: '{}' },
+            { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: crypto.randomUUID(),
+      name: 'Between steps',
+      instructions: 'Test',
+      model,
+      memory: new MockMemory(),
+      tools: {
+        probe: createTool({ id: 'probe', description: 'Probe', inputSchema: z.object({}), execute: async () => 'ok' }),
+      },
+    });
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const stream = await agent.stream('initial', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      maxSteps: 3,
+      // Runs after the loop drained signals and before the next step subscribes.
+      onIterationComplete: async ({ isFinal }) => {
+        if (!isFinal) await (await agent.sendSignal({ type: 'user-message', contents: 'GAP_SIGNAL' }, scope)).accepted;
+      },
+    });
+    await stream.consumeStream();
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[1])).toContain('GAP_SIGNAL');
+    expect(await stream.text).toBe('replacement answer');
   });
 
   it('retains an already selected fallback without borrowing usage from its failed predecessor', async () => {
