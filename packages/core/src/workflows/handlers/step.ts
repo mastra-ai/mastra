@@ -189,6 +189,16 @@ export async function executeStep(
     ...(iterationCount ? { metadata: { iterationCount } } : {}),
   };
 
+  // A foreach iteration shares its step id with the foreach entry, whose running result carries
+  // the finished iterations. Keep them in this start checkpoint so a crash right after it still
+  // restarts without them (#26214).
+  const foreachCheckpoint =
+    executionContext.foreachIndex !== undefined && stepResults[step.id]?.status === 'running'
+      ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput
+        ? stepResults[step.id]?.suspendPayload
+        : undefined
+      : undefined;
+
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
   const stepSpan = await engine.createStepSpan({
@@ -232,7 +242,7 @@ export async function executeStep(
     serializedStepGraph,
     stepResults: {
       ...stepResults,
-      [step.id]: stepInfo,
+      [step.id]: foreachCheckpoint ? { ...stepInfo, suspendPayload: foreachCheckpoint } : stepInfo,
     } as Record<string, StepResult<any, any, any, any>>,
     executionContext,
     workflowStatus: 'running',

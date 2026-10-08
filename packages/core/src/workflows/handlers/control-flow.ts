@@ -196,6 +196,8 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === stepId;
     }
     if (!makeStepRunning) {
+      // On restart an arm that already finished is no longer active, but a later arm may still be.
+      if (restart) continue;
       break;
     }
     const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
@@ -218,6 +220,28 @@ export async function executeParallel(
   }
 
   let execResults: any;
+  // Arms finish in any order. Each finished arm is checkpointed so a crash while
+  // siblings are still running does not re-run it on restart (#26214). The
+  // snapshot is built when the write runs, so serializing the writes keeps a
+  // slower earlier write from landing after a newer one.
+  let checkpointChain: Promise<void> = Promise.resolve();
+  const checkpointArm = (armIndex: number) => {
+    const write = checkpointChain.then(() =>
+      engine.persistStepUpdate({
+        workflowId,
+        runId,
+        resourceId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+        requestContext,
+        phase: `arm-end.${armIndex}`,
+      }),
+    );
+    checkpointChain = write.catch(() => {});
+    return write;
+  };
   const results: StepResult<any, any, any, any>[] = await Promise.all(
     steps.map(async (step, i) => {
       const stepId = getSingleStepEntryId(step);
@@ -262,6 +286,9 @@ export async function executeParallel(
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
+      if (stepExecResult.result.status === 'success' && !abortController?.signal?.aborted) {
+        await checkpointArm(i);
+      }
       return stepExecResult.result;
     }),
   );
@@ -1153,8 +1180,49 @@ export async function executeForeach(
     }
   };
 
+  // Items finish in any order. After each success the finished items are written to
+  // `__workflow_meta.foreachOutput`, the channel suspend and restart already read, so a
+  // crash mid-block does not re-run them (#26214). The write snapshots the latest
+  // state when it runs, so serializing writes keeps an older one from landing last.
+  // Siblings of a resumed foreach read the suspended entry for their own resume data, and the
+  // persistence guard drops `running` writes after a suspend anyway, so only first runs and restarts checkpoint.
+  const resumingSuspended = prevPayload?.status === 'suspended';
+  let checkpointChain: Promise<void> = Promise.resolve();
+  const checkpointItem = (k: number) => {
+    const foreachOutput: PersistedForeachStepResult[] = [];
+    prevForeachOutput.forEach((itemResult, index) => {
+      if (itemResult?.status === 'success') {
+        const { payload: _payload, ...compact } = itemResult;
+        foreachOutput[index] = compact as PersistedForeachStepResult;
+      }
+    });
+    const checkpoint = {
+      ...stepInfo,
+      status: 'running',
+      suspendPayload: { __workflow_meta: { foreachOutput } },
+    } as StepResult<any, any, any, any>;
+    // Iterations share `stepResults[stepId]` and overwrite it with their own result.
+    stepResults[stepId] = checkpoint;
+    const write = checkpointChain.then(() =>
+      engine.persistStepUpdate({
+        workflowId,
+        runId,
+        resourceId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+        requestContext,
+        phase: `item-end.${k}`,
+      }),
+    );
+    checkpointChain = write.catch(() => {});
+    return write;
+  };
+
   const worker = async (task: ForeachTask, cb: DoneCallback) => {
     const { item, k, resumeToUse } = task;
+    let checkpointDue = false;
 
     try {
       // Honor cancellation before dispatching more work
@@ -1199,6 +1267,7 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
+      checkpointDue = result.status === 'success' && !abortController?.signal?.aborted && !resumingSuspended;
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
@@ -1216,6 +1285,22 @@ export async function executeForeach(
       // per-iteration progress array.
       prevForeachOutput[k] = thrownResult;
       killQueue();
+    }
+
+    if (checkpointDue) {
+      try {
+        await checkpointItem(k);
+      } catch (err) {
+        // The item itself finished, so keep it out of the failed set and fail the run on the write error.
+        errorResult ??= {
+          status: 'failed',
+          error: err instanceof Error ? err : new Error(String(err)),
+          payload: undefined,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        } as StepFailure<any, any, any, any>;
+        killQueue();
+      }
     }
 
     inFlight--;
