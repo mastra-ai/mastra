@@ -32,6 +32,87 @@ function step(id: string, execute: Fn) {
 const never = () => new Promise<never>(() => {});
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
 
+describe('foreach progress publication failures', () => {
+  it.each(['running', 'failed'] as const)(
+    'preserves successful items in the %s snapshot when progress publication rejects',
+    async status => {
+      const publicationError = new Error('progress publication failed');
+      let publicationFailed = false;
+      let restarted = false;
+      let siblingStarted = false;
+      const build = () => {
+        const charge = step('charge', async ({ inputData }) => {
+          if (status === 'running' && !restarted) {
+            if (inputData === 1) {
+              siblingStarted = true;
+              return never();
+            }
+            await vi.waitFor(() => expect(siblingStarted).toBe(true));
+          }
+          return { charged: inputData };
+        });
+        const workflow = createWorkflow({
+          id: `progress-failure-${status}`,
+          inputSchema: anySchema,
+          outputSchema: anySchema,
+        })
+          .foreach(charge.step, { concurrency: status === 'running' ? 2 : 1 })
+          .commit();
+        return { workflow, fns: { charge: charge.fn } };
+      };
+      const originalPublish = EventEmitterPubSub.prototype.publish;
+      const publishHook = vi.spyOn(EventEmitterPubSub.prototype, 'publish').mockImplementation(async function (
+        this: EventEmitterPubSub,
+        ...args: Parameters<EventEmitterPubSub['publish']>
+      ) {
+        const data = args[1]?.data;
+        if (data?.type === 'workflow-step-progress' && data.payload.currentIndex === 0 && !restarted) {
+          publicationFailed = true;
+          throw publicationError;
+        }
+        return originalPublish.apply(this, args);
+      });
+      try {
+        if (status === 'running') {
+          const { runId, snapshot } = await crashedCheckpoint(build, [0, 1], () => publicationFailed);
+          expect(snapshot.status).toBe('running');
+          expect(snapshot.context.charge.suspendPayload.__workflow_meta.foreachOutput[0]).toMatchObject({
+            status: 'success',
+            output: { charged: 0 },
+          });
+          restarted = true;
+          const { restarted: result, fns } = await restartFrom(build, runId, snapshot);
+          expect(result.status).toBe('success');
+          expect(fns.charge.mock.calls.map(([{ inputData }]) => inputData)).toEqual([1]);
+          expect((result as any).result).toEqual([{ charged: 0 }, { charged: 1 }]);
+        } else {
+          const { workflow, fns } = build();
+          const storage = new MockStore();
+          new Mastra({ logger: false, storage, workflows: { workflow } });
+          const store = (await storage.getStore('workflows'))!;
+          const run = await workflow.createRun();
+          const result = await run.start({ inputData: [0, 1] });
+          expect(result.status).toBe('failed');
+          expect((result as any).error.message).toBe(publicationError.message);
+          expect(fns.charge.mock.calls.map(([{ inputData }]) => inputData)).toEqual([0]);
+          const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+          expect(snapshot?.context.charge.suspendPayload.__workflow_meta.foreachOutput[0]).toMatchObject({
+            status: 'success',
+            output: { charged: 0 },
+          });
+          restarted = true;
+          const retry = await run.timeTravel({ step: 'charge' });
+          expect(retry.status).toBe('success');
+          expect(fns.charge.mock.calls.map(([{ inputData }]) => inputData)).toEqual([0, 1]);
+          expect((retry as any).result).toEqual([{ charged: 0 }, { charged: 1 }]);
+        }
+      } finally {
+        publishHook.mockRestore();
+      }
+    },
+  );
+});
+
 describe('foreach checkpoint write budget', () => {
   it.each([100, 200])('bounds accumulated snapshot bytes for %i caller-supplied items', async count => {
     const budget = 32 * 1024;

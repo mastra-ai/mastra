@@ -1235,6 +1235,7 @@ export async function executeForeach(
   const worker = async (task: ForeachTask, cb: DoneCallback) => {
     const { item, k, resumeToUse } = task;
     let checkpointDue = false;
+    let itemSucceeded = false;
 
     try {
       // Honor cancellation before dispatching more work
@@ -1260,6 +1261,8 @@ export async function executeForeach(
       Object.assign(stepResults, stepExecResult.stepResults);
 
       const result = stepExecResult.result as ForeachStepResult;
+      itemSucceeded = result.status === 'success';
+      checkpointDue = itemSucceeded && !resumingSuspended;
 
       // Put the finished items back right away, whatever this item's outcome: the awaits below would
       // otherwise leave its plain result in the shared slot, and a sibling's start checkpoint would
@@ -1267,12 +1270,6 @@ export async function executeForeach(
       if (!resumingSuspended) {
         if (result.status === 'success') prevForeachOutput[k] = { ...result, suspendPayload: {} };
         restoreProgress();
-      }
-
-      if (result.status !== 'success') {
-        await handleNonSuccessResult(result, k);
-      } else {
-        await handleSuccessResult(result, k);
       }
 
       if (result.status === 'success' && result.output !== undefined) {
@@ -1287,7 +1284,14 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
-      checkpointDue = result.status === 'success' && !abortController?.signal?.aborted && !resumingSuspended;
+
+      // Save the execution result before publishing progress. A publication failure must
+      // fail the block without turning a completed side effect into a retryable item.
+      if (result.status !== 'success') {
+        await handleNonSuccessResult(result, k);
+      } else {
+        await handleSuccessResult(result, k);
+      }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
@@ -1300,14 +1304,13 @@ export async function executeForeach(
       if (!errorResult) {
         errorResult = thrownResult as StepFailure<any, any, any, any>;
       }
-      // Record the iteration that threw so the failure result below reports it
-      // as failed (and therefore retried) rather than leaving a hole in the
-      // per-iteration progress array.
-      prevForeachOutput[k] = thrownResult;
+      // Retry an iteration that threw, but retain successful execution when only
+      // its progress publication failed. Its checkpoint is still due below.
+      if (!itemSucceeded) prevForeachOutput[k] = thrownResult;
       killQueue();
     }
 
-    if (checkpointDue) {
+    if (checkpointDue && !abortController?.signal?.aborted) {
       try {
         await checkpointItem(k);
       } catch (err) {
