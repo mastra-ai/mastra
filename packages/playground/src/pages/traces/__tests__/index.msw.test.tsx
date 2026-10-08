@@ -1273,6 +1273,24 @@ describe('Traces page filter bar', () => {
       expect(onQuery).toHaveBeenCalled();
       expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).not.toContain('durationMs');
     });
+
+    it('drops durationMs conditions from a filterGroup and keeps the rest of the group', async () => {
+      const group = {
+        id: 'g1',
+        logic: 'or',
+        nodes: [
+          { id: 'n1', fieldId: 'durationMs', value: '1000', operatorId: 'gt' },
+          { id: 'n2', fieldId: 'status', value: 'error' },
+        ],
+      };
+      const onQuery = await renderWithoutRootDuration(
+        `/traces?filterGroup=${encodeURIComponent(JSON.stringify(group))}`,
+      );
+
+      expect(onQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+        where: { op: 'and', args: [{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }] },
+      });
+    });
   });
 
   describe('when the URL carries filterSpanError with the exists operator', () => {

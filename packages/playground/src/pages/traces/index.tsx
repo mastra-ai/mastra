@@ -79,6 +79,7 @@ type TracesPageProps = {
 
 const TRACES_SORT_KEYS = ['startedAt'] as const;
 const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
+const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
 
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
@@ -120,6 +121,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     querySearchParams.delete(`filter${field[0]?.toUpperCase()}${field.slice(1)}`);
   }
   // Servers without root-duration support reject `durationMs` predicates (shared links, saved filters).
+  // Flat params are dropped here; `filterGroup` conditions are dropped by `buildTraceQueryRequest`.
   const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
   if (!withRootDuration) {
     querySearchParams.delete('filterDurationMs');
@@ -328,6 +330,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,
         groups: url.filterGroups,
+        excludedFieldIds: withRootDuration ? undefined : ROOT_DURATION_FIELD_IDS,
         now,
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],

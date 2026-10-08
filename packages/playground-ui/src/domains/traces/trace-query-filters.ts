@@ -167,8 +167,11 @@ function tagsPredicate(operatorId: TraceFilterOperatorId, tags: string[]): Trace
 /** Fields the query API can only test for presence; any other operator is rejected with a 422. */
 const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error', 'feedback.comment']);
 
-function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | undefined {
-  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return undefined;
+function tokenToTraceQueryPredicate(
+  token: TraceFilterToken,
+  excludedFieldIds: ReadonlySet<string>,
+): TokenPredicate | undefined {
+  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) || excludedFieldIds.has(token.fieldId)) return undefined;
   const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
   // Hand-edited URLs can pair these fields with value operators; drop them rather than fail the page.
@@ -231,12 +234,15 @@ function tokenToTraceQueryPredicate(token: TraceFilterToken): TokenPredicate | u
 /** Convert tokens to predicates. With `mergeRelated`, tokens on the same related
  *  collection must match the same row (e.g. scorer X AND score < 0.6), so they are
  *  merged into a single `some`. Inside an `or` group each token stands alone. */
-function predicatesForTokens(tokens: TraceFilterToken[], { mergeRelated }: { mergeRelated: boolean }) {
+function predicatesForTokens(
+  tokens: TraceFilterToken[],
+  { mergeRelated, excludedFieldIds }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string> },
+) {
   const args: TraceQueryPredicate[] = [];
   const related: Record<TraceQueryRelatedScope, TraceQueryScalarPredicate[]> = { spans: [], scores: [], feedback: [] };
 
   for (const token of tokens) {
-    const result = tokenToTraceQueryPredicate(token);
+    const result = tokenToTraceQueryPredicate(token, excludedFieldIds);
     if (!result) continue;
     if (!('scope' in result)) {
       args.push(result.predicate);
@@ -257,12 +263,15 @@ function predicatesForTokens(tokens: TraceFilterToken[], { mergeRelated }: { mer
   return args;
 }
 
-function groupToTraceQueryPredicate(group: TraceFilterGroup): TraceQueryPredicate | undefined {
+function groupToTraceQueryPredicate(
+  group: TraceFilterGroup,
+  excludedFieldIds: ReadonlySet<string>,
+): TraceQueryPredicate | undefined {
   const tokens = group.nodes.filter((node): node is TraceFilterToken => !isTraceFilterGroup(node));
-  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and' });
+  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds });
   for (const node of group.nodes) {
     if (!isTraceFilterGroup(node)) continue;
-    const predicate = groupToTraceQueryPredicate(node);
+    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds);
     if (predicate) args.push(predicate);
   }
   if (args.length === 0) return undefined;
@@ -276,11 +285,14 @@ export function buildTraceQueryRequest({
   dateTo,
   tokens,
   groups = [],
+  excludedFieldIds = new Set(),
   now,
 }: Omit<Parameters<typeof buildTraceListFilters>[0], 'tokens' | 'status'> & {
   status?: TraceStatusFilter;
   tokens: TraceFilterToken[];
   groups?: TraceFilterGroup[];
+  /** Fields the server cannot query (e.g. `durationMs` without `traceQueryRootDuration`); dropped from tokens and groups. */
+  excludedFieldIds?: ReadonlySet<string>;
   now: Date;
 }): Pick<QueryTracesInput, 'timeRange' | 'where'> {
   const args: TraceQueryPredicate[] = [];
@@ -288,10 +300,10 @@ export function buildTraceQueryRequest({
   if (rootEntityType) args.push({ op: 'eq', left: { path: 'entityType' }, right: { literal: rootEntityType } });
   if (status && status !== 'running') args.push({ op: 'eq', left: { path: 'status' }, right: { literal: status } });
 
-  args.push(...predicatesForTokens(tokens, { mergeRelated: true }));
+  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds }));
 
   for (const group of groups) {
-    const predicate = groupToTraceQueryPredicate(group);
+    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds);
     if (predicate) args.push(predicate);
   }
 
