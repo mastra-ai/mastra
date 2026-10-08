@@ -45,15 +45,15 @@ export type FactorySandboxContext = CoreFactorySandboxContext;
  * sandbox: ({ sessionId, sandboxId }) => new E2BSandbox({ id: sessionId, sandboxId })
  * ```
  *
- * @deprecated Pass a FactorySandbox instance (for example `new E2BFactorySandbox({ apiKey })`) instead.
+ * A FactorySandbox instance (for example `new E2BFactorySandbox({ apiKey })`)
+ * additionally exposes settings and template builds to the environment.
  */
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;
 
 /**
  * The `sandbox` option of `MastraFactoryConfig`: a FactorySandbox instance
- * (preferred; it owns the session sandbox constructor, the repo template and
- * the environment settings schema) or the deprecated bare callback, which the
- * factory wraps as a `provider: 'custom'` sandbox with no settings.
+ * (it owns the session sandbox constructor, the repo template and the
+ * environment settings schema) or a bare callback, which the factory wraps as a `provider: 'custom'` sandbox with no settings.
  */
 export type MastraFactorySandboxOption = FactorySandbox | MastraFactorySandboxConfig;
 

@@ -4,7 +4,7 @@ import type { FactorySandboxContext, MastraSandbox } from '@mastra/core/workspac
 import type { MastraFactorySandboxConfig } from './session-sandbox.js';
 
 /**
- * Wraps the deprecated `sandbox: ctx => new SomeSandbox(...)` host callback
+ * Wraps the `sandbox: ctx => new SomeSandbox(...)` host callback
  * as a FactorySandbox. The host owns everything inside the callback, so the
  * factory knows nothing about it: no settings, no template, no builds.
  */

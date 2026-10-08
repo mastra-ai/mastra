@@ -194,8 +194,8 @@ export interface MastraFactoryConfig {
    * The host's sandbox: a FactorySandbox instance such as
    * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
    * constructor, the repo template and the schema of environment settings.
-   * A bare callback is still accepted and wrapped as a `provider: 'custom'`
-   * sandbox with no settings (deprecated). Omitted → repository sandboxes are
+   * A bare callback is also accepted and wrapped as a `provider: 'custom'`
+   * sandbox with no settings. Omitted → repository sandboxes are
    * disabled.
    */
   sandbox?: MastraFactorySandboxOption;
@@ -578,7 +578,7 @@ export class MastraFactory {
 
     // The sandbox option is a FactorySandbox instance (detected by its brand,
     // never by shape: the fleet-era options object also had a `create` key) or
-    // the deprecated bare callback, wrapped here so every consumer sees one
+    // a bare callback, wrapped here so every consumer sees one
     // type. Shape-only validation: probing it with a synthetic ctx at boot
     // would construct against a fake session.
     const sandboxOption = this.#config.sandbox;

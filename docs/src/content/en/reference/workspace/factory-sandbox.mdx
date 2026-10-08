@@ -55,9 +55,9 @@ new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH!
 
 A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it (2 CPUs, 1024 MB and a 5 minute idle timeout on platform and E2B, overridable through `defaults`), and factory only stores values the user typed.
 
-### Deprecated callback
+### Callback form
 
-The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps working. Factory wraps it as a `provider: 'custom'` sandbox. Everything about the sandbox stays inside the callback, and the environment exposes nothing to tune.
+The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` is also supported. Factory wraps it as a `provider: 'custom'` sandbox. Everything about the sandbox stays inside the callback, and the environment exposes nothing to tune.
 
 ## Class
 

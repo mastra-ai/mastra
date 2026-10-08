@@ -546,8 +546,8 @@ new MastraFactory({
 ```
 
 The bare callback form, `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, template: createRepoTemplate(ctx) })`,
-still works but is deprecated: factory sees it as a custom provider with no
-settings to tune. Either way, factory attaches its own session setup to the
+is also supported: factory sees it as a custom provider with no settings to
+tune. Either way, factory attaches its own session setup to the
 sandbox it gets back.
 
 ## Using with Code Mode
