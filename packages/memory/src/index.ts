@@ -138,7 +138,7 @@ type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   /**
    * Selects the experimental Knowledge runtime used by Subconscious observation ingestion, tools, pinning,
    * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
-   * a Knowledge instance supports standalone wiring. Omit to retain the v1 storage-domain path.
+   * a Knowledge instance supports standalone wiring. Omit to use the `knowledge` domain of this Memory's own storage.
    */
   knowledge?: string | Knowledge | false;
 };
@@ -467,21 +467,10 @@ export class Memory extends MastraMemory {
     this.pendingVectorCleanup = Promise.allSettled([this.pendingVectorCleanup, cleanup]).then(() => undefined);
   }
 
-  private pendingSubconsciousWork = new Set<Promise<void>>();
-
-  /** @internal Track observation-dispatched work without blocking the observation turn. */
-  trackSubconsciousWork(work: Promise<void>): void {
-    this.pendingSubconsciousWork.add(work);
-    void work.then(
-      () => this.pendingSubconsciousWork.delete(work),
-      () => this.pendingSubconsciousWork.delete(work),
-    );
-  }
-
   /**
    * Resolve once all background work this Memory started has finished: observational-memory
-   * cycles (buffered observation and reflection, including the nested agent runs they spawn),
-   * observation-dispatched Subconscious curator runs, and vector cleanup from `deleteThread` / `deleteMessages`.
+   * cycles (buffered observation and reflection, including the nested agent runs they spawn)
+   * and vector cleanup from `deleteThread` / `deleteMessages`.
    *
    * Callers that own the storage connection should await this before closing it, otherwise
    * background statements can race the close.
@@ -497,9 +486,6 @@ export class Memory extends MastraMemory {
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
     await engine?.settled();
-    while (this.pendingSubconsciousWork.size) {
-      await Promise.all([...this.pendingSubconsciousWork]);
-    }
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
@@ -654,7 +640,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /** Returns the configured Knowledge v2 instance, or undefined for the v1 storage-domain path. */
+  /** Returns the configured Knowledge v2 instance, or undefined when Knowledge comes from this Memory's own storage. */
   public getKnowledgeInstance(): Knowledge | undefined {
     if (this._knowledge === false || this._knowledge === undefined) return undefined;
     if (typeof this._knowledge !== 'string') return this._knowledge;
@@ -671,7 +657,7 @@ export class Memory extends MastraMemory {
    * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
    */
   public async getKnowledgeStore(): Promise<KnowledgeStorage> {
-    if (this._knowledge === undefined) return this.resolveLegacyKnowledgeStore();
+    if (this._knowledge === undefined) return this.resolveStorageKnowledgeStore();
     if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
@@ -685,7 +671,7 @@ export class Memory extends MastraMemory {
     return this._knowledgeStore;
   }
 
-  private async resolveLegacyKnowledgeStore(): Promise<KnowledgeStorage> {
+  private async resolveStorageKnowledgeStore(): Promise<KnowledgeStorage> {
     const store = await this.storage.getStore('knowledge');
     if (!store) {
       throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);

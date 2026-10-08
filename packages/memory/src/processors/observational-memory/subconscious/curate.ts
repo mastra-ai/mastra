@@ -58,6 +58,7 @@ export class SubconsciousCurateExtractor extends Extractor<unknown> {
     subconscious: ResolvedSubconsciousConfig,
     getCuratorMemory: () => Memory,
     omModel?: ObservationalMemoryModel,
+    trackCuration: (work: Promise<void>) => void = work => void work.catch(() => {}),
   ) {
     super({
       name: 'Curate',
@@ -68,7 +69,7 @@ export class SubconsciousCurateExtractor extends Extractor<unknown> {
         // commit never dispatches, and the parent observation never waits on the curator.
         if (!rawObservations?.trim() || !memory || !observationCommitted) return;
 
-        memory.trackSubconsciousWork(
+        trackCuration(
           observationCommitted.then(committed =>
             committed
               ? curateCommittedObservations(memory, context, rawObservations, {
