@@ -68,6 +68,15 @@ export interface FactorySandboxContext {
   cpuCount?: number;
   /** Memory in MB from the factory's environment settings. */
   memoryMB?: number;
+  /**
+   * Resolves the commit a repository clone pins to, keyed by clone URL (the
+   * repo templates' `resolveHead` option). Factory passes the heads it
+   * recorded on the environment's last build, so the template's identity
+   * moves only when a build does, not on every upstream commit. Absent when
+   * the factory has recorded no build yet; a URL with no recorded head
+   * resolves `undefined` and the template falls back to its own lookup.
+   */
+  resolveHead?: (cloneUrl: string, token?: string) => Promise<string | undefined>;
 }
 
 /**

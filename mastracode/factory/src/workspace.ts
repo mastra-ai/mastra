@@ -17,6 +17,7 @@ import type {
 } from '@mastra/core/workspace';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
+import { recordedHeadResolver } from './environment/heads.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -47,7 +48,7 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-import type { SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -55,7 +56,7 @@ import {
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
-import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
@@ -410,6 +411,8 @@ export interface SessionEnvironment {
   /** vCPUs and memory; null leaves the provider default (identity-bearing in the template). */
   cpuCount: number | null;
   memoryMB: number | null;
+  /** Heads recorded on the environment's last build, by slug; null before the first. */
+  recordedHeads: Record<string, string> | null;
 }
 
 /**
@@ -429,6 +432,15 @@ async function resolveSessionEnvironment(
   if (!projects || !session.factoryProjectId) return undefined;
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
+  return resolveProjectEnvironment(storage, project);
+}
+
+/** The environment of a project, from its settings and `inEnvironment` links; see `resolveSessionEnvironment`. */
+export async function resolveProjectEnvironment(
+  storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>,
+  project: FactoryProject,
+): Promise<SessionEnvironment | undefined> {
+  const session = { orgId: project.orgId };
   const links = (
     await storage.projectRepositories.listByProject({ orgId: session.orgId, factoryProjectId: project.id })
   )
@@ -482,6 +494,41 @@ async function resolveSessionEnvironment(
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
     cpuCount: project.sandboxCpuCount,
     memoryMB: project.sandboxMemoryMb,
+    recordedHeads: project.activeTemplateHeads,
+  };
+}
+
+/**
+ * The environment half of a `FactorySandboxContext`: the list form of the
+ * repo templates, one entry per environment repository minting its own token
+ * at build time. Shared by the session sandbox and the proactive environment
+ * build so both produce the same template identity.
+ */
+export function environmentSandboxContext(
+  environment: SessionEnvironment,
+  input: {
+    orgId: string;
+    getRepositoryAccess: (args: { orgId: string; repositoryId: string }) => Promise<RepositoryAccess>;
+    resolveHead?: FactorySandboxContext['resolveHead'];
+  },
+): Omit<FactorySandboxContext, 'sessionId' | 'sandboxId' | 'repoFullName'> {
+  return {
+    // `getRepositoryAccess` stays present but undefined, the two being
+    // mutually exclusive for the template.
+    setupCommand: undefined,
+    getRepositoryAccess: undefined,
+    repos: environment.repos.map(repo => ({
+      getRepositoryAccess: () => input.getRepositoryAccess({ orgId: input.orgId, repositoryId: repo.repositoryId }),
+      ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+    })),
+    ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
+    // A repository whose setup fails still lands in the image;
+    // the boot hook re-runs that setup from `setup-failed`.
+    continueOnSetupFailure: true,
+    ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
+    ...(environment.cpuCount !== null ? { cpuCount: environment.cpuCount } : {}),
+    ...(environment.memoryMB !== null ? { memoryMB: environment.memoryMB } : {}),
+    ...(input.resolveHead ? { resolveHead: input.resolveHead } : {}),
   };
 }
 
@@ -744,31 +791,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           sandboxId: session.sandboxId ?? undefined,
           repoFullName,
           ...(environment
-            ? {
-                // The list form of the repo templates: one entry per
-                // environment repository, each minting its own token at build
-                // time; `getRepositoryAccess` stays present but undefined, the
-                // two being mutually exclusive for the template.
-                setupCommand: undefined,
-                getRepositoryAccess: undefined,
-                repos: environment.repos.map(repo => ({
-                  getRepositoryAccess: () =>
-                    sourceControl.versionControl.getRepositoryAccess({
-                      orgId: session.orgId,
-                      repositoryId: repo.repositoryId,
-                    }),
-                  ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
-                })),
-                ...(environment.workspaceSetupCommand
-                  ? { workspaceSetupCommand: environment.workspaceSetupCommand }
-                  : {}),
-                // A repository whose setup fails still lands in the image;
-                // the boot hook re-runs that setup from `setup-failed`.
-                continueOnSetupFailure: true,
-                ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
-                ...(environment.cpuCount !== null ? { cpuCount: environment.cpuCount } : {}),
-                ...(environment.memoryMB !== null ? { memoryMB: environment.memoryMB } : {}),
-              }
+            ? // The list form of the repo templates, pinned to the heads the
+              // factory recorded on its last build so the identity holds
+              // steady between builds.
+              environmentSandboxContext(environment, {
+                orgId: session.orgId,
+                getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                ...(environment.recordedHeads ? { resolveHead: recordedHeadResolver(environment.recordedHeads) } : {}),
+              })
             : {
                 // Stored nullable; the context speaks `undefined` for absent.
                 setupCommand: projectRepository.setupCommand ?? undefined,

@@ -43,6 +43,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import type { SandboxTemplateFactory } from './environment/types.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
@@ -192,6 +193,12 @@ export interface MastraFactoryConfig {
   allowedOrigins?: string[];
   /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
   sandbox?: MastraFactorySandboxConfig;
+  /**
+   * The template resolver a factory environment builds from, when the host
+   * can build templates ahead of a session. Omitted → environments build
+   * lazily on their first session, and the build worker is not started.
+   */
+  sandboxTemplate?: SandboxTemplateFactory;
   /**
    * When a session's sandbox boots: on the agent's first command (`'lazy'`,
    * the default) or as soon as the session's workspace is first resolved

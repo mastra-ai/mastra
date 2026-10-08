@@ -3197,6 +3197,33 @@ describe('factory environment sandbox context', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
   });
 
+  it('pins the template to the heads the factory recorded on its last build, leaving unknown repositories to the template', async () => {
+    const sha = 'c'.repeat(40);
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { activeTemplateHeads: { 'octocat/hello': sha } },
+    });
+    addProject();
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    await expect(ctx.resolveHead('https://github.com/Octocat/hello.git')).resolves.toBe(sha);
+    await expect(ctx.resolveHead('https://github.com/octocat/docs.git')).resolves.toBeUndefined();
+  });
+
+  it('passes no resolveHead before the first recorded build', async () => {
+    const { resolver } = environmentFixture({ links: twoLinks, project: { activeTemplateHeads: null } });
+    addProject();
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    expect('resolveHead' in ctx).toBe(false);
+  });
+
   it('applies the default resources and no working directory when the project leaves them unset', async () => {
     const { resolver } = environmentFixture({
       links: twoLinks,
