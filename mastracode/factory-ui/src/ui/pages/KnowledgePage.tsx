@@ -9,6 +9,8 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
+import { KnowledgeDetailsSurface } from '../domains/factory/components/knowledge/KnowledgeDetailsSurface';
+import { getKnowledgeMotionDuration } from '../domains/factory/components/knowledge/knowledgeViewport';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
 import { KnowledgeGraphState } from '../domains/factory/components/knowledge/KnowledgeGraphState';
@@ -54,7 +56,10 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
+    <nav
+      aria-label="Knowledge scope"
+      className="text-muted-foreground mt-1 flex h-5 items-center gap-1 overflow-hidden whitespace-nowrap"
+    >
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         <Txt as="span" variant="caption" className="block">
           org
@@ -75,7 +80,7 @@ function Breadcrumb({
         </>
       ) : null}
       {trail.map((entry, index) => (
-        <span key={`${entry.nodeId}-${index}`} className="flex items-center gap-1">
+        <span key={`${entry.nodeId}-${index}`} className="flex min-w-0 items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
             <Txt as="span" variant="caption" tone="ink" title={entry.name} className="max-w-44 truncate">
@@ -105,8 +110,36 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
+  const [closing, setClosing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const selected = trail.at(-1) ?? null;
-  const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
+  const cancelClose = () => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = undefined;
+    setClosing(false);
+  };
+  const setSelected = (entry: TrailEntry | null) => {
+    cancelClose();
+    setTrail(entry ? [entry] : []);
+  };
+  const closeDetails = () => {
+    if (!selected) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setSelected(null);
+      return;
+    }
+    setClosing(true);
+    const surface = containerRef.current?.querySelector<HTMLElement>('.knowledge-details');
+    // A close before the first paint, or a changed motion preference, may not
+    // dispatch transitionend. Retire the retained details in those cases too.
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(
+      () => setSelected(null),
+      (surface ? getKnowledgeMotionDuration(surface) : 720) + 100,
+    );
+  };
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   // Live updates hold while the user is exploring (moving, clicking,
   // zooming) and resume after 10s of stillness — the layout never shifts
@@ -158,6 +191,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       <KnowledgeGraphState query={graphQuery} threadId={threadId} onBackToProject={backToProject}>
         {payload => (
           <div
+            ref={containerRef}
             className="relative h-full min-h-0 flex-1"
             data-testid="knowledge-graph-container"
             onPointerDownCapture={onActivity}
@@ -168,9 +202,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               key={`${factoryProjectId}:${threadId ?? 'project'}`}
               payload={payload}
               arrivals={arrivals}
-              focusedId={selected?.nodeId}
-              focusedRecordId={selected?.recordId}
-              onClearFocus={() => setTrail([])}
+              focusedId={closing ? undefined : selected?.nodeId}
+              focusedRecordId={closing ? undefined : selected?.recordId}
+              onClearFocus={closeDetails}
               onNodeClick={node => setSelected({ nodeId: node.id, name: node.name })}
               onEdgeClick={edge => {
                 // Selecting an edge selects AND expands the supporting knowledge record (A7).
@@ -182,34 +216,43 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                 threadId={threadId}
                 trail={trail}
                 onProjectClick={backToProject}
-                onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
+                onTrailClick={index => {
+                  cancelClose();
+                  setTrail(current => current.slice(0, index + 1));
+                }}
               />
             </KnowledgeGraph>
             {selected && factoryProjectId ? (
-              <KnowledgeFlyout
-                factoryProjectId={factoryProjectId}
-                nodeId={selected.nodeId}
-                threadId={threadId}
-                focusRecordId={selected.recordId}
-                onSelectRecord={recordId =>
-                  // Bidirectional selection: expanding a card selects the knowledge record
-                  // page-wide, so the graph lights its marker/edge up too.
-                  setTrail(current =>
-                    current.length === 0
-                      ? current
-                      : [...current.slice(0, -1), { ...current[current.length - 1]!, recordId: recordId ?? undefined }],
-                  )
-                }
-                onClose={() => setTrail([])}
-                onOpenThread={openThread}
-                onNodeRef={name => {
-                  // A clicked [[wikilink]] gets the full node-click treatment (A7):
-                  // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
-                  const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
-                  if (target && target.id !== selected.nodeId)
-                    setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
-                }}
-              />
+              <KnowledgeDetailsSurface closing={closing} onExited={() => setSelected(null)}>
+                <KnowledgeFlyout
+                  factoryProjectId={factoryProjectId}
+                  nodeId={selected.nodeId}
+                  nodeName={selected.name}
+                  threadId={threadId}
+                  focusRecordId={selected.recordId}
+                  onSelectRecord={recordId =>
+                    // Bidirectional selection: expanding a card selects the knowledge record
+                    // page-wide, so the graph lights its marker/edge up too.
+                    setTrail(current =>
+                      current.length === 0
+                        ? current
+                        : [
+                            ...current.slice(0, -1),
+                            { ...current[current.length - 1]!, recordId: recordId ?? undefined },
+                          ],
+                    )
+                  }
+                  onClose={closeDetails}
+                  onOpenThread={openThread}
+                  onNodeRef={name => {
+                    // A clicked [[wikilink]] gets the full node-click treatment (A7):
+                    // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
+                    const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
+                    if (target && target.id !== selected.nodeId)
+                      setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
+                  }}
+                />
+              </KnowledgeDetailsSurface>
             ) : null}
           </div>
         )}

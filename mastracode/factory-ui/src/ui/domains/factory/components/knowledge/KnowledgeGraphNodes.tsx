@@ -14,13 +14,15 @@ function NodeNodeComponent({ data }: NodeProps<NodeFlowNode>) {
   const large = size >= 88;
   return (
     // A focused leaf's label extends beyond the circle without resizing it.
-    <div data-testid="knowledge-node" data-node-id={node.id} className="relative" style={{ width: size, height: size }}>
+    <div
+      data-testid="knowledge-node"
+      data-node-id={node.id}
+      className="relative"
+      style={{ ...getKnowledgeNodeStyle(node.rung), width: size, height: size }}
+    >
       {/* A11: nodes never carry pin visuals — pins belong to their record
           markers (dot / line / junction). */}
-      <div
-        className="knowledge-circle shadow-raised flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
-        style={getKnowledgeNodeStyle(node.rung)}
-      >
+      <div className="knowledge-circle shadow-raised flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center">
         {labeled ? (
           <Txt
             as="span"
@@ -39,7 +41,7 @@ function NodeNodeComponent({ data }: NodeProps<NodeFlowNode>) {
         ) : null}
       </div>
       {!labeled ? (
-        <div className="knowledge-leaf-label bg-card shadow-raised pointer-events-none absolute top-full left-1/2 mt-2 hidden -translate-x-1/2 rounded-md px-2 py-1 whitespace-nowrap">
+        <div className="knowledge-leaf-label bg-card shadow-raised pointer-events-none absolute top-full left-1/2 mt-2 rounded-md px-2 py-1 whitespace-nowrap">
           <Txt as="span" variant="label" tone="ink">
             {node.name}
           </Txt>
@@ -51,6 +53,7 @@ function NodeNodeComponent({ data }: NodeProps<NodeFlowNode>) {
   );
 }
 const NodeNode = memo(NodeNodeComponent);
+NodeNode.displayName = 'KnowledgeNode';
 
 /**
  * A11: a knowledge record rendered as its own tiny marker — a dot beside its node or
@@ -66,7 +69,7 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
       data-record-id={record.id}
       data-pinned={record.pinned}
       className={cn(
-        'flex items-center justify-center rounded-full border transition-shadow duration-fast motion-reduce:transition-none',
+        'flex items-center justify-center rounded-full border',
         // Neutral records stay distinct from scope-colored nodes and amber pins.
         record.pinned
           ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground shadow-raised'
@@ -81,5 +84,6 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
   );
 }
 const RecordNode = memo(RecordNodeComponent);
+RecordNode.displayName = 'KnowledgeRecordNode';
 
 export const knowledgeNodeTypes = { knowledgeNode: NodeNode, knowledgeRecord: RecordNode };

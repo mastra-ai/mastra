@@ -2,7 +2,9 @@ import { ControlButton, Controls, useReactFlow } from '@xyflow/react';
 import { Maximize } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { getKnowledgeFitOptions } from './knowledgeViewport';
+import { fitKnowledgeViewport } from './knowledgeViewport';
+import type { KnowledgeFlowNode } from './knowledgeStyles';
+import type { KnowledgeFlowEdge } from './graphModel';
 
 export function KnowledgeGraphControls({
   canvasRef,
@@ -13,15 +15,12 @@ export function KnowledgeGraphControls({
   visibleIds: ReadonlySet<string>;
   focusedId?: string;
 }) {
-  const flow = useReactFlow();
+  const flow = useReactFlow<KnowledgeFlowNode, KnowledgeFlowEdge>();
   function fitView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const cameraIds = focusedId && visibleIds.has(focusedId) ? [focusedId] : [...visibleIds];
-    void flow.fitView({
-      ...getKnowledgeFitOptions(canvas, Boolean(focusedId)),
-      nodes: cameraIds.map(id => ({ id })),
-    });
+    fitKnowledgeViewport(flow, canvas, cameraIds, Boolean(focusedId));
   }
   return (
     <Controls position="bottom-right" showInteractive={false} showFitView={false}>

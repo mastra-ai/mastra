@@ -67,5 +67,6 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   );
 }
 const KnowledgeLink = memo(KnowledgeLinkComponent);
+KnowledgeLink.displayName = 'KnowledgeLink';
 
 export const knowledgeEdgeTypes = { knowledgeLink: KnowledgeLink };

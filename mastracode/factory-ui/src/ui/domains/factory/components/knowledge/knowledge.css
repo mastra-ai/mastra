@@ -1,3 +1,11 @@
+.knowledge-canvas,
+.knowledge-details {
+  /* A slower local composition of the design system's motion token. */
+  --knowledge-motion-scale: 2.4;
+  --knowledge-motion-duration: calc(var(--duration-slow) * var(--knowledge-motion-scale));
+  --knowledge-motion-ease: cubic-bezier(0.333333, 0, 0.666667, 1);
+}
+
 .knowledge-canvas {
   --xy-minimap-background-color: var(--card);
   --xy-minimap-mask-background-color: var(--scrim);
@@ -11,7 +19,38 @@
 .knowledge-circle {
   background: color-mix(in oklab, var(--knowledge-color) 22%, var(--card));
   border-color: color-mix(in oklab, var(--knowledge-color) 65%, var(--border));
-  transition: border-color var(--duration-fast) var(--ease-out-custom);
+  transition: border-color var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+}
+
+.knowledge-canvas [data-testid='knowledge-node'],
+.knowledge-canvas [data-testid='knowledge-record-node'] {
+  transition:
+    transform var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    box-shadow var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+}
+
+.knowledge-canvas [data-testid='knowledge-node']::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border: 2px solid var(--knowledge-color);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    transform var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+}
+
+.knowledge-leaf-label {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 8px);
+  transition:
+    transform var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    visibility 0s var(--knowledge-motion-duration);
 }
 
 .knowledge-canvas .react-flow__node:focus-visible .knowledge-circle {
@@ -29,13 +68,62 @@
   stroke-width: var(--knowledge-edge-width);
   opacity: var(--knowledge-edge-opacity, 1);
   transition:
-    stroke var(--duration-fast) var(--ease-out-custom),
-    opacity var(--duration-fast);
+    stroke var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    stroke-width var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease);
 }
 
 .knowledge-canvas .react-flow__edge:hover .react-flow__edge-path {
   stroke: var(--foreground);
   opacity: 1;
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-hidden],
+.knowledge-canvas .react-flow__edge[data-knowledge-hidden],
+.knowledge-canvas [data-knowledge-edge-id][data-knowledge-hidden] {
+  opacity: 0;
+  pointer-events: none !important;
+}
+
+.knowledge-canvas [data-knowledge-hidden-settled] {
+  visibility: hidden !important;
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-hidden] > [data-testid='knowledge-node'] {
+  transform: scale(0.92);
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-focused] .knowledge-circle {
+  border-color: var(--knowledge-color);
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-focused] [data-testid='knowledge-node']::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.knowledge-canvas .react-flow__node[data-knowledge-focused] .knowledge-leaf-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.knowledge-canvas [data-record-id][data-knowledge-record-focus] {
+  box-shadow: 0 0 0 2px var(--badge-blue-indicator);
+}
+
+.knowledge-canvas [data-record-id][data-knowledge-record-focus][data-pinned='true'] {
+  box-shadow: 0 0 0 2px var(--badge-amber-indicator);
+}
+
+.knowledge-canvas .react-flow__edge-path[data-knowledge-record-focus] {
+  stroke: var(--chart-blue);
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.knowledge-canvas .react-flow__edge-path[data-knowledge-record-focus][data-knowledge-pinned='true'] {
+  stroke: var(--chart-amber);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -54,8 +142,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .knowledge-canvas * {
-    transition: none;
+  .knowledge-canvas *,
+  .knowledge-canvas *::after {
+    transition: none !important;
   }
 }
 
@@ -87,31 +176,62 @@
 .knowledge-canvas .react-flow__node,
 .knowledge-canvas .react-flow__edge,
 .knowledge-canvas [data-knowledge-edge-id] {
+  transition: opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+}
+
+.knowledge-details {
+  opacity: 1;
+  transform: translate(0, 0);
   transition:
-    opacity var(--duration-slow) var(--ease-out-custom),
-    visibility 0s;
+    transform var(--knowledge-motion-duration) var(--knowledge-motion-ease),
+    opacity var(--knowledge-motion-duration) var(--knowledge-motion-ease);
+}
+
+@starting-style {
+  .knowledge-details {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+}
+
+.knowledge-details[data-state='closing'] {
+  opacity: 0;
+  transform: translateX(32px);
+  pointer-events: none;
+}
+
+@media (max-width: 767px) {
+  @starting-style {
+    .knowledge-details {
+      transform: translateY(32px);
+    }
+  }
+  .knowledge-details[data-state='closing'] {
+    transform: translateY(32px);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .knowledge-details {
-    animation: knowledge-details-enter var(--duration-slow) var(--ease-out-custom);
+  .knowledge-details-content {
+    animation: knowledge-details-content-enter var(--knowledge-motion-duration) var(--knowledge-motion-ease);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .knowledge-canvas .react-flow__node,
-  .knowledge-canvas .react-flow__edge {
+  .knowledge-canvas .react-flow__edge,
+  .knowledge-details {
     transition: none;
   }
 }
 
-@keyframes knowledge-details-enter {
+@keyframes knowledge-details-content-enter {
   from {
     opacity: 0;
-    transform: translateX(16px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0);
   }
 }

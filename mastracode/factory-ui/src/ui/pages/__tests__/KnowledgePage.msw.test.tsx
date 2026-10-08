@@ -11,6 +11,13 @@ import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
 
+function finishDetailsExit(flyout: HTMLElement) {
+  // JSDOM has no TransitionEvent constructor; supply the native event's field.
+  const event = new Event('transitionend', { bubbles: true });
+  Object.defineProperty(event, 'propertyName', { value: 'transform' });
+  fireEvent(flyout, event);
+}
+
 const nodeFixture: KnowledgeNodePayload = {
   node: {
     id: 'ent-1',
@@ -219,6 +226,9 @@ describe('KnowledgePage', () => {
     expect(await within(flyout).findByRole('heading', { name: 'Payments Service' })).toBeVisible();
     expect(screen.getAllByTestId('knowledge-node')).toEqual(originalNodes);
     await user.click(within(flyout).getByRole('button', { name: 'Close details' }));
+    expect(flyout).toHaveAttribute('aria-hidden', 'true');
+    expect(flyout).toHaveAttribute('inert');
+    finishDetailsExit(flyout);
     expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('knowledge-node')).toEqual(originalNodes);
   });
@@ -232,6 +242,8 @@ describe('KnowledgePage', () => {
     const flyout = await screen.findByTestId('knowledge-flyout');
     expect(await within(flyout).findByRole('heading', { name: 'Payments Service' })).toBeVisible();
     fireEvent.keyDown(node!, { key: 'Escape' });
+    expect(flyout).toHaveAttribute('aria-hidden', 'true');
+    finishDetailsExit(flyout);
     expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
   });
 

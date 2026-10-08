@@ -1,14 +1,14 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
 import type { Arrivals } from './graphDiff';
 import { NO_FILTERS } from './graphModel';
 import type { KnowledgeGraphFilters } from './graphModel';
 import { KnowledgeGraphCanvas } from './KnowledgeGraphCanvas';
-import { getKnowledgePresentation } from './knowledgePresentation';
+import { KnowledgeGraphPresentation } from './KnowledgeGraphPresentation';
 import { createKnowledgeScene, getVisibleKnowledgeIds, getKnowledgeArrivalScene } from './knowledgeScene';
 import { KnowledgeGraphController } from './KnowledgeGraphController';
 import { KnowledgeGraphControls } from './KnowledgeGraphControls';
@@ -71,7 +71,6 @@ function KnowledgeGraphInner({
   useEffect(() => {
     events.current = { onNodeClick, onClearFocus, onEdgeClick };
   }, [onNodeClick, onClearFocus, onEdgeClick]);
-  const scopeId = useId();
   const canvasRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef<KnowledgeHoverHandle>(null);
   const visibleIds = getVisibleKnowledgeIds(payload, filters, focusedId);
@@ -82,12 +81,15 @@ function KnowledgeGraphInner({
       ref={canvasRef}
       className="knowledge-canvas bg-background relative h-full w-full overflow-hidden"
       data-testid="knowledge-graph"
-      data-knowledge-scene={scopeId}
     >
       <KnowledgeGraphCanvas scene={initialScene} events={events} hoverRef={hoverRef} />
-      <style>
-        {getKnowledgePresentation(scopeId, payload, filters, { nodeId: focusedId, recordId: focusedRecordId })}
-      </style>
+      <KnowledgeGraphPresentation
+        canvasRef={canvasRef}
+        payload={payload}
+        filters={filters}
+        focusedId={focusedId}
+        focusedRecordId={focusedRecordId}
+      />
       <KnowledgeGraphController
         payload={payload}
         arrivals={arrivals}

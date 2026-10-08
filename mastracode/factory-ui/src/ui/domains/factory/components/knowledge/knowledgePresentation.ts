@@ -3,65 +3,62 @@ import { deriveRecordElements } from './graphModel';
 import type { KnowledgeGraphFilters } from './graphModel';
 import { getVisibleKnowledgeIds } from './knowledgeScene';
 
-function cssValue(value: string): string {
-  // Attribute values are quoted: punctuation and Unicode need no escaping.
-  return value
-    .replace(/[\\"]/g, '\\$&')
-    .replace(/[\u0000-\u001f\u007f<]/gu, character => `\\${(character.codePointAt(0) ?? 0).toString(16)} `);
-}
-
-function excludingVisible(attribute: string, ids: string[]): string {
-  if (ids.length === 0) return '';
-  return `:not(:is(${ids.map(id => `[${attribute}="${cssValue(id)}"]`).join(',')}))`;
-}
-
-/** Selection is a CSS presentation change, never a React Flow node/edge update. */
-export function getKnowledgePresentation(
-  scopeId: string,
+/** Update presentation attributes without replacing CSS or touching graph state. */
+export function applyKnowledgePresentation(
+  canvas: HTMLElement,
   payload: KnowledgeGraphPayload,
   filters: KnowledgeGraphFilters,
   selection: { nodeId?: string; recordId?: string },
-): string {
-  const scope = `[data-knowledge-scene="${cssValue(scopeId)}"]`;
-  const rules: string[] = [];
-  if (selection.nodeId || filters.rungs.size > 0 || filters.pinnedOnly) {
-    const visibleIds = getVisibleKnowledgeIds(payload, filters, selection.nodeId);
-    const records = payload.records ?? [];
-    const elements = deriveRecordElements(payload.nodes, records);
-    const edges = records.length > 0 ? elements.recordEdges : payload.edges;
-    const visibleEdges = edges
-      .filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target))
-      .map(edge => edge.id);
-    rules.push(`
-      ${scope} .react-flow__node${excludingVisible('data-id', [...visibleIds])},
-      ${scope} .react-flow__edge${excludingVisible('data-id', visibleEdges)},
-      ${scope} [data-knowledge-edge-id]${excludingVisible('data-knowledge-edge-id', visibleEdges)} {
-        opacity: 0;
-        visibility: hidden !important;
-        pointer-events: none !important;
-        transition: opacity var(--duration-slow) var(--ease-out-custom), visibility 0s var(--duration-slow);
-      }
-      @media (prefers-reduced-motion: reduce) {
-        ${scope} .react-flow__node, ${scope} .react-flow__edge, ${scope} [data-knowledge-edge-id] { transition: none !important; }
-      }
-    `);
+) {
+  const changes: { element: Element; hidden: boolean }[] = [];
+  function queueVisibility(element: Element, hidden: boolean) {
+    if (!hidden) element.removeAttribute('data-knowledge-hidden-settled');
+    if (element.hasAttribute('data-knowledge-hidden') !== hidden) changes.push({ element, hidden });
   }
-  if (selection.nodeId) {
-    const node = `${scope} .react-flow__node[data-id="${cssValue(selection.nodeId)}"]`;
-    rules.push(`
-      ${node} .knowledge-circle { border-color: var(--knowledge-color); outline: 2px solid var(--knowledge-color); outline-offset: 5px; }
-      ${node} .knowledge-leaf-label { display: block; }
-    `);
+  // A node click moves the camera through the existing scene. Keep its context
+  // visible; only explicit scope/pin filters change graph visibility.
+  const visibleIds = getVisibleKnowledgeIds(payload, filters);
+  const records = payload.records ?? [];
+  const edges = records.length > 0 ? deriveRecordElements(payload.nodes, records).recordEdges : payload.edges;
+  const visibleEdges = new Set(
+    edges.filter(edge => visibleIds.has(edge.source) && visibleIds.has(edge.target)).map(edge => edge.id),
+  );
+
+  for (const node of canvas.querySelectorAll<HTMLElement>('.react-flow__node')) {
+    const id = node.dataset.id ?? '';
+    queueVisibility(node, !visibleIds.has(id));
+    node.toggleAttribute('data-knowledge-focused', id === selection.nodeId);
   }
-  if (selection.recordId) {
-    const record = `[data-record-id="${cssValue(selection.recordId)}"]`;
-    const edge = `${scope} .react-flow__edge-path[data-knowledge-record-id="${cssValue(selection.recordId)}"]`;
-    rules.push(`
-      ${scope} ${record} { box-shadow: 0 0 0 2px var(--badge-blue-indicator); }
-      ${scope} ${record}[data-pinned="true"] { box-shadow: 0 0 0 2px var(--badge-amber-indicator); }
-      ${edge} { stroke: var(--chart-blue); stroke-width: 2.5; opacity: 1; }
-      ${edge}[data-knowledge-pinned="true"] { stroke: var(--chart-amber); }
-    `);
+  for (const edge of canvas.querySelectorAll<SVGGElement>('.react-flow__edge')) {
+    queueVisibility(edge, !visibleEdges.has(edge.dataset.id ?? ''));
   }
-  return rules.join('\n');
+  for (const badge of canvas.querySelectorAll<HTMLElement>('[data-knowledge-edge-id]')) {
+    queueVisibility(badge, !visibleEdges.has(badge.dataset.knowledgeEdgeId ?? ''));
+  }
+  for (const record of canvas.querySelectorAll<HTMLElement>('[data-record-id]')) {
+    record.toggleAttribute('data-knowledge-record-focus', record.dataset.recordId === selection.recordId);
+  }
+  for (const path of canvas.querySelectorAll<SVGPathElement>('[data-knowledge-record-id]')) {
+    path.toggleAttribute('data-knowledge-record-focus', path.dataset.knowledgeRecordId === selection.recordId);
+  }
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let index = 0;
+  let frame: number | undefined;
+  function applyBatch() {
+    const end = reducedMotion ? changes.length : Math.min(index + 80, changes.length);
+    for (; index < end; index++) {
+      const change = changes[index]!;
+      change.element.toggleAttribute('data-knowledge-hidden', change.hidden);
+      change.element.toggleAttribute('inert', change.hidden);
+      if (change.element instanceof SVGElement) change.element.setAttribute('tabindex', change.hidden ? '-1' : '0');
+      if (reducedMotion) change.element.toggleAttribute('data-knowledge-hidden-settled', change.hidden);
+    }
+    if (index < changes.length) frame = requestAnimationFrame(applyBatch);
+  }
+  // Stagger dense scenes in small batches rather than allocating hundreds of
+  // simultaneous CSS animations in the click frame. No layout/positions change.
+  if (changes.length > 0) frame = requestAnimationFrame(applyBatch);
+  return () => {
+    if (frame !== undefined) cancelAnimationFrame(frame);
+  };
 }

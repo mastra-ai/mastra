@@ -5,7 +5,7 @@ import type { KnowledgeGraphPayload } from '../../services/knowledge';
 import type { Arrivals } from './graphDiff';
 import type { KnowledgeFlowEdge, KnowledgeGraphFilters } from './graphModel';
 import type { KnowledgeFlowNode } from './knowledgeStyles';
-import { getKnowledgeFitOptions } from './knowledgeViewport';
+import { fitKnowledgeViewport } from './knowledgeViewport';
 import { createKnowledgeScene, getVisibleKnowledgeIds, getKnowledgeArrivalScene } from './knowledgeScene';
 
 export function KnowledgeGraphController({
@@ -43,10 +43,7 @@ export function KnowledgeGraphController({
     if (!canvas) return;
     const visibleIds = getVisibleKnowledgeIds(payload, filters, focusedId);
     const cameraIds = focusedId && visibleIds.has(focusedId) ? [focusedId] : [...visibleIds];
-    void flow.fitView({
-      ...getKnowledgeFitOptions(canvas, Boolean(focusedId)),
-      nodes: cameraIds.map(id => ({ id })),
-    });
+    fitKnowledgeViewport(flow, canvas, cameraIds, Boolean(focusedId));
   });
 
   // Focus and filters move the camera; polling, hovering, dragging and record
