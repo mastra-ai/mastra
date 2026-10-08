@@ -26,6 +26,8 @@ export interface CommandExitRecord {
 
 export interface IToolExecutionComponent {
   updateArgs(args: unknown, rebuild?: boolean): void;
+  /** The tool and arguments this row shows (an approval for a different target must name its own). */
+  getToolCall?(): { toolName: string; args: unknown };
   setArgsStreaming?(streaming: boolean): void;
   stopLiveUpdates?(): void;
   refresh?(): void;

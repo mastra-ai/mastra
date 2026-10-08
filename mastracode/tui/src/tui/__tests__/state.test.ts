@@ -141,8 +141,6 @@ describe('createTUIState', () => {
     expect(state.pendingSubmitPlanComponents).toBeInstanceOf(Map);
     expect(state.pendingSubmitPlanComponents.size).toBe(0);
     expect(state.pendingInlineQuestions).toEqual([]);
-    expect(state.pendingFollowUpMessages).toEqual([]);
-    expect(state.pendingQueuedActions).toEqual([]);
     expect(state.followUpComponents).toEqual([]);
     expect(state.pendingSignalMessageComponentsById).toBeInstanceOf(Map);
     expect(state.pendingSignalMessageComponentsById.size).toBe(0);

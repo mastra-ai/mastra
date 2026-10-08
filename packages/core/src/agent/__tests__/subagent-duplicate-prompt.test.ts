@@ -1,10 +1,10 @@
+import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import type { OutputProcessor, ProcessOutputResultArgs } from '../../processors/index';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import type { MastraDBMessage } from '../types';
 
 /**
  * Regression tests for the duplicate delegation prompt bug.
@@ -158,7 +158,7 @@ async function runDelegation({
 }: {
   method: 'generate' | 'stream';
   persistInputDuringRun: boolean;
-  delegationContext?: MastraDBMessage[];
+  delegationContext?: ModelMessage[];
 }) {
   const store = new InMemoryStore();
   const supervisorMemory = new MockMemory({ storage: store });
@@ -248,17 +248,12 @@ describe.each(['generate', 'stream'] as const)('sub-agent delegation prompt pers
 describe('sub-agent delegation prompt ordering', () => {
   it('keeps the delegation prompt after forwarded supervisor context', async () => {
     const supervisorContext = 'Delegate this request to the right agent.';
-    const futureMessage: MastraDBMessage = {
-      id: 'future-supervisor-message',
-      role: 'user',
-      createdAt: new Date(Date.now() + 60_000),
-      content: { format: 2, parts: [{ type: 'text', text: supervisorContext }] },
-    };
+    const forwardedMessage: ModelMessage = { role: 'user', content: supervisorContext };
 
     const { subAgentPrompts } = await runDelegation({
       method: 'stream',
       persistInputDuringRun: false,
-      delegationContext: [futureMessage],
+      delegationContext: [forwardedMessage],
     });
 
     const userMessages = (subAgentPrompts[0] as Array<{ role: string; content: unknown }>).filter(

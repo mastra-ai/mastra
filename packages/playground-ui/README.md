@@ -57,6 +57,47 @@ A decision removes the actions; clearing it restores them for a retry. `disabled
 decisions without implying server confirmation. `autoFocus` focuses Approve on mount. Custom
 `children` replace the default argument preview. Examples live under **AI / Tool Approval** in Storybook.
 
+### Agent questions
+
+Use `AskUser` to render an agent's `ask_user` payload with shared answer handling:
+
+```tsx
+import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
+
+<AskUser
+  payload={{ question: 'Choose a deployment target', options: [{ label: 'Staging' }] }}
+  onSubmit={handleAnswerSubmit}
+/>;
+```
+
+For custom layouts, compose the controls inside `AskUser.Root`. The root owns selection, custom text, validation, and submission. `AskUser.Question` names the group and its inputs for assistive technology.
+
+```tsx
+import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
+
+<AskUser.Root key={prompt.id} selectionMode="single_select" disabled={isSubmitting} onSubmit={handleAnswerSubmit}>
+  <AskUser.Body>
+    <AskUser.Question>Choose a deployment target</AskUser.Question>
+    <AskUser.Options>
+      <AskUser.Option value="Staging" description="Validate the release before production.">
+        Staging
+      </AskUser.Option>
+      <AskUser.Option value="Production">Production</AskUser.Option>
+      <AskUser.CustomAnswer />
+    </AskUser.Options>
+    <AskUser.Submit when="custom-answer" className="mt-2" />
+  </AskUser.Body>
+</AskUser.Root>;
+```
+
+Single-select options submit their `value` immediately. `when="custom-answer"` shows the submit control only while **Other…** is selected. For multi-select prompts, use `selectionMode="multi_select"` and omit `when` to keep the submit control visible. You can position the submit control anywhere inside the root.
+
+Selecting **Other…** focuses an inline text field. Empty or whitespace-only text unselects it on blur. Non-empty drafts stay selected, and unchecking **Other…** excludes its text from submission. Answers remain `string` for single-select and free-text prompts, and `string[]` for multi-select prompts.
+
+For a free-text prompt, replace `AskUser.Options` with `AskUser.TextAnswer` and omit `when` from the submit control. Use `AskUser.Pending` for a submitting message or `AskUser.Output` with a `result` to display an answer. Reset the draft by changing the root's `key` when switching prompts. The payload-based card handles question changes automatically.
+
+Interactive examples live under **AI / Ask User** in Storybook, including composed layouts with the submit control outside the options.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
