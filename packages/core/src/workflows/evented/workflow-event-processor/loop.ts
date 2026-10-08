@@ -165,6 +165,9 @@ export async function processWorkflowForEach(
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
+  // Restart checkpoints may point at an iteration, but the coordinator advances the workflow path.
+  if (restart) executionPath = [executionPath[0]!];
+
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
@@ -444,6 +447,21 @@ export async function processWorkflowForEach(
     stepResults[stepId] = currentResult;
   }
 
+  if (restart && Array.isArray(currentResult?.output) && currentResult.output.some((result: any) => result === null)) {
+    currentResult.output = currentResult.output.map((result: any) =>
+      result === null ? ({ [FOREACH_QUEUED]: true } as { [FOREACH_QUEUED]: true }) : result,
+    );
+
+    await workflowsStore?.updateWorkflowResults({
+      workflowName: workflowId,
+      runId,
+      stepId,
+      result: currentResult,
+      requestContext,
+    });
+    stepResults[stepId] = currentResult;
+  }
+
   const queuedIndices = Array.isArray(currentResult?.output)
     ? currentResult.output.flatMap((result: any, index: number) => (isQueuedForeachIteration(result) ? [index] : []))
     : [];
@@ -453,7 +471,14 @@ export async function processWorkflowForEach(
       getInitData: () => (stepResults as any)?.input,
     });
     const runningCount = currentResult.output.filter((result: any) => result === null).length;
-    const indicesToRun = queuedIndices.slice(0, Math.max(0, concurrency - runningCount));
+    const suspendedIndices = currentResult.output.flatMap((result: any, index: number) =>
+      result?.status === 'suspended' ? [index] : [],
+    );
+    const indicesToRun = queuedIndices.slice(0, Math.max(0, concurrency - runningCount - suspendedIndices.length));
+    if (indicesToRun.length === 0 && runningCount === 0 && suspendedIndices.length > 0) {
+      await publishSuspendedState(suspendedIndices[0]);
+      return;
+    }
 
     if (indicesToRun.length > 0) {
       const updatedOutput = [...currentResult.output];
@@ -485,7 +510,6 @@ export async function processWorkflowForEach(
             executionPath: [executionPath[0]!, index],
             resumeSteps,
             timeTravel,
-            restart,
             stepResults,
             prevResult: iterationPrevResult,
             resumeData,
@@ -625,7 +649,6 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           timeTravel,
-          restart,
           prevResult: iterationPrevResult,
           resumeData,
           activeStepsPath,
@@ -678,7 +701,6 @@ export async function processWorkflowForEach(
       executionPath: [executionPath[0]!, idx],
       resumeSteps,
       timeTravel,
-      restart,
       stepResults,
       prevResult: iterationPrevResult,
       resumeData,
