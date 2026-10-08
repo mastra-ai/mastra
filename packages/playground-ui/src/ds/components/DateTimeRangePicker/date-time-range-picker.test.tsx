@@ -102,3 +102,30 @@ describe('DateTimeRangePicker (presets)', () => {
     expect(checkedPreset()).toBe('Last 3 days');
   });
 });
+
+/** Applies "custom" at once but leaves other presets pending, like a router that commits URL changes later. */
+function SlowPicker({ onPendingPreset }: { onPendingPreset: (preset: DateRangePreset) => void }) {
+  const [preset, setPreset] = useState<DateRangePreset>('last-3d');
+  return (
+    <DateTimeRangePicker
+      preset={preset}
+      onPresetChange={next => (next === 'custom' ? setPreset(next) : onPendingPreset(next))}
+      presets={TRACE_PRESETS}
+    />
+  );
+}
+
+describe('DateTimeRangePicker (presets restored by a slow parent)', () => {
+  it('shows the restored preset right away, before the parent applies it', () => {
+    const onPendingPreset = vi.fn();
+    render(<SlowPicker onPendingPreset={onPendingPreset} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
+    fireEvent.click(screen.getByRole('button', { name: /presets/i }));
+
+    expect(onPendingPreset).toHaveBeenCalledWith('last-3d');
+    expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();
+    expect(checkedPreset()).toBe('Last 3 days');
+  });
+});

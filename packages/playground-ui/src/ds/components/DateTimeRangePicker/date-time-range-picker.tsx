@@ -77,7 +77,23 @@ export function DateTimeRangePicker({
   const [customRangeError, setCustomRangeError] = useState<string | undefined>();
   const customRangeErrorId = useId();
 
-  const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
+  // "← Presets" restores the previous preset through the parent, which may apply it a
+  // render later (e.g. a router URL update). Show it right away instead of "custom".
+  const restoringPreset = presetMenuOpen && preset === 'custom' ? presetBeforeCustom : undefined;
+  const shownPreset = restoringPreset ?? preset;
+  const datePresetLabel = DATE_PRESETS.find(p => p.value === shownPreset)?.label ?? 'All';
+
+  const applyPreset = (value: DateRangePreset) => {
+    onPresetChange?.(value);
+    const entry = DATE_PRESETS.find(p => p.value === value);
+    if (entry?.ms) {
+      onDateChange?.(new Date(Date.now() - entry.ms), 'from');
+      onDateChange?.(undefined, 'to');
+    } else {
+      onDateChange?.(undefined, 'from');
+      onDateChange?.(undefined, 'to');
+    }
+  };
 
   const handlePresetSelect = (value: DateRangePreset) => {
     setPresetMenuOpen(false);
@@ -92,15 +108,7 @@ export function DateTimeRangePicker({
       return;
     }
     setPresetBeforeCustom(undefined);
-    onPresetChange?.(value);
-    const entry = DATE_PRESETS.find(p => p.value === value);
-    if (entry?.ms) {
-      onDateChange?.(new Date(Date.now() - entry.ms), 'from');
-      onDateChange?.(undefined, 'to');
-    } else {
-      onDateChange?.(undefined, 'from');
-      onDateChange?.(undefined, 'to');
-    }
+    applyPreset(value);
   };
 
   const applyCustomRange = () => {
@@ -126,13 +134,13 @@ export function DateTimeRangePicker({
   const showPresets = () => {
     setCustomRangeError(undefined);
     setCustomRangeOpen(false);
-    if (presetBeforeCustom) handlePresetSelect(presetBeforeCustom);
+    if (presetBeforeCustom) applyPreset(presetBeforeCustom);
     setPresetMenuOpen(true);
   };
 
   const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
 
-  if (preset === 'custom' && !presetMenuOpen) {
+  if (shownPreset === 'custom' && !presetMenuOpen) {
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
         {renderTrigger ? (
@@ -213,7 +221,7 @@ export function DateTimeRangePicker({
     );
   }
 
-  const triggerLabel = preset === 'custom' ? customLabel : datePresetLabel;
+  const triggerLabel = shownPreset === 'custom' ? customLabel : datePresetLabel;
 
   return (
     <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
@@ -229,7 +237,7 @@ export function DateTimeRangePicker({
       <DropdownMenu.Content align="start">
         {/* Items select on click (not onValueChange) so re-picking the checked
             "Custom range..." still reopens the range editor. */}
-        <DropdownMenu.RadioGroup value={preset}>
+        <DropdownMenu.RadioGroup value={shownPreset}>
           {visiblePresets.map(p => (
             <DropdownMenu.RadioItem
               key={p.value}
