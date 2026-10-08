@@ -22,6 +22,8 @@ export interface E2BFactorySandboxSettings extends Record<string, unknown> {
   cpuCount?: number;
   /** Memory in MB for the sandbox template. Part of the template identity. */
   memoryMb?: number;
+  /** Minutes a sandbox stays alive before E2B stops it. Not part of the template identity. */
+  idleTimeoutMinutes?: number;
 }
 
 const SETTINGS_SCHEMA = {
@@ -40,6 +42,13 @@ const SETTINGS_SCHEMA = {
       description: 'Memory in MB for the sandbox template (E2B default 1024)',
       minimum: 512,
       maximum: 8192,
+    },
+    idleTimeoutMinutes: {
+      type: 'integer',
+      title: 'Idle timeout (minutes)',
+      description: 'Minutes a sandbox stays alive before E2B stops it (E2B default 5)',
+      minimum: 1,
+      maximum: 1440,
     },
   },
   additionalProperties: false,
@@ -90,12 +99,14 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
   }
 
   create(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): E2BSandbox {
-    const { defaults: _defaults, ...options } = this.#options;
+    const { defaults, ...options } = this.#options;
+    const idleTimeoutMinutes = settings.idleTimeoutMinutes ?? defaults?.idleTimeoutMinutes;
     return new E2BSandbox({
       ...options,
       id: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
+      ...(idleTimeoutMinutes !== undefined ? { timeout: idleTimeoutMinutes * 60_000 } : {}),
     });
   }
 

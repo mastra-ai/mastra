@@ -81,7 +81,11 @@ describe('E2BFactorySandbox', () => {
     expect(isFactorySandbox(sandbox)).toBe(true);
     const description = describeFactorySandbox(sandbox);
     expect(description.provider).toBe('e2b');
-    expect(Object.keys(description.settingsSchema.properties ?? {})).toEqual(['cpuCount', 'memoryMb']);
+    expect(Object.keys(description.settingsSchema.properties ?? {})).toEqual([
+      'cpuCount',
+      'memoryMb',
+      'idleTimeoutMinutes',
+    ]);
     expect(description.templateFields).toEqual(['cpuCount', 'memoryMb']);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: true } });
   });
@@ -112,6 +116,13 @@ describe('E2BFactorySandbox', () => {
     expect((created as any)._preferredSandboxId).toBe('sbx_prev');
     expect((created as any).connectionOpts).toEqual({ apiKey: 'e2b_test' });
     expect(created.timeout).toBe(1234);
+
+    const tuned = new E2BFactorySandbox({ apiKey: 'e2b_test', timeout: 1234 }).create(context(), {
+      idleTimeoutMinutes: 30,
+    });
+    expect(tuned.timeout).toBe(30 * 60_000);
+    const defaulted = new E2BFactorySandbox({ defaults: { idleTimeoutMinutes: 10 } }).create(context(), {});
+    expect(defaulted.timeout).toBe(10 * 60_000);
   });
 
   describe('builds', () => {
