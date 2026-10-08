@@ -88,9 +88,9 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
           },
           {
             name: 'requestConnections',
-            type: '{ allow(ctx): boolean | Promise<boolean> }',
+            type: '{ allow(ctx): boolean | Promise<boolean>; channels?: string[] }',
             description:
-              'Adds a connect_integration tool that asks the user to connect an allowlisted provider from the chat. allow receives requestContext, agentId, threadId, and resourceId, and runs when tools resolve and when the tool runs. Requires a providers allowlist, plus MASTRA_CONNECT_WEBHOOK_URL outside mastra dev. Wire signalProvider() into the agent and webhookRoute() into server.apiRoutes.',
+              'Adds a connect_integration tool that asks the user to connect an allowlisted provider, or install one of channels, from the chat. allow runs when tools resolve, with requestContext, threadId, and resourceId, and again when the tool runs, with agentId too; write it as an allow-list. channels takes slack-channels, telegram, discord, or microsoft-teams. Requires a providers allowlist or channels, plus MASTRA_CONNECT_WEBHOOK_URL outside mastra dev. Wire signalProvider() into the agent and routes() into server.apiRoutes.',
             isOptional: true,
           },
         ],
@@ -191,7 +191,7 @@ The resolver also exposes methods for manual control:
 - `refresh()` fetches from the platform immediately, then updates the cache and returns the tool record. Rejects if the platform fetch fails.
 - `disconnect()` closes MCP transports owned by this resolver and clears its cached snapshot.
 - `with(extra)` returns a new resolver that merges extra tools into every resolution; extras win on key collision. It accepts a static tool record or a function (sync or async) and calls chain. Spreading the resolver's result in a `tools` callback achieves the same merge; see [Tools](/docs/mastra-platform/connect/tools#combine-with-your-own-tools).
-- `signalProvider()` and `webhookRoute()` return the signal provider and the `POST /connect/webhook` route that `requestConnections` needs. Both throw without that option. Create one signal provider per agent.
+- `signalProvider()` and `routes()` return the signal provider and the routes that `requestConnections` needs: `POST /connect/webhook` for connection results and `GET /connect/done`, which closes the window after a channel install. Both throw without that option. Create one signal provider per agent.
 
 Errors fall into four groups:
 

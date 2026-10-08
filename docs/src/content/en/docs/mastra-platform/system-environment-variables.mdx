@@ -29,6 +29,10 @@ Injected on every deploy.
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | Token the deploy uses to call platform APIs, including observability |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket backing the environment's [workspace](/docs/mastra-platform/workspaces). Set when workspaces are enabled |
 | `MASTRA_WORKERS` | Set to `false` on the main service when the project declares workers, so they run only in their own service |
+| `MASTRA_CONNECT_WEBHOOK_URL` | URL Platform sends [connection results](/docs/mastra-platform/connect/tools#ask-users-to-connect-from-the-chat) to, `https://<deploy-origin>/connect/webhook` |
+| `MASTRA_CONNECT_WEBHOOK_SECRET` | Secret Platform signs connection results with. Created on first use and rotated on the next deploy |
+
+A self-hosted server sets `MASTRA_CONNECT_WEBHOOK_URL` and `MASTRA_CONNECT_WEBHOOK_SECRET` itself and adds its origin to the project's **Server webhook origins** setting.
 
 ## Managed database variables
 
