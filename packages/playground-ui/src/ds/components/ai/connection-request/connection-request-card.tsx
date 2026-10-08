@@ -5,6 +5,7 @@ import { Status } from '@/ds/components/StatusIndicators';
 import type { StatusPresentation } from '@/ds/components/StatusIndicators';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 export type ConnectionRequestStatus = 'request' | 'waiting' | 'connected' | 'failed' | 'declined' | 'expired';
@@ -79,7 +80,7 @@ function OutcomeRow({
   onRetry,
 }: { status: OutcomeStatus } & Pick<ConnectionRequestCardProps, 'displayName' | 'accountLabel' | 'onRetry'>) {
   return (
-    <div className="flex flex-wrap items-center gap-3 text-body-sm text-muted-foreground">
+    <div className={cn(textStyle({ variant: 'body-sm', tone: 'muted' }), 'flex flex-wrap items-center gap-3')}>
       <OutcomeStatusLine status={status} displayName={displayName} accountLabel={accountLabel} />
       {status === 'expired' && onRetry && (
         <Button type="button" size="sm" onClick={onRetry}>
