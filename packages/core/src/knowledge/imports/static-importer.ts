@@ -1,5 +1,6 @@
 import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
+import { deepEqual } from '../../utils/deep-equal';
 import type { Knowledge } from '../index';
 import type { KnowledgeCitationHost, KnowledgeCitationTarget } from './citations';
 import {
@@ -149,7 +150,8 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
           existing.nodeId === this.node.id &&
           existing.source === this.#importer.source &&
           existing.text === input.text &&
-          JSON.stringify(existing.metadata) === JSON.stringify(input.metadata) &&
+          // jsonb (pg) does not preserve key order, so compare metadata structurally.
+          deepEqual(existing.metadata, input.metadata) &&
           isExactScope(await storage.getRecordScopeIds(existing.id), this.#importer.scopeId);
         if (reemitted) return existing;
         throw new Error(
