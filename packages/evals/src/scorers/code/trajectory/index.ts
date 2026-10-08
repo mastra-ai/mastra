@@ -68,7 +68,7 @@ function expectationToExpectedSteps(expectation: TrajectoryExpectation): Expecte
  *
  * @example
  * ```ts
- * import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers';
+ * import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
  *
  * const scorer = createTrajectoryAccuracyScorerCode({
  *   expectedTrajectory: {
@@ -405,7 +405,7 @@ export interface TrajectoryScorerCodeOptions {
  *
  * @example
  * ```ts
- * import { createTrajectoryScorerCode } from '@mastra/evals/scorers';
+ * import { createTrajectoryScorerCode } from '@mastra/evals/scorers/prebuilt';
  *
  * const scorer = createTrajectoryScorerCode({
  *   defaults: {

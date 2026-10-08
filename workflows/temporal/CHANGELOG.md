@@ -1,5 +1,31 @@
 # @mastra/temporal
 
+## 0.4.14-alpha.2
+
+### Patch Changes
+
+- Added support for configuring Temporal activity retries with `init({ retry })`, allowing failing activities to stop after a specified number of attempts while preserving Temporal defaults when omitted. ([#26366](https://github.com/mastra-ai/mastra/pull/26366))
+
+  Previously, activity retries couldn't be configured:
+
+  ```ts
+  const { createWorkflow, createStep } = init({ client, taskQueue: 'mastra' });
+  ```
+
+  You can now limit generated activities to five total attempts:
+
+  ```ts
+  const { createWorkflow, createStep } = init({
+    client,
+    taskQueue: 'mastra',
+    retry: { maximumAttempts: 5, initialInterval: '5 seconds' },
+  });
+  ```
+
+- Updated dependencies [[`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`1211fcf`](https://github.com/mastra-ai/mastra/commit/1211fcf499acbda22ca8d399ae820789c69609f2), [`e995603`](https://github.com/mastra-ai/mastra/commit/e995603f64d4f03d234e7f53cc3ab03d9dfea502), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`cfaeff3`](https://github.com/mastra-ai/mastra/commit/cfaeff3e03d6743682a8db0c1c30c2dab11b3171)]:
+  - @mastra/core@1.76.0-alpha.2
+  - @mastra/deployer@1.76.0-alpha.2
+
 ## 0.4.14-alpha.1
 
 ### Patch Changes
