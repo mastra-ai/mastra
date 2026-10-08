@@ -20,6 +20,7 @@ const packageJson = (await readFile(packagePath, 'utf8'))
   .replace('__CORE_PATH__', join(root, 'packages/core'))
   .replace('__NODE_TYPES_PATH__', join(root, 'node_modules/@types/node'))
   .replace('__TYPESCRIPT_PATH__', join(root, 'node_modules/typescript'))
+  .replace('__TSX_PATH__', join(root, 'node_modules/tsx'))
   .replace('__LIBSQL_PATH__', join(root, 'stores/libsql'))
   .replace('__PG_PATH__', join(root, 'stores/pg'));
 await writeFile(packagePath, packageJson, 'utf8');
