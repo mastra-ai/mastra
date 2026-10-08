@@ -1,13 +1,24 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
+  TABLE_NAMES,
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ensureDate,
+  isRunFenceConflictError,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   WorkflowsStorage,
@@ -16,9 +27,24 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { DODB } from '../../db';
 import type { DODomainConfig } from '../../db';
+import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
+import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
 import { isArrayOfRecords } from '../utils';
+
+const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
+
+function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
+  const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
+  return {
+    runId,
+    generation: Number(row.generation),
+    ownerId: String(row.ownerId),
+    leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
+    live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
+  };
+}
 
 export class WorkflowsStorageDO extends WorkflowsStorage {
   #db: DODB;
@@ -35,10 +61,142 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.#db.createTable({
+      tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_WORKFLOW_RUN_OWNERS],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });
+  }
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  get #ownersTable(): string {
+    return this.#db.getTableName(TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES);
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence, runId);
+    return resolved && { claimsTable: this.#ownersTable, fence: resolved, operation };
+  }
+
+  async #readRunOwner(runId: string): Promise<RunOwnershipRecord | null> {
+    const row = (await this.#db.executeQuery({
+      sql: `SELECT ${RUN_OWNER_COLUMNS} FROM ${this.#ownersTable} WHERE runId = ?`,
+      params: [runId],
+      first: true,
+    })) as Record<string, unknown> | null;
+    return row ? toRunOwnershipRecord(runId, row) : null;
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('CLOUDFLARE_DO', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  // A Durable Object serves other requests whenever it awaits I/O, so each
+  // claim, renewal and release is a single statement that judges the current
+  // claim and replaces it at once. A statement that writes no row lost, and the
+  // follow-up read reports the claim that beat it.
+
+  async claimRunOwnership({
+    runId,
+    ownerId,
+    leaseMs,
+    force,
+    expectedGeneration,
+  }: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    const notLive = `(leaseExpiresAt IS NULL OR leaseExpiresAt <= ${DB_NOW_MS})`;
+    let statement: { sql: string; params: SqlParam[] };
+    if (expectedGeneration === undefined) {
+      statement = {
+        sql: `INSERT INTO ${this.#ownersTable} (runId, generation, ownerId, leaseExpiresAt)
+          VALUES (?, 1, ?, ${DB_NOW_MS} + ?)
+          ON CONFLICT(runId) DO UPDATE SET
+            generation = generation + 1,
+            ownerId = excluded.ownerId,
+            leaseExpiresAt = excluded.leaseExpiresAt
+          ${force ? '' : `WHERE ${notLive}`}`,
+        params: [runId, ownerId, leaseMs],
+      };
+    } else if (expectedGeneration === 0) {
+      // Generation 0 means the run was never claimed: only a first claim matches.
+      statement = {
+        sql: `INSERT INTO ${this.#ownersTable} (runId, generation, ownerId, leaseExpiresAt)
+          VALUES (?, 1, ?, ${DB_NOW_MS} + ?)
+          ON CONFLICT(runId) DO NOTHING`,
+        params: [runId, ownerId, leaseMs],
+      };
+    } else {
+      statement = {
+        sql: `UPDATE ${this.#ownersTable}
+          SET generation = generation + 1, ownerId = ?, leaseExpiresAt = ${DB_NOW_MS} + ?
+          WHERE runId = ? AND generation = ?${force ? '' : ` AND ${notLive}`}`,
+        params: [ownerId, leaseMs, runId, expectedGeneration],
+      };
+    }
+
+    try {
+      const rows = (await this.#db.executeQuery({
+        sql: `${statement.sql} RETURNING ${RUN_OWNER_COLUMNS}`,
+        params: statement.params,
+      })) as Record<string, unknown>[];
+      const claimed = rows[0];
+      if (claimed) return { acquired: true, record: toRunOwnershipRecord(runId, claimed) };
+      return { acquired: false, record: await this.#readRunOwner(runId) };
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      const rows = (await this.#db.executeQuery({
+        sql: `UPDATE ${this.#ownersTable} SET leaseExpiresAt = ${DB_NOW_MS} + ?
+          WHERE runId = ? AND generation = ? AND ownerId = ? AND leaseExpiresAt IS NOT NULL
+          RETURNING ${RUN_OWNER_COLUMNS}`,
+        params: [leaseMs, fence.runId, fence.generation, fence.ownerId],
+      })) as Record<string, unknown>[];
+      const renewed = rows[0];
+      if (renewed) return { renewed: true, record: toRunOwnershipRecord(fence.runId, renewed) };
+      return { renewed: false, record: await this.#readRunOwner(fence.runId) };
+    } catch (error) {
+      throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      const rows = (await this.#db.executeQuery({
+        sql: `UPDATE ${this.#ownersTable} SET leaseExpiresAt = NULL
+          WHERE runId = ? AND generation = ? AND ownerId = ?
+          RETURNING runId`,
+        params: [fence.runId, fence.generation, fence.ownerId],
+      })) as Record<string, unknown>[];
+      return rows.length > 0;
+    } catch (error) {
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await this.#readRunOwner(runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
   }
 
   updateWorkflowResults({
@@ -75,6 +233,7 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -82,9 +241,11 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
     const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     const now = new Date().toISOString();
+    const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
 
     const currentSnapshot = await this.#db.load({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -130,13 +291,13 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
       values as SqlParam[],
       ['workflow_name', 'run_id'],
       updateMap,
+      runFenceGuard(check),
     );
 
-    const { sql, params } = query.build();
-
     try {
-      await this.#db.executeQuery({ sql, params });
+      await executeFenced(this.#db, check, query.build());
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -321,13 +482,27 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     }
   }
 
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
     const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
-      const sql = `DELETE FROM ${fullTableName} WHERE workflow_name = ? AND run_id = ?`;
-      const params: SqlParam[] = [workflowName, runId];
-      await this.#db.executeQuery({ sql, params });
+      const query = createSqlBuilder()
+        .delete(fullTableName)
+        .where('workflow_name = ?', workflowName)
+        .andWhere('run_id = ?', runId);
+      const guard = runFenceGuard(check);
+      if (guard) query.andWhere(guard.sql, ...guard.params);
+      await executeFenced(this.#db, check, query.build());
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

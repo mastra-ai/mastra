@@ -4,16 +4,21 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
+  matchesRunFence,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  resolveRunFence,
   TABLE_THREADS,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
+  RunFence,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -26,6 +31,8 @@ import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
+import { assertRunFence, goWithRunFence, isConditionalCheckFailed, retryOnTransactionConflict } from '../run-fencing';
+import type { RunFenceCheck } from '../run-fencing';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
@@ -40,20 +47,78 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     this.ttlConfig = resolved.ttl;
   }
 
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await deleteTableData(this.service, TABLE_THREADS);
     await deleteTableData(this.service, TABLE_MESSAGES);
     await deleteTableData(this.service, TABLE_RESOURCES);
+    await deleteTableData(this.service, TABLE_MEMORY_RUN_FENCES);
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const fences = this.service.entities.memory_run_fence!;
+    const key = { entity: 'memory_run_fence', run_id: fence.runId };
+    try {
+      // Raises an older fence or creates a missing one. Generations only grow,
+      // so a failed condition means the run already holds this generation or a newer one.
+      await retryOnTransactionConflict(() =>
+        fences
+          .upsert({ ...key, generation: fence.generation, ownerId: fence.ownerId })
+          .where(
+            (attr: any, op: any) => `${op.notExists(attr.generation)} OR ${op.lt(attr.generation, fence.generation)}`,
+          )
+          .go(),
+      );
+      return true;
+    } catch (error) {
+      try {
+        if (!isConditionalCheckFailed(error)) throw error;
+        const { data } = await fences.get(key).go({ consistent: true });
+        return matchesRunFence(data, fence);
+      } catch (cause) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('DYNAMODB', 'RAISE_RUN_FENCE', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { runId: fence.runId },
+          },
+          cause,
+        );
+      }
+    }
+  }
+
+  /** The check a write must pass: its own fence, otherwise the one in scope. */
+  #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence);
+    return resolved && { claims: 'memory_run_fence', fence: resolved, operation };
+  }
+
+  /** Bumps a thread's updatedAt after a write to its messages. */
+  #touchThread(threadId: string, check: RunFenceCheck | undefined): Promise<void> {
+    return goWithRunFence(
+      this.service,
+      check,
+      this.service.entities.thread
+        .update({ entity: 'thread', id: threadId })
+        .set({ updatedAt: new Date().toISOString() }),
+    );
+  }
+
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) {
       return;
     }
 
     this.logger.debug('Deleting messages', { count: messageIds.length });
+    const check = this.#runFenceCheck(options?.fence, 'deleteMessages');
 
     try {
+      let deleted = 0;
       // Collect thread IDs to update timestamps
       const threadIds = new Set<string>();
 
@@ -76,17 +141,23 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
             if (message.threadId) {
               threadIds.add(message.threadId);
             }
-            await this.service.entities.message.delete({ entity: 'message', id: message.id }).go();
+            await goWithRunFence(
+              this.service,
+              check,
+              this.service.entities.message.delete({ entity: 'message', id: message.id }),
+            );
+            deleted++;
           }
         }
       }
 
-      // Update thread timestamps
-      const now = new Date().toISOString();
+      if (deleted === 0) await assertRunFence(this.service, check);
+
       for (const threadId of threadIds) {
-        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
+        await this.#touchThread(threadId, check);
       }
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'DELETE_MESSAGES', 'FAILED'),
@@ -169,7 +240,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     this.logger.debug('Saving thread', { threadId: thread.id });
 
     const now = new Date();
@@ -186,7 +257,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     };
 
     try {
-      await this.service.entities.thread.upsert(threadData).go();
+      await goWithRunFence(
+        this.service,
+        this.#runFenceCheck(fence, 'saveThread'),
+        this.service.entities.thread.upsert(threadData),
+      );
 
       return {
         id: thread.id,
@@ -197,6 +272,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         metadata: thread.metadata,
       };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'SAVE_THREAD', 'FAILED'),
@@ -213,12 +289,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     this.logger.debug('Updating thread', { threadId: id });
+    const check = this.#runFenceCheck(fence, 'updateThread');
 
     try {
       // First, get the existing thread to merge with updates
@@ -257,7 +336,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Update the thread using the primary key
-      await this.service.entities.thread.update({ entity: 'thread', id }).set(updateData).go();
+      await goWithRunFence(
+        this.service,
+        check,
+        this.service.entities.thread.update({ entity: 'thread', id }).set(updateData),
+      );
 
       // Return the potentially updated thread object
       return {
@@ -267,6 +350,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'UPDATE_THREAD', 'FAILED'),
@@ -595,7 +679,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
@@ -628,8 +715,12 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       };
     });
 
+    const check = this.#runFenceCheck(args.fence, 'saveMessages');
+
     try {
-      // Process messages sequentially to enable rollback on error
+      // Process messages sequentially to enable rollback on error. Fenced, each
+      // message is its own fenced write: a single transaction could exceed
+      // DynamoDB's transaction size limits.
       const savedMessageIds: string[] = [];
 
       for (const messageData of messagesToSave) {
@@ -640,13 +731,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
 
         try {
-          await this.service.entities.message.put(messageData).go();
+          await goWithRunFence(this.service, check, this.service.entities.message.put(messageData));
           savedMessageIds.push(messageData.id);
         } catch (error) {
-          // Rollback: delete all previously saved messages
-          for (const savedId of savedMessageIds) {
+          // Rollback: delete all previously saved messages. Once the fence is
+          // superseded the rollback is rejected too, so it is not attempted.
+          for (const savedId of isRunFenceConflictError(error) ? [] : savedMessageIds) {
             try {
-              await this.service.entities.message.delete({ entity: 'message', id: savedId }).go();
+              await goWithRunFence(
+                this.service,
+                check,
+                this.service.entities.message.delete({ entity: 'message', id: savedId }),
+              );
             } catch (rollbackError) {
               this.logger.error('Failed to rollback message during save error', {
                 messageId: savedId,
@@ -658,17 +754,12 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
       }
 
-      // Update thread's updatedAt timestamp
-      await this.service.entities.thread
-        .update({ entity: 'thread', id: threadId })
-        .set({
-          updatedAt: new Date().toISOString(),
-        })
-        .go();
+      await this.#touchThread(threadId, check);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'SAVE_MESSAGES', 'FAILED'),
@@ -908,6 +999,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         id: string;
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
@@ -915,6 +1007,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     if (!messages.length) {
       return [];
     }
+
+    const check = this.#runFenceCheck(args.fence, 'updateMessages');
 
     const updatedMessages: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
@@ -975,7 +1069,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
 
         // Update the message
-        await this.service.entities.message.update({ entity: 'message', id }).set(updatePayload).go();
+        await goWithRunFence(
+          this.service,
+          check,
+          this.service.entities.message.update({ entity: 'message', id }).set(updatePayload),
+        );
 
         // Get the updated message
         const updatedMessage = await this.service.entities.message.get({ entity: 'message', id }).go();
@@ -984,18 +1082,16 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
       }
 
+      if (affectedThreadIds.size === 0) await assertRunFence(this.service, check);
+
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.service.entities.thread
-          .update({ entity: 'thread', id: threadId })
-          .set({
-            updatedAt: new Date().toISOString(),
-          })
-          .go();
+        await this.#touchThread(threadId, check);
       }
 
       return updatedMessages;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'UPDATE_MESSAGES', 'FAILED'),
@@ -1042,6 +1138,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    return this.#saveResource(resource, undefined);
+  }
+
+  async #saveResource(resource: StorageResourceType, check: RunFenceCheck | undefined): Promise<StorageResourceType> {
     this.logger.debug('Saving resource', { resourceId: resource.id });
 
     const now = new Date();
@@ -1057,7 +1157,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     };
 
     try {
-      await this.service.entities.resource.upsert(resourceData).go();
+      await goWithRunFence(this.service, check, this.service.entities.resource.upsert(resourceData));
 
       return {
         id: resource.id,
@@ -1067,6 +1167,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'SAVE_RESOURCE', 'FAILED'),
@@ -1083,12 +1184,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     this.logger.debug('Updating resource', { resourceId });
+    const check = this.#runFenceCheck(fence, 'updateResource');
 
     try {
       // First, get the existing resource to merge with updates
@@ -1103,7 +1207,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        return this.saveResource({ resource: newResource });
+        return this.#saveResource(newResource, check);
       }
 
       const now = new Date();
@@ -1125,7 +1229,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Update the resource using the primary key
-      await this.service.entities.resource.update({ entity: 'resource', id: resourceId }).set(updateData).go();
+      await goWithRunFence(
+        this.service,
+        check,
+        this.service.entities.resource.update({ entity: 'resource', id: resourceId }).set(updateData),
+      );
 
       // Return the updated resource object
       return {
@@ -1135,6 +1243,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'UPDATE_RESOURCE', 'FAILED'),

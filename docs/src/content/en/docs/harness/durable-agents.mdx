@@ -381,6 +381,11 @@ Enforcement of the claim depends on the workflows store. When the store supports
 - `@mastra/oracledb`
 - `@mastra/spanner`
 - `@mastra/dsql`
+- `@mastra/cloudflare-d1`
+- `@mastra/cloudflare`, with `CloudflareDOStorage`
+- `@mastra/convex`
+- `@mastra/mongodb`, on a replica set or sharded cluster
+- `@mastra/dynamodb`
 
 Stores that support run fencing keep one claim record per run, plus one memory fence record per run with memory. Stores with retention support prune them with the `workflows.runOwnership` and `memory.runFences` [retention keys](/reference/storage/retention#retention-eligible-tables). A run's first generation comes from the store's clock, so a run that reuses a `runId` after its records were pruned still outranks the fences and stream events of its earlier executions.
 
