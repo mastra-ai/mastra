@@ -124,7 +124,10 @@ export class KnowledgeSemanticIndexCoordinator {
         const entry = entries[index]!;
         try {
           await this.#apply(entry);
-          await this.#knowledge.completeSemanticOutbox({ ids: [entry.id], workerId: this.#workerId });
+          const completed = await this.#knowledge.completeSemanticOutbox({ ids: [entry.id], workerId: this.#workerId });
+          // Our claim expired and another worker finished this entry; the write above may have
+          // overwritten its newer vector, so re-apply from current storage state to converge.
+          if (!completed.includes(entry.id)) await this.#apply({ ...entry, operation: 'upsert' });
           processed++;
         } catch (error) {
           await this.#knowledge.releaseSemanticOutbox({

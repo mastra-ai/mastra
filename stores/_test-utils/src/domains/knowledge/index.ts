@@ -1195,5 +1195,24 @@ export function createKnowledgeStorageTests(
         accessEpoch: 1,
       });
     });
+    it('reports only the outbox completions whose claim the worker still holds', async () => {
+      const node = await store.createNode({ name: 'Lease subject', scopeIds: [ORG_SCOPE_ID] });
+      const documentId = knowledgeSemanticDocumentId('node', node.id);
+      const [first] = await store
+        .claimSemanticOutbox({ workerId: 'slow', limit: 100, scopeIds: [ORG_SCOPE_ID] })
+        .then(entries => entries.filter(entry => entry.documentId === documentId));
+      expect(first).toBeDefined();
+      const reclaimed = await store.claimSemanticOutbox({
+        workerId: 'fast',
+        limit: 100,
+        scopeIds: [ORG_SCOPE_ID],
+        now: new Date(Date.now() + 61_000),
+      });
+      expect(reclaimed.map(entry => entry.id)).toContain(first!.id);
+
+      expect(await store.completeSemanticOutbox({ ids: [first!.id], workerId: 'fast' })).toEqual([first!.id]);
+      expect(await store.completeSemanticOutbox({ ids: [first!.id], workerId: 'slow' })).toEqual([]);
+      expect(await store.completeSemanticOutbox({ ids: [], workerId: 'slow' })).toEqual([]);
+    });
   });
 }

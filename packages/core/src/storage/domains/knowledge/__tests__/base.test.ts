@@ -325,4 +325,20 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
       accessEpoch: 1,
     });
   });
+  it('reports only the outbox completions whose claim the worker still holds', async () => {
+    const node = await store.createNode({ name: 'Lease subject', scopeIds: [ORG_SCOPE_ID] });
+    const [first] = (await store.claimSemanticOutbox({ workerId: 'slow', limit: 100 })).filter(entry =>
+      entry.documentId.endsWith(node.id),
+    );
+    expect(first).toBeDefined();
+    const reclaimed = await store.claimSemanticOutbox({
+      workerId: 'fast',
+      limit: 100,
+      now: new Date(Date.now() + 61_000),
+    });
+    expect(reclaimed.map(entry => entry.id)).toContain(first!.id);
+
+    expect(await store.completeSemanticOutbox({ ids: [first!.id], workerId: 'fast' })).toEqual([first!.id]);
+    expect(await store.completeSemanticOutbox({ ids: [first!.id], workerId: 'slow' })).toEqual([]);
+  });
 });

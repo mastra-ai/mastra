@@ -820,7 +820,8 @@ export abstract class KnowledgeStorage extends StorageDomain {
   async claimSemanticOutbox(_input: ClaimKnowledgeSemanticOutboxInput): Promise<KnowledgeSemanticOutboxEntry[]> {
     throw new KnowledgeUnsupportedError();
   }
-  async completeSemanticOutbox(_input: { ids: string[]; workerId: string }): Promise<void> {
+  /** Returns the ids this worker actually completed; ids whose claim expired and moved to another worker are omitted. */
+  async completeSemanticOutbox(_input: { ids: string[]; workerId: string }): Promise<string[]> {
     throw new KnowledgeUnsupportedError();
   }
   async releaseSemanticOutbox(_input: { ids: string[]; workerId: string; retryAt?: Date }): Promise<void> {
