@@ -25,6 +25,7 @@ import type {
   KnowledgeScope,
   KnowledgeScopeNodeSummary,
   KnowledgeStorage,
+  ListKnowledgeScopeMembersOutput,
 } from '@mastra/core/storage';
 import {
   canonicalizeKnowledgeScope,
@@ -326,7 +327,7 @@ function withinViewBoundary(scope: KnowledgeScope, viewScope: KnowledgeScope): b
 }
 
 function directScopeMemberCounts(
-  members: KnowledgeNode[],
+  { members, hasMore }: ListKnowledgeScopeMembersOutput,
   childScopeCount: number,
   viewScope: KnowledgeScope,
   maxNodes: number,
@@ -337,7 +338,7 @@ function directScopeMemberCounts(
   const directMemberCount = childScopeCount + contentNodeCount;
   return {
     memberCount: Math.min(directMemberCount, maxNodes),
-    memberCountTruncated: directMemberCount > maxNodes || members.length >= maxNodes,
+    memberCountTruncated: directMemberCount > maxNodes || hasMore,
     contentNodeCount,
     childScopeCount,
   };
@@ -800,7 +801,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   batch.map(async node => {
                     const members = await view.store.listScopeMembers({
                       scopeNodeId: node.id,
-                      limit: this.#limits.maxNodes + 1,
+                      limit: this.#limits.maxNodes,
                     });
                     return {
                       ...node,
@@ -981,13 +982,15 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ? { ...storedRoot, name: resolved.factoryProjectName }
                 : storedRoot;
 
-            const fetched = await store.listScopeMembers({ scopeNodeId, limit: limits.maxNodes + 1 });
-            const bounded = fetched.filter(
+            const fetched = await store.listScopeMembers({ scopeNodeId, limit: limits.maxNodes });
+            const bounded = fetched.members.filter(
               node => node.isScope || (Array.isArray(node.scope) && withinViewBoundary(node.scope, resolved.scope)),
             );
-            let truncated = scopesTruncated || bounded.length > limits.maxNodes;
+            let truncated = scopesTruncated || fetched.hasMore || bounded.length > limits.maxNodes;
             const members = bounded.slice(0, limits.maxNodes);
-            const contentMembers = members.filter(node => !node.isScope);
+            const contentMembers = members.filter(
+              (node): node is KnowledgeNode => !node.isScope && Array.isArray(node.scope),
+            );
             const childScopeCountByParent = new Map<string, number>();
             for (const node of scopeNodes) {
               for (const parentId of node.parentIds) {
@@ -1018,7 +1021,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 batch.map(async node => {
                   const directMembers = await store.listScopeMembers({
                     scopeNodeId: node.id,
-                    limit: limits.maxNodes + 1,
+                    limit: limits.maxNodes,
                   });
                   scopeCountsById.set(
                     node.id,
@@ -1369,11 +1372,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               throw error;
             }
             if (!scopeNode) return c.json({ error: 'scope_not_found' }, 404);
-            const members = await resolved.store.listScopeMembers({
+            const { members, hasMore } = await resolved.store.listScopeMembers({
               scopeNodeId,
-              limit: this.#limits.maxNodes + 1,
+              limit: this.#limits.maxNodes,
             });
-            membersTruncated = members.length > this.#limits.maxNodes;
+            membersTruncated = hasMore || members.length > this.#limits.maxNodes;
             memberIds = new Set(
               members
                 .slice(0, this.#limits.maxNodes)

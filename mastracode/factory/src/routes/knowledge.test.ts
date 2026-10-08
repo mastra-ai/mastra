@@ -554,23 +554,29 @@ describe('KnowledgeRoutes', () => {
     // adapters. Surface the real child membership shape so this regression
     // covers a structural lens containing both a child scope and content.
     const listScopeMembers = h.knowledge.listScopeMembers.bind(h.knowledge);
-    h.knowledge.listScopeMembers = async query => [
-      ...(await listScopeMembers(query)),
-      ...(query.scopeNodeId === ids['features']
-        ? [
-            {
-              id: ids['features:child'],
-              name: 'child',
-              kind: 'domain',
-              scope: null,
-              isScope: true,
-              version: 1,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            } as unknown as KnowledgeNode,
-          ]
-        : []),
-    ];
+    h.knowledge.listScopeMembers = async query => {
+      const page = await listScopeMembers(query);
+      return {
+        hasMore: page.hasMore,
+        members: [
+          ...page.members,
+          ...(query.scopeNodeId === ids['features']
+            ? [
+                {
+                  id: ids['features:child'],
+                  name: 'child',
+                  kind: 'domain',
+                  scope: null,
+                  isScope: true,
+                  version: 1,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                } as unknown as KnowledgeNode,
+              ]
+            : []),
+        ],
+      };
+    };
 
     // Same structural scope, but stamped at a sibling resource of the same
     // org — an org-wide roll-up would include it, a project view must not.
@@ -1250,6 +1256,43 @@ describe('KnowledgeRoutes', () => {
     expect(full.status).toBe(200);
     expect(full.body.truncated).toBeUndefined();
     expect(new Set(full.body.events.map(event => event.node.name))).toEqual(new Set(['Alpha', 'Beta']));
+  });
+
+  it('reports member overflow at the default node limit in the tree, lens, and activity', async () => {
+    const h = await createHarness();
+    const { scopes: ids } = await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
+      ],
+    });
+    // One more member than the default maxNodes of 500.
+    for (let index = 0; index < 501; index += 1) {
+      await h.knowledge.createNode({
+        name: `Member ${index}`,
+        kind: 'concept',
+        scope: h.projectScope,
+        scopeAddresses: ['features'],
+      });
+    }
+
+    const tree = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`)
+    ).json()) as KnowledgeScopeTreePayload;
+    expect(tree.scopeNodes?.find(scope => scope.id === ids['features'])).toMatchObject({
+      memberCount: 500,
+      memberCountTruncated: true,
+    });
+
+    const lens = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/subgraph?scopeNodeId=${ids['features']}`,
+    );
+    expect(lens.status).toBe(200);
+    expect(((await lens.json()) as KnowledgeGraphPayload).truncated).toBe(true);
+
+    const { status, body } = await activity(h, `?scopeNodeId=${ids['features']}`);
+    expect(status).toBe(200);
+    expect(body.truncated).toBe(true);
   });
 
   it('reads each activity target node once per request', async () => {
