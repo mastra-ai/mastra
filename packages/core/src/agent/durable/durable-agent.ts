@@ -1983,7 +1983,7 @@ export class DurableAgent<
    *
    * Subclasses override this method to customize how the workflow is executed:
    * - DurableAgent (this): Runs the workflow directly via createRun + start
-   * - EventedAgent: Uses run.startAsync() for fire-and-forget execution
+   * - EventedAgent: Runs steps through event workers and tracks completion
    * - InngestAgent: Uses inngest.send() to trigger Inngest function
    *
    * @param runId - The unique run ID
@@ -3422,13 +3422,10 @@ export class DurableAgent<
    * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
    * to continue.
    *
-   * Note on suspend persistence: for the base `DurableAgent`, the workflow
-   * engine's `run.start()` only resolves after the suspend snapshot is
-   * persisted, so awaiting `workflowExecution` on suspend is sufficient for
-   * a subsequent `resumeGenerate()` to find the snapshot. Subclasses like
-   * `EventedAgent` use a fire-and-forget `run.startAsync()` and therefore
-   * cannot rely on this await for snapshot durability — see the
-   * `EventedAgent` docs for the recommended pattern.
+   * Note on suspend persistence: both `DurableAgent` and `EventedAgent` track
+   * the workflow engine's `run.start()` through snapshot persistence, so
+   * awaiting `workflowExecution` on suspend is sufficient for a subsequent
+   * `resumeGenerate()` to find the snapshot.
    */
   // @ts-expect-error - Intentionally different signature for durable execution
   async generate(

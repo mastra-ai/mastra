@@ -73,6 +73,68 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     return chunks;
   }
 
+  it('waits for evented suspension persistence before restoring tool calls', async () => {
+    const storage = new InMemoryStore();
+    const workflows = (await storage.getStore('workflows'))!;
+    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
+    let releasePersistence!: () => void;
+    const persistenceGate = new Promise<void>(resolve => {
+      releasePersistence = resolve;
+    });
+    let persistenceStarted!: () => void;
+    const persistenceBlocked = new Promise<void>(resolve => {
+      persistenceStarted = resolve;
+    });
+    const stateSpy = vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(async args => {
+      if (args.workflowName === DurableStepIds.AGENTIC_LOOP && args.opts.status === 'suspended') {
+        persistenceStarted();
+        await persistenceGate;
+      }
+      return updateWorkflowState(args);
+    });
+    const agent = new Agent({
+      id: 'delayed-approver',
+      name: 'delayed-approver',
+      instructions: 'do',
+      model: makeModel('gate', {}),
+      tools: {
+        gate: createTool({
+          id: 'gate',
+          description: 'Gate',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => 'done',
+        }),
+      },
+    });
+    const wrapped = createEventedAgent({ agent, pubsub });
+    new Mastra({ agents: { wrapped }, storage, logger: false });
+    const first = await wrapped.stream('go', { maxSteps: 3, closeOnSuspend: true });
+    await drain(first);
+    await persistenceBlocked;
+    const reads = vi.spyOn(workflows, 'getWorkflowRunById');
+    let resumeSettled = false;
+    const resuming = wrapped.resume(first.runId, { approved: true }, { toolCallId: 'tc-1' }).then(result => {
+      resumeSettled = true;
+      return result;
+    });
+    try {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(resumeSettled).toBe(false);
+      expect(reads).not.toHaveBeenCalled();
+    } finally {
+      releasePersistence();
+      reads.mockRestore();
+      stateSpy.mockRestore();
+    }
+    const resumed = await resuming;
+    await drain(resumed);
+    expect((await resumed.output.toolCalls).map(call => call.payload.toolCallId)).toEqual(['tc-1']);
+    expect((await resumed.output.toolResults).map(result => result.payload.toolCallId)).toEqual(['tc-1']);
+    await resumed.cleanup();
+    await first.cleanup();
+  }, 30000);
+
   describe.each([
     ['durable', createDurableAgent],
     ['evented', createEventedAgent],
