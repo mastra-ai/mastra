@@ -35,4 +35,4 @@ function getTestFileDependencies(changedFiles, testFiles) {
   );
 }
 
-module.exports = { getTestFileDependencies };
+module.exports = { getTestFileDependencies, testFileDependencies };

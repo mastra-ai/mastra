@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { testFileDependencies } from '../../scripts/test-file-dependencies.cjs';
 
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 const ui = 'packages/playground-ui';
@@ -236,4 +246,10 @@ test('CI still falls back to the full suite when more than half the tests are af
   }
   const result = project.workflow([source]);
   assert.match(result.outputs, /run_full=true/);
+});
+
+test('every registered test exists, so a renamed test cannot silently leave the registry', () => {
+  for (const testFile of Object.keys(testFileDependencies)) {
+    assert.ok(existsSync(join(repositoryRoot, testFile)), `${testFile} is registered but missing`);
+  }
 });
