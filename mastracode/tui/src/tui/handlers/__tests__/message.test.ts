@@ -249,7 +249,7 @@ describe('handleMessageStart signals', () => {
             updates: [
               {
                 id: 'activity-1',
-                action: 'knowledge-appended',
+                action: 'record-created',
                 type: 'record',
                 recordId: 'record-1',
                 name: 'Atlas launch',
