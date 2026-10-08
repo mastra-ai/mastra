@@ -185,4 +185,79 @@ describe('runDurableFinishSideEffects', () => {
     expect(globalRunRegistry.get('run-1')?.messageList).toBe(existing);
     expect(existing.get.all.db().length).toBeGreaterThan(0);
   });
+
+  // A recovered run or remote worker has no live registry config, only the JSON Schema
+  // and options persisted in the workflow input.
+  describe('structured output on a recovered run (persisted config only)', () => {
+    const jsonSchema = {
+      type: 'object',
+      properties: { name: { type: 'string' }, age: { type: 'number' } },
+      required: ['name', 'age'],
+      additionalProperties: false,
+    };
+
+    async function finishRecovered({
+      text,
+      finishReason = 'stop',
+      structuredOutput = {},
+    }: {
+      text: string;
+      finishReason?: string;
+      structuredOutput?: Record<string, unknown>;
+    }) {
+      let flushed: MessageList | undefined;
+      const flushMessages = vi.fn(async (list: MessageList) => {
+        flushed = list;
+      });
+      resolveRuntimeDependencies.mockResolvedValue({
+        saveQueueManager: { flushMessages },
+        memory: { createThread: vi.fn() },
+      });
+
+      const list = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      list.add({ role: 'user', content: 'who is it?' }, 'user');
+      list.add({ role: 'assistant', content: text }, 'response');
+
+      await runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: {
+          ...makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+          options: { structuredOutput: { schema: jsonSchema, ...structuredOutput } },
+        } as unknown as DurableAgenticWorkflowInput,
+        messageListState: list.serialize(),
+        mastra: { getLogger: () => undefined } as any,
+        outputResult: { text, finishReason } as any,
+      });
+
+      expect(globalRunRegistry.get('run-1')?.structuredOutput).toBeUndefined();
+      expect(flushMessages).toHaveBeenCalledTimes(1);
+      return flushed!.get.response.db().findLast(m => m.role === 'assistant')?.content.metadata?.structuredOutput;
+    }
+
+    it('validates with the persisted JSON Schema', async () => {
+      await expect(finishRecovered({ text: JSON.stringify({ name: 'Alice', age: 30 }) })).resolves.toEqual({
+        name: 'Alice',
+        age: 30,
+      });
+    });
+
+    it('saves nothing when validation fails without a fallback', async () => {
+      await expect(finishRecovered({ text: JSON.stringify({ name: 'Alice' }) })).resolves.toBeUndefined();
+    });
+
+    it('saves the persisted fallbackValue when errorStrategy is fallback', async () => {
+      await expect(
+        finishRecovered({
+          text: JSON.stringify({ name: 'Alice' }),
+          structuredOutput: { errorStrategy: 'fallback', fallbackValue: { name: 'Fallback', age: 1 } },
+        }),
+      ).resolves.toEqual({ name: 'Fallback', age: 1 });
+    });
+
+    it.each(['length', 'content-filter'])('does not validate truncated output (%s)', async finishReason => {
+      await expect(
+        finishRecovered({ text: JSON.stringify({ name: 'Alice', age: 30 }), finishReason }),
+      ).resolves.toBeUndefined();
+    });
+  });
 });

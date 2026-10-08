@@ -194,19 +194,29 @@ export async function runDurableFinishSideEffects({
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
   // validated object here so the saved assistant message matches plain Agent output.
-  // Prefer the live schema (keeps Zod refinements/transforms). Remote and recovered runs
-  // only have the persisted JSON Schema, which is what cross-process observers validate with too.
+  // This mirrors createObjectStreamTransformer's finalize: truncated finishes never validate,
+  // and failures follow errorStrategy. Prefer the live config (keeps Zod refinements/transforms
+  // and non-JSON fallback values). Remote and recovered runs only have the persisted config,
+  // which is what cross-process observers use too.
   const structuredOutput = initData.options?.structuredOutput;
-  const structuredOutputSchema = registryEntry?.structuredOutput?.schema ?? structuredOutput?.schema;
-  if (structuredOutputSchema && !structuredOutput?.hasStructuringModel && outputText) {
-    const result = await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(outputText);
+  const liveStructuredOutput = registryEntry?.structuredOutput;
+  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  if (structuredOutputSchema && !structuredOutput?.hasStructuringModel && outputText.trim()) {
+    const finishReason = outputResult?.finishReason;
+    const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const result = truncated
+      ? undefined
+      : await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(outputText);
+    const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
+    const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
+    const value = result?.success ? result.value : errorStrategy === 'fallback' ? fallbackValue : undefined;
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
-    if (result.success && lastAssistantMessage) {
+    if (value !== undefined && lastAssistantMessage) {
       lastAssistantMessage.content.metadata = {
         ...lastAssistantMessage.content.metadata,
-        structuredOutput: result.value,
+        structuredOutput: value,
       };
     }
   }

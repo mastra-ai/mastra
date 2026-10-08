@@ -20,7 +20,7 @@ const RESOURCE = 'structured-output-resource';
 const schema = z.object({ name: z.string(), age: z.number() });
 const expected = { name: 'Alice', age: 30 };
 
-function createJsonModel(text: string) {
+function createJsonModel(text: string, finishReason: 'stop' | 'length' | 'content-filter' = 'stop') {
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -29,7 +29,7 @@ function createJsonModel(text: string) {
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: text },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        { type: 'finish', finishReason, usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -39,13 +39,18 @@ function createJsonModel(text: string) {
 
 type Engine = 'plain' | 'durable' | 'evented';
 
-async function runAndRecall(engine: Engine, structuredOutput: Record<string, unknown>, text: string) {
+async function runAndRecall(
+  engine: Engine,
+  structuredOutput: Record<string, unknown>,
+  text: string,
+  finishReason?: 'stop' | 'length' | 'content-filter',
+) {
   const memory = new MockMemory();
   const agent = new Agent({
     id: `so-persist-${engine}`,
     name: 'Structured Output Persistence Agent',
     instructions: 'Return the person',
-    model: createJsonModel(text) as LanguageModelV2,
+    model: createJsonModel(text, finishReason) as LanguageModelV2,
     memory,
   });
   const wrapper =
@@ -91,6 +96,32 @@ describe('structured output persistence (issue #26432)', () => {
 
       expect(metadata).toBeDefined();
       expect(metadata?.structuredOutput).toBeUndefined();
+    },
+  );
+
+  // The caller rejects truncated output even when the partial text parses, so nothing is saved.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'does not save structuredOutput when the model output was truncated (%s)',
+    async engine => {
+      const { object, metadata } = await runAndRecall(engine, { schema }, JSON.stringify(expected), 'length');
+
+      expect(object).toBeUndefined();
+      expect(metadata?.structuredOutput).toBeUndefined();
+    },
+  );
+
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'saves the fallbackValue when validation fails with errorStrategy fallback (%s)',
+    async engine => {
+      const fallbackValue = { name: 'Fallback', age: 1 };
+      const { object, metadata } = await runAndRecall(
+        engine,
+        { schema, errorStrategy: 'fallback', fallbackValue },
+        JSON.stringify({ name: 'Alice' }),
+      );
+
+      expect(object).toEqual(fallbackValue);
+      expect(metadata?.structuredOutput).toEqual(fallbackValue);
     },
   );
 

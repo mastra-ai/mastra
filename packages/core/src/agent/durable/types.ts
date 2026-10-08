@@ -160,6 +160,10 @@ export interface SerializableStructuredOutput {
    * pass yet, so the finish step must not derive the object from the main model's text.
    */
   hasStructuringModel?: boolean;
+  /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
+  errorStrategy?: 'strict' | 'warn' | 'fallback';
+  /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
+  fallbackValue?: unknown;
 }
 
 /**

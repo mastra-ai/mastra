@@ -48,6 +48,10 @@ function findNonJsonSafePath(value: unknown, path: string, ancestors: Set<object
   }
 }
 
+export function isJsonSafe(value: unknown): boolean {
+  return findNonJsonSafePath(value, '', new Set()) === undefined;
+}
+
 /**
  * Schema for the serialized durable options carried in workflow input. These
  * options cross step boundaries (and processes) as JSON, so live objects such
