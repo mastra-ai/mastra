@@ -1235,14 +1235,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                             .slice(iterationPartOffset)
                             .map(part => (part.type === 'text' ? part.text : ''))
                             .join('')
-                        : outputText
+                        : self.#bufferedSteps.length === 1
+                          ? outputText
+                          : lastStepText
                       : undefined;
 
                   // Only reconcile the final step when result processing changed the run-level response
                   // and the same response message still exists. Earlier steps retain their model text.
-                  // Preserve the final iteration slice when its part structure is stable; otherwise use the
-                  // processor's replacement text so redaction is not lost. Compare against undefined, not
-                  // truthiness, so clearing to '' still applies.
+                  // Preserve the final iteration slice when its part structure is stable. If a processor
+                  // replaces the structure, use its replacement for a single-step response, but keep the final
+                  // step iteration-local after a continuation. Compare against undefined, not truthiness, so
+                  // clearing to '' still applies.
                   if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }

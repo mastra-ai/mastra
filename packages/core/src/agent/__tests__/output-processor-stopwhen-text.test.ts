@@ -169,6 +169,51 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('REDACTED');
   });
 
+  it('does not assign collapsed run-level text to the final feedback continuation step', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'more'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'collapse-continuation-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => {
+              if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
+
+              const text = message.content.parts
+                ?.map(part => (part.type === 'text' ? part.text.toUpperCase() : ''))
+                .join('');
+              return {
+                ...message,
+                content: {
+                  ...message.content,
+                  content: text,
+                  parts: [{ type: 'text', text }],
+                },
+              };
+            }),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('FIRSTMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'more']);
+    expect(fullOutput.text).toBe('firstmore');
+  });
+
   it('keeps feedback continuation steps iteration-local with an output processor', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
