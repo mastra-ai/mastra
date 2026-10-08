@@ -5,9 +5,15 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useFactoryEnvironmentQuery, useSaveFactoryEnvironmentMutation } from '../../../../hooks/useFactoryEnvironment';
+import {
+  useFactoryEnvironmentQuery,
+  useRequestEnvironmentBuildMutation,
+  useSaveFactoryEnvironmentMutation,
+} from '../../../../hooks/useFactoryEnvironment';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { settingsSectionPath } from '../settingsSections';
+import { BuildStatusBlock } from './environment/BuildStatusBlock';
+import { BuildTriggersBlock } from './environment/BuildTriggersBlock';
 import { RepositoriesBlock } from './environment/RepositoriesBlock';
 import { ResourcesBlock } from './environment/ResourcesBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
@@ -55,6 +61,7 @@ export function EnvironmentSection() {
 
 function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
   const saveMutation = useSaveFactoryEnvironmentMutation();
+  const buildMutation = useRequestEnvironmentBuildMutation();
   const [buildRequested, setBuildRequested] = useState(false);
 
   if (environment.repositories.length === 0) {
@@ -80,12 +87,28 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
       },
     );
 
+  const buildNow = () =>
+    buildMutation.mutate(
+      { factoryId },
+      {
+        onSuccess: () => toast.success('Build requested'),
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to request a build'),
+      },
+    );
+
   return (
     <div className="flex flex-col gap-8">
       {buildRequested && <Notice variant="info">Changes to the environment start a new build.</Notice>}
       <ResourcesBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
       <RepositoriesBlock repositories={environment.repositories} disabled={saveMutation.isPending} onSave={save} />
       <WorkspaceSetupBlock value={environment.workspaceSetupCommand} disabled={saveMutation.isPending} onSave={save} />
+      <BuildTriggersBlock
+        triggers={environment.buildTriggers}
+        pushSignal={environment.build.pushSignal}
+        disabled={saveMutation.isPending}
+        onSave={save}
+      />
+      <BuildStatusBlock build={environment.build} requesting={buildMutation.isPending} onBuildNow={buildNow} />
     </div>
   );
 }
