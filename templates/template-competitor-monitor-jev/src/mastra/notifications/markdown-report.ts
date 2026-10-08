@@ -5,10 +5,9 @@ import { join } from 'node:path';
 import type { ChangeNotification, NotificationProvider } from './types';
 
 function quote(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map(line => `> ${line}`)
-    .join('\n');
+  const longestRun = (value.match(/`+/g) ?? []).reduce((longest, run) => Math.max(longest, run.length), 0);
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return [`${fence}text`, ...value.split(/\r\n|\r|\n/), fence].join('\n');
 }
 
 export function formatMarkdownReport(event: ChangeNotification) {

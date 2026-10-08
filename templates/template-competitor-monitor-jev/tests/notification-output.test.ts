@@ -15,7 +15,7 @@ import { MonitorStore } from '../src/mastra/lib/store';
 import { createNotifyStep } from '../src/mastra/workflows/competitor-monitor-steps/notify';
 import { createStepContext } from '../src/mastra/workflows/competitor-monitor-steps/workflow-context';
 import type { ChangeNotification } from '../src/mastra/notifications';
-import { MarkdownReportProvider } from '../src/mastra/notifications/markdown-report';
+import { formatMarkdownReport, MarkdownReportProvider } from '../src/mastra/notifications/markdown-report';
 import { createCompetitorMonitorWorkflow } from '../src/mastra/workflows/competitor-monitor-workflow';
 
 const input = {
@@ -321,3 +321,28 @@ it.each(['timeout', 'cancel'] as const)(
     }
   },
 );
+
+it('keeps hostile page excerpts literal inside fences that their content cannot close', () => {
+  const excerpt =
+    '![tracker](https://attacker.example/pixel)\r```\r\n[link](https://attacker.example/)\n````\n<script>alert(1)</script>';
+  const event: ChangeNotification = {
+    eventId: 'event',
+    runId: 'run',
+    monitorId: 'monitor',
+    monitorName: 'Monitor',
+    date: '2026-10-08',
+    changes: [
+      {
+        id: 'change',
+        sourceId: 'pricing',
+        status: 'classified',
+        route: 'alert',
+        evidence: { sourceUrl: 'https://public.example/pricing', beforeExcerpt: excerpt, afterExcerpt: '' },
+      },
+    ],
+  };
+  const report = formatMarkdownReport(event);
+  expect(report).toContain(['Before:', '`````text', ...excerpt.split(/\r\n|\r|\n/), '`````'].join('\n'));
+  expect(report).toContain('After:\n```text\n(empty)\n```');
+  expect(event.changes[0]?.evidence?.beforeExcerpt).toBe(excerpt);
+});
