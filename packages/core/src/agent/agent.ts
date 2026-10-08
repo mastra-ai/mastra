@@ -36,6 +36,7 @@ import type {
   StreamObjectResult,
   StreamTextResult,
 } from '../llm/model/base.types';
+import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
@@ -9358,6 +9359,7 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
