@@ -168,6 +168,8 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
       // without one the flush-gating rebuild (needsSaveQueueForFlush) would fire and
       // defeat what this test asserts — that a registry hit avoids the Mastra rebuild.
       saveQueueManager: {} as any,
+      outputProcessors: [],
+      processorStates: new Map(),
     } as any);
 
     const step = createDurableToolCallStep();

@@ -30,6 +30,7 @@ import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { createDurableLLMMappingStep } from './llm-mapping';
 import { createDurableToolCallStep } from './tool-call';
 
@@ -132,7 +133,7 @@ afterEach(() => {
 });
 
 describe('durable tool-call: processToolResult hook (Option B)', () => {
-  it.each(['placeholder', 'empty'] as const)(
+  it.each(['placeholder', 'empty', 'persistence-only'] as const)(
     'rehydrates output processors before emitting a tool result from a %s registry',
     async registryState => {
       const seen: string[] = [];
@@ -148,7 +149,7 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
       const execute = vi.fn().mockResolvedValue(RAW_RESULT);
       const agent = {
         getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
-        getMemory: vi.fn().mockResolvedValue(undefined),
+        getMemory: vi.fn().mockResolvedValue(registryState === 'persistence-only' ? {} : undefined),
         getWorkspace: vi.fn().mockResolvedValue(undefined),
         listInputProcessors: vi.fn().mockResolvedValue([]),
         listOutputProcessors: vi.fn().mockResolvedValue([outputProcessor]),
@@ -164,14 +165,24 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
         } as any);
       }
 
-      const output = await runToolCallStep(
-        {
-          getAgentById: vi.fn().mockReturnValue(agent),
-          getLogger: () => noopLogger,
-          listTools: () => ({}),
-        },
-        { tenantId: 'redacted-tenant' },
-      );
+      const mastra = {
+        getAgentById: vi.fn().mockReturnValue(agent),
+        getLogger: () => noopLogger,
+        listTools: () => ({}),
+      };
+      if (registryState === 'persistence-only') {
+        await rebuildRunToolsFromMastra({
+          mastra: mastra as any,
+          runId: RUN_ID,
+          agentId: AGENT_ID,
+          state: makeInitData().state as any,
+        });
+        expect(globalRunRegistry.get(RUN_ID)?.tools?.[TOOL_NAME]).toBeDefined();
+        expect(globalRunRegistry.get(RUN_ID)?.saveQueueManager).toBeDefined();
+        expect(agent.listOutputProcessors).not.toHaveBeenCalled();
+      }
+
+      const output = await runToolCallStep(mastra, { tenantId: 'redacted-tenant' });
 
       expect(output.result).toEqual(RAW_RESULT);
       expect(execute).toHaveBeenCalledOnce();

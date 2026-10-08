@@ -505,7 +505,9 @@ export function createDurableToolCallStep() {
       // threadId regardless. Without this guard every tool call on a memoryless durable run would
       // pay for a full rebuild to obtain something that can neither exist nor be used.
       const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
-      if ((!tool || needsSaveQueueForFlush) && mastra) {
+      // A persistence-only rebuild restores tools and the save queue, but not processors.
+      const needsProcessorPipeline = !registryEntry?.outputProcessors || !registryEntry.processorStates;
+      if ((!tool || needsSaveQueueForFlush || needsProcessorPipeline) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
