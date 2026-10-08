@@ -30,7 +30,12 @@ import type { AgentControllerRequestContext, AgentControllerEvent } from '../typ
 
 vi.setConfig({ testTimeout: 30_000 });
 
-function createAskUserToolCallStream(input: string, toolCallId = 'call-1', toolName = 'ask_user') {
+function createAskUserToolCallStream(
+  input: string,
+  toolCallId = 'call-1',
+  toolName = 'ask_user',
+  siblingCallId?: string,
+) {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -42,6 +47,8 @@ function createAskUserToolCallStream(input: string, toolCallId = 'call-1', toolN
         input,
         providerExecuted: false,
       });
+      if (siblingCallId)
+        controller.enqueue({ type: 'tool-call', toolCallId: siblingCallId, toolName, input, providerExecuted: false });
       controller.enqueue({
         type: 'finish',
         finishReason: 'tool-calls',
@@ -113,6 +120,8 @@ describe('AgentController: ask_user native suspension', () => {
     'warm-setup-navigation',
     'warm-approval',
     'warm-approval-reattach',
+    'warm-approval-setup-failure',
+    'warm-approval-siblings',
     'warm-stream-closed',
     'cold',
     'cold-durable',
@@ -146,6 +155,9 @@ describe('AgentController: ask_user native suspension', () => {
           const state = controller.getState();
           expect(controller.state.thinkingLevel).toBe(state.thinkingLevel);
           expect(controller.session.state.get()).toEqual(state);
+          expect(controller.getSubagentModelId?.()).toBe('kimi-for-coding/kimi-for-coding');
+          expect(controller.getSubagentModelId?.({ agentType: 'worker' })).toBe('openai/gpt-5.5');
+          expect(controller.getSubagentModelId?.({ agentType: 'other-type' })).toBe('kimi-for-coding/kimi-for-coding');
           observations.push({
             level: state.thinkingLevel,
             mode: controller.session.modeId,
@@ -179,6 +191,7 @@ describe('AgentController: ask_user native suspension', () => {
         id: `owned-source-${recovery}`,
         name: 'Source',
         instructions: 'Ask twice',
+        defaultOptions: recovery === 'warm-approval-siblings' ? { toolCallConcurrency: 2 } : undefined,
         tools: { owned_state: tool },
         memory: new MockMemory({ storage }),
         model: new MastraLanguageModelV2Mock({
@@ -192,6 +205,7 @@ describe('AgentController: ask_user native suspension', () => {
                       JSON.stringify({ question: 'Continue?' }),
                       `owned-${sourceCalls}`,
                       'owned_state',
+                      recovery === 'warm-approval-siblings' && sourceCalls === 2 ? 'owned-sibling' : undefined,
                     )
                   : createTextStream(),
             };
@@ -254,6 +268,8 @@ describe('AgentController: ask_user native suspension', () => {
     let fixture = await create();
     await fixture.session.thread.create({ id: `owned-a-${recovery}` });
     await fixture.session.state.set({ thinkingLevel: 'high' });
+    await fixture.session.subagents.model.set({ modelId: 'kimi-for-coding/kimi-for-coding' });
+    await fixture.session.subagents.model.set({ modelId: 'openai/gpt-5.5', agentType: 'worker' });
     const sourceEvents: AgentControllerEvent[] = [];
     fixture.session.subscribe(event => {
       sourceEvents.push(event);
@@ -299,6 +315,10 @@ describe('AgentController: ask_user native suspension', () => {
     const threadB = await session.thread.create({ id: `owned-b-${recovery}` });
     await session.mode.switch({ modeId: 'other' });
     await session.model.switch('openai/gpt-5.5', { thinkingLevel: 'low' });
+    expect(session.subagents.model.get()).toBeNull();
+    expect(session.subagents.model.get({ agentType: 'worker' })).toBeNull();
+    await session.subagents.model.set({ modelId: 'openai/gpt-5.5' });
+    await session.subagents.model.set({ modelId: 'kimi-for-coding/kimi-for-coding', agentType: 'worker' });
     const running = session.sendMessage({ content: 'Keep running' });
     const stream = await heldStream.promise;
     const activeRunId = session.getCurrentRunId();
@@ -404,10 +424,53 @@ describe('AgentController: ask_user native suspension', () => {
       const second = { ...address, toolCallId: 'owned-2' };
       if (recovery.startsWith('warm-approval')) {
         await vi.waitFor(() => expect(session.approval.isArmed(second)).toBe(true));
+        if (recovery === 'warm-approval-siblings') {
+          const sibling = { ...address, toolCallId: 'owned-sibling' };
+          // Approval-capable calls are serialized by the loop, even with concurrency > 1.
+          expect(session.approval.isArmed(sibling)).toBe(false);
+          expect(await session.respondToToolApproval({ decision: 'approve', toolCallId: second.toolCallId })).toEqual({
+            accepted: true,
+          });
+          await vi.waitFor(() => expect(session.suspensions.has(second)).toBe(true));
+          await session.respondToToolSuspension({ address: second, resumeData: 'second' });
+          await vi.waitFor(() => expect(session.approval.isArmed(sibling)).toBe(true));
+          expect(await session.respondToToolApproval({ decision: 'approve', toolCallId: sibling.toolCallId })).toEqual({
+            accepted: true,
+          });
+          await vi.waitFor(() => expect(session.suspensions.has(sibling)).toBe(true));
+          await session.respondToToolSuspension({ address: sibling, resumeData: 'sibling' });
+          expect(observations).toHaveLength(3);
+          expect(session.getCurrentRunId()).toBe(activeRunId);
+          expect(session.state.get()).toMatchObject({ thinkingLevel: 'low', hostCount: 3 });
+          expect(session.displayState.get()).toEqual(display);
+          expect(abortSignal?.aborted).toBe(false);
+          expect(cleanup).not.toHaveBeenCalled();
+          expect(events.filter(event => event.type === 'tool_approval_required')).toHaveLength(2);
+          return;
+        }
         expect(events.filter(event => event.type === 'tool_approval_required')).toMatchObject([
           { threadId: address.threadId, toolCallId: second.toolCallId },
         ]);
         expect(session.displayState.get()).toEqual(display);
+        if (recovery === 'warm-approval-setup-failure') {
+          const subscribe = vi
+            .spyOn(session.machinery, 'subscribeToThread')
+            .mockRejectedValueOnce(new Error('source approval setup unavailable'));
+          expect(await session.respondToToolApproval({ decision: 'approve', toolCallId: second.toolCallId })).toEqual({
+            accepted: true,
+          });
+          await vi.waitFor(() =>
+            expect(events.filter(event => event.type === 'tool_approval_required')).toHaveLength(2),
+          );
+          expect(subscribe).toHaveBeenCalledOnce();
+          subscribe.mockRestore();
+          expect(session.approval.isArmed(second)).toBe(true);
+          expect(observations).toHaveLength(1);
+          expect(session.getCurrentRunId()).toBe(activeRunId);
+          expect(session.displayState.get()).toEqual(display);
+          expect(cleanup).not.toHaveBeenCalled();
+          expect(abortSignal?.aborted).toBe(false);
+        }
         if (recovery === 'warm-approval-reattach') {
           navigated = true;
           await session.thread.switch({ threadId: address.threadId });

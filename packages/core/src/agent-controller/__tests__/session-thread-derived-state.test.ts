@@ -157,6 +157,42 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it('restores global and per-type subagent selections without leaking them to new conversations', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createSettingsController(storage, 'subagent-selections');
+    const session = await controller.createSession({
+      id: 'subagent-selections',
+      ownerId: 'owner',
+      resourceId: 'resource',
+      createInitialThread: false,
+    });
+    await session.subagents.model.set({ modelId: 'kimi-for-coding/kimi-for-coding' });
+    await session.subagents.model.set({ agentType: 'worker', modelId: 'openai/gpt-5.5' });
+    await session.state.set({ customHostField: 'shared' });
+    const a = await session.thread.create({ id: 'subagent-a' });
+    expect((await session.thread.getById({ threadId: a.id }))?.metadata).toMatchObject({
+      subagentModelId: 'kimi-for-coding/kimi-for-coding',
+      subagentModelId_worker: 'openai/gpt-5.5',
+    });
+    const context = await session.machinery.buildRequestContext(undefined, {
+      threadId: a.id,
+      resourceId: 'resource',
+      execution: true,
+    });
+    const source = context.get('controller') as AgentControllerRequestContext;
+    await session.thread.create({ id: 'subagent-b' });
+    expect(session.subagents.model.get()).toBeNull();
+    expect(session.subagents.model.get({ agentType: 'worker' })).toBeNull();
+    await session.subagents.model.set({ modelId: 'openai/gpt-5.5' });
+    expect(source.getSubagentModelId?.()).toBe('kimi-for-coding/kimi-for-coding');
+    expect(source.getSubagentModelId?.({ agentType: 'worker' })).toBe('openai/gpt-5.5');
+    await session.thread.switch({ threadId: a.id });
+    expect(session.subagents.model.get()).toBe('kimi-for-coding/kimi-for-coding');
+    expect(session.subagents.model.get({ agentType: 'worker' })).toBe('openai/gpt-5.5');
+    expect(session.state.get().customHostField).toBe('shared');
+    expect((await session.thread.getById({ threadId: a.id }))?.metadata).not.toHaveProperty('customHostField');
+    await session.thread.clearAndReleaseLock();
+  });
   it.each(['approveToolCall', 'declineToolCall'] as const)(
     'binds explicit %s coordinates without an inherited context',
     async method => {
