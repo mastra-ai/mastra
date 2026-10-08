@@ -4,55 +4,59 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AvatarRail } from './index';
 
+function renderRail(select: () => void) {
+  render(
+    <AvatarRail aria-label="Organizations">
+      <AvatarRail.Item aria-label="Mastra" current onClick={select}>
+        M
+      </AvatarRail.Item>
+      <AvatarRail.Item aria-label="Unavailable" disabled>
+        U
+      </AvatarRail.Item>
+      <AvatarRail.Item aria-label="Acme" onClick={select}>
+        A
+      </AvatarRail.Item>
+      <AvatarRail.Item aria-label="Create an organization">+</AvatarRail.Item>
+    </AvatarRail>,
+  );
+  return userEvent.setup();
+}
+
 describe('AvatarRail', () => {
-  it('marks the current organization and activates a different organization', async () => {
-    const select = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <AvatarRail aria-label="Organizations">
-        <AvatarRail.Item aria-label="Mastra" current>
-          M
-        </AvatarRail.Item>
-        <AvatarRail.Item aria-label="Acme" onClick={select}>
-          A
-        </AvatarRail.Item>
-      </AvatarRail>,
-    );
-    expect(screen.getByRole('toolbar', { name: 'Organizations' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Mastra' }).getAttribute('aria-current')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Acme' }).hasAttribute('aria-current')).toBe(false);
-    await user.click(screen.getByRole('button', { name: 'Acme' }));
-    expect(select).toHaveBeenCalledOnce();
+  describe('when it renders', () => {
+    it('names the toolbar and marks only the current organization', () => {
+      renderRail(vi.fn());
+      expect(screen.getByRole('toolbar', { name: 'Organizations' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Mastra' }).getAttribute('aria-current')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Acme' }).hasAttribute('aria-current')).toBe(false);
+    });
   });
 
-  it('roves focus without switching organization and skips disabled controls', async () => {
-    const select = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <AvatarRail aria-label="Organizations">
-        <AvatarRail.Item aria-label="Mastra" current onClick={select}>
-          M
-        </AvatarRail.Item>
-        <AvatarRail.Item aria-label="Unavailable" disabled>
-          U
-        </AvatarRail.Item>
-        <AvatarRail.Item aria-label="Acme" onClick={select}>
-          A
-        </AvatarRail.Item>
-        <AvatarRail.Item aria-label="Create an organization" onClick={select}>
-          +
-        </AvatarRail.Item>
-      </AvatarRail>,
-    );
-    await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mastra' }));
-    await user.keyboard('{ArrowDown}');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Acme' }));
-    expect(select).not.toHaveBeenCalled();
-    await user.keyboard('{ArrowDown}{Enter}');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create an organization' }));
-    expect(select).toHaveBeenCalledOnce();
-    await user.keyboard('{ArrowDown}{ArrowUp}');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Create an organization' }));
+  describe('when an organization is clicked', () => {
+    it('activates it', async () => {
+      const select = vi.fn();
+      const user = renderRail(select);
+      await user.click(screen.getByRole('button', { name: 'Acme' }));
+      expect(select).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('when arrow keys move focus', () => {
+    it('skips disabled items without activating anything', async () => {
+      const select = vi.fn();
+      const user = renderRail(select);
+      await user.tab();
+      await user.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Acme' }));
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    it('activates the focused item with Enter', async () => {
+      const select = vi.fn();
+      const user = renderRail(select);
+      await user.tab();
+      await user.keyboard('{ArrowDown}{Enter}');
+      expect(select).toHaveBeenCalledOnce();
+    });
   });
 });

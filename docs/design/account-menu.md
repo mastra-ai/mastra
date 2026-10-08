@@ -4,7 +4,7 @@ Use `AvatarRail` for organization shortcuts and `CompositeAvatar` for a person's
 
 ## Compose the menu
 
-The rail makes the popup a dialog containing a toolbar and named menus. Declare the trigger's popup type, label the content, and put action items inside `DropdownMenu.Group`. Pass `rail={null}` to keep the same layout without the rail column when only one organization applies.
+`layout="account"` makes the popup a dialog containing a toolbar and named menus. Declare the trigger's popup type, label the content, and put action items inside `DropdownMenu.Group`. Leave out `rail` to keep the same layout without the rail column when only one organization applies.
 
 ```tsx
 import { Avatar, CompositeAvatar } from '@mastra/playground-ui/components/Avatar'
@@ -25,10 +25,11 @@ export function AccountMenu({ switchOrganization }: { switchOrganization: () => 
       </DropdownMenu.IdentityTrigger>
       <DropdownMenu.Content
         aria-label="Account and organizations"
+        layout="account"
         rail={
           <AvatarRail aria-label="Organizations">
             <AvatarRail.Item aria-label="Acme" current onClick={switchOrganization}>
-              <Avatar name="Acme" size="rail" />
+              <Avatar name="Acme" size="control" />
             </AvatarRail.Item>
           </AvatarRail>
         }
@@ -48,4 +49,4 @@ Up and down arrows move focus through enabled rail items without selecting an or
 
 ## Sizes and colors
 
-Use the existing `md` avatar for the profile and `xs` for its badge. The `rail` avatar size uses the existing medium-control token. Rail items keep a stable circular target and a separate current-organization ring. Popup surfaces, borders, hover and focus fills, focus outlines, and text colors use semantic design-system tokens.
+Use the existing `md` avatar for the profile and `xs` for its badge. The `control` avatar size uses the existing medium-control token. Rail items keep a stable circular target and a separate current-organization ring. Popup surfaces, borders, hover and focus fills, focus outlines, and text colors use semantic design-system tokens.

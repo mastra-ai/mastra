@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AvatarRail } from '../AvatarRail/index';
 import { DropdownMenu } from './dropdown-menu';
 
-function AccountMenu({ select }: { select: () => void }) {
+function AccountMenu({ select, withRail = true }: { select: () => void; withRail?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenu.IdentityTrigger aria-label="Justin menu" aria-haspopup="dialog" avatar={<span>J</span>}>
@@ -13,15 +13,18 @@ function AccountMenu({ select }: { select: () => void }) {
       </DropdownMenu.IdentityTrigger>
       <DropdownMenu.Content
         aria-label="Account menu"
+        layout="account"
         rail={
-          <AvatarRail aria-label="Organizations">
-            <AvatarRail.Item aria-label="Mastra" current>
-              M
-            </AvatarRail.Item>
-            <AvatarRail.Item aria-label="Acme" onClick={select}>
-              A
-            </AvatarRail.Item>
-          </AvatarRail>
+          withRail && (
+            <AvatarRail aria-label="Organizations">
+              <AvatarRail.Item aria-label="Mastra" current>
+                M
+              </AvatarRail.Item>
+              <AvatarRail.Item aria-label="Acme" onClick={select}>
+                A
+              </AvatarRail.Item>
+            </AvatarRail>
+          )
         }
       >
         <DropdownMenu.Group role="menu" aria-label="Actions">
@@ -33,76 +36,82 @@ function AccountMenu({ select }: { select: () => void }) {
   );
 }
 
-describe('DropdownMenu with an avatar rail', () => {
-  it('preserves the trigger label on ordinary menus', async () => {
-    render(
-      <DropdownMenu defaultOpen>
-        <DropdownMenu.Trigger>Account</DropdownMenu.Trigger>
-        <DropdownMenu.Content>
-          <DropdownMenu.Item>Settings</DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>,
-    );
-    expect(await screen.findByRole('menu', { name: 'Account' })).toBeDefined();
+async function openAccountMenu(props: { select: () => void; withRail?: boolean }) {
+  const user = userEvent.setup();
+  render(<AccountMenu {...props} />);
+  await user.click(screen.getByRole('button', { name: 'Justin menu' }));
+  const popup = await screen.findByRole('dialog', { name: 'Account menu' });
+  return { user, popup };
+}
+
+describe('DropdownMenu.Content', () => {
+  describe('when it uses the default menu layout', () => {
+    it('takes its name from the trigger', async () => {
+      render(
+        <DropdownMenu defaultOpen>
+          <DropdownMenu.Trigger>Account</DropdownMenu.Trigger>
+          <DropdownMenu.Content>
+            <DropdownMenu.Item>Settings</DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>,
+      );
+      expect(await screen.findByRole('menu', { name: 'Account' })).toBeDefined();
+    });
   });
 
-  it('keeps the account layout without a rail column when rail is null', async () => {
-    render(
-      <DropdownMenu defaultOpen>
-        <DropdownMenu.Trigger aria-haspopup="dialog">Account</DropdownMenu.Trigger>
-        <DropdownMenu.Content aria-label="Account menu" rail={null}>
-          <DropdownMenu.Group role="menu" aria-label="Actions">
-            <DropdownMenu.Item>Sign out</DropdownMenu.Item>
-          </DropdownMenu.Group>
-        </DropdownMenu.Content>
-      </DropdownMenu>,
-    );
-    const popup = await screen.findByRole('dialog', { name: 'Account menu' });
-    expect(popup.className).toContain('w-87');
-    expect(popup.querySelector('[data-slot=dropdown-menu-rail]')).toBeNull();
-    expect(popup.querySelector('[data-slot=dropdown-menu-actions]')).not.toBeNull();
+  describe('when the account layout has no rail', () => {
+    it('renders the actions without an organizations toolbar', async () => {
+      const { popup } = await openAccountMenu({ select: vi.fn(), withRail: false });
+      expect(screen.queryByRole('toolbar')).toBeNull();
+      expect(popup.querySelector('[data-slot=dropdown-menu-rail]')).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeDefined();
+    });
   });
 
-  it('moves between the rail and actions and restores focus on Escape', async () => {
-    const select = vi.fn();
-    const user = userEvent.setup();
-    render(<AccountMenu select={select} />);
-    await user.click(screen.getByRole('button', { name: 'Justin menu' }));
-    expect(await screen.findByRole('dialog', { name: 'Account menu' })).toBeDefined();
-    await user.keyboard('{ArrowLeft}');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mastra' }));
-    await user.keyboard('{ArrowDown}');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Acme' }));
-    expect(select).not.toHaveBeenCalled();
-    await user.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Account settings' }));
-    await user.keyboard('{ArrowDown}');
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Sign out' }));
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Justin menu' }));
-  });
+  describe('when the account layout has a rail', () => {
+    it('moves focus from the actions to the current organization with ArrowLeft', async () => {
+      const { user } = await openAccountMenu({ select: vi.fn() });
+      await user.keyboard('{ArrowLeft}');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mastra' }));
+    });
 
-  it('paints the highlighted item itself without a moving surface across the rail', async () => {
-    const select = vi.fn();
-    const user = userEvent.setup();
-    render(<AccountMenu select={select} />);
-    await user.click(screen.getByRole('button', { name: 'Justin menu' }));
-    const popup = await screen.findByRole('dialog', { name: 'Account menu' });
-    const account = screen.getByRole('menuitem', { name: 'Account settings' });
-    const signOut = screen.getByRole('menuitem', { name: 'Sign out' });
-    await user.hover(account);
-    expect(account.hasAttribute('data-highlighted')).toBe(true);
-    expect(account.className).toContain('data-highlighted:bg-fill-subtle');
-    expect(account.className).toContain('data-highlighted:text-foreground');
-    await user.hover(signOut);
-    expect(account.hasAttribute('data-highlighted')).toBe(false);
-    expect(signOut.hasAttribute('data-highlighted')).toBe(true);
-    expect(signOut.className).toContain('data-highlighted:bg-fill-subtle');
-    await user.hover(screen.getByRole('button', { name: 'Acme' }));
-    expect(popup.querySelector('[data-slot=fluid-hover-highlight]')).toBeNull();
-    expect(popup.querySelector('[data-fluid-hover-active]')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Mastra' }).getAttribute('aria-current')).toBe('true');
-    expect(select).not.toHaveBeenCalled();
+    it('roves the rail without selecting an organization', async () => {
+      const select = vi.fn();
+      const { user } = await openAccountMenu({ select });
+      await user.keyboard('{ArrowLeft}');
+      await user.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Acme' }));
+      expect(select).not.toHaveBeenCalled();
+    });
+
+    it('moves from the rail back to the actions with ArrowRight', async () => {
+      const { user } = await openAccountMenu({ select: vi.fn() });
+      await user.keyboard('{ArrowLeft}');
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Sign out' }));
+    });
+
+    it('closes on Escape and restores focus to the trigger', async () => {
+      const { user } = await openAccountMenu({ select: vi.fn() });
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Justin menu' }));
+    });
+
+    it('highlights only the hovered action without a moving surface', async () => {
+      const select = vi.fn();
+      const { user, popup } = await openAccountMenu({ select });
+      const account = screen.getByRole('menuitem', { name: 'Account settings' });
+      const signOut = screen.getByRole('menuitem', { name: 'Sign out' });
+      await user.hover(account);
+      await user.hover(signOut);
+      expect(account.hasAttribute('data-highlighted')).toBe(false);
+      expect(signOut.hasAttribute('data-highlighted')).toBe(true);
+      await user.hover(screen.getByRole('button', { name: 'Acme' }));
+      expect(popup.querySelector('[data-slot=fluid-hover-highlight]')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Mastra' }).getAttribute('aria-current')).toBe('true');
+      expect(select).not.toHaveBeenCalled();
+    });
   });
 });

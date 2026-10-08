@@ -27,6 +27,19 @@ const cloudLogo = `${assetRoot}/3KNRJGGDY2N767QXGDP3ZTM4EM.svg`;
 const longOrganizationName =
   'testfrkjgakjrlkgjajlgjkalkjglkajlgjlajlrgjalkjglajklgkjalkjglakjlgkajljalkjgljkljlkkjlkjl';
 
+const defaultOrganization = { id: 'mastra', name: longOrganizationName, logo: mastraLogo };
+const organizations = [
+  defaultOrganization,
+  { id: 'acme', name: 'Acme', logo: acmeLogo },
+  { id: 'cloud', name: 'Cloud', logo: cloudLogo },
+];
+
+function resolveTheme(theme: 'light' | 'dark' | 'system') {
+  if (theme !== 'system') return theme;
+  if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+  return 'dark';
+}
+
 function AccountMenuExample({
   initiallyOpen = true,
   initialTheme = 'dark',
@@ -39,10 +52,7 @@ function AccountMenuExample({
   multiOrg?: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
-  const [organization, setOrganization] = useState('mastra');
-  const organizationName =
-    organization === 'mastra' ? longOrganizationName : organization === 'acme' ? 'Acme' : 'Cloud';
-  const organizationLogo = organization === 'mastra' ? mastraLogo : organization === 'acme' ? acmeLogo : cloudLogo;
+  const [current, setCurrent] = useState(defaultOrganization);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(initialTheme);
 
   return (
@@ -51,9 +61,9 @@ function AccountMenuExample({
         <DropdownMenu.IdentityTrigger
           aria-label="Justin Levine menu"
           aria-haspopup="dialog"
-          description={organizationName}
+          description={current.name}
           avatar={
-            <CompositeAvatar badge={<Avatar name={organizationName} src={organizationLogo} size="xs" />}>
+            <CompositeAvatar badge={<Avatar name={current.name} src={current.logo} size="xs" />}>
               <Avatar name="Justin Levine" src={portrait} size="md" />
             </CompositeAvatar>
           }
@@ -65,35 +75,25 @@ function AccountMenuExample({
           side="top"
           align="start"
           sideOffset={8}
+          layout="account"
           rail={
-            multiOrg ? (
+            multiOrg && (
               <AvatarRail aria-label="Organizations">
-                <AvatarRail.Item
-                  aria-label={longOrganizationName}
-                  current={organization === 'mastra'}
-                  onClick={() => setOrganization('mastra')}
-                >
-                  <Avatar name={longOrganizationName} src={mastraLogo} size="rail" />
-                </AvatarRail.Item>
-                <AvatarRail.Item
-                  aria-label="Acme"
-                  current={organization === 'acme'}
-                  onClick={() => setOrganization('acme')}
-                >
-                  <Avatar name="Acme" src={acmeLogo} size="rail" />
-                </AvatarRail.Item>
-                <AvatarRail.Item
-                  aria-label="Cloud"
-                  current={organization === 'cloud'}
-                  onClick={() => setOrganization('cloud')}
-                >
-                  <Avatar name="Cloud" src={cloudLogo} size="rail" />
-                </AvatarRail.Item>
+                {organizations.map(organization => (
+                  <AvatarRail.Item
+                    key={organization.id}
+                    aria-label={organization.name}
+                    current={organization.id === current.id}
+                    onClick={() => setCurrent(organization)}
+                  >
+                    <Avatar name={organization.name} src={organization.logo} size="control" />
+                  </AvatarRail.Item>
+                ))}
                 <AvatarRail.Item aria-label="Create an organization" variant="action" onClick={() => setOpen(false)}>
                   <PlusIcon />
                 </AvatarRail.Item>
               </AvatarRail>
-            ) : null
+            )
           }
         >
           <div className="flex min-w-0 items-center gap-2.5 px-3 py-1.5">
@@ -110,7 +110,7 @@ function AccountMenuExample({
           <DropdownMenu.Separator />
           <div className="flex min-w-0 flex-col px-3 py-1.5">
             <Txt variant="label" className="truncate">
-              {organizationName}
+              {current.name}
             </Txt>
             <Txt variant="body-sm" tone="muted">
               Admin
@@ -155,12 +155,7 @@ function AccountMenuExample({
               value={theme}
               onChange={next => {
                 setTheme(next);
-                const resolved =
-                  next === 'system'
-                    ? window.matchMedia('(prefers-color-scheme: light)').matches
-                      ? 'light'
-                      : 'dark'
-                    : next;
+                const resolved = resolveTheme(next);
                 document.documentElement.classList.toggle('light', resolved === 'light');
                 document.documentElement.classList.toggle('dark', resolved === 'dark');
               }}

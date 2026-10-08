@@ -30,9 +30,55 @@ const NativeItemHighlightContext = React.createContext(false);
 function useItemHighlightClass(variant: 'default' | 'destructive' = 'default') {
   const native = React.useContext(NativeItemHighlightContext);
   if (!native) return undefined;
-  return variant === 'destructive'
-    ? 'not-disabled:hover:bg-destructive-subtle not-disabled:active:bg-destructive-subtle data-highlighted:bg-destructive-subtle data-popup-open:bg-destructive-subtle'
-    : 'not-disabled:hover:bg-fill-subtle not-disabled:active:bg-fill data-highlighted:bg-fill-subtle data-popup-open:bg-fill-subtle';
+  if (variant === 'destructive') {
+    return 'not-disabled:hover:bg-destructive-subtle not-disabled:active:bg-destructive-subtle data-highlighted:bg-destructive-subtle data-popup-open:bg-destructive-subtle';
+  }
+  return 'not-disabled:hover:bg-fill-subtle not-disabled:active:bg-fill data-highlighted:bg-fill-subtle data-popup-open:bg-fill-subtle';
+}
+
+function dropGeneratedLabelledBy(props: { 'aria-label'?: string }) {
+  if (!props['aria-label']) return {};
+  return { 'aria-labelledby': undefined };
+}
+
+const railNavigationKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ']);
+
+function focusRailFromActions(event: React.KeyboardEvent<HTMLDivElement>) {
+  if (event.defaultPrevented || event.key !== 'ArrowLeft') return;
+  const rail = event.currentTarget.querySelector('[data-slot=dropdown-menu-rail]');
+  if (!rail) return;
+  const target =
+    rail.querySelector<HTMLButtonElement>('button[aria-current=true]:not(:disabled)') ??
+    rail.querySelector<HTMLButtonElement>('button:not(:disabled)');
+  target?.focus();
+  event.preventDefault();
+}
+
+function AccountMenuBody({ rail, children }: { rail?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <>
+      {rail && (
+        <div
+          data-slot="dropdown-menu-rail"
+          className="flex shrink-0 border-r border-border"
+          onKeyDown={event => {
+            if (event.key === 'ArrowRight') {
+              event.currentTarget.parentElement
+                ?.querySelector<HTMLElement>('[role=menuitem]:not([data-disabled])')
+                ?.focus();
+              event.preventDefault();
+            }
+            if (railNavigationKeys.has(event.key)) event.stopPropagation();
+          }}
+        >
+          {rail}
+        </div>
+      )}
+      <div data-slot="dropdown-menu-actions" className="min-h-0 min-w-0 flex-1 overflow-y-auto px-1 py-0.75">
+        {children}
+      </div>
+    </>
+  );
 }
 
 const DropdownMenuGroup = MenuPrimitive.Group;
@@ -153,12 +199,20 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
 );
 DropdownMenuSubContent.displayName = 'DropdownMenuSubContent';
 
+type DropdownMenuContentLayoutProps = { layout?: 'menu'; rail?: never } | { layout: 'account'; rail?: React.ReactNode };
+
 type DropdownMenuContentProps = MenuPopupProps &
-  DropdownMenuContentPositionerProps & {
+  DropdownMenuContentPositionerProps &
+  DropdownMenuContentLayoutProps & {
     container?: HTMLElement;
     size?: 'default' | 'sm';
-    rail?: React.ReactNode;
   };
+
+const accountCollisionAvoidance: DropdownMenuContentPositionerProps['collisionAvoidance'] = {
+  side: 'shift',
+  align: 'shift',
+  fallbackAxisSide: 'none',
+};
 
 const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
   (
@@ -166,6 +220,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       className,
       container,
       size = 'default',
+      layout = 'menu',
       rail,
       align = 'start',
       alignOffset = 0,
@@ -178,7 +233,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       sticky,
       arrowPadding,
       disableAnchorTracking,
-      collisionAvoidance = rail === undefined ? undefined : { side: 'shift', align: 'shift', fallbackAxisSide: 'none' },
+      collisionAvoidance,
       children,
       ...props
     },
@@ -203,76 +258,51 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       collisionAvoidance,
     };
 
+    if (layout === 'account') {
+      return (
+        <MenuPrimitive.Portal container={resolvedContainer}>
+          <MenuPrimitive.Positioner
+            className={menuPositionerClass}
+            {...positionerProps}
+            collisionAvoidance={collisionAvoidance ?? accountCollisionAvoidance}
+          >
+            <MenuPrimitive.Popup
+              data-slot="dropdown-menu-content"
+              className={cn(menuPopupClass, 'flex max-h-(--available-height) w-87 overflow-hidden p-0', className)}
+              {...props}
+              ref={ref}
+              role="dialog"
+              aria-orientation={undefined}
+              {...dropGeneratedLabelledBy(props)}
+              onKeyDown={event => {
+                props.onKeyDown?.(event);
+                focusRailFromActions(event);
+              }}
+            >
+              <NativeItemHighlightContext.Provider value>
+                <AccountMenuBody rail={rail}>{children}</AccountMenuBody>
+              </NativeItemHighlightContext.Provider>
+            </MenuPrimitive.Popup>
+          </MenuPrimitive.Positioner>
+        </MenuPrimitive.Portal>
+      );
+    }
+
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
         <MenuPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
             data-slot="dropdown-menu-content"
-            className={cn(
-              menuPopupClass,
-              menu.containerClassName,
-              size === 'sm' && 'rounded-md p-0.5',
-              rail !== undefined && 'flex max-h-(--available-height) w-87 overflow-hidden p-0',
-              className,
-            )}
+            className={cn(menuPopupClass, menu.containerClassName, size === 'sm' && 'rounded-md p-0.5', className)}
             {...props}
-            role={rail !== undefined ? 'dialog' : (props.role ?? 'menu')}
-            {...(props['aria-label'] ? { 'aria-labelledby': undefined } : {})}
-            aria-orientation={rail !== undefined ? undefined : 'vertical'}
-            {...(rail === undefined ? menu.getContainerProps(props, ref) : { ref })}
-            onKeyDown={event => {
-              props.onKeyDown?.(event);
-              if (rail === undefined || event.defaultPrevented || event.key !== 'ArrowLeft') return;
-              const target =
-                event.currentTarget.querySelector<HTMLButtonElement>(
-                  '[data-slot=dropdown-menu-rail] button[aria-current=true]:not(:disabled)',
-                ) ??
-                event.currentTarget.querySelector<HTMLButtonElement>(
-                  '[data-slot=dropdown-menu-rail] button:not(:disabled)',
-                );
-              target?.focus();
-              event.preventDefault();
-            }}
+            role={props.role ?? 'menu'}
+            aria-orientation="vertical"
+            {...dropGeneratedLabelledBy(props)}
+            {...menu.getContainerProps(props, ref)}
           >
-            <NativeItemHighlightContext.Provider value={rail !== undefined}>
-              {rail !== undefined ? (
-                <>
-                  {rail !== null && (
-                    <div
-                      data-slot="dropdown-menu-rail"
-                      className="flex shrink-0 border-r border-border"
-                      onKeyDown={event => {
-                        if (event.key === 'ArrowRight') {
-                          event.currentTarget.parentElement
-                            ?.querySelector<HTMLElement>('[role=menuitem]:not([data-disabled])')
-                            ?.focus();
-                          event.preventDefault();
-                        }
-                        if (
-                          ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' '].includes(
-                            event.key,
-                          )
-                        ) {
-                          event.stopPropagation();
-                        }
-                      }}
-                    >
-                      {rail}
-                    </div>
-                  )}
-                  <div
-                    data-slot="dropdown-menu-actions"
-                    className="min-h-0 min-w-0 flex-1 overflow-y-auto px-1 py-0.75"
-                  >
-                    {children}
-                  </div>
-                </>
-              ) : (
-                <FluidMenuItems menu={menu} className={size === 'sm' ? 'rounded-sm' : undefined}>
-                  {children}
-                </FluidMenuItems>
-              )}
-            </NativeItemHighlightContext.Provider>
+            <FluidMenuItems menu={menu} className={size === 'sm' ? 'rounded-sm' : undefined}>
+              {children}
+            </FluidMenuItems>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>

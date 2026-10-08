@@ -25,13 +25,13 @@ function OrganizationRailExample() {
         current={organization === 'mastra'}
         onClick={() => setOrganization('mastra')}
       >
-        <Avatar name="Mastra" size="rail" />
+        <Avatar name="Mastra" size="control" />
       </AvatarRail.Item>
       <AvatarRail.Item aria-label="Acme" current={organization === 'acme'} onClick={() => setOrganization('acme')}>
-        <Avatar name="Acme" size="rail" />
+        <Avatar name="Acme" size="control" />
       </AvatarRail.Item>
       <AvatarRail.Item aria-label="Unavailable organization" disabled>
-        <Avatar name="Unavailable" size="rail" />
+        <Avatar name="Unavailable" size="control" />
       </AvatarRail.Item>
       <AvatarRail.Item aria-label="Create an organization" variant="action">
         <PlusIcon />
@@ -67,7 +67,7 @@ export const ManyOrganizations: Story = {
     <AvatarRail aria-label="Organizations" className="max-h-80">
       {Array.from({ length: 30 }, (_, index) => (
         <AvatarRail.Item key={index} aria-label={`Organization ${index + 1}`} current={index === 0}>
-          <Avatar name={`Organization ${index + 1}`} size="rail" />
+          <Avatar name={`Organization ${index + 1}`} size="control" />
         </AvatarRail.Item>
       ))}
     </AvatarRail>
