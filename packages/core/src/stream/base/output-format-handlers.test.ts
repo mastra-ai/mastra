@@ -15,7 +15,7 @@ import {
   escapeUnescapedControlCharsInJsonStrings,
 } from './output-format-handlers';
 
-function finishChunk(reason: 'stop' | 'length' | 'content-filter'): ChunkType<unknown> {
+function finishChunk(reason: 'stop' | 'length' | 'content-filter' | 'tool-calls'): ChunkType<unknown> {
   return {
     type: 'finish',
     runId: 'test-run',
@@ -227,6 +227,43 @@ describe('output-format-handlers', () => {
       const chunks = await transform('{"name":"Ana","items":[]}', { structuredOutput: { schema } }, []);
 
       expect(chunks.filter(chunk => chunk.type === 'object-result')).toHaveLength(1);
+    });
+
+    it('does not reuse an array draft when the terminal step is invalid', async () => {
+      const arraySchema = z.array(z.object({ answer: z.string() }));
+      const chunks = await convertAsyncIterableToArray(
+        convertArrayToReadableStream<ChunkType<z.infer<typeof arraySchema>>>([
+          {
+            type: 'text-delta',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: { id: 'text-1', text: '{"elements":[{"answer":"draft"}]}' },
+          },
+          {
+            type: 'tool-call',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId: 'call-1', toolName: 'lookup', args: {} },
+          } as ChunkType<z.infer<typeof arraySchema>>,
+          finishChunk('tool-calls') as ChunkType<z.infer<typeof arraySchema>>,
+          {
+            type: 'step-start',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: {},
+          } as ChunkType<z.infer<typeof arraySchema>>,
+          {
+            type: 'text-delta',
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            payload: { id: 'text-2', text: '{"invalid":true}' },
+          },
+          finishChunk('stop') as ChunkType<z.infer<typeof arraySchema>>,
+        ]).pipeThrough(createObjectStreamTransformer({ structuredOutput: { schema: arraySchema } })),
+      );
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
+      expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
     });
   });
 

@@ -500,7 +500,7 @@ class ArrayFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
     const resultValue =
       value && typeof value === 'object' && 'elements' in value && Array.isArray(value.elements)
         ? value.elements
-        : this.textPreviousFilteredArray;
+        : undefined;
 
     return this.validateValue(resultValue);
   }
@@ -647,7 +647,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   structuredOutput?: StreamTransformerStructuredOutput<OUTPUT>;
   logger?: IMastraLogger;
 }) {
-  const handler = createOutputHandler<OUTPUT>({ schema: structuredOutput?.schema });
+  let handler = createOutputHandler<OUTPUT>({ schema: structuredOutput?.schema });
 
   let accumulatedText = '';
   let previousObject: unknown = undefined;
@@ -664,6 +664,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
       }
 
       if (chunk.type === 'step-start') {
+        handler = createOutputHandler<OUTPUT>({ schema: structuredOutput?.schema });
         accumulatedText = '';
         previousObject = undefined;
         hasToolCall = false;
