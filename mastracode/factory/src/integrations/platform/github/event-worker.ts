@@ -7,6 +7,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
+import { githubFeedbackTargets } from '../../github/pr-feedback.js';
 import type { GithubReconcileRepositorySource } from '../../github/reconcile-worker.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
@@ -452,8 +453,9 @@ export class PlatformGithubEventWorker extends MastraWorker {
           });
           continue;
         }
+        let ingressResult: unknown;
         if (isFactoryIngestedEvent(parsed)) {
-          await this.#ingestFactoryEvent?.(parsed);
+          ingressResult = await this.#ingestFactoryEvent?.(parsed);
         } else {
           this.deps?.logger.debug('Platform GitHub event not forwarded to Factory ingress', {
             repositoryId,
@@ -464,6 +466,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
         }
         const result = await this.#dispatch(parsed, {
           controller: this.#controller,
+          factoryFeedbackTargets: githubFeedbackTargets(ingressResult),
           listSubscriptions: (target, options) =>
             listPullRequestSubscriptionsForWebhook(target, options, this.#github.integrationStorage),
           retireSubscription: (id, status) =>

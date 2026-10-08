@@ -27,12 +27,18 @@ import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
+import type { GithubFeedbackTarget } from './pr-feedback.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
 const FACTORY_TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
+
+interface GithubRulesIngressResult {
+  status: 'ignored' | 'committed' | 'replayed' | 'missing';
+  feedbackTargets?: GithubFeedbackTarget[];
+}
 
 async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -396,7 +402,7 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
-  async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+  async ingest(parsed: ParsedGithubWebhook): Promise<GithubRulesIngressResult> {
     const event = eventName(parsed);
     const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
@@ -413,7 +419,7 @@ export class GithubRules {
       repositoryExternalId: String(repositoryId),
     });
     if (projects.length === 0) return { status: 'ignored' };
-    const results = [];
+    const results: GithubRulesIngressResult[] = [];
     for (const project of projects) {
       results.push(
         event
@@ -421,8 +427,10 @@ export class GithubRules {
           : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
       );
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
+    const feedbackTargets = results.flatMap(result => result.feedbackTargets ?? []);
+    const feedback = feedbackTargets.length > 0 ? { feedbackTargets } : {};
+    if (results.some(result => result.status === 'committed')) return { status: 'committed', ...feedback };
+    if (results.some(result => result.status === 'replayed')) return { status: 'replayed', ...feedback };
     return results[0] ?? { status: 'ignored' };
   }
 
@@ -434,7 +442,7 @@ export class GithubRules {
     repositoryName: string,
     login: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+  ): Promise<GithubRulesIngressResult> {
     const factoryProject = await this.options.projects.get({
       orgId: project.orgId,
       id: project.factoryProjectId,
@@ -533,7 +541,7 @@ export class GithubRules {
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
-    ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
+    ): Promise<GithubRulesIngressResult> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
         actor,
@@ -687,6 +695,38 @@ export class GithubRules {
         causalChain: [],
         now: new Date(),
       });
+      // Claim only the target of an accepted, durably queued authoring wake.
+      // Replays read the committed decisions, not the freshly evaluated rule:
+      // configuration changes must not create a second subscription delivery.
+      const feedbackEvent = event === 'pullRequestCommentCreated' || event === 'pullRequestReviewSubmitted';
+      if (feedbackEvent && committed.status !== 'missing' && committed.result.status === 'accepted') {
+        const queued = committed.result.decisions;
+        const workItemId = committed.result.itemId;
+        if (
+          typeof workItemId === 'string' &&
+          Array.isArray(queued) &&
+          queued.some(entry => {
+            const decision = object(entry);
+            return decision?.type === 'sendMessage' && decision.role === 'work' && decision.idleBehavior !== 'persist';
+          })
+        ) {
+          const bindings = await this.options.storage.listRunBindings(
+            project.orgId,
+            project.factoryProjectId,
+            workItemId,
+          );
+          const binding = bindings
+            .filter(binding => binding.status === 'active' && binding.role === 'work')
+            .sort(
+              (left, right) => right.createdAt.getTime() - left.createdAt.getTime() || left.id.localeCompare(right.id),
+            )[0];
+          if (binding)
+            return {
+              status: committed.status,
+              feedbackTargets: [{ orgId: project.orgId, sessionId: binding.sessionId, threadId: binding.threadId }],
+            };
+        }
+      }
       return { status: committed.status };
     };
 

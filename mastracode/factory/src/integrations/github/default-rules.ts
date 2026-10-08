@@ -1,7 +1,7 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
-import { normalizedVerdictLine } from '../../review-verdict.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+import { isInformationalPrComment, PR_FEEDBACK_INSTRUCTIONS, requestsChangesVerdict } from './pr-feedback.js';
 import { isFactoryApproveVerdict } from './stale-reviews.js';
 
 export type GithubRuleOverrides = Partial<
@@ -258,8 +258,8 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
     priority: 'high',
     message:
       `Changes were requested on pull request #${context.pullRequest.number} (${context.review.url}). ` +
-      'Read the review comments on this PR, address the ones you agree with, and push the fixes to the PR branch. ' +
-      'Reply on GitHub to anything you are deliberately not changing, explaining why.',
+      'Read the review comments on this PR. ' +
+      PR_FEEDBACK_INSTRUCTIONS,
   } as const;
 }
 
@@ -288,25 +288,6 @@ function pullRequestReviewSubmitted(context: FactoryGithubRuleContext) {
   return addressReviewFeedback(context) ?? dismissStaleFactoryReviews(context);
 }
 
-/**
- * Detects the `factory-review` handoff verdict in a comment body.
- *
- * GitHub forbids an app from reviewing a pull request it authored, so on
- * Factory-authored PRs the review skill falls back to posting its verdict as a
- * plain comment. That comment is the only signal the authoring agent gets, so
- * it has to be readable back out. The skill's handoff contract puts the verdict
- * on the first line (`Verdict: request changes`), so only that line is
- * inspected — a verdict quoted later in the findings must not count.
- */
-function requestsChangesVerdict(body: string | undefined): boolean {
-  // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
-  const normalized = normalizedVerdictLine(body);
-  if (!normalized) return false;
-  // Match the verdict exactly so negated phrasings ("Verdict: do not request
-  // changes") cannot wake the author.
-  return /^verdict: ?(request changes|changes requested)$/.test(normalized);
-}
-
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
   // A validated Factory mention is a review-entry request, not feedback for the
   // authoring Work session. Invalid or unrecognized comments retain the normal
@@ -331,6 +312,14 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
   ) {
     return;
   }
+  if (
+    isInformationalPrComment({
+      sender: githubActorLogin(context),
+      author: context.issueComment.author,
+      body: context.issueComment.body,
+    })
+  )
+    return;
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:address-pull-request-comment`,
@@ -338,8 +327,8 @@ function addressPullRequestComment(context: FactoryGithubRuleContext) {
     priority: 'high',
     message:
       `${context.issueComment.author ?? 'Someone'} commented on pull request #${context.pullRequest.number} ` +
-      `(${context.issueComment.url ?? context.pullRequest.url}). Read the comment, address it if you agree, and push ` +
-      'the fixes to the PR branch. Reply on GitHub to anything you are deliberately not changing, explaining why.',
+      `(${context.issueComment.url ?? context.pullRequest.url}). Read the comment. ` +
+      PR_FEEDBACK_INSTRUCTIONS,
   } as const;
 }
 
