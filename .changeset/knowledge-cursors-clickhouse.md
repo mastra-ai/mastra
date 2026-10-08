@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Stopped mapping the deprecated `mastra_knowledge_cursors` table, which Knowledge no longer creates. No peer dependency ranges change.
+Removed the deprecated Knowledge curation cursor table from this store's table list, matching `@mastra/core`, which no longer creates it. Nothing changes for your app: this store never read or wrote Knowledge cursors. No peer dependency ranges change.
