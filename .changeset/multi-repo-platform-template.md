@@ -25,6 +25,6 @@ const template = createRepoTemplate({
     },
   ],
   workspaceSetupCommand: 'cd app && pnpm link ../shared-ui',
-  workingDirectory: '/home/user/workspace',
+  workingDirectory: '/home/user/repos',
 });
 ```
