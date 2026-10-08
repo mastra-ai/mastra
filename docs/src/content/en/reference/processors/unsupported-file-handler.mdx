@@ -16,7 +16,7 @@ Mastra adds this processor to every agent's `errorProcessors` by default, after 
 1. Every file goes to the model unchanged. Which file types a model reads varies by provider and changes over time, so the processor doesn't guess up front.
 1. The model call fails because of the file, in one of two ways:
    - The provider SDK refuses the file type before the request goes out, with an `UnsupportedFunctionalityError` that names the media type. The OpenAI and Anthropic SDKs do, for example.
-   - The provider rejects the request in its HTTP response. The error often says nothing about the file: Gemini answers some file types with a `502`. Any API error counts, as long as the request holds a file that isn't an image, a PDF, or text.
+   - The provider rejects the request in its HTTP response. The error often says nothing about the file: Gemini answers some file types with a `502`. Any API error counts, as long as the request holds a file that isn't an image, a PDF, or text. A status that asks to try again later, `408`, `409`, `429`, `503`, or `504`, doesn't count: [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor) sends the same request again, file included.
 1. On the first refusal of the call, the processor takes the rejected file out of the prompt, along with every other file that isn't an image, a PDF, or text. The call is tried again only once, and this covers every file the model may not read in that one attempt.
 1. It returns `{ retry: true }`, and the model is called again. If the call fails again, the error surfaces.
 
@@ -66,7 +66,7 @@ The `UnsupportedFileHandler` takes no constructor parameters.
     name: 'processAPIError',
     type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
     description:
-      'Signals a retry when the provider SDK refused a file type and the request holds a file. Only triggers on the first retry attempt.',
+      'Signals a retry when the provider refused a file, in its SDK or in its HTTP response, and leaves errors that ask to try again later to `StreamErrorRetryProcessor`. Only triggers on the first retry attempt.',
     isOptional: false,
   },
   {
@@ -82,7 +82,7 @@ The `UnsupportedFileHandler` takes no constructor parameters.
 ## Limitations
 
 - **Sandboxes shared across threads.** Files are written by default to the agent's sandbox, under a directory per thread that keeps them apart but doesn't protect them. In a sandbox shared by other threads or users, the command tool of any thread can read them. When files are private, resolve [one sandbox per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
-- **One more attempt.** If the call still fails once the files are taken out, the error surfaces. An API error on a request that holds such a file is retried once without it, even when the file wasn't the cause. A refusal unrelated to a file, on a request without one, is left alone.
+- **One more attempt.** If the call still fails once the files are taken out, the error surfaces. An API error on a request that holds such a file is retried once without it, even when the file wasn't the cause, unless its status asks to try again later. A refusal unrelated to a file, on a request without one, is left alone.
 
 ## Related
 

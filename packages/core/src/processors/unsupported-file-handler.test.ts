@@ -274,6 +274,33 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       ).rejects.toThrow('An internal error has occurred');
       expect(prompts).toHaveLength(1);
     });
+
+    // A status that asks to try again later says nothing about the files: the retry processor resends the request as is.
+    // Concurrent, since each case waits for the retry processor's delay.
+    it.concurrent.for([408, 409, 429, 503, 504])(
+      'leaves a %i to the retry processor, which sends the file again',
+      async (statusCode, { expect }) => {
+        let failed = false;
+        const { agent, prompts } = createAgent(() => {
+          if (failed) return undefined;
+          failed = true;
+          return new APICallError({
+            message: 'Try again later',
+            url: 'https://example.com/v1/chat',
+            requestBodyValues: {},
+            statusCode,
+            isRetryable: true,
+          });
+        });
+
+        const result = await agent.generate(turnWith(file('PK workbook', 'leads.xlsx', XLSX)), { memory: MEMORY });
+
+        expect(result.text).toBe('ok');
+        expect(prompts).toHaveLength(2);
+        expect(userFileParts(prompts[1]!)).toHaveLength(1);
+        expect(userTexts(prompts[1]!)).toEqual(['Read these']);
+      },
+    );
   });
 
   it('leaves a rejection that is not about a file alone', async () => {

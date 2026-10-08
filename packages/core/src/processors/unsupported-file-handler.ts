@@ -28,6 +28,8 @@ const REJECTED_MEDIA_TYPE = /media type:?\s+(\S+)/i;
 const MAX_CAUSE_DEPTH = 5;
 /** Recorded for a rejection that names no media type: every file the model may not read goes. */
 const UNNAMED_REJECTION = '*';
+/** Statuses that ask to try again later. They say nothing about the files, and the retry processor resends the request as is. */
+const TRY_LATER_STATUS_CODES: ReadonlySet<unknown> = new Set([408, 409, 429, 503, 504]);
 
 /**
  * Lets an agent keep working when the model rejects a file the user sent.
@@ -63,9 +65,10 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
       rejectionsOf(state).add(mediaType);
       return { retry: true };
     }
-    // A provider can reject the file in its HTTP response with nothing about the file in it,
-    // like Gemini's 502, so any API error counts when the request holds a file the model may not read.
-    if (!isAPICallError(error) || !hasUnreadableFile(messageList)) return;
+    // A provider can reject the file in its HTTP response with nothing about the file in it, like Gemini's 502,
+    // so an API error counts when the request holds a file the model may not read, unless it asks to try again later.
+    const apiError = apiCallErrorOf(error);
+    if (!apiError || TRY_LATER_STATUS_CODES.has(apiError.statusCode) || !hasUnreadableFile(messageList)) return;
     rejectionsOf(state).add(UNNAMED_REJECTION);
     return { retry: true };
   }
@@ -144,14 +147,14 @@ function rejectedMediaTypeOf(error: unknown): string | undefined {
   return undefined;
 }
 
-function isAPICallError(error: unknown): boolean {
+function apiCallErrorOf(error: unknown): { statusCode?: unknown } | undefined {
   let current: unknown = error;
   for (let depth = 0; depth < MAX_CAUSE_DEPTH && current; depth++) {
     const { name, cause } = current as { name?: unknown; cause?: unknown };
-    if (name === 'AI_APICallError') return true;
+    if (name === 'AI_APICallError') return current as { statusCode?: unknown };
     current = cause;
   }
-  return false;
+  return undefined;
 }
 
 function hasUnreadableFile(messageList: MessageList): boolean {
