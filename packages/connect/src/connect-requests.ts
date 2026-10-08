@@ -23,7 +23,7 @@ const CONNECT_DONE_PATH = '/connect/done';
 const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 const POLL_INTERVAL_MS = 2_000;
 const IDLE_CHECK_MS = 250;
-const IDLE_WAIT_MS = 15_000;
+const IDLE_WAIT_MS = 8_000;
 const CHANNEL_REQUEST_TTL_MS = 15 * 60_000;
 
 export type ConnectRequestData = {
@@ -122,10 +122,10 @@ export function verifyConnectSignature(
 
 export type DeliverOutcome = 'delivered' | 'duplicate' | 'in_flight' | 'rejected' | 'failed';
 
-const OUTCOME_STATUS: Record<DeliverOutcome, 200 | 403 | 409 | 503> = {
+const OUTCOME_STATUS: Record<DeliverOutcome, 200 | 403 | 503> = {
   delivered: 200,
   duplicate: 200,
-  in_flight: 409,
+  in_flight: 503,
   rejected: 403,
   failed: 503,
 };
