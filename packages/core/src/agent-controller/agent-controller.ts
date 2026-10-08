@@ -2550,7 +2550,12 @@ export class AgentController<TState = {}> {
       },
       abortSignal: scope?.abortSignal ?? (view.isActive() ? session.run.getAbortSignal() : undefined),
       emitEvent: view.emit,
-      getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+      getSubagentModelId: params => {
+        const state = view.get() as Record<string, unknown>;
+        const perType = params?.agentType ? state[`subagentModelId_${params.agentType}`] : undefined;
+        if (typeof perType === 'string') return perType;
+        return typeof state.subagentModelId === 'string' ? state.subagentModelId : null;
+      },
     };
 
     this.#executionViews.set(controllerContext, executionView);

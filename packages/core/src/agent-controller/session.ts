@@ -146,7 +146,13 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 const OM_STATE_KEYS = ['observerModelId', 'reflectorModelId', 'observationThreshold', 'reflectionThreshold'] as const;
 const THREAD_DERIVED_STATE_KEYS = [...OM_STATE_KEYS, ...PERSISTED_STATE_KEYS] as const;
-const AUTO_PERSISTED_STATE_KEYS = [...THREAD_DERIVED_STATE_KEYS] as const;
+function isSubagentModelKey(key: string): boolean {
+  return key === 'subagentModelId' || key.startsWith('subagentModelId_');
+}
+
+function threadDerivedStateKeys(state: Record<string, unknown>): string[] {
+  return [...THREAD_DERIVED_STATE_KEYS, ...Object.keys(state).filter(isSubagentModelKey)];
+}
 
 /** Version marker for thread metadata using the single-model persistence format. */
 export const MODEL_PERSISTENCE_VERSION = 2 as const;
@@ -932,7 +938,7 @@ export class SessionThread {
     const metadata: Record<string, unknown> = { [MODE_ID_KEY]: modeId };
     if (preserveStartupSelection) {
       const state = session.state.get() as Record<string, unknown>;
-      for (const key of THREAD_DERIVED_STATE_KEYS) {
+      for (const key of threadDerivedStateKeys(state)) {
         if (state[key] !== undefined) metadata[key] = state[key];
       }
     }
@@ -1349,7 +1355,7 @@ export class SessionThread {
         });
       }
 
-      for (const key of PERSISTED_STATE_KEYS) {
+      for (const key of [...PERSISTED_STATE_KEYS, ...Object.keys(meta ?? {}).filter(isSubagentModelKey)]) {
         if (key === 'thinkingLevel' && persistedModelId) continue;
         const value = meta?.[key];
         if (value === undefined) continue;
@@ -1851,8 +1857,8 @@ interface ApprovalGateFilter {
  * approval, the run parks on a promise here until the UI responds approve or
  * decline.
  *
- * Gates are keyed by `toolCallId` and each remembers the thread/run that opened
- * it. More than one gate can be parked at once — a background/sub-agent run on a
+ * Gates retain the tool call and thread/run that opened them. Bare call-ID
+ * responses are rejected when more than one owner has that ID. More than one gate can be parked at once — a background/sub-agent run on a
  * detached thread arms its own gate while the foreground run arms another — so
  * arming never overwrites or strands an existing gate, and a response can only
  * release the gate it names. Thread-scoped callers (abort, a user-message
@@ -1865,8 +1871,8 @@ interface ApprovalGateFilter {
  * categories.
  */
 export class SessionApproval {
-  /** Parked gates keyed by the tool call that opened them. */
-  #gates = new Map<string, ApprovalGate>();
+  /** Parked gates retain their full thread/run ownership, even when call IDs repeat. */
+  #gates = new Set<ApprovalGate>();
 
   /**
    * Park an approval for `toolCallId` and return a promise that resolves once
@@ -1886,14 +1892,16 @@ export class SessionApproval {
     threadId?: string;
     runId?: string;
   }): Promise<ApprovalDecision> {
-    const existing = this.#gates.get(toolCallId);
+    const existing = [...this.#gates].find(
+      gate => gate.toolCallId === toolCallId && gate.threadId === threadId && gate.runId === runId,
+    );
     if (existing) return existing.promise;
 
     let resolve!: (decision: ApprovalDecision) => void;
     const promise = new Promise<ApprovalDecision>(r => {
       resolve = r;
     });
-    this.#gates.set(toolCallId, { toolCallId, toolName, threadId, runId, promise, resolve });
+    this.#gates.add({ toolCallId, toolName, threadId, runId, promise, resolve });
     return promise;
   }
 
@@ -1932,14 +1940,17 @@ export class SessionApproval {
     toolCallId: string;
     onAlwaysAllow?: (toolName: string, threadId?: string) => void;
   }): SessionCommandResult {
-    const gate = this.#gates.get(toolCallId);
-    if (!gate) return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
+    const matches = this.#matching({ toolCallId });
+    if (matches.length !== 1) {
+      return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
+    }
+    const gate = matches[0]!;
 
     if (decision === 'always_allow_category') {
       onAlwaysAllow?.(gate.toolName, gate.threadId);
     }
 
-    this.#gates.delete(toolCallId);
+    this.#gates.delete(gate);
     gate.resolve({
       decision: decision === 'decline' ? 'decline' : 'approve',
       requestContext,
@@ -1961,7 +1972,7 @@ export class SessionApproval {
   cancel(options: ApprovalGateFilter & { declineContext?: { reason?: string; message?: string } } = {}): string[] {
     const gates = this.#matching(options);
     for (const gate of gates) {
-      this.#gates.delete(gate.toolCallId);
+      this.#gates.delete(gate);
       gate.resolve({ decision: 'decline', declineContext: options.declineContext });
     }
     return gates.map(gate => gate.toolCallId);
@@ -2871,7 +2882,7 @@ class SessionState<TState = unknown> {
   #newSource(state: Record<string, unknown>): StateSource {
     const source: StateSource = {
       ...this.#getBinding(),
-      preferences: Object.fromEntries(THREAD_DERIVED_STATE_KEYS.map(key => [key, state[key]])),
+      preferences: Object.fromEntries(threadDerivedStateKeys(state).map(key => [key, state[key]])),
       writtenKeys: new Set(),
       references: 0,
       persistSetting: this.#capturePersistSetting?.(),
@@ -2886,7 +2897,7 @@ class SessionState<TState = unknown> {
 
   #read(source: StateSource): Readonly<TState> {
     const state = { ...(this.#state as Record<string, unknown>) };
-    for (const key of THREAD_DERIVED_STATE_KEYS) {
+    for (const key of threadDerivedStateKeys({ ...state, ...source.preferences })) {
       if (source.preferences[key] === undefined) delete state[key];
       else state[key] = source.preferences[key];
     }
@@ -3033,14 +3044,16 @@ class SessionState<TState = unknown> {
     if (shouldApply && !shouldApply()) return false;
     onApply?.();
     const state = validatedState as Record<string, unknown>;
-    for (const key of THREAD_DERIVED_STATE_KEYS) {
+    for (const key of threadDerivedStateKeys({ ...source.preferences, ...state })) {
       source.preferences[key] = state[key];
       if (!hydrating && changedKeys.includes(key)) source.writtenKeys.add(key);
     }
     // Only the host portion of a validated snapshot is shared across bindings.
     this.#state = validatedState;
     const visibleKeys = changedKeys.filter(
-      key => source === this.#source || !(THREAD_DERIVED_STATE_KEYS as readonly string[]).includes(key),
+      key =>
+        source === this.#source ||
+        (!(THREAD_DERIVED_STATE_KEYS as readonly string[]).includes(key) && !isSubagentModelKey(key)),
     );
     if (visibleKeys.length > 0) {
       this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys: visibleKeys });
@@ -3063,7 +3076,7 @@ class SessionState<TState = unknown> {
       retained ?? this.#newSource(keys.length === 0 ? before : (this.#initialState as Record<string, unknown>));
     if (previous !== this.#source) this.#pruneSources();
     const after = this.get() as Record<string, unknown>;
-    const changedKeys = THREAD_DERIVED_STATE_KEYS.filter(key => before[key] !== after[key]);
+    const changedKeys = threadDerivedStateKeys({ ...before, ...after }).filter(key => before[key] !== after[key]);
     if (changedKeys.length > 0) this.#bus.emit({ type: 'state_changed', state: after, changedKeys });
   }
 
@@ -3082,7 +3095,7 @@ class SessionState<TState = unknown> {
   async #persistSettings(updates: Partial<TState>, persistSetting?: PersistSettingFn): Promise<void> {
     if (!persistSetting) return;
     const values = updates as Record<string, unknown>;
-    for (const key of AUTO_PERSISTED_STATE_KEYS) {
+    for (const key of threadDerivedStateKeys(values)) {
       if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
       try {
         await persistSetting({ key, value: values[key] });
@@ -5692,29 +5705,43 @@ export class Session<TState = unknown> {
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
               });
-            void decision
-              .then(async approval => {
+            void (async () => {
+              let pendingDecision = decision;
+              while (!approvalDisposed) {
+                const approval = await pendingDecision;
                 if (approvalDisposed) return;
-                const continuation = await this.machinery.buildRequestContext(
-                  approval.requestContext ?? requestContext,
-                  { ...next, execution: true, abortSignal: context.abortSignal },
-                );
-                if (approvalDisposed) return;
-                const observer = await this.observeSourceResume(agent, next, continuation);
+                let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
+                let accepted = false;
                 try {
+                  const continuation = await this.machinery.buildRequestContext(
+                    approval.requestContext ?? requestContext,
+                    { ...next, execution: true, abortSignal: context.abortSignal },
+                  );
+                  if (approvalDisposed) return;
+                  observer = await this.observeSourceResume(agent, next, continuation);
                   if (approvalDisposed) return;
                   const binding = { ...next, agent, requestContext: continuation, abortSignal: context.abortSignal };
                   if (approval.decision === 'approve') await this.approveToolCall(binding);
-                  else
-                    await this.declineToolCall({
-                      ...binding,
-                      declineContext: approval.declineContext,
-                    });
+                  else await this.declineToolCall({ ...binding, declineContext: approval.declineContext });
+                  accepted = true;
                   await observer.promise;
+                  return;
+                } catch (error) {
+                  if (approvalDisposed) return;
+                  if (accepted || observer?.dispatched()) throw error;
+                  pendingDecision = this.approval.arm({ ...next, toolName: chunk.payload.toolName });
+                  context.emitEvent?.({
+                    type: 'tool_approval_required',
+                    threadId: next.threadId,
+                    toolCallId: next.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    args: chunk.payload.args,
+                  });
                 } finally {
-                  observer.cancel();
+                  observer?.cancel();
                 }
-              })
+              }
+            })()
               .catch(error => context.emitEvent?.({ type: 'error', error: getErrorFromUnknown(error) }))
               .finally(() => {
                 ownedCalls.delete(next.toolCallId);
