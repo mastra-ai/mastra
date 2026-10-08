@@ -28,9 +28,13 @@
  * fixed (and the helper refuses a declaration that stops reproducing at all).
  *
  * plain's own values are pinned literally, read from the observation the helper returns, so the
- * reference stays visible next to the declaration. The `throws` leg is the only one driven
- * directly: a rejected run leaves the helper nothing to record, and the harness's own verdict for
- * that cell is NOT COMPARABLE.
+ * reference stays visible next to the declaration. The `throws` leg stays directly driven: the
+ * helper does record the rejected run now (`COR-1417` made a failed run an observation, and all
+ * three engines report `Error: T23 stopWhen failure`), but the recorded divergence is not one any
+ * ticket owns — durable and evented stream `step-finish` plus an `error` chunk where plain's
+ * stream simply rejects, and evented consults the predicate three times — so driving it through
+ * the helper would mean declaring a difference against no ticket. It is reported as the F-5
+ * finding instead.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';

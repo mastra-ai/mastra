@@ -36,11 +36,17 @@
  * is not modified.
  *
  * Deviation from the harness, stated per the case's port notes: the harness drives
- * `retry-zero` alongside the others and compares each cell's contract. Here the run fails,
- * so plain rejects before producing a turn and `expectEngineParity` cannot record it (it
- * requires at least one plain turn). The variant is therefore driven per engine and asserted
- * the way the harness judges it: the attempt count on each engine, that the run settled as a
- * failure, and the harness's own cross-engine comparison of the whole contract.
+ * `retry-zero` alongside the others and compares each cell's contract. The variant is
+ * therefore driven per engine here and asserted the way the harness judges it: the attempt
+ * count on each engine, that the run settled as a failure, and the harness's own cross-engine
+ * comparison of the whole contract.
+ *
+ * It cannot move onto `expectEngineParity`. Since COR-1417 the helper does record a failed run
+ * (as `snapshot.error`), but on this scenario all three engines emit the same non-empty
+ * `finish.stepResult` (`{ reason: 'error', warnings: [], isContinued: false }`), which makes the
+ * helper's global staleness guard fire on COR-1390's `finish` entry — "payload 'stepResult' no
+ * longer differs from plain; remove it from KNOWN_CHUNK_DIFFERENCES" — before any per-scenario
+ * comparison runs. That guard is not overridable, so the run is driven directly instead.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
