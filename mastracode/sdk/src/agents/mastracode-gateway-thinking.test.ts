@@ -1,9 +1,3 @@
-/**
- * Resolver-level tests: the session thinking level must reach the wire body for
- * Google, custom OpenAI-compatible, and OpenAI API-key models, and must leave
- * requests untouched when thinking is off or unset.
- */
-
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,6 +76,23 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(g3.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'medium' });
     const g25 = await requestBody(resolve('low', 'google', 'gemini-2.5-flash'));
     expect(g25.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 1024 });
+  });
+
+  it('sends DeepSeek the reasoning effort the model runs', async () => {
+    expect((await requestBody(resolve('max', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('max');
+    expect((await requestBody(resolve('xhigh', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('high');
+  });
+
+  it('turns DeepSeek thinking off, which DeepSeek leaves on by default', async () => {
+    const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'));
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('leaves a DeepSeek request untouched when no thinking level is set', async () => {
+    const body = await requestBody(resolve(undefined, 'deepseek', 'deepseek-v4-pro'));
+    expect(body).not.toHaveProperty('thinking');
+    expect(body).not.toHaveProperty('reasoning_effort');
   });
 
   it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {
