@@ -630,18 +630,20 @@ export function createDurableToolCallStep() {
         mastra?.getToolPayloadTransform?.();
       let threadExists = state?.threadExists ?? false;
 
-      let messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      const toolsForTransform = globalRunRegistry.get(runId)?.tools ?? rebuiltTools;
+      const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      let resumeMessageList = messageList;
       // A durable engine can replay the completed LLM step on a cold resume,
       // so its runtime rehydration never runs before this suspended tool step.
       // The suspension metadata was flushed to memory before suspending.
-      if (!messageList && workflowResumeData !== undefined && memory && state?.threadId) {
+      if (!resumeMessageList && workflowResumeData !== undefined && memory && state?.threadId) {
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
         if (messages.length) {
-          messageList = createRunMessageList({
+          resumeMessageList = createRunMessageList({
             mastra,
             threadId: state.threadId,
             resourceId: state.resourceId,
@@ -662,10 +664,10 @@ export function createDurableToolCallStep() {
         }
       }
 
-      const doFlush = async () => {
+      const doFlush = async (messagesToFlush = messageList) => {
         await flushMessagesBeforeSuspension({
           saveQueueManager,
-          messageList,
+          messageList: messagesToFlush,
           memory,
           threadId: state?.threadId,
           resourceId: state?.resourceId,
@@ -784,7 +786,7 @@ export function createDurableToolCallStep() {
         target: { toolCallId?: string; toolName: string; runId?: string },
         type: 'suspension' | 'approval',
       ) => {
-        if (!messageList) return;
+        if (!resumeMessageList) return;
 
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const expectedPartType = type === 'suspension' ? 'data-tool-call-suspended' : 'data-tool-call-approval';
@@ -798,7 +800,7 @@ export function createDurableToolCallStep() {
 
         const changedMessages = [];
         let matchedEntry: Record<string, any> | undefined;
-        for (const message of messageList.get.all.db()) {
+        for (const message of resumeMessageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
           let messageChanged = false;
@@ -830,12 +832,11 @@ export function createDurableToolCallStep() {
         }
 
         if (changedMessages.length > 0) {
-          messageList.add(changedMessages, 'response');
-          await doFlush();
+          resumeMessageList.add(changedMessages, 'response');
+          await doFlush(resumeMessageList);
         }
         // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
         if (matchedEntry && pubsub) {
-          const resumedEntry = globalRunRegistry.get(runId);
           // Re-run the original approval/suspension display transform so the ack never re-exposes redacted payloads.
           const displayed = await applyToolPayloadTransformToChunk(
             {
@@ -854,7 +855,7 @@ export function createDurableToolCallStep() {
             },
             {
               policy: toolPayloadTransform,
-              tools: resumedEntry?.tools ?? rebuiltTools,
+              tools: toolsForTransform,
               logger: logger as any,
             },
           );
@@ -898,7 +899,7 @@ export function createDurableToolCallStep() {
             },
             {
               policy: toolPayloadTransform,
-              tools: registryEntry?.tools,
+              tools: toolsForTransform,
               logger: logger as any,
             },
           );
@@ -968,7 +969,7 @@ export function createDurableToolCallStep() {
                 },
                 {
                   policy: toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  tools: toolsForTransform,
                   logger: logger as any,
                 },
               );
@@ -1220,7 +1221,7 @@ export function createDurableToolCallStep() {
                 },
                 {
                   policy: toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  tools: toolsForTransform,
                   logger: logger as any,
                 },
               );
@@ -1287,7 +1288,7 @@ export function createDurableToolCallStep() {
                 },
                 {
                   policy: toolPayloadTransform,
-                  tools: registryEntry?.tools,
+                  tools: toolsForTransform,
                   logger: logger as any,
                 },
               );
@@ -1525,7 +1526,7 @@ export function createDurableToolCallStep() {
                     {
                       policy: toolPayloadTransform,
                       toolTransform: (mappingTool as { transform?: any })?.transform,
-                      tools: liveEntry?.tools,
+                      tools: toolsForTransform,
                       logger: logger as any,
                       transformInput: {
                         providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
@@ -1862,7 +1863,7 @@ export function createDurableToolCallStep() {
               {
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
-                tools: registryEntry?.tools,
+                tools: toolsForTransform,
                 logger: logger as any,
               },
             );
@@ -1932,7 +1933,7 @@ export function createDurableToolCallStep() {
               {
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
-                tools: registryEntry?.tools,
+                tools: toolsForTransform,
                 logger: logger as any,
               },
             );

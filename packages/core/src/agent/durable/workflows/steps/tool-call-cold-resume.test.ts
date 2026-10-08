@@ -24,6 +24,62 @@ afterEach(() => {
 });
 
 describe('cold durable tool-call resume (#25978)', () => {
+  it.each([false, true])('redacts a declined tool using its own transform with placeholder=%s', async placeholder => {
+    if (placeholder) {
+      globalRunRegistry.set(runId, { isPlaceholder: true, tools: {}, model: undefined } as any);
+    }
+    const args = { value: 'secret' };
+    const execute = vi.fn();
+    const messages = [
+      {
+        id: 'suspended-message',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'save', args },
+            },
+          ],
+          metadata: { pendingToolApprovals: { 'call-1': { toolCallId: 'call-1', toolName: 'save', args } } },
+        },
+      },
+    ];
+    const tools = { save: { id: 'save', execute, transform: { display: { input: () => '[tool-redacted]' } } } };
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockImplementationOnce(async () => {
+      const registryEntry = globalRunRegistry.get(runId);
+      if (registryEntry) registryEntry.tools = tools as any;
+      return { tools: tools as any, memory: { recall: vi.fn().mockResolvedValue({ messages }) } as any };
+    });
+    vi.mocked(resolveRuntime.toolRequiresApproval).mockResolvedValue(true);
+    const result = await (createDurableToolCallStep() as any).execute({
+      inputData: { toolCallId: 'call-1', toolName: 'save', args, requireApproval: true },
+      resumeData: { approved: false },
+      suspendData: { type: 'approval' },
+      suspend: vi.fn(),
+      requestContext: new Map(),
+      getInitData: () => ({
+        runId,
+        agentId: 'saver',
+        options: {},
+        state: { threadId: 'thread-1', resourceId: 'user-1', threadExists: true },
+      }),
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      [PUBSUB_SYMBOL]: { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() },
+    });
+    expect(result.error).toBeUndefined();
+    expect(execute).not.toHaveBeenCalled();
+    const chunks = vi.mocked(emitChunkEvent).mock.calls.map(call => call[2]);
+    expect(chunks.map(chunk => chunk.type)).toEqual(['tool-call-resumed', 'tool-output-denied']);
+    for (const chunk of chunks) {
+      const display = JSON.stringify(chunk.metadata?.mastra?.toolPayloadTransform?.display);
+      expect(display).toContain('[tool-redacted]');
+      expect(display).not.toContain('secret');
+    }
+  });
+
   it.each([
     ['approval', false, true],
     ['approval', true, true],

@@ -177,7 +177,7 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
       );
       const messageListState = messageList.serialize();
       const memory = {
-        recall: vi.fn().mockResolvedValue({ messages: [] }),
+        recall: vi.fn().mockResolvedValue({ messages: messageList.get.all.db() }),
         saveMessages: vi.fn().mockResolvedValue([]),
       };
       const saveQueueManager = new SaveQueueManager({ memory: memory as any });
