@@ -50,12 +50,12 @@ how it looks and behaves.
 
 - Ask your coding agent: “Add a compact bookings summary component and teach the agent when to choose
   it. Explore the code and propose a plan before making changes.” Follow
-  [Adding UI components](docs/ui-components.md) for catalog registration, rendering, and selection instructions.
-- Connect your own data or adapt the example to another domain. See [Data sources](docs/data-sources.md)
+  [Adding UI components](https://github.com/mastra-ai/mastra/blob/main/templates/template-genui-data-explorer/docs/ui-components.md) for catalog registration, rendering, and selection instructions.
+- Connect your own data or adapt the example to another domain. See [Data sources](https://github.com/mastra-ai/mastra/blob/main/templates/template-genui-data-explorer/docs/data-sources.md)
   for the source contract and related Mastra templates for databases, PDFs, CSVs, and documents.
 
 For the startup flow, server/client boundaries, and independent deployment commands, see
-[Architecture and deployment](docs/architecture.md).
+[Architecture and deployment](https://github.com/mastra-ai/mastra/blob/main/templates/template-genui-data-explorer/docs/architecture.md).
 
 ## About Mastra templates
 
@@ -63,4 +63,4 @@ For the startup flow, server/client boundaries, and independent deployment comma
 Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are
 synchronized to standalone repositories.
 
-[Want to contribute?](./CONTRIBUTING.md)
+[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/template-genui-data-explorer/CONTRIBUTING.md)
