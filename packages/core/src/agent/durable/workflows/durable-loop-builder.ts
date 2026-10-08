@@ -663,10 +663,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           await emitStepFinish(true);
           return true;
         }
+        // The parked step completed before the run-level abort was observed. Emit its own outcome
+        // before recording the abort on loop state so consumers keep the completed step boundary.
+        await emitStepFinish(true);
         if (state.lastStepResult) {
           state.lastStepResult.reason = isTotalTimeout ? 'error' : 'abort';
         }
-        await emitStepFinish(false);
         return false;
       }
 
@@ -818,6 +820,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           transcript.messageListState = callbackList().serialize();
         },
         logger: rt.logger,
+      }).catch(async error => {
+        // User continuation policy can throw after the step has completed. Preserve that step's
+        // boundary on the stream before the workflow propagates the policy error.
+        await emitStepFinish(state.lastStepResult?.isContinued === true);
+        throw error;
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;

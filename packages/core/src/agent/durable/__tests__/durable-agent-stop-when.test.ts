@@ -17,10 +17,10 @@
  * contracts across engines — the cross-engine divergence is COR-1430, declared below.
  *
  * COR-1430 (declared below, for durable and evented): a throwing `stopWhen` rejects plain's stream
- * — its turn simply ends after the tool result — where durable and evented append an `error` chunk
- * to that same turn and resolve. The declaration's `expect` adds exactly that chunk, so the helper's
- * leaf-by-leaf comparison still covers everything else, and its own staleness check fails the
- * moment either side stops behaving this way.
+ * — its turn simply ends after the tool result — where durable and evented append `step-finish` and
+ * `error` chunks to that same turn and resolve. The declaration's `expect` adds exactly those chunks,
+ * so the helper's leaf-by-leaf comparison still covers everything else, and its own staleness check
+ * fails the moment either side stops behaving this way.
  *
  * Plain's own values are pinned literally, read from the observation the helper returns, so the
  * reference stays visible next to the declaration.
@@ -57,28 +57,28 @@ const EXPECTED_TURNS: Partial<Record<Variant, number>> = { predicate: 1, 'has-to
 
 /**
  * COR-1430: the same run settles differently. plain rejects the stream on the throwing predicate,
- * so its turn ends after the tool result; durable and evented append an `error` chunk to that turn
- * and resolve. The expectation adds exactly that chunk — and only that chunk — so the helper still
- * compares everything else leaf by leaf.
+ * so its turn ends after the tool result; durable and evented append `step-finish` and `error` chunks
+ * to that turn and resolve. The expectation adds exactly those chunks so the helper still compares
+ * everything else leaf by leaf.
  *
- * `chunkPayloads` is ignored because the extra error payload is not derivable from plain's
- * observation. The test body pins the parts that matter instead — the extra chunk's type and the
- * error it carries.
+ * `chunkPayloads` is ignored because the extra payloads are not derivable from plain's observation.
+ * The test body pins the parts that matter instead — the extra chunks' types, the completed step,
+ * and the error they carry.
  */
 function settledAfterThrowingStopWhen(plain: EngineObservation): EngineObservation {
   return {
     ...plain,
     turns: plain.turns.map(turn => ({
       ...turn,
-      chunks: [...turn.chunks, 'undefined:error'],
-      chunkTypes: [...turn.chunkTypes, 'error'],
+      chunks: [...turn.chunks, 'AGENT:step-finish', 'undefined:error'],
+      chunkTypes: [...turn.chunkTypes, 'step-finish', 'error'],
     })),
   };
 }
 
 const COR_1430: EngineDifference = {
   reason:
-    "COR-1430: a throwing stopWhen rejects plain's stream, where durable and evented stream an `error` chunk instead and resolve.",
+    "COR-1430: a throwing stopWhen rejects plain's stream, where durable and evented stream `step-finish` and `error` chunks instead and resolve.",
   ignore: ['chunkPayloads'],
   expect: settledAfterThrowingStopWhen,
 };
@@ -264,8 +264,8 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
 
     // Plain's reference, read off the observation the helper returned: the rejection ends the turn
     // after the tool result, so nothing else reaches the stream. Durable and evented settle the same
-    // run by appending the error chunk the COR-1430 declaration adds — its `expect` is what makes the
-    // comparison above possible, and its `reason` records why they are allowed to differ.
+    // run by appending the completed step and error chunks the COR-1430 declaration adds — its
+    // `expect` makes the comparison above possible, and its `reason` records why they may differ.
     const plainTypes = results.plain!.turns.at(-1)!.chunkTypes;
     expect(plainTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
     expect(errorMessages(results.plain!.turns.at(-1)!), 'plain: no error chunk on the wire').toEqual([]);
@@ -277,8 +277,10 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
         'step-start',
         'tool-call',
         'tool-result',
+        'step-finish',
         'error',
       ]);
+      expect((turn.chunkPayloads[4] as { stepResult?: { reason?: unknown } }).stepResult?.reason).toBe('tool-calls');
       expect(errorMessages(turn), `${engine}: error chunk`).toEqual(['T23 stopWhen failure']);
     }
 
