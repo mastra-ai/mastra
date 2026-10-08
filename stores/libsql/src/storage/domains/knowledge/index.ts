@@ -167,6 +167,20 @@ function escapeLikePattern(value: string): string {
   return value.replaceAll('=', '==').replaceAll('%', '=%').replaceAll('_', '=_');
 }
 
+function visibleNodeSql(scopeIds: KnowledgeScopeIds): string {
+  return `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=n.id AND v.scopeNodeId IN (${scopeIds.map(() => '?').join(',')}))`;
+}
+
+/** A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target. */
+function visibleRecordSql(scopeIds: KnowledgeScopeIds): { sql: string; args: string[] } {
+  const visibleNode = (alias: string) =>
+    `${alias}.deletedAt IS NULL AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${scopeIds.map(() => '?').join(',')}))`;
+  return {
+    sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIds.map(() => '?').join(',')})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
+    args: [...scopeIds, ...scopeIds, ...scopeIds],
+  };
+}
+
 function nodeReferenceId(node: KnowledgeNode | string): string {
   return typeof node === 'string' ? node : node.id;
 }
@@ -677,40 +691,34 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
-    const result = await this.#client.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE deletedAt IS NULL`,
-    );
-    const nodes: KnowledgeNode[] = [];
-    for (const row of result.rows) {
-      const node = parseNode(row);
-      if (!isKnowledgeNodeVisible(node, await this.#getNodeScopeIds(this.#client, node.id), scopeIds)) continue;
-      if (input.namePrefix && !node.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase())) continue;
-      if (input.kind && node.kind !== input.kind) continue;
-      if (input.isScope !== undefined && node.isScope !== input.isScope) continue;
-      nodes.push(node);
+    if (scopeIds.length === 0) return [];
+    const clauses = ['n.deletedAt IS NULL', visibleNodeSql(scopeIds)];
+    const args: InValue[] = [...scopeIds];
+    if (input.namePrefix) {
+      clauses.push("lower(n.name) LIKE ? ESCAPE '='");
+      args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
     }
-    nodes.sort(
-      (left, right) =>
-        right.updatedAt.getTime() - left.updatedAt.getTime() ||
-        left.name.localeCompare(right.name) ||
-        left.id.localeCompare(right.id),
-    );
-    let start = 0;
+    if (input.kind) {
+      clauses.push('n.kind=?');
+      args.push(input.kind);
+    }
+    if (input.isScope !== undefined) clauses.push(`n.isScope=${input.isScope ? 'TRUE' : 'FALSE'}`);
     if (input.cursor) {
       const cursor = parseKnowledgeNodeCursor(input.cursor, {
         namePrefix: input.namePrefix,
         kind: input.kind,
         isScope: input.isScope,
       });
-      start = nodes.findIndex(
-        node =>
-          node.updatedAt.getTime() < cursor.updatedAt.getTime() ||
-          (node.updatedAt.getTime() === cursor.updatedAt.getTime() &&
-            (node.name > cursor.name || (node.name === cursor.name && node.id > cursor.id))),
-      );
-      if (start < 0) return [];
+      const updatedAt = cursor.updatedAt.toISOString();
+      clauses.push('(n.updatedAt<? OR (n.updatedAt=? AND (n.name>? OR (n.name=? AND n.id>?))))');
+      args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
     }
-    return nodes.slice(start, start + (input.limit ?? 100));
+    args.push(input.limit ?? 100);
+    const result = await this.#client.execute({
+      sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE ${clauses.join(' AND ')} ORDER BY n.updatedAt DESC, n.name ASC, n.id ASC LIMIT ?`,
+      args,
+    });
+    return result.rows.map(parseNode);
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -1038,44 +1046,41 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     const query = input.query.trim().toLocaleLowerCase();
-    if (!query) return [];
+    if (!query || scopeIds.length === 0) return [];
+    const limit = input.limit ?? 20;
+    const pattern = `%${escapeLikePattern(query)}%`;
+    const nodes = await this.#client.execute({
+      sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} AND (lower(n.name) LIKE ? ESCAPE '=' OR lower(coalesce(n.kind,'')) LIKE ? ESCAPE '=' OR lower(coalesce(json(n.metadata),'')) LIKE ? ESCAPE '=') ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
+      args: [...scopeIds, pattern, pattern, pattern, limit],
+    });
     const results: SearchKnowledgeResult[] = [];
-    const nodes = await this.#client.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE deletedAt IS NULL ORDER BY updatedAt DESC`,
-    );
     for (const row of nodes.rows) {
       const node = parseNode(row);
-      const nodeScopeIds = await this.#getNodeScopeIds(this.#client, node.id);
-      const haystack = `${node.name} ${node.kind ?? ''} ${JSON.stringify(node.metadata ?? {})}`.toLocaleLowerCase();
-      if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds) && haystack.includes(query))
-        results.push({
-          type: 'node',
-          id: node.id,
-          recordId: node.id,
-          name: node.name,
-          text: node.name,
-          scopeIds: nodeScopeIds,
-        });
-      if (results.length >= (input.limit ?? 20)) return results;
+      results.push({
+        type: 'node',
+        id: node.id,
+        recordId: node.id,
+        name: node.name,
+        text: node.name,
+        scopeIds: await this.#getNodeScopeIds(this.#client, node.id),
+      });
     }
-    const records = await this.#client.execute(
-      `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE deletedAt IS NULL ORDER BY id DESC`,
-    );
+    if (results.length >= limit) return results;
+    const visibleRecord = visibleRecordSql(scopeIds);
+    const records = await this.#client.execute({
+      sql: `SELECT r.*,json(r.metadata) AS metadataJson,p.name AS parent_name FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND lower(r.text) LIKE ? ESCAPE '=' AND ${visibleRecord.sql} ORDER BY r.id DESC LIMIT ?`,
+      args: [pattern, ...visibleRecord.args, limit - results.length],
+    });
     for (const row of records.rows) {
       const record = parseKnowledge(row);
-      if (!record.text.toLocaleLowerCase().includes(query)) continue;
-      const recordScopeIds = await this.#getRecordScopeIds(this.#client, record.id);
-      if (!(await this.#isRecordVisible(this.#client, record, scopeIds))) continue;
-      const parent = await this.#getNode(this.#client, record.nodeId);
       results.push({
         type: 'record',
         id: record.id,
         recordId: record.nodeId,
-        name: parent!.name,
+        name: String(row.parent_name),
         text: record.text,
-        scopeIds: recordScopeIds,
+        scopeIds: await this.#getRecordScopeIds(this.#client, record.id),
       });
-      if (results.length >= (input.limit ?? 20)) break;
     }
     return results;
   }
@@ -1690,20 +1695,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #resolveNode(executor: Executor, name: string, scopeIds: KnowledgeScopeIds): Promise<KnowledgeNode | null> {
+    if (scopeIds.length === 0) return null;
+    // Only same-named nodes in a visible scope are candidates; the widest membership wins.
     const result = await executor.execute({
-      sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE lower(name)=? AND deletedAt IS NULL`,
-      args: [canonicalName(name)],
+      sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE lower(n.name)=? AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} ORDER BY (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" c WHERE c.nodeId=n.id) DESC, n.id ASC LIMIT 1`,
+      args: [canonicalName(name), ...scopeIds],
     });
-    const candidates: Array<{ node: KnowledgeNode; scopeIds: KnowledgeScopeIds }> = [];
-    for (const row of result.rows) {
-      const node = parseNode(row);
-      const nodeScopeIds = await this.#getNodeScopeIds(executor, node.id);
-      if (isKnowledgeNodeVisible(node, nodeScopeIds, scopeIds)) candidates.push({ node, scopeIds: nodeScopeIds });
-    }
-    candidates.sort(
-      (left, right) => right.scopeIds.length - left.scopeIds.length || left.node.id.localeCompare(right.node.id),
-    );
-    return candidates[0]?.node ?? null;
+    return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
 
   async #getRecord(executor: Executor, id: string, includeDeleted: boolean): Promise<KnowledgeRecord | null> {
