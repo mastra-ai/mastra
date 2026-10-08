@@ -162,7 +162,7 @@ describe('PostgreSQL observational memory supersededBy upgrade and row locks', (
   it('activation waits for a row lock held by another writer and then sees its write', async () => {
     const key = { threadId: `lock-${randomUUID()}`, resourceId: 'lock-resource', scope: 'thread' as const, config: {} };
     const record = await memory.initializeObservationalMemory(key);
-    await memory.updateBufferedObservations({
+    await memory.appendBufferedObservations({
       id: record.id,
       chunk: {
         cycleId: 'cycle-one',

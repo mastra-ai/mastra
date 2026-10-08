@@ -5,6 +5,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  assertActiveObservationsApplied,
   createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
@@ -1870,7 +1871,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     try {
       const collection = await this.getCollection(OM_TABLE);
       const safeTokenCount = Number.isFinite(input.tokenCount) && input.tokenCount >= 0 ? input.tokenCount : 0;
@@ -2175,7 +2180,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   // Async Buffering Methods
   // ============================================
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     try {
       const collection = await this.getCollection(OM_TABLE);
 

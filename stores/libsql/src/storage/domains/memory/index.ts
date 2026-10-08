@@ -34,6 +34,7 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
+  assertActiveObservationsApplied,
   createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
@@ -2178,7 +2179,11 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     try {
       const now = new Date();
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
@@ -2536,7 +2541,11 @@ export class MemoryLibSQL extends MemoryStorage {
   // Async Buffering Methods
   // ============================================
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     try {
       const nowStr = new Date().toISOString();
 

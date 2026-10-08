@@ -2,6 +2,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  assertActiveObservationsApplied,
   MemoryStorage,
   TABLE_MESSAGES,
   TABLE_OBSERVATIONAL_MEMORY,
@@ -377,7 +378,11 @@ export class MemoryOracle extends MemoryStorage {
     return insertObservationalMemoryRecord(this.ctx, record);
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     return updateActiveObservations(this.ctx, input);
   }
 
@@ -413,7 +418,11 @@ export class MemoryOracle extends MemoryStorage {
     return updateObservationalMemoryConfig(this.ctx, input);
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     return updateBufferedObservations(this.ctx, input);
   }
 

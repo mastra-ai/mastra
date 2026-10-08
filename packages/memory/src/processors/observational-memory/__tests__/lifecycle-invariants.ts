@@ -86,8 +86,8 @@ export function instrumentStorage(
   ledger: LifecycleLedger,
   ids: { threadId: string; resourceId: string },
 ): void {
-  const append = storage.updateBufferedObservations.bind(storage);
-  storage.updateBufferedObservations = async input => {
+  const append = storage.appendBufferedObservations.bind(storage);
+  storage.appendBufferedObservations = async input => {
     const head = await storage.getObservationalMemory(ids.threadId, ids.resourceId);
     const cursorBefore = time(head?.lastObservedAt);
     const result = await append(input);
@@ -96,18 +96,17 @@ export function instrumentStorage(
       cycleId: input.chunk.cycleId,
       messageIds: input.chunk.messageIds,
       cursorBefore,
-      // Adapters that predate the result report nothing; that means the chunk was stored.
-      persisted: result ? result.persisted : true,
+      persisted: result.persisted,
     });
     return result;
   };
 
-  const commit = storage.updateActiveObservations.bind(storage);
-  storage.updateActiveObservations = async input => {
+  const commit = storage.commitActiveObservations.bind(storage);
+  storage.commitActiveObservations = async input => {
     // Read the ids now: InMemory returns live records, which the commit mutates.
     const before = idsIn((await storage.getObservationalMemory(ids.threadId, ids.resourceId))?.activeObservations);
     const result = await commit(input);
-    if (!result || result.applied) {
+    if (result.applied) {
       // The ids the commit added: committed text minus the head text it replaced (with repeats).
       const remaining = before;
       const added = idsIn(input.observations).filter(id => {

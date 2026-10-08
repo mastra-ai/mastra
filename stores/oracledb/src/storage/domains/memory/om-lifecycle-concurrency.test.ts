@@ -192,7 +192,7 @@ describeIntegration('OracleDB observational memory supersededBy upgrade, backfil
   it('activation waits for a row lock held by another writer and then sees its write', async () => {
     const key = { threadId: `lock-${randomUUID()}`, resourceId: 'lock-resource', scope: 'thread' as const, config: {} };
     const record = await memory.initializeObservationalMemory(key);
-    await memory.updateBufferedObservations({
+    await memory.appendBufferedObservations({
       id: record.id,
       chunk: {
         cycleId: 'cycle-one',
@@ -258,13 +258,13 @@ describeIntegration('OracleDB observational memory supersededBy upgrade, backfil
     const record = await memory.initializeObservationalMemory(key);
     const winter = new Date('2024-01-15T10:00:00.000Z');
     const summer = new Date('2024-07-15T10:00:00.000Z');
-    await memory.updateActiveObservations({
+    await memory.commitActiveObservations({
       id: record.id,
       observations: '- winter',
       tokenCount: 1,
       lastObservedAt: winter,
     });
-    await memory.updateBufferedObservations({
+    await memory.appendBufferedObservations({
       id: record.id,
       chunk: {
         cycleId: 'cycle-summer',

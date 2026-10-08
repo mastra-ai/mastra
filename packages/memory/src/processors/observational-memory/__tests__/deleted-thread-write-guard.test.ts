@@ -165,7 +165,7 @@ describe('deleted-thread write guards', () => {
   describe('sync observation cycle', () => {
     it('writes no observation vectors and does not resurrect the record when the thread is deleted mid-cycle', async () => {
       const onIndexObservations = vi.fn().mockResolvedValue(undefined);
-      const updateActive = vi.spyOn(storage, 'updateActiveObservations');
+      const updateActive = vi.spyOn(storage, 'commitActiveObservations');
       const initialize = vi.spyOn(storage, 'initializeObservationalMemory');
       await seedThread(storage, threadId, resourceId);
 
@@ -192,7 +192,7 @@ describe('deleted-thread write guards', () => {
 
     it('still indexes observations when the thread survives the cycle', async () => {
       const onIndexObservations = vi.fn().mockResolvedValue(undefined);
-      const updateActive = vi.spyOn(storage, 'updateActiveObservations');
+      const updateActive = vi.spyOn(storage, 'commitActiveObservations');
       await seedThread(storage, threadId, resourceId);
 
       const om = createOM(storage, { model: createObserverModel(), onIndexObservations });
@@ -214,7 +214,7 @@ describe('deleted-thread write guards', () => {
   describe('buffered observation cycle', () => {
     it('writes no buffered chunk and no vectors when the thread is deleted mid-cycle', async () => {
       const onIndexObservations = vi.fn().mockResolvedValue(undefined);
-      const updateBuffered = vi.spyOn(storage, 'updateBufferedObservations');
+      const updateBuffered = vi.spyOn(storage, 'appendBufferedObservations');
       await seedThread(storage, threadId, resourceId);
 
       const om = createOM(storage, {
@@ -234,7 +234,7 @@ describe('deleted-thread write guards', () => {
 
     it('still buffers and indexes when the thread survives the cycle', async () => {
       const onIndexObservations = vi.fn().mockResolvedValue(undefined);
-      const updateBuffered = vi.spyOn(storage, 'updateBufferedObservations');
+      const updateBuffered = vi.spyOn(storage, 'appendBufferedObservations');
       await seedThread(storage, threadId, resourceId);
 
       const om = createOM(storage, {

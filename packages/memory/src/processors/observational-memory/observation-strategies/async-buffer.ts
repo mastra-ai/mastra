@@ -171,7 +171,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const appendResult = await withRetry(
       () => {
         appendAttempts++;
-        return this.storage.updateBufferedObservations({
+        const input = {
           id: record.id,
           chunk: {
             cycleId: this.cycleId,
@@ -187,7 +187,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
             extractionFailures: processed.extractionFailures,
           },
           lastBufferedAtTime: processed.lastObservedAt,
-        });
+        };
+        // Cores older than appendBufferedObservations only offer the void-returning write.
+        return typeof this.storage.appendBufferedObservations === 'function'
+          ? this.storage.appendBufferedObservations(input)
+          : this.storage.updateBufferedObservations(input).then(() => ({ persisted: true, recordId: input.id }));
       },
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
@@ -197,7 +201,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     // for this cycle's chunk on the head before giving up. A chunk that never landed must not
     // be indexed, reported as buffered, or advance buffering.
     let committedRecord = liveRecord;
-    if (appendResult && !appendResult.persisted) {
+    if (!appendResult.persisted) {
       const head = appendAttempts > 1 ? await getLineageHead(this.storage, record) : null;
       const landed =
         !!head &&
@@ -209,7 +213,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       this.persistedRecordId = head.id;
       committedRecord = head;
     } else {
-      this.persistedRecordId = appendResult?.recordId ?? record.id;
+      this.persistedRecordId = appendResult.recordId;
     }
     // Storage redirects an append aimed at a retired generation to the head; report the
     // generation the chunk landed on, which a later reflection may already have superseded.

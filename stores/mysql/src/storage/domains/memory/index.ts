@@ -5,6 +5,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
+  assertActiveObservationsApplied,
   MemoryStorage,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
@@ -2070,7 +2071,11 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     try {
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
 
@@ -2207,7 +2212,11 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     try {
       const newChunk: BufferedObservationChunk = {
         id: `ombuf-${globalThis.crypto.randomUUID()}`,

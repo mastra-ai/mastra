@@ -310,9 +310,9 @@ describe('sync observation commits against the head text', () => {
     await storage.saveMessages({ messages });
     observerReturns(om, '- observed fact');
 
-    const original = storage.updateActiveObservations.bind(storage);
+    const original = storage.commitActiveObservations.bind(storage);
     let injected = false;
-    vi.spyOn(storage, 'updateActiveObservations').mockImplementation(async input => {
+    vi.spyOn(storage, 'commitActiveObservations').mockImplementation(async input => {
       if (input.expectedActiveObservations !== undefined && !injected) {
         injected = true;
         const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
@@ -355,9 +355,9 @@ describe('sync observation commits against the head text', () => {
       results: new Map([[ids.threadId, { observations: 'Date: Jan 10, 2026\n* merged new fact' }]]),
     } as Awaited<ReturnType<typeof om.observer.callMultiThread>>);
 
-    const original = storage.updateActiveObservations.bind(storage);
+    const original = storage.commitActiveObservations.bind(storage);
     let injected = false;
-    vi.spyOn(storage, 'updateActiveObservations').mockImplementation(async input => {
+    vi.spyOn(storage, 'commitActiveObservations').mockImplementation(async input => {
       if (input.expectedActiveObservations !== undefined && !injected) {
         injected = true;
         const head = (await storage.getObservationalMemory(null, resourceId))!;
@@ -405,7 +405,7 @@ describe('sync observation commits against the head text', () => {
       await release.promise;
       return { observations: '- observed fact' } as Awaited<ReturnType<typeof om.observer.call>>;
     });
-    const update = vi.spyOn(storage, 'updateActiveObservations');
+    const update = vi.spyOn(storage, 'commitActiveObservations');
     const patch = vi.spyOn(storage, 'patchThread');
 
     const observing = om.observe({ threadId: ids.threadId, resourceId: ids.resourceId, messages });
@@ -465,9 +465,9 @@ describe('sync observation commits against the head text', () => {
     observerReturns(om, '- observed fact');
 
     // Every commit attempt races a concurrent writer that changes the head text first.
-    const original = storage.updateActiveObservations.bind(storage);
+    const original = storage.commitActiveObservations.bind(storage);
     let concurrentWrites = 0;
-    vi.spyOn(storage, 'updateActiveObservations').mockImplementation(async input => {
+    vi.spyOn(storage, 'commitActiveObservations').mockImplementation(async input => {
       if (input.expectedActiveObservations !== undefined) {
         const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
         concurrentWrites++;

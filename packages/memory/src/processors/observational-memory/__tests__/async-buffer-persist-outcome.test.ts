@@ -41,12 +41,12 @@ async function bufferOnce(
   if (opts.rolloverBeforeAppend || opts.rolloverAfterAppend || opts.clearAfterAppend) {
     // Another writer rolls the generation over after the cycle read its head, before the append,
     // and optionally again right after the append landed.
-    const append = storage.updateBufferedObservations.bind(storage);
-    vi.spyOn(storage, 'updateBufferedObservations').mockImplementation(async input => {
+    const append = storage.appendBufferedObservations.bind(storage);
+    vi.spyOn(storage, 'appendBufferedObservations').mockImplementation(async input => {
       const first = appendedTo.length === 0;
       if (first && opts.rolloverBeforeAppend) await rollover('REFLECTED');
       const result = await append(input);
-      if (result?.persisted) appendedTo.push(result.recordId);
+      if (result.persisted) appendedTo.push(result.recordId);
       if (first && opts.rolloverAfterAppend) await rollover('REFLECTED_AGAIN');
       if (first && opts.clearAfterAppend) await storage.clearObservationalMemory(threadId, resourceId);
       return result;

@@ -286,7 +286,7 @@ describe('Memory.copyThread / cloneThread', () => {
 
     const copied = (await memoryStore.getObservationalMemory(thread.id, resourceId))!;
     expect(copied.supersededBy ?? null).toBeNull();
-    const write = await memoryStore.updateActiveObservations({
+    const write = await memoryStore.commitActiveObservations({
       id: copied.id,
       observations: '- destination fact',
       tokenCount: 3,

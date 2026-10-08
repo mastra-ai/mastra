@@ -194,7 +194,7 @@ describe('MySQL observational memory supersededBy upgrade and row locks', () => 
       messageTokens: 500,
       lastObservedAt: new Date(Date.parse('2026-01-10T12:00:00.000Z') + ms),
     });
-    await memory.updateBufferedObservations({ id: record.id, chunk: chunk('cycle-one', 101) });
+    await memory.appendBufferedObservations({ id: record.id, chunk: chunk('cycle-one', 101) });
 
     const holder = await pool.getConnection();
     try {

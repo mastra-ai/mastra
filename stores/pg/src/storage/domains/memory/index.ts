@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  assertActiveObservationsApplied,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -2736,7 +2737,11 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     try {
       const tableName = this.#omTableName();
       const nowStr = new Date().toISOString();
@@ -3112,7 +3117,11 @@ export class MemoryPG extends MemoryStorage {
   // Async Buffering Methods
   // ============================================
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     try {
       const tableName = this.#omTableName();
       const nowStr = new Date().toISOString();

@@ -178,7 +178,7 @@ describe('LibSQL observational memory writes alongside other writes in the same 
           for (let i = 0; i < 20; i++) {
             const head = (await store.getObservationalMemory(threadId, resourceId))!;
             await capture(
-              store.updateBufferedObservations({
+              store.appendBufferedObservations({
                 id: head.id,
                 chunk: {
                   cycleId: `c${i}`,
@@ -271,7 +271,7 @@ describe('LibSQL observational memory guarded writes', () => {
           config: {},
         });
         injected = false;
-        await store.updateActiveObservations({
+        await store.commitActiveObservations({
           id: record.id,
           observations: '- fact',
           tokenCount: 1,

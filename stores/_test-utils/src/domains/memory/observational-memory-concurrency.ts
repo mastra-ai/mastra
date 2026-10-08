@@ -69,14 +69,14 @@ export function createObservationalMemoryConcurrencyTests({
 
     const seed = async (key: Key, chunks: Chunk[] = []) => {
       const record = await stores.a.initializeObservationalMemory(key);
-      await stores.a.updateActiveObservations({
+      await stores.a.commitActiveObservations({
         id: record.id,
         observations: '- base',
         tokenCount: 10,
         lastObservedAt: at(0),
       });
       for (const chunk of chunks) {
-        await stores.a.updateBufferedObservations({ id: record.id, chunk, lastBufferedAtTime: chunk.lastObservedAt });
+        await stores.a.appendBufferedObservations({ id: record.id, chunk, lastBufferedAtTime: chunk.lastObservedAt });
       }
       return clone(await head(key));
     };
@@ -118,7 +118,7 @@ export function createObservationalMemoryConcurrencyTests({
           const late = chunkAt('late', 200);
           await Promise.all([
             stores.a.createReflectionGeneration({ currentRecord: snapshot, reflection: '- reflected', tokenCount: 5 }),
-            stores.b.updateBufferedObservations({
+            stores.b.appendBufferedObservations({
               id: snapshot.id,
               chunk: late,
               lastBufferedAtTime: late.lastObservedAt,
@@ -177,7 +177,7 @@ export function createObservationalMemoryConcurrencyTests({
               currentPendingTokens: 500,
               bufferedChunks: snapshot.bufferedObservationChunks,
             }),
-            stores.b.updateBufferedObservations({
+            stores.b.appendBufferedObservations({
               id: snapshot.id,
               chunk: two,
               lastBufferedAtTime: two.lastObservedAt,
@@ -197,8 +197,8 @@ export function createObservationalMemoryConcurrencyTests({
           const snapshot = await seed(key);
           const chunk = chunkAt('dup', 100);
           const results = await Promise.all([
-            stores.a.updateBufferedObservations({ id: snapshot.id, chunk }),
-            stores.b.updateBufferedObservations({ id: snapshot.id, chunk }),
+            stores.a.appendBufferedObservations({ id: snapshot.id, chunk }),
+            stores.b.appendBufferedObservations({ id: snapshot.id, chunk }),
           ]);
           await expectInvariants(key, [chunk], snapshot.lastObservedAt);
           expect(results.filter(r => r && r.persisted).length).toBe(1);
@@ -251,7 +251,7 @@ export function createObservationalMemoryConcurrencyTests({
           const appended = `${snapshot.activeObservations}\n${tail}`;
           const [, commit] = await Promise.all([
             stores.a.createReflectionGeneration({ currentRecord: snapshot, reflection: '- reflected', tokenCount: 5 }),
-            stores.b.updateActiveObservations({
+            stores.b.commitActiveObservations({
               id: snapshot.id,
               observations: appended,
               tokenCount: 20,

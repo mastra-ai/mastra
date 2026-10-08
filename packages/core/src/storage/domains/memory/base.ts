@@ -497,15 +497,27 @@ export abstract class MemoryStorage extends StorageDomain {
    * Update active observations.
    * Called when observations are created and immediately activated (no buffering).
    *
+   * Adapters that implement {@link commitActiveObservations} throw here when the write is not
+   * applied, so a caller that only awaits this method can't mistake a rejected write for a
+   * committed one. Use {@link commitActiveObservations} to get the outcome instead.
+   */
+  async updateActiveObservations(_input: UpdateActiveObservationsInput): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Write active observations and report whether they were written.
+   *
    * Never writes to a superseded record (`{ applied: false, reason: 'retired' }`), and when
    * `expectedActiveObservations` is given, writes only if the stored text still equals it
    * (`{ applied: false, reason: 'conflict' }` otherwise). The cursor never moves backward.
-   * A `void` return (older adapters) means the write was applied.
+   *
+   * The default delegates to {@link updateActiveObservations} and reports the write as applied,
+   * which keeps adapters that predate this method working unchanged.
    */
-  async updateActiveObservations(
-    _input: UpdateActiveObservationsInput,
-  ): Promise<UpdateActiveObservationsResult | void> {
-    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+    await this.updateActiveObservations(input);
+    return { applied: true };
   }
 
   // ============================================
@@ -517,15 +529,26 @@ export abstract class MemoryStorage extends StorageDomain {
    * Update buffered observations.
    * Called when observations are created asynchronously via `bufferTokens`.
    *
+   * Use {@link appendBufferedObservations} to learn where the chunk was stored, or whether it
+   * was skipped.
+   */
+  async updateBufferedObservations(_input: UpdateBufferedObservationsInput): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Append a buffered observation chunk and report where it was stored.
+   *
    * Appends to the head generation (a superseded `id` is redirected to the head). Skips the
    * append when the head already holds a chunk with the same `cycleId` or the chunk is wholly
    * covered by the head's cursor; see {@link UpdateBufferedObservationsResult}.
-   * A `void` return (older adapters) means the chunk was stored on `input.id`.
+   *
+   * The default delegates to {@link updateBufferedObservations} and reports the chunk as stored
+   * on `input.id`, which keeps adapters that predate this method working unchanged.
    */
-  async updateBufferedObservations(
-    _input: UpdateBufferedObservationsInput,
-  ): Promise<UpdateBufferedObservationsResult | void> {
-    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+    await this.updateBufferedObservations(input);
+    return { persisted: true, recordId: input.id };
   }
 
   /**
