@@ -91,7 +91,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     if (url.pathname.includes('/knowledge/nodes/')) {
       return route.fulfill({
         json: {
-          node: { ...graph.nodes[0], content: 'Handles charging flows through [[Deploy Runbook]].' },
+          node: { ...graph.nodes[0], rung: 'resource', content: 'Handles charging flows through [[Deploy Runbook]].' },
           records: [
             {
               id: 'record-1',
