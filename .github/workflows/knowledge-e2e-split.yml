@@ -43,6 +43,12 @@ jobs:
         run: pnpm turbo build --filter "./${{ matrix.project }}"
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Provide docker-compose (tests spawn the v1 binary name)
+        run: |
+          mkdir -p "$HOME/bin"
+          printf '#!/bin/sh\nexec docker compose "$@"\n' > "$HOME/bin/docker-compose"
+          chmod +x "$HOME/bin/docker-compose"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
       - name: Normalize project name
         id: normalize
         run: echo "id=$(echo '${{ matrix.side }}-${{ matrix.project }}' | tr '/' '-')" >> $GITHUB_OUTPUT
