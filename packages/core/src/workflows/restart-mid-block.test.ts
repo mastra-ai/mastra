@@ -12,9 +12,11 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
+import { DefaultExecutionEngine } from './default';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -452,6 +454,135 @@ describe('checkpoint writes are ordered with the step start writes', () => {
     expect(writes.length).toBeGreaterThan(5);
     const foreachOutput = (stored()!.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput;
     expect(foreachOutput?.[0]?.status).toBe('success');
+  });
+
+  it('foreach: a start write prepared before a sibling finished still keeps that sibling', async () => {
+    let releaseStartup!: () => void;
+    const startupGate = new Promise<void>(resolve => (releaseStartup = resolve));
+    const started: number[] = [];
+    const state = { restarted: false };
+    const build = () => {
+      const list = step('list', async () => [0, 1]);
+      const charge = step('charge', async ({ inputData }) => {
+        started.push(inputData);
+        return inputData === 0 || state.restarted ? { charged: inputData } : never();
+      });
+      const workflow = createWorkflow({ id: 'order-startup', inputSchema: anySchema, outputSchema: anySchema })
+        .then(list.step)
+        .foreach(charge.step, { concurrency: 2 })
+        .commit();
+      return { workflow, fns: { charge: charge.fn } };
+    };
+    // Hold item 1 in its startup hook, after the step has looked at the shared foreach state.
+    const original = DefaultExecutionEngine.prototype.onStepExecutionStart;
+    const hook = vi.spyOn(DefaultExecutionEngine.prototype, 'onStepExecutionStart').mockImplementation(async function (
+      this: DefaultExecutionEngine,
+      params: any,
+    ) {
+      if (params.executionContext.foreachIndex === 1) await startupGate;
+      return original.call(this, params);
+    });
+    try {
+      const { runId, stored, writes } = await runWithInterceptedStore(build, snapshot => {
+        const output = (snapshot.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput;
+        // item 0 has finished and been saved: let item 1 continue
+        if (output?.[0]?.status === 'success') releaseStartup();
+      });
+      await vi.waitFor(() => expect(started).toEqual([0, 1]));
+      await sleep(300);
+
+      const foreachOutput = (stored()!.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput;
+      expect(writes.length).toBeGreaterThan(4);
+      expect(foreachOutput?.[0]?.status).toBe('success');
+
+      hook.mockRestore();
+      state.restarted = true;
+      const { restarted: result, fns } = await restartFrom(build, runId, stored()!);
+
+      expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([1]);
+      expect(result.status).toBe('success');
+      expect((result as any).result).toEqual([{ charged: 0 }, { charged: 1 }]);
+    } finally {
+      hook.mockRestore();
+      releaseStartup();
+    }
+  });
+
+  it('foreach: a start write made while a sibling success is being reported keeps all finished items', async () => {
+    const gate = () => {
+      let release!: () => void;
+      const promise = new Promise<void>(resolve => (release = resolve));
+      return { promise, release };
+    };
+    const item1Work = gate();
+    const item2Startup = gate();
+    const item1Progress = gate();
+    let item2StartupEntered = false;
+    let item1ProgressHeld = false;
+    const state = { restarted: false };
+    const build = () => {
+      const list = step('list', async () => [0, 1, 2]);
+      const charge = step('charge', async ({ inputData }) => {
+        if (state.restarted) return { charged: inputData };
+        if (inputData === 1) await item1Work.promise;
+        return inputData === 2 ? never() : { charged: inputData };
+      });
+      const workflow = createWorkflow({ id: 'order-progress', inputSchema: anySchema, outputSchema: anySchema })
+        .then(list.step)
+        .foreach(charge.step, { concurrency: 2 })
+        .commit();
+      return { workflow, fns: { charge: charge.fn } };
+    };
+    const originalStart = DefaultExecutionEngine.prototype.onStepExecutionStart;
+    const startHook = vi
+      .spyOn(DefaultExecutionEngine.prototype, 'onStepExecutionStart')
+      .mockImplementation(async function (this: DefaultExecutionEngine, params: any) {
+        if (params.executionContext.foreachIndex === 2) {
+          item2StartupEntered = true;
+          await item2Startup.promise;
+        }
+        return originalStart.call(this, params);
+      });
+    const originalPublish = EventEmitterPubSub.prototype.publish;
+    const publishHook = vi.spyOn(EventEmitterPubSub.prototype, 'publish').mockImplementation(async function (
+      this: EventEmitterPubSub,
+      ...args: any[]
+    ) {
+      const data = args[1]?.data;
+      if (data?.type === 'workflow-step-progress' && data.payload.currentIndex === 1) {
+        item1ProgressHeld = true;
+        await item1Progress.promise;
+      }
+      return (originalPublish as any).apply(this, args);
+    });
+    try {
+      const { runId, stored } = await runWithInterceptedStore(build, () => {});
+      // item 0 is finished and saved once item 2 is picked up; item 1 then finishes but its report is held
+      await vi.waitFor(() => expect(item2StartupEntered).toBe(true));
+      item1Work.release();
+      await vi.waitFor(() => expect(item1ProgressHeld).toBe(true));
+      item2Startup.release();
+      await sleep(300);
+      const snapshot = JSON.parse(JSON.stringify(stored()!)) as WorkflowRunState;
+      item1Progress.release();
+
+      const foreachOutput = (snapshot.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput;
+      expect(foreachOutput?.[0]?.status).toBe('success');
+      expect(foreachOutput?.[1]?.status).toBe('success');
+
+      startHook.mockRestore();
+      publishHook.mockRestore();
+      state.restarted = true;
+      const { restarted: result, fns } = await restartFrom(build, runId, snapshot);
+      expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([2]);
+      expect(result.status).toBe('success');
+    } finally {
+      startHook.mockRestore();
+      publishHook.mockRestore();
+      item1Work.release();
+      item2Startup.release();
+      item1Progress.release();
+    }
   });
 
   it('parallel: an arm that finishes after the block failed to persist does not write another checkpoint', async () => {

@@ -1187,7 +1187,8 @@ export async function executeForeach(
   // Siblings of a resumed foreach read the suspended entry for their own resume data, and the
   // persistence guard drops `running` writes after a suspend anyway, so only first runs and restarts checkpoint.
   const resumingSuspended = prevPayload?.status === 'suspended';
-  const checkpointItem = (k: number) => {
+  /** Rebuilds the running foreach result from the finished items and puts it back in the shared slot. */
+  const restoreProgress = () => {
     const foreachOutput: PersistedForeachStepResult[] = [];
     prevForeachOutput.forEach((itemResult, index) => {
       if (itemResult?.status === 'success') {
@@ -1195,13 +1196,16 @@ export async function executeForeach(
         foreachOutput[index] = compact as PersistedForeachStepResult;
       }
     });
-    const checkpoint = {
+    // Iterations share `stepResults[stepId]` and overwrite it with their own result.
+    stepResults[stepId] = {
       ...stepInfo,
       status: 'running',
       suspendPayload: { __workflow_meta: { foreachOutput } },
     } as StepResult<any, any, any, any>;
-    // Iterations share `stepResults[stepId]` and overwrite it with their own result.
-    stepResults[stepId] = checkpoint;
+  };
+
+  const checkpointItem = (k: number) => {
+    restoreProgress();
     return engine.persistStepUpdate({
       workflowId,
       runId,
@@ -1243,6 +1247,13 @@ export async function executeForeach(
       Object.assign(stepResults, stepExecResult.stepResults);
 
       const result = stepExecResult.result as ForeachStepResult;
+
+      // Put the finished items back right away: the awaits below would otherwise leave this item's
+      // plain result in the shared slot, and a sibling's start checkpoint would drop earlier progress.
+      if (result.status === 'success' && !resumingSuspended) {
+        prevForeachOutput[k] = { ...result, suspendPayload: {} };
+        restoreProgress();
+      }
 
       if (result.status !== 'success') {
         await handleNonSuccessResult(result, k);
