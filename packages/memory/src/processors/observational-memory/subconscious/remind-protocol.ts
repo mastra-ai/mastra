@@ -6,11 +6,14 @@ import type { Memory } from '../../..';
 export const REMIND_PARENT_THREAD_METADATA_KEY = 'subconsciousRemindParentThreadId';
 export const REMIND_MESSAGE_METADATA_KEY = 'subconsciousRemind';
 
+export type RemindSource = { type: string; id: string; recordId: string; name: string };
+
 export type RemindMessageMetadata =
   | {
       type: 'passive-check';
       eventId: string;
       candidateIds: string[];
+      sources?: RemindSource[];
     }
   | {
       type: 'question';
@@ -71,7 +74,10 @@ function parseMetadata(value: unknown): RemindMessageMetadata | undefined {
   const metadata = value as Record<string, unknown>;
   switch (metadata.type) {
     case 'passive-check':
-      return isString(metadata.eventId) && Array.isArray(metadata.candidateIds) && metadata.candidateIds.every(isString)
+      return isString(metadata.eventId) &&
+        Array.isArray(metadata.candidateIds) &&
+        metadata.candidateIds.every(isString) &&
+        (metadata.sources === undefined || Array.isArray(metadata.sources))
         ? (metadata as RemindMessageMetadata)
         : undefined;
     case 'question':

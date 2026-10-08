@@ -10,6 +10,7 @@ import type { Memory } from '../../..';
 import { createKnowledgeTools } from './knowledge-tools';
 import { RemindContinuationProcessor } from './remind-continuation';
 import { getRemindMessageMetadata } from './remind-protocol';
+import type { RemindSource } from './remind-protocol';
 import type { SubconsciousModel } from './types';
 
 const DEFAULT_INSTRUCTIONS = `Review passive reminder checks and memory questions in this conversation. Use the knowledge tools when more context is needed.
@@ -89,18 +90,34 @@ function passiveCheck(
     const serializedSources = text.match(/Scoped source candidates:\n([^\n]+)/)?.[1];
     if (!serializedSources) continue;
     try {
-      const sources = JSON.parse(serializedSources) as Array<{ id?: unknown; recordId?: unknown }>;
+      const sources = JSON.parse(serializedSources) as RemindSource[];
       const candidateIds = [
         ...new Set(
           sources.flatMap(source => [source.id, source.recordId]).filter((id): id is string => typeof id === 'string'),
         ),
       ];
-      return { type: 'passive-check', eventId, candidateIds };
+      return { type: 'passive-check', eventId, candidateIds, sources };
     } catch {
       continue;
     }
   }
   return undefined;
+}
+
+// Resolves cited ids to graph nodes so the UI can open them; record hits point at their anchor node.
+function sourceNodes(sourceIds: string[], sources: RemindSource[] = []) {
+  const nodes = new Map<string, { nodeId: string; name: string; recordId?: string }>();
+  for (const sourceId of sourceIds) {
+    const source = sources.find(candidate => candidate.id === sourceId || candidate.recordId === sourceId);
+    if (!source || source.name === '(private node)') continue;
+    const node =
+      source.type === 'record'
+        ? { nodeId: source.recordId, name: source.name, recordId: source.id }
+        : { nodeId: source.id, name: source.name };
+    if (typeof node.nodeId !== 'string' || typeof node.name !== 'string') continue;
+    nodes.set(`${node.nodeId}:${node.recordId ?? ''}`, node);
+  }
+  return [...nodes.values()];
 }
 
 export function createReminderAgent(options: {
@@ -170,6 +187,7 @@ export function createReminderAgent(options: {
         attributes: {
           source: 'subconscious',
           sourceIds: sourceIds.join(','),
+          sourceNodes: JSON.stringify(sourceNodes(sourceIds, check.sources)),
           agent: 'remind',
           threadId: options.parentThreadId,
         },

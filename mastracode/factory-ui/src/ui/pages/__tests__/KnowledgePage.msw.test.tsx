@@ -385,6 +385,17 @@ describe('KnowledgePage', () => {
     expect(breadcrumb).toHaveTextContent('Payments Service');
   });
 
+  it('opens the flyout from a ?node=&record= deep link and consumes the params', async () => {
+    stubKnowledgeRoute();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?node=ent-1&record=record-1`);
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByText('Payments Service')).toBeInTheDocument();
+    expect(router.state.location.search).toBe('');
+    fireEvent.click(within(flyout).getByRole('button', { name: /close/i }));
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+  });
+
   it('renders the calm not-available state for a stale thread deep link', async () => {
     stubKnowledgeRoute();
     renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=gone-thread`);

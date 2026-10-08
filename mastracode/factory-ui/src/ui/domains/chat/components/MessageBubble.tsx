@@ -31,6 +31,7 @@ import {
 import {
   HIDDEN_REACTIVE_SIGNAL_TAGS,
   SignalRow,
+  SignalSources,
   signalRowView,
   SUPPRESSED_STATE_SIGNAL_IDS,
   TimeGap,
@@ -226,7 +227,14 @@ export function MessageBubble({
       return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
     }
     if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
-    return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+    const row = <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+    if (!signalRow.sources) return row;
+    return (
+      <div>
+        {row}
+        <SignalSources sources={signalRow.sources} />
+      </div>
+    );
   }
 
   const status = statusMetadata(entry);

@@ -168,7 +168,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             {
               contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nCurrent observations:\n${context.rawObservations}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
               metadata: {
-                [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId, candidateIds },
+                [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId, candidateIds, sources },
               },
             },
             {

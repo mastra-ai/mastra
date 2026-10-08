@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -127,6 +128,65 @@ describe('TranscriptEntries signal rows', () => {
     expect(screen.queryByText(/current-task-list/)).not.toBeInTheDocument();
     expect(screen.queryByText(/current-objective/)).not.toBeInTheDocument();
   });
+
+  it('links reminder sources to the knowledge flyout', async () => {
+    const entry: TimelineEntry = {
+      kind: 'message',
+      id: 'sig-rem',
+      message: signalDBMessage({
+        id: 'sig-rem',
+        type: 'reactive',
+        tagName: 'remembered',
+        text: 'Atlas launches in March.\n\nSources: rec-1',
+        attributes: {
+          sourceIds: 'rec-1',
+          sourceNodes: JSON.stringify([{ nodeId: 'node-1', name: 'Project Atlas', recordId: 'rec-1' }]),
+        },
+      }),
+    };
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/factories/:factoryId/user/threads/:threadId',
+          element: <TranscriptEntries entries={[entry]} onApprove={() => {}} onRespond={() => {}} />,
+        },
+        { path: '/factories/:factoryId/knowledge', element: <p>knowledge page</p> },
+      ],
+      { initialEntries: ['/factories/f-1/user/threads/t-1'] },
+    );
+    renderWithProviders(<RouterProvider router={router} />);
+
+    const chip = within(screen.getByRole('navigation', { name: 'Signal sources' })).getByRole('link', {
+      name: 'Project Atlas',
+    });
+    expect(chip).toHaveAttribute('href', '/factories/f-1/knowledge?node=node-1&record=rec-1');
+    chip.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByText('knowledge page')).toBeInTheDocument();
+  });
+
+  it.each([undefined, 'not json', '[{"name":"no id"}]'])(
+    'renders reminders without usable sourceNodes as plain rows: %s',
+    sourceNodes => {
+      renderEntries([
+        {
+          kind: 'message',
+          id: 'sig-old',
+          message: signalDBMessage({
+            id: 'sig-old',
+            type: 'reactive',
+            tagName: 'remembered',
+            text: 'Atlas launches in March.\n\nSources: rec-1',
+            attributes: { sourceIds: 'rec-1', ...(sourceNodes ? { sourceNodes } : {}) },
+          }),
+        },
+      ]);
+
+      expect(screen.getByRole('group', { name: 'Signal: remembered' })).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Signal sources' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    },
+  );
 
   it('hides internal github reactive signals but renders other reactive tags', () => {
     renderEntries([

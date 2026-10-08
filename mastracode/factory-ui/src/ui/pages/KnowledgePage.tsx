@@ -110,6 +110,24 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const selected = trail.at(-1) ?? null;
   const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
 
+  // Deep links from other surfaces (e.g. reminder sources) open the flyout via
+  // ?node=<id>&record=<id>; the params are consumed so closing stays closed.
+  const linkedNodeId = searchParams.get('node');
+  const linkedRecordId = searchParams.get('record') ?? undefined;
+  useEffect(() => {
+    if (!linkedNodeId) return;
+    setTrail([{ nodeId: linkedNodeId, name: linkedNodeId, recordId: linkedRecordId }]);
+    setSearchParams(
+      params => {
+        const copy = new URLSearchParams(params);
+        copy.delete('node');
+        copy.delete('record');
+        return copy;
+      },
+      { replace: true },
+    );
+  }, [linkedNodeId, linkedRecordId, setSearchParams]);
+
   // Live updates hold while the user is exploring (moving, clicking,
   // zooming) and resume after 10s of stillness — the layout never shifts
   // under someone mid-interaction.
