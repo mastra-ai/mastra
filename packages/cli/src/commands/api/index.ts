@@ -501,6 +501,10 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryEnvironment, 'build', FACTORY_API_ROUTE_CATALOG.projectEnvironmentBuild, {
+    description: 'Queue a build of the sandbox environment of a Factory project',
+    routePlacement: 'origin',
+  });
 
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {

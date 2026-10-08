@@ -122,6 +122,7 @@ describe('api command descriptors', () => {
       factoryProjectDelete: ['projectDelete', ['id'], false, false, false],
       factoryProjectEnvironmentGet: ['projectEnvironmentGet', ['id'], false, false, false],
       factoryProjectEnvironmentUpdate: ['projectEnvironmentUpdate', ['id'], true, true, false],
+      factoryProjectEnvironmentBuild: ['projectEnvironmentBuild', ['id'], false, false, false],
       'factoryWork-itemList': ['workItemList', ['id'], false, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
