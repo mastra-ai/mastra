@@ -9,6 +9,7 @@ import {
   knowledgeScopeKey,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
+  knowledgeVisibleScopeKeys,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
@@ -374,9 +375,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   #resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): KnowledgeNode | null {
     const canonical = canonicalizeKnowledgeScope(scope);
     const canonicalName = name.trim().toLocaleLowerCase();
-    const visible = [...this.#db.knowledgeNodes.values()]
-      .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
-      .map(node => this.#resolveTerminalNode(node.id)!)
+    const visible = knowledgeVisibleScopeKeys(canonical)
+      .map(key => this.#db.knowledgeNodeKeys.get(`${key}\u0000${canonicalName}`))
+      .filter((id): id is string => id !== undefined)
+      .map(id => this.#resolveTerminalNode(id)!)
       .filter(node => isKnowledgeScopeVisible(node.scope, canonical))
       .sort((left, right) => right.scope.length - left.scope.length);
     return visible[0] ? cloneNode(visible[0]) : null;
