@@ -654,12 +654,23 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
   let finishReason: MastraFinishReason | undefined;
+  let hasToolCall = false;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
+      }
+
+      if (chunk.type === 'step-start') {
+        accumulatedText = '';
+        previousObject = undefined;
+        hasToolCall = false;
+      }
+
+      if (chunk.type === 'tool-call') {
+        hasToolCall = true;
       }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
@@ -690,12 +701,16 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
       // Providers that omit finish are handled by the flush fallback below.
       if (chunk.type === 'finish') {
         finishReason = chunk.payload.stepResult.reason;
-        await finalize(controller);
+        if (finishReason !== 'tool-calls' || !hasToolCall) {
+          await finalize(controller);
+        }
       }
     },
 
     async flush(controller) {
-      await finalize(controller);
+      if (finishReason !== 'tool-calls' || !hasToolCall) {
+        await finalize(controller);
+      }
     },
   });
 

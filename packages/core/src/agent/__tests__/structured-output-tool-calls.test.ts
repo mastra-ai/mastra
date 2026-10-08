@@ -551,3 +551,98 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
     expect(result.toolCalls.length).toBeGreaterThan(0);
   });
 });
+
+describe('structuredOutput with text before a tool call (#25038)', () => {
+  const outputSchema = z.object({ answer: z.string() });
+  const lookupTool = createTool({
+    id: 'lookup',
+    description: 'Look up information',
+    inputSchema: z.object({ query: z.string() }),
+    execute: async ({ query }) => ({ result: query }),
+  });
+
+  it.each([
+    { durable: false, intermediateText: 'I will look that up.' },
+    { durable: false, intermediateText: JSON.stringify({ answer: 'draft' }) },
+    { durable: true, intermediateText: 'I will look that up.' },
+    { durable: true, intermediateText: JSON.stringify({ answer: 'draft' }) },
+  ])('uses the terminal structured output for durable=$durable', async ({ durable, intermediateText }) => {
+    let modelCalls = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        modelCalls++;
+        const hasToolResults = prompt.some(
+          (message: any) =>
+            message.role === 'tool' ||
+            (Array.isArray(message.content) && message.content.some((content: any) => content.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'step-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: intermediateText },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'lookup',
+                input: JSON.stringify({ query: 'test' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'step-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: JSON.stringify({ answer: 'final' }) },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: `structured-output-before-tool-${durable}`,
+      name: 'Structured Output Before Tool Agent',
+      instructions: 'Look up information and return structured results.',
+      model: mockModel,
+      tools: { lookup: lookupTool },
+      durable,
+    });
+    const stream = await agent.stream('Look up test data', {
+      maxSteps: 3,
+      structuredOutput: { schema: outputSchema },
+    });
+    const objectResults = [];
+    const errors = [];
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'object-result') objectResults.push(chunk.object);
+      if (chunk.type === 'error') errors.push(chunk.payload.error);
+    }
+
+    expect(modelCalls).toBe(2);
+    expect(errors).toEqual([]);
+    expect(objectResults).toEqual([{ answer: 'final' }]);
+  });
+});
