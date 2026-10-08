@@ -1,6 +1,6 @@
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PlatformFactorySandbox } from './factory-sandbox.js';
 import { createRepoTemplate } from './repo-template.js';
@@ -54,6 +54,11 @@ async function identity(resolver: ReturnType<typeof createRepoTemplate>) {
 }
 
 describe('PlatformFactorySandbox', () => {
+  // The client reads SANDBOX_PROVIDER when the option is absent; the runner's
+  // environment must not decide whether a PlatformSandbox can be constructed.
+  beforeEach(() => vi.stubEnv('SANDBOX_PROVIDER', 'e2b'));
+  afterEach(() => vi.unstubAllEnvs());
+
   it('is a branded FactorySandbox describing cpu, memory and idle timeout', () => {
     const sandbox = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1' });
     expect(isFactorySandbox(sandbox)).toBe(true);
