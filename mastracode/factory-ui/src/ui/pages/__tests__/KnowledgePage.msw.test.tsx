@@ -12,6 +12,7 @@ import type {
   KnowledgeScopeTreePayload,
 } from '../../domains/factory/services/knowledge';
 import { createAppRoutes } from '../../router';
+import knowledgeCss from '../../domains/factory/components/knowledge/knowledge.css?raw';
 
 const FACTORY_ID = 'fp-1';
 
@@ -381,6 +382,8 @@ describe('KnowledgePage', () => {
     expect(nodes).toHaveLength(2);
     expect(screen.getByText('Payments Service')).toBeInTheDocument();
     expect(screen.getByText('Deploy Runbook')).toBeInTheDocument();
+    // Rung + pin filter chips render.
+    expect(screen.getByRole('button', { name: 'Project' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pinned' })).toBeInTheDocument();
     // Clean payload → no truncation banner.
     expect(screen.queryByTestId('knowledge-truncation-banner')).not.toBeInTheDocument();
@@ -760,11 +763,14 @@ describe('KnowledgePage', () => {
     renderRoute();
 
     const nodes = await screen.findAllByTestId('knowledge-node');
-    const graphStyles = screen.getByTestId('knowledge-graph').querySelector('style')?.textContent?.replace(/\s+/g, ' ');
-    const [beforeGuard, guarded] = graphStyles!.split('@media (prefers-reduced-motion: no-preference)');
-    expect(beforeGuard).not.toMatch(/animation|@keyframes/);
-    expect(guarded).toMatch(/@keyframes knowledgeArrive/);
-    expect(nodes[0]!.querySelector('[data-knowledge-circle]')).toHaveClass('motion-reduce:transition-none');
+    const css = knowledgeCss.replace(/\s+/g, ' ');
+    const [beforeGuard, afterGuard] = css.split('@media (prefers-reduced-motion: no-preference)');
+    expect(beforeGuard).not.toMatch(/animation:/);
+    const [guarded, afterReduce] = afterGuard!.split('@media (prefers-reduced-motion: reduce)');
+    expect(guarded).toMatch(/animation: knowledge-arrive/);
+    expect(afterReduce).toMatch(/\.knowledge-canvas \* \{ transition: none; \}/);
+    expect(afterReduce!.split('@keyframes')[0]).not.toMatch(/animation:/);
+    expect(screen.getByTestId('knowledge-graph')).toHaveClass('knowledge-canvas');
 
     fireEvent.click(nodes[0]!);
     expect(await screen.findByTestId('knowledge-flyout')).toHaveClass('motion-reduce:transition-none');
