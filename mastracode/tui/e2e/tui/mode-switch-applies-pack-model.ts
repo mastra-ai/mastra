@@ -44,10 +44,10 @@ export const modeSwitchAppliesPackModelScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
-    await runtime.waitForScreenText(/▐build▌mode-switch-e2e\/build-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/build · (?:mode-switch-e2e\/)?build-model/i, terminal, 8_000);
 
     terminal.write('\x1b[Z');
-    await runtime.waitForScreenText(/▐plan▌mode-switch-e2e\/plan-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/plan · (?:mode-switch-e2e\/)?plan-model/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

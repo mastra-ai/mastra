@@ -581,14 +581,18 @@ Pass `scope: null` to deliberately share entries across all callers. Only use th
 
 ### Custom cache backend
 
-`ResponseCache` accepts any `MastraServerCache`. For production, use `RedisCache` from `@mastra/redis`:
+`ResponseCache` accepts any `MastraServerCache`. For production, use `RedisServerCache` from `@mastra/redis`:
 
 ```typescript title="src/mastra/agents/cached-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { ResponseCache } from '@mastra/core/processors'
-import { RedisCache } from '@mastra/redis'
+import { RedisServerCache } from '@mastra/redis'
+import { createClient } from 'redis'
 
-const cache = new RedisCache({ url: process.env.REDIS_URL })
+const client = createClient({ url: process.env.REDIS_URL })
+await client.connect()
+
+const cache = new RedisServerCache({ client })
 
 export const agent = new Agent({
   id: 'cached-agent',

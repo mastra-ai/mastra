@@ -83,11 +83,11 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.submit('/mode plan');
-    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bplan · /i, terminal, 8_000);
 
     terminal.submit('Create a concise goal implementation plan for the plan approval e2e test.');
     await runtime.waitForScreenText(/Plan: E2E Goal Plan/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Use as \/goal\s+— switch to Build mode and pursue this plan/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Use as \/goal\s+switch to Build mode and pursue this plan/i, terminal, 10_000);
     await runtime.waitForScreenText(/Confirm the goal handoff starts the canonical goal run/i, terminal, 10_000);
 
     holdNextResponse = true;
@@ -111,7 +111,7 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     if (/Unexpected second goal run\.|Goal\s+◌\s+waiting/i.test(view)) {
       throw new Error('A second goal run started after the plan goal was judged done');
     }
-    if (!/▐build▌/.test(view) || /▐plan▌/.test(view)) {
+    if (!/\bbuild · /.test(view) || /\bplan · /.test(view)) {
       throw new Error('Mode did not stay in Build after the plan goal was judged done');
     }
     terminal.keyCtrlC();
