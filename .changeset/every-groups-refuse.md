@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory dropping the final assistant response when durable agent finalization reconstructs the message list. Final persistence and idle buffering now use the accepted output, without restoring messages removed by output processors. Fixes #25023.
+Improved observational memory finalization defensively: persistence and idle buffering use the terminal message list accepted by the processor pipeline rather than the list captured by the observation turn. Invariant tests cover distinct-list ownership and removed output. This is hardening, not a confirmed fix for #25023; the reported message loss remains unreproduced and the issue stays open.

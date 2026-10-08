@@ -17523,7 +17523,7 @@ describe('OM context loading with no prior observations', () => {
     expect(saved.find(m => m.id === 'assistant-msg-1')).toBeDefined();
   });
 
-  it('should persist the final response when durable execution replaces the turn message list', async () => {
+  it('uses the supplied terminal list for persistence when it differs from the captured turn list', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -17607,9 +17607,9 @@ describe('OM context loading with no prior observations', () => {
       'response',
     );
 
-    // Durable execution can deserialize a fresh MessageList for finalization while the shared OM
-    // turn still points at the list from the last input step. Earlier output processors may also
-    // remove rejected content from the final list.
+    // Construct a distinct terminal list to assert the ownership invariant, including removed output.
+    // This synthetic setup is not a reproduction of #25023: no supported caller has been shown
+    // to reach finalization with this distinct-list/live-turn combination.
     const finalMessageList = new MessageList({ threadId, resourceId }).deserialize(stepMessageList.serialize());
     finalMessageList.removeByIds(['rejected-msg-durable']);
     finalMessageList.add(

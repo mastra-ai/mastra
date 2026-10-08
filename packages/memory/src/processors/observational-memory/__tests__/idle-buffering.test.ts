@@ -141,7 +141,7 @@ describe('turn.end() idle buffering', () => {
     );
   });
 
-  it('persists and buffers the authoritative final list rather than the stale step list', async () => {
+  it('uses an explicitly supplied terminal list for both persistence and idle buffering', async () => {
     const mockOM = createMockOM({ asyncEnabled: true });
     mockOM.getUnobservedMessages = vi.fn((messages: MastraDBMessage[]) => messages);
     const stepMessageList = new MessageList({ threadId, resourceId });

@@ -438,8 +438,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const liveTurn = turn && !turn.ended ? turn : undefined;
 
         if (liveTurn) {
-          // Durable finalization may deserialize a new list. Persist the final processor
-          // output rather than the turn's stale step snapshot.
+          // Use the pipeline's accepted terminal list as the persistence authority,
+          // rather than relying on the list captured when the turn began.
           await liveTurn.end(messageList);
         }
         this.turn = undefined;
