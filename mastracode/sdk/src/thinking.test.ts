@@ -118,6 +118,18 @@ describe('thinking model capabilities', () => {
       undefined,
       ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
     ],
+    [
+      'DeepSeek offers off through its thinking switch',
+      'deepseek/deepseek-v4-pro',
+      [{ type: 'toggle' }, ...effort('low', 'high', 'max')],
+      ['off', 'low', 'high', 'max'],
+    ],
+    [
+      'DeepSeek offers no off its request cannot send',
+      'deepseek/deepseek-v4-pro',
+      effort('none', 'high', 'max'),
+      ['high', 'max'],
+    ],
   ])('%s', (_, modelId, reasoningOptions, levels) => {
     expect(getAvailableThinkingLevelsForModel(modelId, reasoningOptions)).toEqual(levels);
   });
@@ -133,6 +145,7 @@ describe('thinking model capabilities', () => {
     ],
     ['low on a model with only high', 'openai/gpt-5-pro', 'low', effort('high'), 'high'],
     ['off anywhere', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
+    ['off on DeepSeek without its thinking switch', 'deepseek/deepseek-v4-pro', 'off', effort('none', 'high'), 'high'],
   ] as const)('runs %s as the closest level the request sends', (_, modelId, level, reasoningOptions, runLevel) => {
     expect(runThinkingLevel(modelId, level, reasoningOptions)).toBe(runLevel);
   });

@@ -7,17 +7,17 @@ export type ThinkingProviderOptions = Record<string, JSONValue>;
 
 export interface ThinkingRequest {
   optionsKey: string;
-  optionsByLevel: ReadonlyMap<ThinkingLevelSetting, ThinkingProviderOptions>;
+  optionsByLevel: ReadonlyMap<ThinkingLevelSetting, ThinkingProviderOptions | undefined>;
 }
 
-interface EffortRequestShape {
+interface EffortFormat {
   acceptedLevels?: readonly ThinkingLevelSetting[];
-  options: (effort: string) => ThinkingProviderOptions;
+  toOptions: (effort: string) => ThinkingProviderOptions;
 }
 
-interface ThinkingRequestShape {
+interface ThinkingRequestFormat {
   optionsKey: string;
-  effort?: EffortRequestShape;
+  effort?: EffortFormat;
   toggle?: (enabled: boolean) => ThinkingProviderOptions;
 }
 
@@ -32,43 +32,43 @@ const LEVEL_FOR_EFFORT: Partial<Record<string, ThinkingLevelSetting>> = {
   max: 'max',
 };
 
-const REQUEST_SHAPES_BY_PROVIDER: Partial<Record<string, ThinkingRequestShape>> = {
+const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>> = {
   deepseek: {
     optionsKey: 'deepseek',
     effort: {
       acceptedLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
-      options: reasoningEffort => ({ reasoningEffort }),
+      toOptions: reasoningEffort => ({ reasoningEffort }),
     },
     toggle: enabled => ({ thinking: { type: enabled ? 'enabled' : 'disabled' } }),
   },
 };
 
-function requestShapeFor(modelId: string): ThinkingRequestShape | undefined {
+function requestFormatFor(modelId: string): ThinkingRequestFormat | undefined {
   if (modelId.startsWith(MASTRA_GATEWAY_PREFIX)) return undefined;
   const [provider = ''] = modelId.split('/');
-  return REQUEST_SHAPES_BY_PROVIDER[provider];
+  return REQUEST_FORMATS_BY_PROVIDER[provider];
 }
 
-function acceptedLevelFor(effort: EffortRequestShape, value: string): ThinkingLevelSetting | undefined {
+function acceptedLevelFor(effort: EffortFormat, value: string): ThinkingLevelSetting | undefined {
   const level = LEVEL_FOR_EFFORT[value];
-  if (!level) return undefined;
-  return (effort.acceptedLevels?.includes(level) ?? true) ? level : undefined;
+  const rejectedByPackage = level && effort.acceptedLevels && !effort.acceptedLevels.includes(level);
+  return rejectedByPackage ? undefined : level;
 }
 
 function optionsByLevelFor(
-  { effort, toggle }: ThinkingRequestShape,
+  { effort, toggle }: ThinkingRequestFormat,
   reasoningOptions: readonly ModelReasoningOption[],
-): Map<ThinkingLevelSetting, ThinkingProviderOptions> {
-  const optionsByLevel = new Map<ThinkingLevelSetting, ThinkingProviderOptions>();
+): Map<ThinkingLevelSetting, ThinkingProviderOptions | undefined> {
+  const optionsByLevel = new Map<ThinkingLevelSetting, ThinkingProviderOptions | undefined>();
   if (effort) {
     for (const value of reasoningOptions.flatMap(option => (option.type === 'effort' ? option.values : []))) {
       const level = acceptedLevelFor(effort, value);
-      if (level) optionsByLevel.set(level, effort.options(value));
+      if (level) optionsByLevel.set(level, effort.toOptions(value));
     }
   }
   if (toggle && reasoningOptions.some(option => option.type === 'toggle')) optionsByLevel.set('off', toggle(false));
-  const onlyTurnsOff = optionsByLevel.size === 1 && optionsByLevel.has('off');
-  if (onlyTurnsOff) optionsByLevel.set(TOGGLE_ON_LEVEL, toggle?.(true) ?? {});
+  const sendsNoThinkingLevel = [...optionsByLevel.keys()].every(level => level === 'off');
+  if (sendsNoThinkingLevel) optionsByLevel.set(TOGGLE_ON_LEVEL, toggle?.(true));
   return optionsByLevel;
 }
 
@@ -76,9 +76,7 @@ export function thinkingRequestFor(
   modelId: string,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): ThinkingRequest | undefined {
-  const shape = requestShapeFor(modelId);
-  if (!shape || !reasoningOptions) return undefined;
-  const optionsByLevel = optionsByLevelFor(shape, reasoningOptions);
-  if (optionsByLevel.size === 0) return undefined;
-  return { optionsKey: shape.optionsKey, optionsByLevel };
+  const format = requestFormatFor(modelId);
+  if (!format || !reasoningOptions?.length) return undefined;
+  return { optionsKey: format.optionsKey, optionsByLevel: optionsByLevelFor(format, reasoningOptions) };
 }

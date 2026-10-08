@@ -78,8 +78,8 @@ function closestOfferedEffort(
 
 function runRequestThinkingLevel(level: ThinkingLevelSetting, request: ThinkingRequest): ThinkingLevelSetting {
   if (request.optionsByLevel.has(level)) return level;
-  const sentEfforts = ACTIVE_THINKING_LEVELS.filter(effort => request.optionsByLevel.has(effort));
-  return closestOfferedEffort(level, sentEfforts) ?? 'off';
+  const requestEfforts = ACTIVE_THINKING_LEVELS.filter(effort => request.optionsByLevel.has(effort));
+  return closestOfferedEffort(level, requestEfforts) ?? TOGGLE_ON_LEVEL;
 }
 
 function lowestLevelWithSameBudget(level: ActiveThinkingLevel): ActiveThinkingLevel {
