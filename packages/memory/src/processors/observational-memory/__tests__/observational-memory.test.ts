@@ -4744,7 +4744,7 @@ describe('Reflector Agent Helpers', () => {
       expect(consolidation).toContain('Keep every concrete fact');
       expect(consolidation).toContain('never drop specifics');
       expect(consolidation).toContain('keep both the old and new values with their dates and say which is current');
-      expect(consolidation).toContain('have never done, do not know, or refused');
+      expect(consolidation).toContain('Keep what the user explicitly said they have never done, do not know, or refused');
       expect(consolidation).toContain('Prefer many short factual lines over prose summaries');
       // Older observations may be condensed in wording, but not stripped of their facts.
       expect(consolidation).toContain('Condense the wording of older observations more than recent ones, but keep their facts');

@@ -79,7 +79,7 @@ When consolidating observations:
 - Keep every concrete fact: names, places, dates, numbers, amounts, durations, titles, versions, and who said what. Merge duplicates, but never drop specifics
 - Keep every dated statement with its date, and retain the timestamps that matter (start times, completion times, significant events)
 - When the user changed their mind or a fact was updated, keep both the old and new values with their dates and say which is current
-- Keep what the user said they have never done, do not know, or refused, and keep every stated preference, rule, and instruction with its meaning intact
+- Keep what the user explicitly said they have never done, do not know, or refused, and keep every stated preference, rule, and instruction with its meaning intact
 - Prefer many short factual lines over prose summaries. Do not replace facts with generalities like "discussed travel plans"
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
 - Preserve ✅ completion markers — they are memory signals that tell the assistant what is already resolved and help prevent repeated work
