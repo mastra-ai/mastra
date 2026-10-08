@@ -149,10 +149,7 @@ describe('durable agent usage with selectively omitted counters', () => {
           ).toBe(true);
         }
 
-        expect(
-          JSON.stringify(terminalUsage),
-          `${engine}: terminal finish usage equals the resolved full output usage`,
-        ).toBe(JSON.stringify(usage));
+        expect(terminalUsage, `${engine}: terminal finish usage equals the resolved full output usage`).toEqual(usage);
 
         observed[engine] = {
           variant,
