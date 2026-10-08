@@ -8,11 +8,22 @@ import type {
   PruneResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
+  TABLE_NAMES,
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   mergeWorkflowStepResult,
   normalizePerPage,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   matchesExpectedWorkflowStatus,
@@ -21,10 +32,25 @@ import {
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
+import type { SqliteClient as Client, SqliteInValue as InValue, SqliteValue } from '../../db/client';
+import { assertRunFence, DB_NOW_MS, inWriteTransaction, withRunFence } from '../../db/run-fencing';
+import type { RunFenceCheck } from '../../db/run-fencing';
 import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
+
+const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
+
+function toRunOwnershipRecord(runId: string, row: Record<string, SqliteValue>): RunOwnershipRecord {
+  const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
+  return {
+    runId,
+    generation: Number(row.generation),
+    ownerId: String(row.ownerId),
+    leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
+    live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
+  };
+}
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
   /**
@@ -92,10 +118,133 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       schema,
       ifNotExists: ['resourceId'],
     });
+    await this.#db.createTable({
+      tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_WORKFLOW_RUN_OWNERS],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.#db.deleteData({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });
+  }
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence, runId);
+    return resolved && { claimsTable: TABLE_WORKFLOW_RUN_OWNERS, fence: resolved, operation };
+  }
+
+  async #readRunOwner(q: { execute: Client['execute'] }, runId: string): Promise<RunOwnershipRecord | null> {
+    const result = await q.execute({
+      sql: `SELECT ${RUN_OWNER_COLUMNS} FROM ${TABLE_WORKFLOW_RUN_OWNERS} WHERE runId = ?`,
+      args: [runId],
+    });
+    const row = result.rows[0];
+    return row ? toRunOwnershipRecord(runId, row) : null;
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('LIBSQL', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  // Claims, renewals and releases run in write transactions: the read that
+  // judges the current claim and the write that replaces it hold the
+  // database's write lock together, so racing claimers resolve one at a time.
+
+  async claimRunOwnership({
+    runId,
+    ownerId,
+    leaseMs,
+    force,
+    expectedGeneration,
+  }: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    try {
+      return await this.executeWithRetry(
+        () =>
+          inWriteTransaction(this.#client, async tx => {
+            const current = await this.#readRunOwner(tx, runId);
+            const generation = current?.generation ?? 0;
+            if (expectedGeneration !== undefined && expectedGeneration !== generation) {
+              return { acquired: false, record: current };
+            }
+            if (current?.live && !force) {
+              return { acquired: false, record: current };
+            }
+            await tx.execute({
+              sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_OWNERS} (runId, generation, ownerId, leaseExpiresAt)
+                VALUES (?, ?, ?, ${DB_NOW_MS} + ?)
+                ON CONFLICT(runId) DO UPDATE SET
+                  generation = excluded.generation,
+                  ownerId = excluded.ownerId,
+                  leaseExpiresAt = excluded.leaseExpiresAt`,
+              args: [runId, generation + 1, ownerId, leaseMs],
+            });
+            return { acquired: true, record: (await this.#readRunOwner(tx, runId))! };
+          }),
+        'claimRunOwnership',
+      );
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      return await this.executeWithRetry(
+        () =>
+          inWriteTransaction(this.#client, async tx => {
+            const renewed = await tx.execute({
+              sql: `UPDATE ${TABLE_WORKFLOW_RUN_OWNERS} SET leaseExpiresAt = ${DB_NOW_MS} + ?
+                WHERE runId = ? AND generation = ? AND ownerId = ? AND leaseExpiresAt IS NOT NULL`,
+              args: [leaseMs, fence.runId, fence.generation, fence.ownerId],
+            });
+            const record = await this.#readRunOwner(tx, fence.runId);
+            return renewed.rowsAffected > 0 ? { renewed: true, record: record! } : { renewed: false, record };
+          }),
+        'renewRunOwnership',
+      );
+    } catch (error) {
+      throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      const released = await this.executeWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `UPDATE ${TABLE_WORKFLOW_RUN_OWNERS} SET leaseExpiresAt = NULL
+                WHERE runId = ? AND generation = ? AND ownerId = ?`,
+              args: [fence.runId, fence.generation, fence.ownerId],
+            }),
+          ),
+        'releaseRunOwnership',
+      );
+      return released.rowsAffected > 0;
+    } catch (error) {
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await this.#readRunOwner(this.#client, runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
   }
 
   /** Delete workflow snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
@@ -141,6 +290,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     result,
     requestContext,
     state,
+    fence: explicitFence,
   }: {
     workflowName: string;
     runId: string;
@@ -148,7 +298,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
     state?: Record<string, any>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const check = this.#runFenceCheck(explicitFence, runId, 'updateWorkflowResults');
     return this.executeWithRetry(
       () =>
         // Serialize the interactive transaction against all other writes on the shared
@@ -157,6 +309,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           // Use a transaction to ensure atomicity
           const tx = await this.#client.transaction('write');
           try {
+            if (check) await assertRunFence(tx, check);
             // Load existing snapshot within transaction
             const existingSnapshotResult = await tx.execute({
               sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
@@ -217,11 +370,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence: explicitFence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    const check = this.#runFenceCheck(explicitFence, runId, 'updateWorkflowState');
     return this.executeWithRetry(
       () =>
         // Serialize the interactive transaction against all other writes on the shared
@@ -230,6 +386,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           // Use a transaction to ensure atomicity
           const tx = await this.#client.transaction('write');
           try {
+            if (check) await assertRunFence(tx, check);
             // Load existing snapshot within transaction
             const existingSnapshotResult = await tx.execute({
               sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
@@ -285,6 +442,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -292,6 +450,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }) {
     const now = new Date();
     const createdAtValue = (createdAt ?? now).toISOString();
@@ -303,10 +462,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     // original createdAt and only advances updatedAt. The generic INSERT OR REPLACE helper
     // would rewrite the whole row, resetting createdAt on every step persist. This mirrors
     // updateWorkflowResults above and the pg/mysql/mongodb stores.
+    const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
     await this.executeWithRetry(
       () =>
-        withClientWriteLock(this.#client, () =>
-          this.#client.execute({
+        withRunFence(this.#client, check, writer =>
+          writer.execute({
             sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
@@ -379,14 +539,26 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
+    const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     return this.executeWithRetry(async () => {
       try {
-        await this.#client.execute({
-          sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-          args: [workflowName, runId],
-        });
+        await withRunFence(this.#client, check, writer =>
+          writer.execute({
+            sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+            args: [workflowName, runId],
+          }),
+        );
       } catch (error) {
+        if (isRunFenceConflictError(error)) throw error;
         throw new MastraError(
           {
             id: createStorageErrorId('LIBSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

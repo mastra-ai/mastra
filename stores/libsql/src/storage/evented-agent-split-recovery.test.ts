@@ -5,7 +5,8 @@
  *
  * 1. The API process starts a run and the worker dies while the model call is
  *    in flight, so the run is left `running` in storage.
- * 2. Both processes restart. The new API process calls
+ * 2. Both processes restart. The killed process's claim on the run lapses, then
+ *    the new API process calls
  *    `agent.recoverActiveRuns()`, which restarts the run and publishes
  *    `workflow.start`. That event must reach the new worker process; if the
  *    durable loop's events were local-only, the run would stay `running`.
@@ -22,7 +23,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 interface ChildMessage {
-  type: 'ready' | 'status' | 'model-called' | 'tool-called' | 'recovered' | 'run-status' | 'error';
+  type: 'ready' | 'status' | 'model-called' | 'tool-called' | 'recovered' | 'claim-lapsed' | 'run-status' | 'error';
   data?: any;
 }
 
@@ -152,9 +153,18 @@ process.on('message', async (msg: any) => {
           succeeded: result.succeeded,
           failed: result.failed,
           runIds: result.recovered.map(r => r.runId),
+          statuses: result.recovered.map(r => r.status),
           errors: result.recovered.map(r => r.error?.message).filter(Boolean),
         },
       });
+    } else if (msg.type === 'lapse-claim') {
+      // End the killed process's claim the way its lease running out would.
+      const workflows = await storage.getStore('workflows');
+      const record = await workflows!.getRunOwnership({ runId: msg.runId });
+      if (record?.live) {
+        await workflows!.releaseRunOwnership({ runId: msg.runId, generation: record.generation, ownerId: record.ownerId });
+      }
+      process.send!({ type: 'claim-lapsed' });
     } else if (msg.type === 'run-status') {
       const workflows = await storage.getStore('workflows');
       const { runs } = await workflows!.listWorkflowRuns({ workflowName: 'durable-agentic-loop' });
@@ -266,9 +276,17 @@ describe('EventedAgent restart recovery - API (MASTRA_WORKERS=false) + dedicated
     const apiModels = record(second.api, 'model-called');
     const apiTools = record(second.api, 'tool-called');
 
+    // Until the killed process's claim lapses, the run still looks owned.
+    second.api.send({ type: 'recover' });
+    const skipped = await waitForMessage(second.api, 'recovered', 20_000);
+    expect(skipped.data).toEqual({ succeeded: 0, failed: 0, runIds: [runId], statuses: ['skipped'], errors: [] });
+
+    second.api.send({ type: 'lapse-claim', runId });
+    await waitForMessage(second.api, 'claim-lapsed');
+
     second.api.send({ type: 'recover' });
     const recovered = await waitForMessage(second.api, 'recovered', 20_000);
-    expect(recovered.data).toEqual({ succeeded: 1, failed: 0, runIds: [runId], errors: [] });
+    expect(recovered.data).toEqual({ succeeded: 1, failed: 0, runIds: [runId], statuses: ['success'], errors: [] });
 
     // A durable run deletes its snapshot once it finishes, so nothing is left `running`.
     let statuses = await runStatuses(second.api);

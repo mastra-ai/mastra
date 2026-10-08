@@ -1019,9 +1019,13 @@ export class PgDB extends MastraBase {
     await flush();
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  /** `client` lets a caller run the insert inside its own transaction. */
+  async insert(
+    { tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> },
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'> = this.client,
+  ): Promise<void> {
     try {
-      await this.executeInsert(this.client, { tableName, record });
+      await this.executeInsert(client, { tableName, record });
     } catch (error) {
       throw new MastraError(
         {
