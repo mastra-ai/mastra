@@ -17,6 +17,12 @@ export class FileTransport extends LoggerTransport {
     }
 
     this.fileStream = createWriteStream(this.path, { flags: 'a' });
+    // Without a listener, the file stream's 'error' event would crash the process.
+    // Write failures already reach the transport through the write callback, so only
+    // forward errors that have not destroyed the transport yet (e.g. open failures).
+    this.fileStream.on('error', error => {
+      if (!this.destroyed) this.destroy(error);
+    });
   }
 
   _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk?: any) => void) {

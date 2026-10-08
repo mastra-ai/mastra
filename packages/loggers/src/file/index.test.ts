@@ -123,6 +123,15 @@ describe('FileTransport', () => {
     expect(result).toEqual([null, 'ok\n']);
   });
 
+  it('should surface real filesystem errors on the transport instead of crashing', async () => {
+    const transport = new FileTransport({ path: testDir });
+    const writeError = new Promise<Error | null | undefined>(resolve => transport.write('line\n', resolve));
+    const transportError = new Promise<Error>(resolve => transport.once('error', resolve));
+
+    expect((await writeError)?.message).toMatch(/EISDIR/);
+    expect((await transportError).message).toMatch(/EISDIR/);
+  });
+
   it('should flush remaining data when stream ends', () => {
     const endSpy = vi.spyOn(fileLogger.fileStream, 'end');
 
