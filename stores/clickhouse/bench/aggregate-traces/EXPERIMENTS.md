@@ -81,6 +81,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X34 | prod+local | Integer keys for the token retry dedupe; what the dedupe costs                                                             | Dedupe memory follows the number of token rows, not key type or aggregate: −11% at largest                                                   | done   |
 | X35 | local      | One usage row per model call: separate table, span columns, `FINAL` read                                                   | Per-call table ×0.41 at largest; `FINAL` read adds a ~160 MiB floor (rejected)                                                               | done   |
 | X36 | prod       | Real Platform read traffic from `query_log` across compute groups (`traffic.ts`, 2.3 days)                                 | Cold reads are rare (≤5% of reads touch object storage, p99 1.6 s); the read-ahead floor makes 8% of 256 MiB-capped span reads fail          | done   |
+| X37 | prod       | mobs-query's own read paths, today's settings vs platform#3407 (`mobs-ab.ts`, 33 operations, 15 projects)                  | Warm: same latency, 3–4× less memory, no failures. Forced-cold: 2–4× slower; 43 of 230 cold reads hit the 9 s limit, 39 already took > 9 s   | done   |
 
 ## Entries
 
@@ -566,6 +567,38 @@ Isolating that step on prod (largest project, ~2.3M token rows): grouping alone 
 | E4   | 293–298    | 297–304   | 872–875        | 752–771       |
 | T1   | 303–305    | 289–292   | 845–854        | 766–768       |
 | T3   | 299–300    | 291       | 860–867        | 758–766       |
+
+### X37: platform#3407 settings on mobs-query's own reads (prod replica, read-only, 2026-10-08)
+
+`mobs-ab.ts` calls mobs-query's real service functions (lists, trace/branch/span detail, logs, metrics, scores,
+feedback, discovery, metric aggregates at 24 h and 7 d) with a guarded client, so the SQL is exactly what the service
+sends. **A** = today (server defaults: read-ahead pool 200). **B** = the PR (`filesystem_prefetches_limit = 8`,
+`max_execution_time = 9`, throw). List and detail operations run on all 15 projects, the rest on one per bucket. Each
+operation: one cold call per variant (filesystem cache off), one unmeasured warm-up, then 3 warm calls per variant
+alternating A/B. 1,840 calls. The measured shapes match 70.5% of mobs-query's real reads over 3 days by normalized
+query hash (83,298 reads, identified by mobs-query's `CLICKHOUSE_SETTINGS`); every uncovered shape is a variant of a
+measured family and under 2.4% of reads on its own.
+
+| bucket  | warm ms A → B (median op) | warm MiB A → B | cold ms A → B (median op) | B cold failures | of which A also > 9 s |
+| ------- | ------------------------- | -------------- | ------------------------- | --------------- | --------------------- |
+| small   | 21 → 17                   | 48 → 13        | 196 → 846                 | 3 / 46          | 3                     |
+| mid     | 17 → 17                   | 44 → 10        | 536 → 1,121               | 7 / 46          | 6                     |
+| p90     | 16 → 17                   | 49 → 12        | 287 → 1,322               | 5 / 46          | 4                     |
+| p99     | 24 → 26                   | 69 → 21        | 808 → 1,018               | 15 / 46         | 13                    |
+| largest | 35 → 36                   | 88 → 22        | 484 → 967                 | 13 / 46         | 13                    |
+
+- **Warm reads do not change.** No operation got meaningfully slower (worst: p99 logs page 118 → 165 ms; most within
+  ±10%). No warm failures in either variant. Memory drops 3–4× except where real query state dominates (branch list
+  at p99/largest ~200/410 MiB in both).
+- **Fully cold reads get 2–4× slower**, and every B failure was a cold call hitting the 9 s limit (code 159): branch
+  list (15, every bucket), trace list (13), trace detail (4), others (3). In 39 of 43 the same call under A also took
+  over 9 s, which in production already exceeds the 10 s socket timeout; 4 calls A finished in 6–9 s.
+- **The real behaviour change:** a > 10 s read today is cut by the socket, retried once, and the retry often succeeds
+  because the abandoned server query kept filling the cache. Under B the server stops at 9 s with `TIMEOUT_EXCEEDED`,
+  which `withRetry` does not retry, so the user sees an error instead of a slow success.
+- **How often that happens:** in 3 days mobs-query ran 83,352 reads; 425 (0.5%) were mostly cold, 9 took over 3 s,
+  4 over 6 s, 2 over 9 s. At a 2–4× cold slowdown, only reads taking more than ~2–4.5 s today are at risk: about
+  3 per day.
 
 ### X36: real read traffic (prod, read-only, 2026-10-06 to 2026-10-08)
 
