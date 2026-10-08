@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fixed Observational Memory structured working-memory extraction failing on OpenAI by using the configured schema instead of an open record schema.
+Fixed OpenAI working-memory extraction failing when working memory uses a schema.

@@ -12,12 +12,19 @@ import type { ExtractorRuntimeContext } from './extractor';
 /**
  * Derive a Zod schema for native structured extraction from the configured working-memory schema.
  * Using `z.record` here emits `propertyNames`, which OpenAI strict mode rejects (#25343).
- * The configured schema is still re-validated in `onExtracted` before anything is stored.
+ * The configured object branch lists real properties for OpenAI; the passthrough branch accepts
+ * invalid shapes so one bad working-memory value does not fail sibling extractors in the shared
+ * response. Persistence still re-validates against the configured schema in `onExtracted`.
  * Like the working memory tool, nulls in optional fields are treated as "not provided" rather than as invalid.
  */
 function toNullableWorkingMemoryZodSchema(schema: PublicSchema): z.ZodType<Record<string, unknown> | null> {
   const zodSchema = isZodType(schema) ? schema : convertSchemaToZod(schema as never);
-  return z.union([zodSchema as z.ZodType<Record<string, unknown>>, z.null()]);
+  return z.union([
+    zodSchema as z.ZodType<Record<string, unknown>>,
+    // Keep sibling extractors when WM fails the configured shape; onExtracted still blocks persist.
+    z.object({}).passthrough(),
+    z.null(),
+  ]);
 }
 
 async function validateAgainstConfiguredSchema(schema: PublicSchema, value: unknown): Promise<unknown> {

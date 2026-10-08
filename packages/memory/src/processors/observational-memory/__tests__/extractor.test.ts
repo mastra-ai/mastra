@@ -880,7 +880,7 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
     expect(invalid.memory.updateWorkingMemory).not.toHaveBeenCalled();
   });
 
-  it('does not persist an invalid working-memory document from a shared structured extraction', async () => {
+  it('rejects an invalid document from structured extraction without dropping sibling extractors', async () => {
     const memory = createSchemaMemory(colorSchema);
     const extractors = await resolveExtractors(
       [
@@ -904,12 +904,9 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
       memory,
     });
 
-    // Configured WM schema is part of the shared structured-output object, so an invalid
-    // working-memory value fails native extraction and the json-prompt-injection fallback.
-    expect(doStream).toHaveBeenCalledTimes(2);
+    expect(doStream).toHaveBeenCalledTimes(1);
     expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
-    expect(extraction.values).toEqual({});
-    expect(extraction.failures.map(f => f.slug).sort()).toEqual(['topic', 'working-memory']);
-    expect(result.values).toBeUndefined();
+    expect(result.values).toEqual({ topic: 'paint' });
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: expect.stringContaining('preferredColor') }]);
   });
 });
