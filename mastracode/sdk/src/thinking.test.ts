@@ -93,10 +93,23 @@ describe('thinking model capabilities', () => {
     ['Claude without extended thinking offers only off', 'anthropic/claude-3-5-haiku-20241022', undefined, ['off']],
     ['Gemini without a thinking config offers only off', 'google/gemini-2.0-flash', undefined, ['off']],
     [
-      'other providers offer the efforts the model publishes',
-      'xai/grok-3-mini',
+      'providers without a request format offer the efforts the model publishes',
+      'zai/glm-5',
       effort('low', 'high'),
       ['off', 'low', 'high'],
+    ],
+    ['xAI offers no off its request cannot send', 'xai/grok-3-mini', effort('low', 'high'), ['low', 'high']],
+    [
+      'Groq offers only the efforts its package accepts',
+      'groq/qwen/qwen3.8-27b',
+      effort('none', 'default', 'low', 'medium', 'high'),
+      ['off', 'low', 'medium', 'high'],
+    ],
+    [
+      'the Mastra gateway offers what OpenRouter can send',
+      'mastra/groq/openai/gpt-oss-20b',
+      effort('low', 'medium', 'high'),
+      ['low', 'medium', 'high'],
     ],
     ['OpenAI models listed without reasoning controls offer only off', 'openai/gpt-4o', [], ['off']],
     ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
@@ -118,6 +131,18 @@ describe('thinking model capabilities', () => {
       undefined,
       ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
     ],
+    [
+      'DeepSeek offers off through its thinking switch',
+      'deepseek/deepseek-v4-pro',
+      [{ type: 'toggle' }, ...effort('low', 'high', 'max')],
+      ['off', 'low', 'high', 'max'],
+    ],
+    [
+      'DeepSeek offers no off its request cannot send',
+      'deepseek/deepseek-v4-pro',
+      effort('none', 'high', 'max'),
+      ['high', 'max'],
+    ],
   ])('%s', (_, modelId, reasoningOptions, levels) => {
     expect(getAvailableThinkingLevelsForModel(modelId, reasoningOptions)).toEqual(levels);
   });
@@ -133,6 +158,7 @@ describe('thinking model capabilities', () => {
     ],
     ['low on a model with only high', 'openai/gpt-5-pro', 'low', effort('high'), 'high'],
     ['off anywhere', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
+    ['off on DeepSeek without its thinking switch', 'deepseek/deepseek-v4-pro', 'off', effort('none', 'high'), 'high'],
   ] as const)('runs %s as the closest level the request sends', (_, modelId, level, reasoningOptions, runLevel) => {
     expect(runThinkingLevel(modelId, level, reasoningOptions)).toBe(runLevel);
   });

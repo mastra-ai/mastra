@@ -101,9 +101,9 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.7'))).reasoning).toEqual({ effort: 'high' });
   });
 
-  it('turns thinking off only on models that list a way to', async () => {
+  it('runs off as the lowest effort on models that cannot turn thinking off, as the picker shows', async () => {
     expect((await requestBody(resolve('off', 'groq', 'qwen/qwen3.8-27b'))).reasoning_effort).toBe('none');
-    expect(await requestBody(resolve('off', 'groq', 'openai/gpt-oss-20b'))).not.toHaveProperty('reasoning_effort');
+    expect((await requestBody(resolve('off', 'groq', 'openai/gpt-oss-20b'))).reasoning_effort).toBe('low');
   });
 
   it('passes the listed effort to OpenAI-compatible providers and Perplexity', async () => {
@@ -164,5 +164,16 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     reloadAuthStorage();
 
     expect((await requestBody(resolve('xhigh', 'openai', 'gpt-5'))).reasoning).toMatchObject({ effort: 'high' });
+  });
+
+  it('sends the xAI OAuth path the same effort as the xAI API-key path', async () => {
+    writeFileSync(
+      join(appDataDir, 'auth.json'),
+      JSON.stringify({ xai: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 } }),
+      'utf8',
+    );
+    reloadAuthStorage();
+
+    expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.7'))).reasoning_effort).toBe('high');
   });
 });

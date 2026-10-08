@@ -32,6 +32,7 @@ import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/gith
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
+  MASTRA_GATEWAY_PREFIX,
   normalizeAnthropicModelId,
   OPENAI_PREFIX,
   remapOpenAIModelForCodexOAuth,
@@ -47,9 +48,9 @@ import {
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import {
-  defaultProviderOptionsMiddleware,
   ModelRouterLanguageModelWithProviderOptions,
   providerThinkingOptions,
+  withDefaultProviderOptionsModel,
 } from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
@@ -540,10 +541,10 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (args.providerId === 'xai' && this.#credentials.get('xai')?.type === 'oauth') {
-      return xaiProvider(args.modelId, {
-        headers: args.headers,
-        authStorage: this.#credentials,
-      }) as unknown as GatewayLanguageModel;
+      return withDefaultProviderOptionsModel(
+        xaiProvider(args.modelId, { headers: args.headers, authStorage: this.#credentials }),
+        providerThinkingOptions(`xai/${args.modelId}`, this.#thinkingLevel),
+      );
     }
 
     if (args.providerId === 'google') {
@@ -552,12 +553,11 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     if (this.#routeThroughMastraGateway) {
       const gatewayModel = this.#mastraGateway.resolveLanguageModel(args);
-      const thinkingOptions = this.#providerThinkingOptions('openrouter', args);
-      if (!thinkingOptions || gatewayModel.specificationVersion !== 'v3') return gatewayModel;
-      return wrapLanguageModel({
-        model: gatewayModel,
-        middleware: [defaultProviderOptionsMiddleware(thinkingOptions)],
-      });
+      if (gatewayModel.specificationVersion !== 'v3') return gatewayModel;
+      return withDefaultProviderOptionsModel(
+        gatewayModel,
+        providerThinkingOptions(`${MASTRA_GATEWAY_PREFIX}${args.providerId}/${args.modelId}`, this.#thinkingLevel),
+      );
     }
 
     if (args.providerId === 'kimi-for-coding') {
@@ -568,18 +568,11 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
+    const routedModelId: `${string}/${string}` = `${args.providerId}/${args.modelId}`;
     return new ModelRouterLanguageModelWithProviderOptions(
-      { id: `${args.providerId}/${args.modelId}`, apiKey: args.apiKey, headers: args.headers },
-      this.#providerThinkingOptions(args.providerId, args),
+      { id: routedModelId, apiKey: args.apiKey, headers: args.headers },
+      providerThinkingOptions(routedModelId, this.#thinkingLevel),
     ) as unknown as GatewayLanguageModel;
-  }
-
-  #providerThinkingOptions(optionsProvider: string, args: { providerId: string; modelId: string }) {
-    return providerThinkingOptions({
-      optionsProvider,
-      catalogModelId: `${args.providerId}/${args.modelId}`,
-      level: this.#thinkingLevel,
-    });
   }
 
   #resolveAnthropicModel(args: {
