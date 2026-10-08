@@ -150,6 +150,25 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * arguments and metadata stay as stored. A provider-executed call can only take an approval
  * answer, since the provider, not the client, produces its outcome.
  */
+/**
+ * Carry only server-computed toModelOutput markers across memory reconciliation.
+ * Arbitrary client providerMetadata is dropped (trust boundary); `modelOutputComputed`
+ * is set exclusively by `applyClientToolModelOutput` on the server.
+ */
+function trustedServerModelOutputMetadata(
+  part: MastraMessagePart,
+): MastraToolInvocationPart['providerMetadata'] | undefined {
+  const mastra = part.providerMetadata?.mastra;
+  if (!mastra || typeof mastra !== 'object' || !('modelOutputComputed' in mastra) || !mastra.modelOutputComputed) {
+    return undefined;
+  }
+  const next: Record<string, unknown> = { modelOutputComputed: true };
+  if ('modelOutput' in mastra) {
+    next.modelOutput = (mastra as Record<string, unknown>).modelOutput;
+  }
+  return { mastra: next } as MastraToolInvocationPart['providerMetadata'];
+}
+
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
   const storedCalls = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
@@ -174,7 +193,14 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
       errorText,
       approval: approval ?? storedCall.toolInvocation.approval,
     };
-    return [{ type: 'tool-invocation' as const, toolInvocation }];
+    const providerMetadata = trustedServerModelOutputMetadata(part);
+    return [
+      {
+        type: 'tool-invocation' as const,
+        toolInvocation,
+        ...(providerMetadata ? { providerMetadata } : {}),
+      },
+    ];
   });
   return { ...live, content: { format: 2, parts } };
 }

@@ -940,6 +940,61 @@ describe('applyClientToolModelOutput', () => {
     expect(toModelOutput).not.toHaveBeenCalled();
   });
 
+  it('keeps the mapped output after memory recalls a pending call for the same assistant message', async () => {
+    const toModelOutput = vi.fn((output: any) => ({
+      type: 'content',
+      value: [{ type: 'text', text: `MAPPED ${output.fileId}` }],
+    }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', { fileId: 'file-123' })], 'input');
+    await applyClientToolModelOutput({ messageList, tools });
+
+    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toEqual({
+      type: 'content',
+      value: [{ type: 'text', text: 'MAPPED file-123' }],
+    });
+
+    // Memory recall of the stored pending call shares the live assistant message id and
+    // reconciles through clientToolOutcomes — the server-computed mapping must survive.
+    const liveAssistant = messageList.get.input.db().find(m => m.role === 'assistant');
+    expect(liveAssistant).toBeDefined();
+
+    messageList.add(
+      {
+        id: liveAssistant!.id,
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'browserTool',
+                args: {},
+              },
+            },
+          ],
+        },
+      },
+      'memory',
+    );
+
+    await expect(toolResultPromptOutput(messageList, 'call-1')).resolves.toEqual({
+      type: 'content',
+      value: [{ type: 'text', text: 'MAPPED file-123' }],
+    });
+    const part = findResultPart(messageList);
+    expect(part.providerMetadata?.mastra).toMatchObject({
+      modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED file-123' }] },
+      modelOutputComputed: true,
+    });
+  });
+
   it('does not recompute after the enriched message round-trips through JSON storage', async () => {
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
