@@ -46,9 +46,9 @@ import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { globalRunRegistry } from '../run-registry';
+import type { Deferred } from './abort-parity-support';
+import { ABORT_ARTIFACT, aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
-  CapturedRequest,
-  EngineDifference,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -68,39 +68,6 @@ const MAX_STEPS = 6;
 
 const VARIANTS = ['run', 'signal'] as const;
 type Variant = (typeof VARIANTS)[number];
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>(resolver => {
-    resolve = resolver;
-  });
-  return { promise, resolve };
-}
-
-function aborted(signal?: AbortSignal): Promise<void> {
-  return new Promise<void>(resolve => {
-    if (!signal) return;
-    if (signal.aborted) return resolve();
-    signal.addEventListener('abort', () => resolve(), { once: true });
-  });
-}
-
-/** Number of tool results the model has already been handed. */
-function toolResultCount(request: CapturedRequest): number {
-  let count = 0;
-  for (const message of request.prompt) {
-    if (message.role !== 'tool') continue;
-    for (const part of message.content) {
-      if (part.type === 'tool-result') count += 1;
-    }
-  }
-  return count;
-}
 
 /**
  * The harness's `stepScript(count)`: call `step` with the next number while the
@@ -131,38 +98,6 @@ function abortRun(handle: EngineHandle, runId: string): boolean {
   controller.abort(new Error('Aborted'));
   return true;
 }
-
-/**
- * COR-1415 — plain's abort surface. Plain delivers the aborted step's
- * `tool-result` a second time, immediately before the `abort` chunk, and reports
- * `reason: 'tripwire'` on the finish chunk; durable and evented do neither. The
- * `expect` maps plain's observation onto the wrapped engines' shape, so the
- * comparison outside these fields stays exact. When plain stops finalising the
- * aborted step the difference no longer reproduces and the helper fails the
- * test, which is the signal to delete this declaration.
- */
-const ABORT_ARTIFACT: EngineDifference = {
-  reason:
-    "COR-1415: plain emits the aborted step's tool-result a second time and finishes the abort as 'tripwire'; durable and evented abort without it.",
-  expect: plain => ({
-    ...plain,
-    turns: plain.turns.map(turn => {
-      // Plain's spurious chunk sits directly before the abort chunk it also
-      // emits; both wrapped engines go straight from the parked step to `abort`.
-      const spurious = turn.chunkTypes.indexOf('abort') - 1;
-      const withoutSpurious = <T>(list: T[]): T[] => list.filter((_, index) => index !== spurious);
-      return {
-        ...turn,
-        chunks: withoutSpurious(turn.chunks),
-        chunkTypes: withoutSpurious(turn.chunkTypes),
-        chunkPayloads: withoutSpurious(turn.chunkPayloads),
-        finishChunk: { ...turn.finishChunk, reason: 'abort' },
-        // The duplicate result sorts next to the result it duplicates.
-        toolResults: turn.toolResults.slice(0, -1),
-      };
-    }),
-  }),
-};
 
 interface EngineCaseState {
   memory: MockMemory;

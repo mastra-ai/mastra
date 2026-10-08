@@ -41,9 +41,9 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import type { Deferred } from './abort-parity-support';
+import { ABORT_ARTIFACT, aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
-  CapturedRequest,
-  EngineDifference,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -67,39 +67,6 @@ const ERROR_MESSAGE = 'T36 model failure';
 /** The shapes that run through the parity helper; `error` is driven directly (see `runErrorDirect`). */
 type StreamedVariant = 'normal' | 'abort';
 
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>(resolver => {
-    resolve = resolver;
-  });
-  return { promise, resolve };
-}
-
-function aborted(signal?: AbortSignal): Promise<void> {
-  return new Promise<void>(resolve => {
-    if (!signal) return;
-    if (signal.aborted) return resolve();
-    signal.addEventListener('abort', () => resolve(), { once: true });
-  });
-}
-
-/** Number of tool results the model has already been handed. */
-function toolResultCount(request: CapturedRequest): number {
-  let count = 0;
-  for (const message of request.prompt) {
-    if (message.role !== 'tool') continue;
-    for (const part of message.content) {
-      if (part.type === 'tool-result') count += 1;
-    }
-  }
-  return count;
-}
-
 /** The harness's script: run `STEP_COUNT` numbered steps, then answer. */
 const script: ModelScript = {
   respond: request => {
@@ -115,37 +82,6 @@ function isSubsequence(sub: string[], full: string[]): boolean {
     full.reduce((index, entry) => (index < sub.length && sub[index] === entry ? index + 1 : index), 0) === sub.length
   );
 }
-
-/**
- * COR-1415 — plain's abort surface. Plain delivers the aborted step's `tool-result` a second time,
- * immediately before the `abort` chunk, and reports `reason: 'tripwire'` on the finish chunk while
- * durable and evented abort directly. The `expect` maps plain's observation onto the wrapped
- * engines' shape, so the comparison outside these fields stays exact. When plain stops finalising
- * the aborted step the difference no longer reproduces and the helper fails the test, which is the
- * signal to delete this declaration.
- */
-const ABORT_ARTIFACT: EngineDifference = {
-  reason:
-    "COR-1415: plain emits the aborted step's tool-result a second time and finishes the abort as 'tripwire'; durable and evented abort without it.",
-  expect: plain => ({
-    ...plain,
-    turns: plain.turns.map(turn => {
-      // Plain's spurious chunk sits directly before the abort chunk it also emits; both wrapped
-      // engines go straight from the parked step to `abort`.
-      const spurious = turn.chunkTypes.indexOf('abort') - 1;
-      const withoutSpurious = <T>(list: T[]): T[] => list.filter((_, index) => index !== spurious);
-      return {
-        ...turn,
-        chunks: withoutSpurious(turn.chunks),
-        chunkTypes: withoutSpurious(turn.chunkTypes),
-        chunkPayloads: withoutSpurious(turn.chunkPayloads),
-        finishChunk: { ...turn.finishChunk, reason: 'abort' },
-        // The duplicate result sorts next to the result it duplicates.
-        toolResults: turn.toolResults.slice(0, -1),
-      };
-    }),
-  }),
-};
 
 /**
  * One turn's stream options. `onStepFinish` is deliberately absent from the helper's shared option
@@ -597,8 +533,12 @@ async function runErrorDirect(engine: ParityEngine): Promise<ErrorCaseState> {
     }
   }
   state.requests = requests.length;
-  if (cleanup) await cleanup();
-  await host.shutdown();
+  // Pair the teardown so a throwing cleanup cannot leave this run's host alive.
+  try {
+    if (cleanup) await cleanup();
+  } finally {
+    await host.shutdown();
+  }
   return state;
 }
 
