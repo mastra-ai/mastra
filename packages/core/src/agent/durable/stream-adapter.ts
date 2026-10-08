@@ -18,6 +18,7 @@ import type {
   MastraStreamTransformOptions,
   LanguageModelUsage,
   StepStartPayload,
+  ToolCallChunk,
 } from '../../stream/types';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
@@ -69,6 +70,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   runId: string;
   /** Message ID for this execution */
   messageId: string;
+  /** Tool calls emitted before a resumed stream segment started. */
+  initialToolCalls?: ToolCallChunk[];
   /** Model information for the output */
   model: {
     modelId: string | undefined;
@@ -195,6 +198,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     pubsub,
     runId,
     messageId,
+    initialToolCalls,
     model,
     threadId,
     resourceId,
@@ -719,6 +723,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     stream,
     messageList,
     messageId,
+    initialToolCalls,
     finishUsageIsTotal: true,
     options: {
       runId,

@@ -18,6 +18,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
+import { buildConnectionStringPoolConfig } from '../../shared/pool-config';
 import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
@@ -134,10 +135,13 @@ export function resolvePgConfig(config: PgDomainConfig): {
   // Config to create new pool
   let pool: Pool;
   if ('connectionString' in config) {
-    pool = new Pool({
-      connectionString: config.connectionString,
-      ssl: config.ssl,
-    });
+    // Parse the URL ourselves so an explicit `ssl` wins over `sslmode=` (see #17307).
+    pool = new Pool(
+      buildConnectionStringPoolConfig(
+        { connectionString: config.connectionString, ssl: config.ssl },
+        { max: 10, idleTimeoutMillis: 10000 },
+      ),
+    );
   } else {
     pool = new Pool({
       host: config.host,
@@ -422,10 +426,21 @@ export interface PgDBInternalConfig {
   skipDefaultIndexes?: boolean;
 }
 
-// Static map to track schema setup across all PgDB instances
-// Key: schemaName, Value: { promise, complete }
-// This prevents race conditions when multiple domains try to create the same schema concurrently
-const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
+type SchemaSetupEntry = { promise: Promise<void> | null; complete: boolean };
+
+// Tracks schema setup per connection pool, then per schema name. Domains sharing a
+// pool coordinate concurrent setup; stores on other pools (possibly other databases
+// with the same schema name) set their schema up independently.
+const schemaSetupRegistry = new WeakMap<Pool, Map<string, SchemaSetupEntry>>();
+
+function getSchemaSetupRegistry(pool: Pool): Map<string, SchemaSetupEntry> {
+  let registry = schemaSetupRegistry.get(pool);
+  if (!registry) {
+    registry = new Map();
+    schemaSetupRegistry.set(pool, registry);
+  }
+  return registry;
+}
 
 /**
  * Guard prune batch limits: a non-positive limit deletes nothing while callers'
@@ -738,8 +753,8 @@ export class PgDB extends MastraBase {
       return;
     }
 
-    // Use static registry to coordinate schema setup across all PgDB instances
-    let registryEntry = schemaSetupRegistry.get(this.schemaName);
+    const registry = getSchemaSetupRegistry(this.client.$pool);
+    let registryEntry = registry.get(this.schemaName);
     if (registryEntry?.complete) {
       return;
     }
@@ -751,7 +766,7 @@ export class PgDB extends MastraBase {
     // cold schema yields an empty snapshot and falls through to the probe.
     const snapshot = this.schemaSnapshot;
     if (snapshot && snapshot.tables.size > 0) {
-      schemaSetupRegistry.set(this.schemaName, { promise: null, complete: true });
+      registry.set(this.schemaName, { promise: null, complete: true });
       return;
     }
 
@@ -792,21 +807,21 @@ export class PgDB extends MastraBase {
           }
 
           // Mark as complete in the registry
-          const entry = schemaSetupRegistry.get(schemaNameCapture);
+          const entry = registry.get(schemaNameCapture);
           if (entry) {
             entry.complete = true;
           }
           this.logger.debug(`Schema "${quotedSchemaName}" is ready for use`);
         } catch (error) {
           // On error, clear the registry entry so retry is possible
-          schemaSetupRegistry.delete(schemaNameCapture);
+          registry.delete(schemaNameCapture);
           throw error;
         }
       })();
 
       // Register the promise immediately so concurrent callers can await it
-      schemaSetupRegistry.set(this.schemaName, { promise: setupPromise, complete: false });
-      registryEntry = schemaSetupRegistry.get(this.schemaName);
+      registry.set(this.schemaName, { promise: setupPromise, complete: false });
+      registryEntry = registry.get(this.schemaName);
     }
 
     await registryEntry!.promise;
@@ -1638,6 +1653,36 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Drops NOT NULL from `columns` on `tableName` where it is still set. Answered
+   * from the init snapshot when one is installed, so a converged schema issues
+   * no query and never takes the ACCESS EXCLUSIVE lock.
+   */
+  async dropNotNull({ tableName, columns }: { tableName: TABLE_NAMES; columns: string[] }): Promise<void> {
+    const parsedColumns = columns.map(c => parseSqlIdentifier(c, 'column name'));
+    const snapshot = this.schemaSnapshot;
+    let toAlter: string[];
+    if (snapshot) {
+      const notNull = snapshot.notNullColumns.get(tableName);
+      toAlter = parsedColumns.filter(c => notNull?.has(c));
+    } else {
+      const rows = await this.client.any<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = $1 AND table_name = $2 AND column_name = ANY($3) AND is_nullable = 'NO'`,
+        [this.schemaName || 'public', tableName, parsedColumns],
+      );
+      toAlter = rows.map(r => r.column_name);
+    }
+    if (toAlter.length === 0) return;
+
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    await this.client.none(
+      `ALTER TABLE ${fullTableName} ${toAlter.map(c => `ALTER COLUMN "${c}" DROP NOT NULL`).join(', ')}`,
+    );
+    const notNull = snapshot?.notNullColumns.get(tableName);
+    for (const c of toAlter) notNull?.delete(c);
+  }
+
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
       const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
@@ -1744,20 +1789,8 @@ export class PgDB extends MastraBase {
       });
 
       const snapshot = this.schemaSnapshot;
-      if (snapshot) {
-        if (snapshot.indexes.has(name)) return;
-      } else {
-        const indexExists = await this.client.oneOrNone(
-          `SELECT 1 FROM pg_indexes
-         WHERE indexname = $1
-         AND schemaname = $2`,
-          [name, schemaName],
-        );
-
-        if (indexExists) {
-          return;
-        }
-      }
+      if (snapshot?.indexes.has(name)) return;
+      if (!(await this.prepareIndexBuild(name, schemaName))) return;
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
       const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
@@ -1792,14 +1825,9 @@ export class PgDB extends MastraBase {
       const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
       const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
-      await this.client.none(sql);
+      await this.timedIndexBuild(name, sql);
       snapshot?.indexes.add(name);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('CONCURRENTLY')) {
-        const retryOptions = { ...options, concurrent: false };
-        return this.createIndex(retryOptions);
-      }
-
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INDEX_CREATE', 'FAILED'),
@@ -1827,9 +1855,49 @@ export class PgDB extends MastraBase {
   async createIndexFromStatement(indexName: string, sql: string): Promise<void> {
     const snapshot = this.schemaSnapshot;
     if (snapshot?.indexes.has(indexName)) return;
+    if (!(await this.prepareIndexBuild(indexName, this.schemaName || 'public'))) return;
 
-    await this.client.none(sql);
+    await this.timedIndexBuild(indexName, sql);
     snapshot?.indexes.add(indexName);
+  }
+
+  /**
+   * Decides whether `indexName` still needs building. Returns false when a valid
+   * index already exists, or when another session is currently building it.
+   * An invalid index left by an interrupted `CREATE INDEX CONCURRENTLY` is
+   * dropped (concurrently) so the caller rebuilds it — `IF NOT EXISTS` would
+   * otherwise keep the broken index forever.
+   */
+  private async prepareIndexBuild(indexName: string, schemaName: string): Promise<boolean> {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot && !snapshot.invalidIndexes.has(indexName)) return true;
+    const existing = await this.client.oneOrNone<{ is_valid: boolean; building: boolean }>(
+      `SELECT i.indisvalid AS is_valid,
+              EXISTS (SELECT 1 FROM pg_stat_progress_create_index p WHERE p.index_relid = c.oid) AS building
+         FROM pg_catalog.pg_index i
+         JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = $1 AND n.nspname = $2`,
+      [indexName, schemaName],
+    );
+    if (!existing) return true;
+    if (existing.is_valid) return false;
+    if (existing.building) {
+      this.logger.warn(`Index ${indexName} is being built by another session; skipping`);
+      return false;
+    }
+
+    this.logger.warn(`Dropping invalid index ${indexName} left by an interrupted build; rebuilding it`);
+    const quotedIndexName = `"${parseSqlIdentifier(indexName, 'index name')}"`;
+    await this.client.none(`DROP INDEX CONCURRENTLY IF EXISTS ${getSchemaName(this.schemaName)}.${quotedIndexName}`);
+    return true;
+  }
+
+  private async timedIndexBuild(indexName: string, sql: string): Promise<void> {
+    const startedAt = Date.now();
+    this.logger.info(`Creating index ${indexName}`);
+    await this.client.none(sql);
+    this.logger.info(`Created index ${indexName} in ${Date.now() - startedAt}ms`);
   }
 
   async dropIndex(indexName: string): Promise<void> {

@@ -1708,6 +1708,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     startNotificationDispatch: () => {
       if (ownsNotificationDispatch) notificationDispatcher.start();
     },
+    /**
+     * Stops advertising every live session's threads and releases their
+     * ownership claims. Call first on shutdown: a claim otherwise stays held
+     * (and renewed) through the rest of teardown, so a restarted process cannot
+     * claim the thread — and peers cannot reach it — until this one exits.
+     */
+    releaseThreadClaims: () => {
+      for (const session of liveSessions) {
+        sessionPeerCleanup.get(session)?.();
+        sessionPeerCleanup.delete(session);
+      }
+    },
     /** Stops this process's notification dispatch and releases its leases. Call on shutdown. */
     stopNotificationDispatch: async () => {
       await notificationDispatcher.stop();

@@ -7,7 +7,7 @@ description: "Browse OpenCode Zen model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 
-Access 116 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 119 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -92,6 +92,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 1,
     "outputCost": 5
+  },
+  {
+    "model": "opencode/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "opencode/claude-opus-4-5",
@@ -272,6 +284,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "opencode/exo-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode/fledge-alpha-free",
@@ -896,6 +920,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "opencode/mistral-large-4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 262144,
+    "inputCost": 0.68,
+    "outputCost": 2.09
   },
   {
     "model": "opencode/muse-spark-1.2",

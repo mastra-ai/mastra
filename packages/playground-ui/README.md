@@ -57,6 +57,47 @@ A decision removes the actions; clearing it restores them for a retry. `disabled
 decisions without implying server confirmation. `autoFocus` focuses Approve on mount. Custom
 `children` replace the default argument preview. Examples live under **AI / Tool Approval** in Storybook.
 
+### Agent questions
+
+Use `AskUser` to render an agent's `ask_user` payload with shared answer handling:
+
+```tsx
+import { AskUser } from '@mastra/playground-ui/components/ai/ask-user';
+
+<AskUser
+  payload={{ question: 'Choose a deployment target', options: [{ label: 'Staging' }] }}
+  onSubmit={handleAnswerSubmit}
+/>;
+```
+
+For custom layouts, compose the controls inside `AskUser.Root`. The root owns selection, custom text, validation, and submission. `AskUser.Question` names the group and its inputs for assistive technology.
+
+```tsx
+import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
+
+<AskUser.Root key={prompt.id} selectionMode="single_select" disabled={isSubmitting} onSubmit={handleAnswerSubmit}>
+  <AskUser.Body>
+    <AskUser.Question>Choose a deployment target</AskUser.Question>
+    <AskUser.Options>
+      <AskUser.Option value="Staging" description="Validate the release before production.">
+        Staging
+      </AskUser.Option>
+      <AskUser.Option value="Production">Production</AskUser.Option>
+      <AskUser.CustomAnswer />
+    </AskUser.Options>
+    <AskUser.Submit when="custom-answer" className="mt-2" />
+  </AskUser.Body>
+</AskUser.Root>;
+```
+
+Single-select options submit their `value` immediately. `when="custom-answer"` shows the submit control only while **Other…** is selected. For multi-select prompts, use `selectionMode="multi_select"` and omit `when` to keep the submit control visible. You can position the submit control anywhere inside the root.
+
+Selecting **Other…** focuses an inline text field. Empty or whitespace-only text unselects it on blur. Non-empty drafts stay selected, and unchecking **Other…** excludes its text from submission. Answers remain `string` for single-select and free-text prompts, and `string[]` for multi-select prompts.
+
+For a free-text prompt, replace `AskUser.Options` with `AskUser.TextAnswer` and omit `when` from the submit control. Use `AskUser.Pending` for a submitting message or `AskUser.Output` with a `result` to display an answer. Reset the draft by changing the root's `key` when switching prompts. The payload-based card handles question changes automatically.
+
+Interactive examples live under **AI / Ask User** in Storybook, including composed layouts with the submit control outside the options.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
@@ -140,11 +181,11 @@ Opacity is allowed only through design-system tokens, for layers whose job is to
 - Neutral hairlines: the `border` ladder, `surface-rim`, field/inset rims, and `gray-alpha-*`.
 - Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
 
-Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions. `src/color-rules.test.ts` enforces this across playground-ui, Studio, and Factory.
+Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions.
 
 #### Border roles
 
-Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`; the color guard rejects these across the DS, Studio, Factory, and stories. Existing roles cover the following uses without adding a new token value:
+Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`. Existing roles cover the following uses without adding a new token value:
 
 | Role                | Token / utility                                              | Use                                                                     |
 | ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |

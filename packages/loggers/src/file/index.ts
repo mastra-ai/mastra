@@ -1,5 +1,6 @@
 import type { WriteStream } from 'node:fs';
-import { createWriteStream, existsSync, readFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, statSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
@@ -11,20 +12,31 @@ export class FileTransport extends LoggerTransport {
     this.path = path;
 
     if (!existsSync(this.path)) {
-      console.info(this.path);
       throw new Error('File path does not exist');
     }
 
+    if (!statSync(this.path).isFile()) {
+      throw new Error(`File path must point to a file: ${this.path}`);
+    }
+
     this.fileStream = createWriteStream(this.path, { flags: 'a' });
+    // Without a listener, the file stream's 'error' event would crash the process.
+    // Write failures already reach the transport through the write callback, so only
+    // forward errors that have not destroyed the transport yet (e.g. open failures).
+    this.fileStream.on('error', error => {
+      if (!this.destroyed) this.destroy(error);
+    });
   }
 
-  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk: any) => void) {
+  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk?: any) => void) {
     try {
-      this.fileStream.write(chunk);
+      this.fileStream.write(chunk, error => {
+        if (error) callback(error);
+        else callback(null, chunk);
+      });
     } catch (error) {
-      console.error('Error parsing log entry:', error);
+      callback(error as Error);
     }
-    callback(null, chunk);
   }
 
   _flush(callback: Function) {
@@ -70,84 +82,10 @@ export class FileTransport extends LoggerTransport {
     hasMore: boolean;
   }> {
     try {
-      const {
-        fromDate,
-        toDate,
-        logLevel,
-        filters,
-        returnPaginationResults: returnPaginationResultsInput,
-        page: pageInput,
-        perPage: perPageInput,
-      } = params || {};
-
-      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput ?? 100;
-      const returnPaginationResults = returnPaginationResultsInput ?? true;
-
-      const logs = readFileSync(this.path, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .flatMap(line => {
-          try {
-            return [JSON.parse(line)];
-          } catch {
-            return [];
-          }
-        });
-
-      let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
-
-      if (filters) {
-        filteredLogs = filteredLogs.filter(log =>
-          Object.entries(filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
-        );
-      }
-
-      if (logLevel) {
-        filteredLogs = filteredLogs.filter(log => log.level === logLevel);
-      }
-
-      if (fromDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= fromDate!.getTime());
-      }
-
-      if (toDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= toDate!.getTime());
-      }
-
-      if (!returnPaginationResults) {
-        return {
-          logs: filteredLogs,
-          total: filteredLogs.length,
-          page,
-          perPage: filteredLogs.length,
-          hasMore: false,
-        };
-      }
-
-      const total = filteredLogs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = filteredLogs.slice(start, end);
-      const hasMore = end < total;
-
-      return {
-        logs: paginatedLogs,
-        total,
-        page,
-        perPage: resolvedPerPage,
-        hasMore,
-      };
+      return await this.#queryLogs(params || {});
     } catch (error) {
       console.error('Error getting logs from file:', error);
-      return {
-        logs: [],
-        total: 0,
-        page: 0,
-        perPage: 0,
-        hasMore: false,
-      };
+      return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
     }
   }
 
@@ -157,8 +95,8 @@ export class FileTransport extends LoggerTransport {
     toDate,
     logLevel,
     filters,
-    page: pageInput,
-    perPage: perPageInput,
+    page,
+    perPage,
   }: {
     runId: string;
     fromDate?: Date;
@@ -175,33 +113,73 @@ export class FileTransport extends LoggerTransport {
     hasMore: boolean;
   }> {
     try {
-      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-      const perPage = perPageInput ?? 100;
-      const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters });
-      const logs = (allLogs?.logs?.filter(log => log?.runId === runId) || []) as BaseLogMessage[];
-      const total = logs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = logs.slice(start, end);
-      const hasMore = end < total;
-
-      return {
-        logs: paginatedLogs,
-        total,
-        page,
-        perPage: resolvedPerPage,
-        hasMore,
-      };
+      return await this.#queryLogs({ runId, fromDate, toDate, logLevel, filters, page, perPage });
     } catch (error) {
       console.error('Error getting logs by runId from file:', error);
-      return {
-        logs: [],
-        total: 0,
-        page: 0,
-        perPage: 0,
-        hasMore: false,
-      };
+      return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
     }
+  }
+
+  /**
+   * Streams the log file line by line, counting every matching record but
+   * retaining only the requested page (or all matches when pagination is off).
+   */
+  async #queryLogs({
+    runId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+    returnPaginationResults = true,
+    page: pageInput,
+    perPage: perPageInput,
+  }: {
+    runId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+    returnPaginationResults?: boolean;
+    page?: number;
+    perPage?: number;
+  }) {
+    const page = pageInput === 0 ? 1 : (pageInput ?? 1);
+    const perPage = (perPageInput ?? 100) || 100;
+    const start = (page - 1) * perPage;
+    const end = start + perPage;
+    const filterEntries = Object.entries(filters ?? {});
+
+    const logs: BaseLogMessage[] = [];
+    let total = 0;
+
+    const lines = createInterface({ input: createReadStream(this.path, 'utf8'), crlfDelay: Infinity });
+    for await (const line of lines) {
+      if (!line.trim()) continue;
+
+      let log: any;
+      try {
+        log = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (log === null || typeof log !== 'object') continue;
+      if (runId !== undefined && log.runId !== runId) continue;
+      if (!filterEntries.every(([key, value]) => log[key] === value)) continue;
+      if (logLevel && log.level !== logLevel) continue;
+      if (fromDate && !(new Date(log.time).getTime() >= fromDate.getTime())) continue;
+      if (toDate && !(new Date(log.time).getTime() <= toDate.getTime())) continue;
+
+      if (!returnPaginationResults || (total >= start && total < end)) {
+        logs.push(log);
+      }
+      total++;
+    }
+
+    if (!returnPaginationResults) {
+      return { logs, total, page, perPage: total, hasMore: false };
+    }
+
+    return { logs, total, page, perPage, hasMore: end < total };
   }
 }

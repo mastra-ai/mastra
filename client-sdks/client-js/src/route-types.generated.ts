@@ -17,7 +17,7 @@ type InputShared_Auxiliary_21 =
       [key: string]: InputShared_Auxiliary_21;
     };
 
-type InputShared_Auxiliary_204 =
+type InputShared_Auxiliary_205 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -56,42 +56,51 @@ type InputShared_Auxiliary_204 =
       value: string;
     }
   | {
+      op: 'matches' | 'notMatches';
+      left: {
+        path: string;
+      };
+      right: {
+        literal: string;
+      };
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_204[];
+      args: InputShared_Auxiliary_205[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_204;
+      arg: InputShared_Auxiliary_205;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_228;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_228;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_228;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_228;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_223;
+            some: InputShared_Auxiliary_228;
           }
         | {
-            none: InputShared_Auxiliary_223;
+            none: InputShared_Auxiliary_228;
           };
     };
 
-type InputShared_Auxiliary_223 =
+type InputShared_Auxiliary_228 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -130,34 +139,43 @@ type InputShared_Auxiliary_223 =
       value: string;
     }
   | {
+      op: 'matches' | 'notMatches';
+      left: {
+        path: string;
+      };
+      right: {
+        literal: string;
+      };
+    }
+  | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_223[];
+      args: InputShared_Auxiliary_228[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_223;
+      arg: InputShared_Auxiliary_228;
     };
 
-type InputShared_Auxiliary_254 =
+type InputShared_Auxiliary_262 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_254[];
+      args: InputShared_Auxiliary_262[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_254;
+      arg: InputShared_Auxiliary_262;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_204;
+            some: InputShared_Auxiliary_205;
           }
         | {
-            none: InputShared_Auxiliary_204;
+            none: InputShared_Auxiliary_205;
           };
     };
 
-type InputShared_Auxiliary_682 =
+type InputShared_Auxiliary_690 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -202,19 +220,19 @@ type InputShared_Auxiliary_682 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_682[];
+      args: InputShared_Auxiliary_690[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_682;
+      arg: InputShared_Auxiliary_690;
     };
 
-type InputShared_Auxiliary_756 = {
+type InputShared_Auxiliary_764 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_756[] | undefined;
+  children?: InputShared_Auxiliary_764[] | undefined;
 };
 
 type Shared_Auxiliary_764 = {
@@ -266,6 +284,7 @@ type InputShared_Type_2 = {
   requestContextKeys?: string[] | undefined;
   traceId?: string | undefined;
   parentSpanId?: string | undefined;
+  nestUnderParent?: boolean | undefined;
   tags?: string[] | undefined;
   hideInput?: boolean | undefined;
   hideOutput?: boolean | undefined;
@@ -1780,7 +1799,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_682[];
+  predicates: InputShared_Auxiliary_690[];
 };
 
 type InputShared_Type_89 = {
@@ -1794,7 +1813,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_682;
+  predicate: InputShared_Auxiliary_690;
 };
 
 type InputShared_Type_90 =
@@ -5371,6 +5390,14 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5512,6 +5539,14 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
     | undefined;
   toolCallId: string;
   format?: string | undefined;
+  providerOptions?:
+    | {
+        [key: string]: {
+          [key: string]: InputShared_Auxiliary_21;
+        };
+      }
+    | undefined;
+  modelSettings?: unknown | undefined;
   reason?: string | undefined;
 };
 
@@ -6269,6 +6304,12 @@ export type PostAgentsAgentIdVoiceSpeak_PathParams = GetAgentsAgentIdVoiceSpeake
 export type PostAgentsAgentIdVoiceSpeak_Body = {
   text: string;
   speakerId?: string | undefined;
+  options?:
+    | {
+        speaker?: string | undefined;
+        [x: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Response;
@@ -9050,6 +9091,7 @@ export type PostMemoryThreadsThreadIdWorkingMemory_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  mode?: ('replace' | 'merge') | undefined;
 };
 
 export type PostMemoryThreadsThreadIdWorkingMemory_Response = PostAuthRefresh_Response;
@@ -10257,7 +10299,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_204 | undefined;
+  where?: InputShared_Auxiliary_205 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10347,7 +10389,7 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_204 | undefined;
+  where?: InputShared_Auxiliary_205 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (
@@ -10377,7 +10419,7 @@ export type PostObservabilityTracesAggregate_Body = {
       )
     | `countDistinct.${string}`
   )[];
-  having?: InputShared_Auxiliary_223 | undefined;
+  having?: InputShared_Auxiliary_228 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10459,9 +10501,9 @@ export type PostObservabilityThreadsQuery_Body = {
       from: string;
       to: string;
     };
-    where?: InputShared_Auxiliary_204 | undefined;
+    where?: InputShared_Auxiliary_205 | undefined;
   };
-  where?: InputShared_Auxiliary_254 | undefined;
+  where?: InputShared_Auxiliary_262 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -10504,7 +10546,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_223 | undefined;
+  where?: InputShared_Auxiliary_228 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt';
     direction: 'asc' | 'desc';
@@ -10604,6 +10646,8 @@ export type PostObservabilityTracesQueryFields_Response = {
       | 'notExists'
       | 'includes'
       | 'notIncludes'
+      | 'matches'
+      | 'notMatches'
     )[];
     valueSuggestions: boolean;
   }[];
@@ -18405,7 +18449,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_756[] | undefined;
+  files?: InputShared_Auxiliary_764[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18463,7 +18507,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_756[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_764[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19241,6 +19285,7 @@ export type GetSystemPackages_Response = {
   isDev: boolean;
   cmsEnabled: boolean;
   liveKitConnectionRouteEnabled: boolean;
+  liveKitRecordingRouteEnabled?: boolean | undefined;
   editorSource?: ('code' | 'db') | undefined;
   editorSourceCapabilities?:
     | {

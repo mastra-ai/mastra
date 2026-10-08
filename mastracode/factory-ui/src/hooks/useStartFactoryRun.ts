@@ -8,6 +8,7 @@ import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
 import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardRepositorySlug';
+import { repositoryMatchesCardSource } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
 
@@ -37,10 +38,10 @@ export interface StartFactoryRunInput {
 export function useStartFactoryRun() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const repositorySlugFor = useCardRepositorySlug();
+  const repositories = factoryQuery.data?.repositories ?? [];
+  const repositorySlugFor = useCardRepositorySlug(repositories);
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const repositories = factoryQuery.data?.repositories ?? [];
 
   const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
@@ -48,10 +49,13 @@ export function useStartFactoryRun() {
     mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
       const targetSlug = repositorySlug ?? (await repositorySlugFor(workItem.source, workItem.metadata));
+      const repositoriesForSource = repositories.filter(candidate =>
+        repositoryMatchesCardSource(candidate, workItem.source),
+      );
       const repository = targetSlug
-        ? repositories.find(candidate => candidate.slug === targetSlug)
+        ? repositoriesForSource.find(candidate => candidate.slug === targetSlug)
         : repositories.length === 1
-          ? repositories[0]
+          ? repositoriesForSource[0]
           : undefined;
       if (!repository) throw new Error('Choose a repository before starting this Factory run');
       const metadata = { ...workItem.metadata, repository: repository.slug };
