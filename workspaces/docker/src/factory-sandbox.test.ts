@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DockerFactorySandbox } from './factory-sandbox';
 import { DockerSandbox } from './sandbox';
 import { createDockerRepoTemplate } from './template/repo-template';
+import type { DockerTemplate, DockerTemplateBuildResult } from './template/template';
 
 const cloneUrl = 'https://example.com/acme/app.git';
 const sha = '0123456789abcdef0123456789abcdef01234567';
@@ -38,14 +39,71 @@ describe('DockerFactorySandbox', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('is a branded FactorySandbox with template-affecting image and owner settings and no builds', () => {
+  it('is a branded FactorySandbox with template-affecting image and owner settings and local builds', () => {
     const sandbox = new DockerFactorySandbox();
     expect(isFactorySandbox(sandbox)).toBe(true);
     const description = describeFactorySandbox(sandbox);
     expect(description.provider).toBe('docker');
     expect(Object.keys(description.settingsSchema.properties ?? {})).toEqual(['baseImage', 'owner']);
-    expect(description.capabilities).toEqual({ template: true, builds: { available: false, history: false } });
-    expect(sandbox.builds).toBeUndefined();
+    expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
+  });
+
+  describe('builds', () => {
+    function stubTemplate(sandbox: DockerFactorySandbox, build: () => Promise<DockerTemplateBuildResult>) {
+      const template = { templateId: 'mastra-template:abc123', build: vi.fn(build) };
+      vi.spyOn(sandbox, 'template').mockReturnValue(async () => template as unknown as DockerTemplate);
+      return template;
+    }
+
+    it('start kicks the image build without waiting and get reports building, then ready', async () => {
+      const sandbox = new DockerFactorySandbox();
+      let finish!: (result: DockerTemplateBuildResult) => void;
+      const template = stubTemplate(sandbox, () => new Promise(resolve => (finish = resolve)));
+
+      const start = await sandbox.builds.start(context(), {});
+      expect(start).toEqual({
+        buildId: 'mastra-template:abc123',
+        templateId: 'mastra-template:abc123',
+        status: 'building',
+      });
+      expect(template.build).toHaveBeenCalledTimes(1);
+      expect(await sandbox.builds.get(context(), {}, start.buildId)).toMatchObject({ status: 'building' });
+
+      // A second start while the build runs does not start another.
+      await sandbox.builds.start(context(), {});
+      expect(template.build).toHaveBeenCalledTimes(1);
+
+      finish({ status: 'ready', templateId: 'mastra-template:abc123' });
+      await vi.waitFor(async () =>
+        expect(await sandbox.builds.get(context(), {}, start.buildId)).toMatchObject({
+          status: 'ready',
+          templateId: 'mastra-template:abc123',
+          finishedAt: expect.any(String),
+        }),
+      );
+    });
+
+    it('get reports failed with the error, and unknown for an id this process never started', async () => {
+      const sandbox = new DockerFactorySandbox();
+      stubTemplate(sandbox, () => Promise.reject(new Error('daemon unreachable')));
+      const start = await sandbox.builds.start(context(), {});
+      await vi.waitFor(async () =>
+        expect(await sandbox.builds.get(context(), {}, start.buildId)).toMatchObject({
+          status: 'failed',
+          error: 'daemon unreachable',
+        }),
+      );
+      expect(await sandbox.builds.get(context(), {}, 'mastra-template:other')).toEqual({
+        buildId: 'mastra-template:other',
+        status: 'unknown',
+      });
+    });
+
+    it('start rejects when the context yields no template', async () => {
+      const sandbox = new DockerFactorySandbox();
+      vi.spyOn(sandbox, 'template').mockReturnValue(undefined);
+      await expect(sandbox.builds.start(context(), {})).rejects.toThrow('yields no template');
+    });
   });
 
   it('builds the same Dockerfile as createDockerRepoTemplate(ctx) for an unset environment', async () => {
