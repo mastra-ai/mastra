@@ -388,7 +388,8 @@ repository is cloned to `<workingDirectory>/<repo>`.
 #### Several repositories in one template
 
 Pass `repos` instead of `getRepositoryAccess` to clone several repositories
-into one template, each with its own credential resolver and setup command:
+into one template, each with its own credential resolver and setup command (a string or an
+array, each entry its own build step):
 
 ```typescript
 const sandbox = new E2BSandbox({
@@ -431,8 +432,8 @@ per repository and `.mastra-sandbox/workspace-setup` after the workspace
 commands, all under the working directory. With `continueOnSetupFailure`,
 check `.mastra-sandbox/setup-failed` first.
 
-Changing the repository list starts a new template. Changing setup commands or
-credentials doesn't. If any entry's access can't be resolved the sandbox falls
+Adding or removing a repository starts a new template, as does editing a
+setup command, while a rotated credential reuses the existing one. If any entry's access can't be resolved the sandbox falls
 back to its default template. A repository whose head can't be resolved is
 cloned unpinned while the others keep their pins.
 

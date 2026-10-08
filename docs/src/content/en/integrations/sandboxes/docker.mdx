@@ -83,7 +83,8 @@ instead.
 #### Several repositories in one image
 
 Pass `repos` instead of `getRepositoryAccess` to clone several repositories
-into one image, each with its own access resolver, `ref` and setup command:
+into one image, each with its own access resolver, `ref` and setup command (a string or an
+array, each entry its own build step):
 
 ```typescript
 const sandbox = new DockerSandbox({
