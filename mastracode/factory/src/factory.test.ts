@@ -1455,6 +1455,35 @@ describe('MastraFactory.prepare integrations', () => {
     expect(ctx.storage.sourceControl).toBeDefined();
   });
 
+  it('registers the environment build worker only when the host provides sandboxTemplate', async () => {
+    const github = fakeIntegration({
+      id: 'github',
+      versionControl: {
+        initialize: vi.fn(),
+        registerInstallation: vi.fn(),
+        registerRepositories: vi.fn(),
+        getRepositoryAccess: vi.fn(),
+      } as unknown as VersionControl,
+    });
+    const without = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: [github],
+    }).prepare();
+    expect(without.workers?.map(worker => worker.name)).toEqual(['factory-supervisor-health']);
+
+    const withTemplate = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: [github],
+      sandboxTemplate: () => undefined,
+    }).prepare();
+    expect(withTemplate.workers?.map(worker => worker.name)).toEqual([
+      'factory-supervisor-health',
+      'factory-environment-build',
+    ]);
+  });
+
   it('exposes the source-control owner on the routes context when github is registered', async () => {
     const ctx = await prepareIntegrationContext({
       storage: fakeStorage(),

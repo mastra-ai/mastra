@@ -48,6 +48,8 @@ export interface FactoryProject {
   /** Trailing-hour push-build cap window, persisted so replicas and restarts agree. */
   buildWindowStartedAt: Date | null;
   buildWindowCount: number;
+  /** Consecutive failed builds since the last `ready`; the retry backoff doubles on it. */
+  buildFailureCount: number;
   /** Worker lease on the build; null when no build is running. */
   buildClaimedAt: Date | null;
   createdAt: Date;
@@ -93,6 +95,7 @@ export interface UpdateFactoryProjectInput {
   lastPushAt?: Date | null;
   buildWindowStartedAt?: Date | null;
   buildWindowCount?: number;
+  buildFailureCount?: number;
   buildClaimedAt?: Date | null;
 }
 
@@ -136,6 +139,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     last_push_at: { type: 'timestamp', nullable: true },
     build_window_started_at: { type: 'timestamp', nullable: true },
     build_window_count: { type: 'integer', default: 0 },
+    build_failure_count: { type: 'integer', default: 0 },
     build_claimed_at: { type: 'timestamp', nullable: true },
     /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
@@ -175,6 +179,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   last_push_at: Date | null;
   build_window_started_at: Date | null;
   build_window_count: number | null;
+  build_failure_count: number | null;
   build_claimed_at: Date | null;
   environment_backfilled_at: Date | null;
   created_at: Date;
@@ -212,6 +217,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     lastPushAt: row.last_push_at ?? null,
     buildWindowStartedAt: row.build_window_started_at ?? null,
     buildWindowCount: row.build_window_count ?? 0,
+    buildFailureCount: row.build_failure_count ?? 0,
     buildClaimedAt: row.build_claimed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -260,6 +266,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       build_push_debounce_minutes: BUILD_PUSH_DEBOUNCE_MINUTES_DEFAULT,
       build_push_max_per_hour: BUILD_PUSH_MAX_PER_HOUR_DEFAULT,
       build_window_count: 0,
+      build_failure_count: 0,
       created_at: now,
       updated_at: now,
     });
@@ -334,6 +341,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.lastPushAt !== undefined ? { last_push_at: input.lastPushAt } : {}),
       ...(input.buildWindowStartedAt !== undefined ? { build_window_started_at: input.buildWindowStartedAt } : {}),
       ...(input.buildWindowCount !== undefined ? { build_window_count: input.buildWindowCount } : {}),
+      ...(input.buildFailureCount !== undefined ? { build_failure_count: input.buildFailureCount } : {}),
       ...(input.buildClaimedAt !== undefined ? { build_claimed_at: input.buildClaimedAt } : {}),
       updated_at: new Date(),
     }));
@@ -369,9 +377,11 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
 
   /**
    * Record the outcome of a claimed build and release the lease. Every
-   * attempt stamps `last_build_attempted_at`; only `ready` moves the template
-   * id, heads and `last_built_at`. A request made after the claim stays
-   * pending so the next tick serves it.
+   * attempt stamps `last_build_attempted_at` with the claim time (so a push
+   * that landed while the build ran stays newer than the attempt and is
+   * served next); only `ready` moves the template id, heads and
+   * `last_built_at`. A request made after the claim stays pending so the
+   * next tick serves it.
    */
   async recordBuild({
     orgId,
@@ -386,7 +396,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       const requested = current.build_requested_at;
       const stillRequested = requested !== null && requested.getTime() > input.claimedAt.getTime();
       return {
-        last_build_attempted_at: input.now,
+        last_build_attempted_at: input.claimedAt,
         build_claimed_at: null,
         build_requested_at: stillRequested ? requested : null,
         ...(input.result.status === 'ready'
@@ -396,8 +406,13 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
               last_built_at: input.now,
               active_template_id: input.result.templateId,
               active_template_heads: input.result.heads,
+              build_failure_count: 0,
             }
-          : { last_build_status: 'failed', last_build_error: input.result.error }),
+          : {
+              last_build_status: 'failed',
+              last_build_error: input.result.error,
+              build_failure_count: (current.build_failure_count ?? 0) + 1,
+            }),
         updated_at: input.now,
       };
     });

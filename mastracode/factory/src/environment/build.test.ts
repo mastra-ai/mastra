@@ -99,7 +99,7 @@ describe('runEnvironmentBuild', () => {
       lastBuildStatus: 'ready',
       lastBuildError: null,
       lastBuiltAt: finishedAt,
-      lastBuildAttemptedAt: finishedAt,
+      lastBuildAttemptedAt: claimedAt,
       buildClaimedAt: null,
       activeTemplateId: 'tpl-1',
       activeTemplateHeads: heads,

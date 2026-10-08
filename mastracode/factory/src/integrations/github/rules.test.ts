@@ -235,6 +235,66 @@ function pullRequest(
 }
 
 describe('GithubRules', () => {
+  it('hands a push to every project linking the repository and still ignores it as an event', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const onPush = vi.fn(async () => {});
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry({ boards: [createTestBoard()] }),
+      configVersion: 'custom-github-v2',
+      onPush,
+    });
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await expect(
+      service.ingest({
+        event: 'push',
+        deliveryId: 'push-1',
+        payload: {
+          ref: 'refs/heads/main',
+          after: 'c0ffee',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'maintainer' },
+        },
+      }),
+    ).resolves.toEqual({ status: 'ignored' });
+
+    expect(onPush).toHaveBeenCalledTimes(1);
+    expect(onPush).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      repositoryExternalId: '10',
+      ref: 'refs/heads/main',
+      after: 'c0ffee',
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('ignores a push when no push listener is configured', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects } = await setup('write');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry({ boards: [createTestBoard()] }),
+      configVersion: 'custom-github-v2',
+    });
+    await expect(
+      service.ingest({
+        event: 'push',
+        deliveryId: 'push-2',
+        payload: { ref: 'refs/heads/main', after: 'c0ffee', installation: { id: 7 }, repository: { id: 10 } },
+      }),
+    ).resolves.toEqual({ status: 'ignored' });
+  });
+
   it('accepts a linked target on another installed board and preserves committed ingress after uninstall', async () => {
     const decision = {
       type: 'upsertLinkedWorkItem' as const,

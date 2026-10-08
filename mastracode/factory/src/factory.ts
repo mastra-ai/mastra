@@ -43,6 +43,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { FactoryEnvironmentBuildWorker, type EnvironmentPushEvent } from './environment/build-worker.js';
 import type { SandboxTemplateFactory } from './environment/types.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -678,6 +679,29 @@ export class MastraFactory {
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     );
     const workItemsReady = storage.isDomainReady('work-items');
+    // Proactive environment builds need a host that can build templates
+    // (`sandboxTemplate`), a GitHub provider for heads and tokens, and the
+    // project + source-control domains. Without them environments build
+    // lazily on their first session, as before.
+    const environmentBuildWorker =
+      this.#config.sandboxTemplate &&
+      githubIntegration &&
+      storage.isDomainReady('projects') &&
+      storage.isDomainReady('source-control')
+        ? new FactoryEnvironmentBuildWorker({
+            projects: factoryProjectsStorage,
+            sourceControl: {
+              storage: sourceControlStorage.forIntegration(githubIntegration.id),
+              versionControl: githubIntegration.versionControl,
+            },
+            sandboxTemplate: this.#config.sandboxTemplate,
+          })
+        : undefined;
+    const onRepositoryPush = environmentBuildWorker
+      ? async (event: EnvironmentPushEvent) => {
+          await environmentBuildWorker.notePush(event);
+        }
+      : undefined;
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
         ? new SessionRetirementCoordinator({
@@ -1238,6 +1262,7 @@ export class MastraFactory {
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
             audit: auditDomain,
+            ...(onRepositoryPush ? { onRepositoryPush } : {}),
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
@@ -1538,6 +1563,7 @@ export class MastraFactory {
             }),
           ]
         : []),
+      ...(environmentBuildWorker ? [environmentBuildWorker] : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)
         .flatMap(({ integration }) =>
@@ -1558,6 +1584,7 @@ export class MastraFactory {
                 factoryReady,
                 domains,
                 feed: commentsDomain,
+                ...(onRepositoryPush ? { onRepositoryPush } : {}),
                 ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
               },
               integration.id,

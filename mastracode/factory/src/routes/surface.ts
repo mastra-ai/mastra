@@ -7,7 +7,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
@@ -92,6 +92,8 @@ export interface FactoryApiRoutesDeps {
   users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
   audit: AuditEmitter & AuditRecorder;
+  /** Receives pushes to linked repositories (the environment build worker). */
+  onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
@@ -414,6 +416,7 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
+    onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry;
     factoryReady: boolean;
@@ -461,7 +464,14 @@ export function buildIntegrationContext(
           runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
         }
       : {}),
-    ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
+    ...(deps.emitAudit || deps.onRepositoryPush
+      ? {
+          hooks: {
+            ...(deps.emitAudit ? { emitAudit: deps.emitAudit } : {}),
+            ...(deps.onRepositoryPush ? { onRepositoryPush: deps.onRepositoryPush } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -588,6 +598,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         stateSigner: deps.stateSigner,
         emitAudit,
+        ...(deps.onRepositoryPush ? { onRepositoryPush: deps.onRepositoryPush } : {}),
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
       },
       integration.id,

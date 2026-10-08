@@ -47,6 +47,14 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
+  /** A push to a repository linked to a project; the environment build worker listens. */
+  onRepositoryPush?: (event: {
+    orgId: string;
+    factoryProjectId: string;
+    repositoryExternalId: string;
+    ref: string;
+    after: string;
+  }) => Promise<void>;
 }
 
 /**

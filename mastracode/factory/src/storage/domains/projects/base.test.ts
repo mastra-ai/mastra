@@ -173,7 +173,7 @@ describe('FactoryProjectsStorage', () => {
         lastBuildStatus: 'ready',
         lastBuildError: null,
         lastBuiltAt: finishedAt,
-        lastBuildAttemptedAt: finishedAt,
+        lastBuildAttemptedAt: claimedAt,
         activeTemplateId: 'tpl-1',
         activeTemplateHeads: { 'a/b': 'c0ffee' },
         buildClaimedAt: null,
@@ -211,7 +211,7 @@ describe('FactoryProjectsStorage', () => {
       expect(recorded).toMatchObject({
         lastBuildStatus: 'failed',
         lastBuildError: 'image build failed',
-        lastBuildAttemptedAt: failedAt,
+        lastBuildAttemptedAt: claimedAt,
         lastBuiltAt: builtAt,
         activeTemplateId: 'tpl-1',
         activeTemplateHeads: { 'a/b': 'c0ffee' },

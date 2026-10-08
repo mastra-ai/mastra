@@ -35,7 +35,7 @@ const SUPPORTED_EVENTS = new Set([
   'pull_request_review',
   'pull_request_review_comment',
   // Pushes never reach the subscription dispatcher; they feed the factory
-  // ingest path so base checkpoints rebuild on default-branch updates.
+  // ingest path so the environment rebuilds after a push to a base branch.
   'push',
 ]);
 // Kinds emitted by `classifyGithubWebhook` that carry untrusted sender-authored
