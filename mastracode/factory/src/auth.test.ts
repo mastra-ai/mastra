@@ -2,7 +2,10 @@ import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { IMastraAuthProvider } from '@mastra/core/server';
+
 import {
+  ensureFactoryAuthUser,
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
@@ -90,6 +93,40 @@ describe('env-implied WorkOS fallback', () => {
   it('enables auth when both env vars are set', () => {
     enableEnv();
     expect(mountFactoryAuth(new Hono())).toBe(true);
+  });
+});
+
+describe('ensureFactoryAuthUser on ungated (requiresAuth: false) routes', () => {
+  async function buildUngatedApp() {
+    const { MastraAuthWorkos } = await import('@mastra/auth-workos');
+    const provider = new (MastraAuthWorkos as unknown as new () => IMastraAuthProvider)();
+    const app = new Hono();
+    app.get('/web/thing', async c => {
+      const user = await ensureFactoryAuthUser(provider, c);
+      return user ? c.json({ ok: true }) : c.json({ error: 'unauthorized' }, 401);
+    });
+    return app;
+  }
+
+  it('forwards a renewed session cookie on the handler response', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockReturnValue({ 'Set-Cookie': 'wos-session=v2; Path=/; Max-Age=1209600' });
+    const app = await buildUngatedApp();
+
+    const res = await app.request('/web/thing', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toBe('wos-session=v2; Path=/; Max-Age=1209600');
+  });
+
+  it('still authenticates when forwarding headers throws', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const app = await buildUngatedApp();
+
+    const res = await app.request('/web/thing', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
   });
 });
 

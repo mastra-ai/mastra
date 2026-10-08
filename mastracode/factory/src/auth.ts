@@ -393,6 +393,19 @@ export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): Ma
  *
  * Returns `undefined` when there is no valid session (or auth is disabled).
  */
+function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context): void {
+  // Forward a renewed session cookie (e.g. rotated by the shared API during
+  // verification) so the browser's cookie stays current. Best-effort.
+  try {
+    const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
+    for (const [name, value] of Object.entries(pending ?? {})) {
+      c.header(name, value, { append: true });
+    }
+  } catch {
+    // never fail a request over header forwarding
+  }
+}
+
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
@@ -403,6 +416,9 @@ export async function ensureFactoryAuthUser(
 
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
+  // Routes declared `requiresAuth: false` skip the gate, so this is their only
+  // authentication — forward a renewed session cookie from here too.
+  forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
   const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
@@ -862,16 +878,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
       authenticateRequest(provider, token, c.req.raw),
     );
-    // Forward a renewed session cookie (e.g. rotated by the shared API during
-    // verification) so the browser's cookie stays current. Best-effort.
-    try {
-      const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
-      for (const [name, value] of Object.entries(pending ?? {})) {
-        c.header(name, value, { append: true });
-      }
-    } catch {
-      // never fail a request over header forwarding
-    }
+    forwardPendingResponseHeaders(provider, c);
 
     if (user) {
       const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
