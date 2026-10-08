@@ -141,8 +141,9 @@ export function resolveTargets(selection: Selection, spec: string): SelectedProj
   });
 }
 
-type Arm = 'old' | 'new';
-type Impls = Record<Arm, QueryTracesFn>;
+type Arm = 'old' | 'new' | 'variant';
+/** `variant` (optional, `--variant`) is a bench-only candidate compiler run as a third interleaved arm. */
+type Impls = Record<'old' | 'new', QueryTracesFn> & { variant?: QueryTracesFn };
 const STATEMENTS = ['main', 'list', 'payload'] as const;
 
 /** Each implementation's project-scoped statements for a case, at the cursor / watermark the benchmark uses. */
@@ -152,7 +153,7 @@ async function armStatements(
   caseId: string,
   project: SelectedProject,
   windowId: keyof typeof WINDOWS,
-): Promise<Record<Arm, TraceStatements> | string> {
+): Promise<(Partial<Record<Arm, TraceStatements>> & Record<'old' | 'new', TraceStatements>) | string> {
   const def = caseById(caseId);
   if (!['traces', 'page', 'groups', 'delta'].includes(def.api)) return `${caseId} is not a queryTraces() case`;
   const literals = literalsFor(project, ctx.sidecar);
@@ -185,7 +186,11 @@ async function armStatements(
     return `${caseId} is not a queryTraces() case`;
   }
   const capture = (impl: QueryTracesFn) => captureTraceQuery(impl, plan.plan, project, def.relations, runKey, head);
-  return { old: await capture(impls.old), new: await capture(impls.new) };
+  return {
+    old: await capture(impls.old),
+    new: await capture(impls.new),
+    ...(impls.variant ? { variant: await capture(impls.variant) } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +262,16 @@ async function ship(
           log(`skip ${caseId} ${project.bucket} ${windowId}: ${arms}`);
           continue;
         }
-        for (const arm of ['old', 'new'] as const) {
-          if (arms[arm].keyFailure) log(`${caseId} ${arm}: capture stopped early (${arms[arm].keyFailure})`);
+        const names = (['old', 'new', 'variant'] as const).filter(arm => arms[arm]);
+        for (const arm of names) {
+          const failure = arms[arm]!.keyFailure;
+          if (failure) log(`${caseId} ${arm}: capture stopped early (${failure})`);
         }
         for (let rep = -coldReps; rep < reps; rep++) {
-          const order: Arm[] = (rep + 2) % 2 === 0 ? ['old', 'new'] : ['new', 'old'];
-          for (const arm of order) await runArm(ctx, arm, arms[arm], { ...meta, rep, cold: rep < 0 });
+          // Rotate the arm order every rep so cache and drift hit each arm in every position.
+          const shift = (rep + names.length * 4) % names.length;
+          const order = [...names.slice(shift), ...names.slice(0, shift)];
+          for (const arm of order) await runArm(ctx, arm, arms[arm]!, { ...meta, rep, cold: rep < 0 });
         }
       }
     }
@@ -317,10 +326,13 @@ interface HashRow {
 type Hash = HashRow | { error: string };
 
 /**
- * Old vs new results, compared on the server:
+ * Old vs new (or `--variant`) results, compared on the server:
  * - the list (old: the single keyset / delta / groups statement, or page rows without the total row; new: the
- *   bounded list, or `main` for delta / groups), order-sensitive;
- * - the payloads of the returned rows (old: carried on the list rows; new: the payload lookup), as a set;
+ *   second statement of keyset / page mode, or `main` for delta / groups), order-sensitive. When the new flow
+ *   reads keyset rows for the visible traces only, the old list is cut to the same rows and the look-ahead
+ *   (whether a next page exists) is compared as old rows vs new keys;
+ * - the payloads of the returned rows (old: carried on the list rows; new: a payload lookup, or the rows
+ *   read by key), as a set;
  * - page mode: the total.
  * The old list is hashed before and after the new arm, so live-data drift shows up as an unstable control.
  */
@@ -340,6 +352,10 @@ async function equiv(ctx: Ctx, impls: Impls, cases: string[], targets: SelectedP
           continue;
         }
         const def = caseById(caseId);
+        // With --variant, the candidate is compared against the old compiler instead of the current one.
+        const cand = arms.variant ?? arms.new;
+        // Lists without a payload statement carry the payloads themselves.
+        const inline = !cand.payload && cand.list?.query.includes('metadataRaw AS metadata');
         const hashOf = async (statement: Statement | undefined, columns: string[], label: string): Promise<Hash> => {
           if (!statement) return { error: 'not issued' };
           const out = await exec<HashRow>(ctx, hashStatement(statement, columns), `equiv:${caseId}:${label}`, {
@@ -354,8 +370,14 @@ async function equiv(ctx: Ctx, impls: Impls, cases: string[], targets: SelectedP
           : def.api === 'delta'
             ? [...LIST_COLUMNS, '__delta_cursor']
             : LIST_COLUMNS;
-        const oldList = page ? slice(arms.old.main, { where: '__metadata = 0' }) : arms.old.main;
-        const newList = groups || def.api === 'delta' ? arms.new.main : arms.new.list;
+        // Keyed keyset rows: only the visible traces are read (the keys carry the look-ahead).
+        const visibleOnly = def.api === 'traces' && Boolean(inline);
+        const oldList = page
+          ? slice(arms.old.main, { where: '__metadata = 0' })
+          : visibleOnly
+            ? slice(arms.old.main, { limit: visibleLimit(arms.old.main) })
+            : arms.old.main;
+        const newList = groups || def.api === 'delta' ? cand.main : cand.list;
 
         const left = await hashOf(oldList, columns, 'old');
         // No list statement means the new flow saw nothing past the bound: it matches only an empty old list.
@@ -370,6 +392,11 @@ async function equiv(ctx: Ctx, impls: Impls, cases: string[], targets: SelectedP
           controlStable: same(left, control, true),
           errors: [left, right].flatMap(h => ('error' in h ? [h.error] : [])),
         };
+        if (visibleOnly) {
+          const oldAll = await hashOf(arms.old.main, ['traceId'], 'old-ahead');
+          const newKeys = await hashOf(cand.main, ['traceId'], 'new-keys');
+          data.lookAheadMatch = same(oldAll, newKeys, true);
+        }
         if (!groups) {
           // Visible rows only: keyset / delta lists carry one look-ahead row the payload lookup skips.
           const visible =
@@ -381,7 +408,13 @@ async function equiv(ctx: Ctx, impls: Impls, cases: string[], targets: SelectedP
           const none = { n: '0' } as Hash;
           const a = visible === 0 && !oldPayloads ? none : await hashOf(oldPayloads, PAYLOAD_COLUMNS, 'old-payload');
           const b =
-            visible === 0 && !arms.new.payload ? none : await hashOf(arms.new.payload, PAYLOAD_COLUMNS, 'new-payload');
+            visible === 0 && !cand.payload && !inline
+              ? none
+              : await hashOf(
+                  inline ? slice(cand.list!, { limit: visible }) : cand.payload,
+                  PAYLOAD_COLUMNS,
+                  'new-payload',
+                );
           data.payloadMatch = same(a, b, false);
           data.payloadRows = [a, b].map(h => ('n' in h ? Number(h.n) : h.error));
         }
@@ -392,9 +425,17 @@ async function equiv(ctx: Ctx, impls: Impls, cases: string[], targets: SelectedP
             `equiv:${caseId}:old-total`,
             { parse: true },
           );
-          const bound = await exec<{ traces: string }>(ctx, arms.new.main, `equiv:${caseId}:new-total`, {
-            parse: true,
-          });
+          // The legacy total-and-bound statement, or the keys statement's total column.
+          const bound = await exec<{ traces: string }>(
+            ctx,
+            cand.total
+              ? cand.total
+              : cand.main.query.includes(' AS bound')
+                ? cand.main
+                : { ...cand.main, query: `SELECT toString(any(__total)) AS traces FROM (${cand.main.query})` },
+            `equiv:${caseId}:new-total`,
+            { parse: true },
+          );
           data.totalMatch =
             total.ok && bound.ok && Number(total.rows![0]?.total ?? 0) === Number(bound.rows![0]?.traces ?? 0);
         }
@@ -564,6 +605,9 @@ async function main() {
     options: {
       exp: { type: 'string', default: 'QX' },
       legacy: { type: 'string' },
+      variant: { type: 'string' },
+      // End of every window instead of the selection's anchor (e.g. delta cases, whose index keeps 2 days).
+      anchor: { type: 'string' },
       cases: { type: 'string', default: 'T0' },
       targets: { type: 'string', default: 'small' },
       windows: { type: 'string', default: '1d,30d' },
@@ -599,7 +643,7 @@ async function main() {
     client,
     runId,
     exp: values.exp!,
-    anchorTo: selection.anchorTo,
+    anchorTo: values.anchor ? new Date(values.anchor).toISOString() : selection.anchorTo,
     sidecar,
     lastEnd: 0,
     consecutiveErrors: 0,
@@ -614,6 +658,11 @@ async function main() {
     const legacy = (await import(resolve(values.legacy))) as { queryTraces?: QueryTracesFn };
     if (typeof legacy.queryTraces !== 'function') throw new Error('--legacy module has no queryTraces export');
     impls = { old: legacy.queryTraces, new: queryTraces };
+    if (values.variant) {
+      const variant = (await import(resolve(values.variant))) as { queryTraces?: QueryTracesFn };
+      if (typeof variant.queryTraces !== 'function') throw new Error('--variant module has no queryTraces export');
+      impls.variant = variant.queryTraces;
+    }
   }
   log(
     `${command} ${values.exp} run ${runId}: cases [${cases.join(', ')}] targets [${targets.map(t => `${t.bucket}:${t.hash}`).join(', ')}] windows [${windows.join(', ')}]`,

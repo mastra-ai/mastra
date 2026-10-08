@@ -51,9 +51,10 @@ describe('trace-query case catalogue', () => {
         return;
       }
       // queryTraces() also scopes its current-root key re-read; queryThreads() gets that from W1.
-      const keyed = ['traces', 'page', 'groups', 'delta'].includes(def.api) ? 1 : 0;
-      const delta = (def.api === 'delta' ? 1 : 0) + (keyed && def.relations.includes('spans') ? 1 : 0);
-      const expected = def.api === 'spans' ? 2 : 2 + keyed + delta + def.relations.length + (variant === 'w1' ? 1 : 0);
+      // queryTraces() seeds the delta index and span existence checks with the tenant's window roots.
+      const keyed = ['traces', 'page', 'groups', 'delta'].includes(def.api);
+      const windows = (def.api === 'delta' ? 1 : 0) + (keyed && def.relations.includes('spans') ? 1 : 0);
+      const expected = def.api === 'spans' ? 2 : 2 + windows + def.relations.length + (variant === 'w1' ? 1 : 0);
       expect(scoped(compiled.query)).toBe(expected);
       expect(compiled.query_params[PROJECT_PARAM]).toBe('proj-test');
       expect(Object.values(compiled.query_params)).toContain('org-test');
@@ -143,12 +144,12 @@ describe('trace-query case catalogue', () => {
 });
 
 describe('stages', () => {
-  /** Answers capture key reads: the bound statement with `bound`, list key reads with `rows`. */
-  const keyRunner = (bound: { traces: string; bound: string | null }, rows: Record<string, unknown>[]) => {
+  /** Answers capture key reads: the page's root keys with `keys`, list key reads with `rows`. */
+  const keyRunner = (keys: Record<string, unknown>[], rows: Record<string, unknown>[]) => {
     const seen: Array<{ statement: Statement; step: string }> = [];
     const run: KeyRunner = async <Row>(statement: Statement, step: string) => {
       seen.push({ statement, step });
-      const out = step === 'trace-bound' ? [bound] : rows;
+      const out = step === 'trace-root-keys' ? keys : rows;
       return { ok: true, rows: out as Row[], wallMs: 1 } as QueryOutcome<Row>;
     };
     return { run, seen };
@@ -170,45 +171,69 @@ describe('stages', () => {
     endedAt: '2026-10-05 00:00:01.000',
   };
 
+  const rootKey = {
+    traceId: 't-1',
+    dedupeKey: 't-1:s-1',
+    sortValue: '2026-10-05T00:00:00.000Z',
+    rootStartedAt: '2026-10-05T00:00:00.000Z',
+    __total: '1',
+  };
+
   it('captures keyset statements from the real store, project-scoped, with the store settings', async () => {
-    const { run, seen } = keyRunner({ traces: '1', bound: '2026-10-05 00:00:00.000' }, [key]);
+    const { run, seen } = keyRunner([rootKey], [key]);
     const traced = await capture('T7', run);
 
-    expect(traced.main.query).toContain(' AS bound');
-    expect(traced.list!.query).toMatch(/AND \(startedAt >= \{trace_query_\d+:DateTime64/);
-    // Roots seed, current-root keys, root_scope, and the span relation with its window-roots seed.
-    for (const statement of [traced.main, traced.list!]) expect(scoped(statement.query)).toBe(5);
-    expect(scoped(traced.payload!.query)).toBe(1);
-    expect(Object.values(traced.payload!.query_params)).toEqual(expect.arrayContaining(['org-test', 't-1', 's-1']));
-    for (const statement of [traced.main, traced.list!, traced.payload!]) {
+    expect(traced.main.query).toContain('count() OVER () AS __total');
+    // Roots seed, the seeded traces' roots, and the span relation with its window-roots seed.
+    expect(scoped(traced.main.query)).toBe(4);
+    // The keyed rows (with payloads) are one scoped root read; no separate payload lookup.
+    expect(traced.list!.query).toContain('r.metadataRaw AS metadata');
+    expect(scoped(traced.list!.query)).toBe(1);
+    expect(Object.values(traced.list!.query_params)).toEqual(
+      expect.arrayContaining(['org-test', 't-1', 't-1:s-1', '2026-10-05 00:00:00.000']),
+    );
+    expect(traced.payload).toBeUndefined();
+    for (const statement of [traced.main, traced.list!]) {
       expect(statement.settings).toMatchObject({ filesystem_prefetches_limit: '8' });
       expect(statement.settings).not.toHaveProperty('max_execution_time');
       expect(statement.settings).not.toHaveProperty('max_memory_usage');
     }
     expect(traced.main.sharedSnapshot).toBe(true);
-    // Only the bound (counts and a timestamp) and key columns are read back.
-    expect(seen.map(s => s.step)).toEqual(['trace-bound', 'trace-keys']);
+    // Only key columns are read back.
+    expect(seen.map(s => s.step)).toEqual(['trace-root-keys', 'trace-keys']);
+    expect(seen[0]!.statement.query).toMatch(
+      /^SELECT toString\(traceId\) AS traceId, toString\(dedupeKey\) AS dedupeKey, sortValue, rootStartedAt, __total FROM \(/,
+    );
     expect(seen[1]!.statement.query).toMatch(
       /^SELECT toString\(traceId\) AS traceId, toString\(rootSpanId\) AS rootSpanId, startedAt, endedAt FROM \(/,
     );
   });
 
-  it('captures only the total-and-bound statement for an empty page', async () => {
-    const { run } = keyRunner({ traces: '0', bound: null }, []);
+  it('captures only the keys statement for an empty first page', async () => {
+    const { run } = keyRunner([], []);
     const traced = await capture('P0', run);
-    expect(traced.main.query).toContain(' AS bound');
+    expect(traced.main.query).toContain('count() OVER () AS __total');
     expect(traced.list).toBeUndefined();
     expect(traced.payload).toBeUndefined();
   });
 
+  it('captures the total statement for a numbered page past the last one', async () => {
+    const { run, seen } = keyRunner([], [{ traces: '3' }]);
+    const traced = await capture('P1', run);
+    expect(traced.main.query).toContain('count() OVER () AS __total');
+    expect(traced.total!.query).toContain('uniqExact(traceId) AS traces');
+    expect(traced.list).toBeUndefined();
+    expect(seen.map(s => s.step)).toEqual(['trace-root-keys', 'trace-bound']);
+  });
+
   it('captures the delta list with its cursor column, and groups without reading rows', async () => {
-    const delta = keyRunner({ traces: '0', bound: null }, [{ ...key, __delta_cursor: '5' }]);
+    const delta = keyRunner([], [{ ...key, __delta_cursor: '5' }]);
     const traced = await capture('D1', delta.run, { cursorId: '9', traceId: 't-9' });
     expect(traced.main.query).toContain('delta_candidates');
     expect(delta.seen[0]!.statement.query).toContain('__delta_cursor FROM (');
     expect(scoped(traced.payload!.query)).toBe(1);
 
-    const groups = keyRunner({ traces: '0', bound: null }, []);
+    const groups = keyRunner([], []);
     const g0 = await capture('G0', groups.run);
     expect(g0.main.query).toContain('GROUP BY threadId');
     expect(groups.seen).toHaveLength(0);

@@ -47,6 +47,7 @@ export function injectProjectScope<T extends CompiledClickHouseTraceQuery>(
       throw new RewriteError(`Relation ${relation}: expected ${declared} CTE(s), found ${present}`);
     }
   }
+  // The compiler at b123b235d9a (usable as a `--legacy` arm) read current-root keys in a CTE of their own.
   const keyed = countOccurrences(compiled.query, 'current_root_keys AS (');
   if (keyed > 1) throw new RewriteError(`Expected at most one current_root_keys CTE, found ${keyed}`);
   // queryTraces() also seeds the delta index and span existence checks with the tenant's window roots.

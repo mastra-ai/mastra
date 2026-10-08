@@ -64,6 +64,8 @@ export interface TraceStatements {
   main: Statement;
   list?: Statement;
   payload?: Statement;
+  /** Page mode past the last page: the statement that counts the total when the keys statement returns no rows. */
+  total?: Statement;
   /** A key read that failed (e.g. a statement over its memory limit); later statements were not issued. */
   keyFailure?: string;
 }
@@ -129,8 +131,29 @@ export async function captureTraceQuery(
         captured.push({ kind: 'payload', statement });
         return answer([]);
       }
-      const statement = injectProjectScope(raw, scope.projectId, relations);
-      if (args.query.includes(' AS bound')) {
+      // Rows read by key (one root scan, list columns and payloads): keyset / page mode's second statement.
+      const keyed = !args.query.startsWith('WITH') && args.query.includes('metadataRaw AS metadata');
+      const statement = keyed
+        ? injectPayloadProjectScope(raw, scope.projectId)
+        : injectProjectScope(raw, scope.projectId, relations);
+      if (args.query.includes(' AS __total')) {
+        // Keyset / page mode's first statement: the page's current-root keys and the total.
+        captured.push({ kind: 'bound', statement });
+        const rows = await read<Record<string, unknown>>(
+          keyOnly(
+            statement,
+            'toString(traceId) AS traceId, toString(dedupeKey) AS dedupeKey, sortValue, rootStartedAt, __total',
+          ),
+          'trace-root-keys',
+        );
+        registerSensitive(
+          rows.flatMap(row => [row.traceId, row.dedupeKey].filter(v => typeof v === 'string')) as string[],
+        );
+        return answer(rows);
+      }
+      // ` AS bound`: the total-and-bound statement of the compiler at b123b235d9a (a `--legacy` arm);
+      // ` AS traces` alone: the total for a numbered page past the last one.
+      if (args.query.includes(' AS bound') || args.query.includes('uniqExact(traceId) AS traces')) {
         captured.push({ kind: 'bound', statement });
         return answer(await read(statement, 'trace-bound'));
       }
@@ -164,8 +187,8 @@ export async function captureTraceQuery(
 
   const kinds = captured.map(c => c.kind).join(',');
   const shapes: Record<string, string[]> = {
-    keyset: ['bound', 'bound,list', 'bound,list,payload', 'list'],
-    page: ['bound', 'bound,list', 'bound,list,payload', 'list', 'list,payload'],
+    keyset: ['bound', 'bound,list', 'bound,list,payload', 'list', 'list,payload'],
+    page: ['bound', 'bound,list', 'bound,list,payload', 'list', 'list,payload', 'bound,bound'],
     delta: ['list', 'list,payload'],
     groups: ['list'],
   };
@@ -176,6 +199,7 @@ export async function captureTraceQuery(
     main: first!.statement,
     list: rest.find(c => c.kind === 'list')?.statement,
     payload: captured.find(c => c.kind === 'payload')?.statement,
+    ...(kinds === 'bound,bound' ? { total: rest[0]!.statement } : {}),
     ...(keyFailure ? { keyFailure } : {}),
   };
 }
