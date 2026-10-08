@@ -20,7 +20,6 @@
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
     "anthropic/claude-sonnet-5.5",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -201,6 +200,7 @@
     "sakana/fugu-ultra-v2",
     "sakana/sakana-namazu",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
@@ -261,7 +261,6 @@
     "anthropic/claude-sonnet-4.6",
     "apodex/apodex-1.1-mini:free",
     "arcee-ai/trinity-large-thinking",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -330,7 +329,7 @@
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
     "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante:free",
+    "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
@@ -503,6 +502,7 @@
     "sao10k/l3.3-euryale-70b",
     "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-1.8b",
     "tencent/hy-mt2-30b-a3b",
@@ -820,6 +820,7 @@
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-30b-a3b",
     "tencent/hy-mt2-7b",
@@ -1422,11 +1423,6 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "baidu/ernie-4.5-vl-424b-a47b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "x-ai/grok-4.20-multi-agent": [
       {
         "type": "effort",
@@ -1746,17 +1742,17 @@
         "values": ["none", "high"]
       }
     ],
-    "inclusionai/ling-3.0-flash-sante:free": [
-      {
-        "type": "toggle"
-      }
-    ],
     "inclusionai/ling-3.0-flash": [
       {
         "type": "toggle"
       }
     ],
     "inclusionai/ling-3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash-sante": [
       {
         "type": "toggle"
       }
@@ -1909,6 +1905,12 @@
     "minimax/minimax-m3": [
       {
         "type": "toggle"
+      }
+    ],
+    "stepfun/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "stepfun/step-3.7-flash": [

@@ -505,7 +505,13 @@ export async function rebuildRunToolsFromMastra(options: {
       if (options.rehydrateProcessors && (existing.isPlaceholder || !existing.requestContext)) {
         existing.requestContext = resolveRequestContext;
       }
-      if (Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
+      const registryModel = existing.model as { __metadataOnly?: boolean } | undefined;
+      const hasAuthoritativeToolSnapshot =
+        existing.isPlaceholder !== true &&
+        !!registryModel &&
+        registryModel.__metadataOnly !== true &&
+        (existing.baseTools !== undefined || existing.tools !== undefined);
+      if (!hasAuthoritativeToolSnapshot && Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
       existing.workspace ??= workspace;
       existing.memory ??= memory;
       existing.saveQueueManager ??= saveQueueManager;

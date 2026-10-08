@@ -188,6 +188,46 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     expect(result.result).toEqual({ ok: true });
   });
 
+  it.each([false, true])(
+    'does not restore an omitted tool when processor hydration is needed: %s',
+    async needsHydration => {
+      const removedExecute = vi.fn().mockResolvedValue({ shouldNotRun: true });
+      globalRunRegistry.set(RUN_ID, {
+        tools: { kept: { id: 'kept', execute: vi.fn() } as any },
+        model: {} as any,
+        saveQueueManager: {} as any,
+        ...(needsHydration ? {} : { outputProcessors: [], processorStates: new Map() }),
+      } as any);
+      if (needsHydration) {
+        vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockImplementationOnce(async () => {
+          const entry = globalRunRegistry.get(RUN_ID)!;
+          entry.outputProcessors = [];
+          entry.processorStates = new Map();
+          return { tools: { removed: { id: 'removed', execute: removedExecute } }, workspace: undefined };
+        });
+      }
+      vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce({ id: 'removed', execute: removedExecute } as any);
+      const listTools = vi.fn(() => ({ removed: { id: 'removed', execute: removedExecute } }));
+
+      const step = createDurableToolCallStep();
+      const result = await (step as any).execute({
+        inputData: { toolCallId: 'call-removed', toolName: 'removed', args: {} },
+        mastra: { getLogger: () => undefined, listTools },
+        suspend: vi.fn(),
+        resumeData: undefined,
+        requestContext: new Map(),
+        getInitData: () => makeInitData(),
+        [PUBSUB_SYMBOL]: mockPubsub(),
+      });
+
+      expect(resolveRuntime.rebuildRunToolsFromMastra).toHaveBeenCalledTimes(needsHydration ? 1 : 0);
+      expect(resolveRuntime.resolveTool).not.toHaveBeenCalled();
+      expect(listTools).not.toHaveBeenCalled();
+      expect(removedExecute).not.toHaveBeenCalled();
+      expect(result.error).toEqual(expect.objectContaining({ name: 'ToolNotFoundError' }));
+    },
+  );
+
   it('applies a rebuilt tool transcript transform to a synchronous result', async () => {
     vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
       tools: {

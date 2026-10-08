@@ -199,6 +199,37 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     },
   );
 
+  it.each(['tools', 'baseTools'] as const)(
+    'preserves an authoritative empty %s snapshot while restoring processors',
+    async snapshotField => {
+      const snapshot = {};
+      const execute = vi.fn().mockResolvedValue(RAW_RESULT);
+      globalRunRegistry.set(RUN_ID, {
+        [snapshotField]: snapshot,
+        model: {} as any,
+        saveQueueManager: {},
+      } as any);
+      const agent = {
+        getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
+        listOutputProcessors: vi.fn().mockResolvedValue([]),
+      };
+      const mastra = { getAgentById: () => agent, getLogger: () => noopLogger, listTools: () => ({}) };
+
+      const first = await runToolCallStep(mastra);
+      expect(first.error).toEqual(expect.objectContaining({ name: 'ToolNotFoundError' }));
+      expect(globalRunRegistry.get(RUN_ID)?.[snapshotField]).toBe(snapshot);
+      expect(globalRunRegistry.get(RUN_ID)?.tools?.[TOOL_NAME]).toBeUndefined();
+      expect(globalRunRegistry.get(RUN_ID)?.outputProcessors).toEqual([]);
+      expect(globalRunRegistry.get(RUN_ID)?.processorStates).toBeInstanceOf(Map);
+
+      const second = await runToolCallStep(mastra);
+      expect(second.error).toEqual(expect.objectContaining({ name: 'ToolNotFoundError' }));
+      expect(agent.getToolsForExecution).toHaveBeenCalledOnce();
+      expect(execute).not.toHaveBeenCalled();
+      expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    },
+  );
+
   it('fails closed when output processors cannot be rebuilt on a cold worker', async () => {
     const execute = vi.fn().mockResolvedValue(RAW_RESULT);
     const agent = {
