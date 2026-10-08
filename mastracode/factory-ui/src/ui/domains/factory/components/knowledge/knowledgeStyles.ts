@@ -21,19 +21,32 @@ export function getKnowledgeNodeStyle(rung: NodeFlowNode['data']['node']['rung']
   return { '--knowledge-color': knowledgeScopes[rung].color };
 }
 
+interface KnowledgeEdgeStyle extends CSSProperties {
+  '--knowledge-edge-stroke': string;
+  '--knowledge-edge-width': number;
+  '--knowledge-edge-opacity'?: number;
+}
+
 export function getKnowledgeEdgeStyle({
   source,
   target,
   data,
-}: Pick<KnowledgeFlowEdge, 'source' | 'target' | 'data'>): CSSProperties {
+}: Pick<KnowledgeFlowEdge, 'source' | 'target' | 'data'>): KnowledgeEdgeStyle {
   if (data?.focused) {
-    return { stroke: data.pinned ? 'var(--chart-amber)' : 'var(--chart-blue)', strokeWidth: 2.5 };
+    return {
+      '--knowledge-edge-stroke': data.pinned ? 'var(--chart-amber)' : 'var(--chart-blue)',
+      '--knowledge-edge-width': 2.5,
+    };
   }
-  if (data?.pinned) return { stroke: 'var(--chart-amber)', strokeWidth: 2 };
+  if (data?.pinned) return { '--knowledge-edge-stroke': 'var(--chart-amber)', '--knowledge-edge-width': 2 };
   if (source.startsWith('record:') || target.startsWith('record:')) {
-    return { stroke: 'var(--muted-foreground)', strokeWidth: 1.2, opacity: 0.45 };
+    return {
+      '--knowledge-edge-stroke': 'var(--muted-foreground)',
+      '--knowledge-edge-width': 1.2,
+      '--knowledge-edge-opacity': 0.45,
+    };
   }
-  return { stroke: 'var(--border-strong)', strokeWidth: 1.4 };
+  return { '--knowledge-edge-stroke': 'var(--border-strong)', '--knowledge-edge-width': 1.4 };
 }
 
 export function getMiniMapNodeColor(node: KnowledgeFlowNode): string {

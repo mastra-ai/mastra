@@ -26,6 +26,9 @@
 }
 
 .knowledge-canvas .react-flow__edge-path {
+  stroke: var(--knowledge-edge-stroke);
+  stroke-width: var(--knowledge-edge-width);
+  opacity: var(--knowledge-edge-opacity, 1);
   transition:
     stroke var(--duration-fast) var(--ease-out-custom),
     opacity var(--duration-fast);
