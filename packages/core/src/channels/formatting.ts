@@ -1,3 +1,6 @@
+import { z } from 'zod';
+
+import type { AgentChunkType } from '../stream/types';
 import { chatModule } from './chat-lazy';
 import type { PostableMessage } from './types';
 
@@ -164,16 +167,14 @@ export function formatToolDenied(
 
 export const CONNECT_REQUEST_PART = 'data-mastra-connect-request';
 
-export interface ConnectRequestData {
-  reason: string;
-  displayName: string;
-  connectUrl: string;
-}
+const connectRequestChunkSchema = z.object({
+  data: z.object({ reason: z.string(), displayName: z.string(), connectUrl: z.string() }),
+});
 
-export function formatConnectRequest(
-  { reason, displayName, connectUrl }: ConnectRequestData,
-  linkButtons: boolean,
-): PostableMessage {
+export function formatConnectRequest(chunk: AgentChunkType<any>, linkButtons: boolean): PostableMessage | null {
+  const parsed = connectRequestChunkSchema.safeParse(chunk);
+  if (!parsed.success) return null;
+  const { reason, displayName, connectUrl } = parsed.data.data;
   const label = `Connect ${displayName}`;
   if (linkButtons) {
     return ui().Card({

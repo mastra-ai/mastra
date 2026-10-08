@@ -3,7 +3,6 @@ import type { Adapter, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import { CONNECT_REQUEST_PART, formatConnectRequest } from './formatting';
-import type { ConnectRequestData } from './formatting';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
@@ -162,10 +161,10 @@ export async function runStaticDriver({
         // posts as its own message after the user's signal echo.
         await flushText();
       }
-      if (chunkType === CONNECT_REQUEST_PART) {
+      const connectRequest = chunkType === CONNECT_REQUEST_PART && formatConnectRequest(chunk, linkButtons);
+      if (connectRequest) {
         await flushText();
-        const { data } = chunk as unknown as { data: ConnectRequestData };
-        await chatThread.post(formatConnectRequest(data, linkButtons));
+        await chatThread.post(connectRequest);
       }
       // OM and other data-* parts are dropped silently — no Plan widget to
       // render OM lifecycle into in static mode.

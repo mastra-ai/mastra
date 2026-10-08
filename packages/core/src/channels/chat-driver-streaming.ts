@@ -4,7 +4,6 @@ import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import { chatModule } from './chat-lazy';
 import { CONNECT_REQUEST_PART, formatConnectRequest, formatToolApproval } from './formatting';
-import type { ConnectRequestData } from './formatting';
 import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
@@ -388,9 +387,9 @@ export async function runStreamingDriver({
         await closeSession();
         continue;
       }
-      if (chunkType === CONNECT_REQUEST_PART) {
-        const { data } = chunk as unknown as { data: ConnectRequestData };
-        await postOutOfBand(formatConnectRequest(data, linkButtons));
+      const connectRequest = chunkType === CONNECT_REQUEST_PART && formatConnectRequest(chunk, linkButtons);
+      if (connectRequest) {
+        await postOutOfBand(connectRequest);
         continue;
       }
       const om = asOmChunk(chunk);
