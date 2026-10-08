@@ -431,7 +431,7 @@ per repository and `.mastra-sandbox/workspace-setup` after the workspace
 commands, all under the working directory. With `continueOnSetupFailure`,
 check `.mastra-sandbox/setup-failed` first.
 
-Changing the repository list starts a new template; changing setup commands or
+Changing the repository list starts a new template. Changing setup commands or
 credentials doesn't. If any entry's access can't be resolved the sandbox falls
 back to its default template. A repository whose head can't be resolved is
 cloned unpinned while the others keep their pins.

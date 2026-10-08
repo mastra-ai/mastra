@@ -75,9 +75,9 @@ is part of the image identity: a moved branch yields a fresh image on the next
 new sandbox and an unmoved one reuses the cached image. If the head can't be
 resolved the resolver rejects rather than caching an unpinned clone.
 
-`setupCommand` also accepts an array; each entry runs as its own cached build
+`setupCommand` also accepts an array. Each entry runs as its own cached build
 step. A command cannot contain a bare newline, which would start a new
-Dockerfile instruction; end the line with `\` or pass separate commands
+Dockerfile instruction. End the line with `\` or pass separate commands
 instead.
 
 #### Several repositories in one image
