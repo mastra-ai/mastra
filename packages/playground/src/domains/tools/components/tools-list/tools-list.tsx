@@ -55,13 +55,13 @@ export function ToolsList({
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
-    return <DataListSkeleton columns="auto 1fr auto" />;
+    return <DataListSkeleton scroll="page" columns="auto 1fr auto" />;
   }
 
   const sortFor = (key: ToolsSortKey) => (sort?.key === key ? sort.direction : undefined);
 
   return (
-    <DataList columns="auto 1fr auto" scrollRef={containerRef}>
+    <DataList scroll="page" columns="auto 1fr auto" scrollRef={containerRef}>
       <DataList.Top>
         {onSortChange ? (
           <DataList.SortableTopCell sortKey="name" sort={sortFor('name')} onSortChange={onSortChange}>

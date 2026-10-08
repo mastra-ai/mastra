@@ -1,5 +1,6 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import type { DataListScroll } from '@mastra/playground-ui/components/DataList';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -18,6 +19,7 @@ import {
 import { ExperimentRowCells } from './experiment-row-cells';
 
 export interface ExperimentsListProps {
+  scroll?: DataListScroll;
   experiments: DatasetExperiment[];
   datasets?: DatasetRecord[];
   reviewByExperiment?: Map<string, { needsReview: number; complete: number; total: number }>;
@@ -139,6 +141,7 @@ function ExperimentRow({
 }
 
 export function ExperimentsList({
+  scroll,
   experiments,
   datasets,
   reviewByExperiment,
@@ -193,7 +196,7 @@ export function ExperimentsList({
   const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
 
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton scroll={scroll} columns={COLUMNS} />;
   }
 
   const gridColumns = isSelectionActive ? `auto ${BASE_COLUMNS}` : COLUMNS;
@@ -216,7 +219,7 @@ export function ExperimentsList({
   );
 
   return (
-    <DataList columns={gridColumns} scrollRef={containerRef}>
+    <DataList scroll={scroll} columns={gridColumns} scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive ? (
           <>

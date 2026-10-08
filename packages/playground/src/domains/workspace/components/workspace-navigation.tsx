@@ -5,7 +5,9 @@ import { useWorkspaces } from '@mastra/react/hooks/workspace';
 import { useNavigate, useParams } from 'react-router';
 import { ContextualSidebarHeader } from '@/components/ui/contextual-sidebar-header';
 import { ContextualSidebarLayout } from '@/components/ui/contextual-sidebar-layout';
+import { ContextualSidebarSection } from '@/components/ui/contextual-sidebar-section';
 import { SidebarSlot } from '@/components/ui/sidebar-slot';
+import { StudioAreaLinks } from '@/domains/navigation/components/studio-area-links';
 
 /** Workspace navigation and file tools share the same full-height frame as other primitives. */
 export function WorkspaceNavigation() {
@@ -19,11 +21,14 @@ export function WorkspaceNavigation() {
       header={
         <ContextualSidebarHeader>
           <Txt variant="subheading" className="px-3">
-            Workspaces
+            Resources
           </Txt>
         </ContextualSidebarHeader>
       }
     >
+      <ContextualSidebarSection>
+        <StudioAreaLinks areaId="resources" />
+      </ContextualSidebarSection>
       <div className="shrink-0 border-b border-surface-rim p-1">
         <Combobox
           aria-label="Workspace"

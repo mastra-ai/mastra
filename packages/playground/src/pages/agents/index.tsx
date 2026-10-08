@@ -85,6 +85,7 @@ function Agents() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<AgentHeaderCreateAction />}
       actionRow={

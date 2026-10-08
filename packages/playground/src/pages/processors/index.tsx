@@ -58,6 +58,7 @@ export function Processors() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>

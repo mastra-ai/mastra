@@ -8,6 +8,7 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ChevronDown, ChevronLeft, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import { useRecentAgentIds } from '../hooks/use-recent-agent-ids';
+import { AgentSidebarIdentity } from './agent-sidebar-identity';
 import { ContextualSidebarHeader } from '@/components/ui/contextual-sidebar-header';
 import { ContextualSidebarSection } from '@/components/ui/contextual-sidebar-section';
 
@@ -27,6 +28,8 @@ export function RecentAgentsList({
   const { Link, paths } = useLinkComponent();
   const recentAgents = recentIds.flatMap(id => agents[id] ?? []);
   const visibleAgents = expanded ? recentAgents : recentAgents.slice(0, 3);
+
+  if (view === 'agent' && agents[agentId]) return <AgentSidebarIdentity agent={agents[agentId]} />;
 
   return (
     <ScrollArea maxHeight="40vh" className="shrink-0 border-b border-border" mask={false}>

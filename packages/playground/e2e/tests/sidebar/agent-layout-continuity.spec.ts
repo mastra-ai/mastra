@@ -18,7 +18,7 @@ test.describe('Agent route layout', () => {
   test.describe('when opening an agent from the collection', () => {
     test('keeps navigation full height with the page header beside it', async ({ page }) => {
       await page.goto('/agents');
-      const collection = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
+      const collection = page.getByRole('complementary', { name: 'Build navigation', exact: true });
       await expect(
         page.getByRole('link').filter({ has: page.getByText('Weather Agent', { exact: true }) }),
       ).toBeVisible();

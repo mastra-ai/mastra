@@ -32,6 +32,21 @@ describe('RecentAgents', () => {
       expect(screen.getByRole('link', { name: 'All agents' }).getAttribute('href')).toBe('/chat/agents');
     });
   });
+  describe('when inspecting an agent workspace', () => {
+    it('shows the active agent and its configured model above the workspace navigation', async () => {
+      renderWithProviders(
+        <TestLinkProvider>
+          <RecentAgents agentId="researcher" view="agent" />
+        </TestLinkProvider>,
+      );
+      const activeAgent = await screen.findByRole('navigation', { name: 'Active agent' });
+      expect(within(activeAgent).getByRole('link', { name: 'Research Agent' }).getAttribute('aria-current')).toBe(
+        'page',
+      );
+      expect(within(activeAgent).getByText('gpt-4o-mini')).toBeTruthy();
+      expect(screen.queryByRole('navigation', { name: 'Recent agents' })).toBeNull();
+    });
+  });
   describe('when switching between agents', () => {
     it('keeps previously visited agents in most recently opened order', async () => {
       const { rerender } = renderWithProviders(navigation('analyst'));

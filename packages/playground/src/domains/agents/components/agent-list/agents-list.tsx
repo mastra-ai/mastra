@@ -24,11 +24,11 @@ export function AgentsList({ agents, isLoading, hasSearch, sort, onSortChange }:
   const { containerRef, getRowProps } = useDataListKeyboard({ count: agents.length, global: true });
 
   if (isLoading) {
-    return <DataListSkeleton columns={agentsListColumns} fit="container" />;
+    return <DataListSkeleton scroll="page" columns={agentsListColumns} fit="container" />;
   }
 
   return (
-    <DataList columns={agentsListColumns} fit="container" scrollRef={containerRef}>
+    <DataList scroll="page" columns={agentsListColumns} fit="container" scrollRef={containerRef}>
       <DataList.Top>
         <DataList.SortableTopCell
           sortKey="name"

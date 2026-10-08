@@ -21,7 +21,7 @@ describe('AppSidebar permissions', () => {
     it('provides every task area without requiring More', async () => {
       server.use(authHandler(adminSidebarCapabilities));
       renderSidebar();
-      for (const name of ['Agents', 'Evaluate', 'Observe', 'Connections', 'Workspaces']) {
+      for (const name of ['Build', 'Evaluate', 'Monitor', 'Resources']) {
         expect(await screen.findByRole('link', { name })).toBeTruthy();
       }
     });
@@ -30,8 +30,8 @@ describe('AppSidebar permissions', () => {
     it('provides Build without exposing unauthorized task areas', async () => {
       server.use(authHandler(memberSidebarCapabilities));
       renderSidebar();
-      expect((await screen.findByRole('link', { name: 'Agents' })).getAttribute('href')).toBe('/agents');
-      for (const name of ['Evaluate', 'Observe', 'Connections', 'Workspaces']) {
+      expect((await screen.findByRole('link', { name: 'Build' })).getAttribute('href')).toBe('/agents');
+      for (const name of ['Evaluate', 'Monitor', 'Resources']) {
         expect(screen.queryByRole('link', { name })).toBeNull();
       }
     });
@@ -40,16 +40,16 @@ describe('AppSidebar permissions', () => {
     it('groups the permitted collections under Build', async () => {
       server.use(authHandler(viewerSidebarCapabilities));
       renderSidebar();
-      await screen.findByRole('link', { name: 'Agents' });
+      await screen.findByRole('link', { name: 'Build' });
       expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
-      expect(screen.queryByRole('link', { name: 'Connections' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Resources' })).toBeNull();
     });
   });
   describe('when RBAC is disabled for a viewer', () => {
     it('makes all task areas available', async () => {
       server.use(authHandler(rbacDisabledSidebarCapabilities));
       renderSidebar();
-      for (const name of ['Agents', 'Evaluate', 'Observe', 'Connections', 'Workspaces']) {
+      for (const name of ['Build', 'Evaluate', 'Monitor', 'Resources']) {
         expect(await screen.findByRole('link', { name })).toBeTruthy();
       }
     });

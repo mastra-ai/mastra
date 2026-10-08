@@ -204,6 +204,7 @@ export default function Experiments() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ExperimentsToolbar
@@ -237,6 +238,7 @@ export default function Experiments() {
     >
       <h1 className="sr-only">Experiments</h1>
       <ExperimentsList
+        scroll="page"
         experiments={experiments}
         datasets={datasets}
         reviewByExperiment={reviewByExperiment}

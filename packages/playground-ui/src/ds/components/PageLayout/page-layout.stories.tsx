@@ -6,6 +6,7 @@ import { expect, within } from 'storybook/test';
 import { ActionRow } from '../ActionRow';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
+import { DataList } from '../DataList';
 import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
 import { Txt } from '../Txt';
@@ -222,6 +223,41 @@ export const FullPage: Story = {
         }
       >
         {resourceList}
+      </PageLayout>
+    </StoryFrame>
+  ),
+};
+
+/** The page owns vertical scrolling; search stays visible and the table grows naturally. */
+export const Catalog: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageLayout
+        variant="catalog"
+        breadcrumbs={crumbs}
+        actionRow={
+          <ActionRow>
+            <ActionRow.Start>
+              <Input aria-label="Filter resources" placeholder="Filter resources" />
+            </ActionRow.Start>
+            <ActionRow.End>
+              <Button>View</Button>
+            </ActionRow.End>
+          </ActionRow>
+        }
+      >
+        <DataList columns="minmax(12rem, 1fr) minmax(20rem, 2fr)" scroll="page">
+          <DataList.Top>
+            <DataList.TopCell>Name</DataList.TopCell>
+            <DataList.TopCell>Description</DataList.TopCell>
+          </DataList.Top>
+          {Array.from({ length: 50 }, (_, index) => (
+            <DataList.RowButton key={index}>
+              <DataList.NameCell>Resource {index + 1}</DataList.NameCell>
+              <DataList.DescriptionCell>Inspect configuration and recent activity.</DataList.DescriptionCell>
+            </DataList.RowButton>
+          ))}
+        </DataList>
       </PageLayout>
     </StoryFrame>
   ),

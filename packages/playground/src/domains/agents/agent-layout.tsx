@@ -1,6 +1,6 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useMatch, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentConfigToggle } from '@/domains/agents/components/agent-config-toggle';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
@@ -16,6 +16,8 @@ const chatCrumbs = [navCrumb('/chat'), agentCrumb];
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
   const isChat = useIsAgentChat();
+  const activeView = useMatch('/agents/:agentId/:view/*')?.params.view;
+  const viewHasHeading = activeView === 'overview' || activeView === 'configuration';
   const [chatContainer, setChatContainer] = useState<HTMLDivElement | null>(null);
 
   return (
@@ -34,7 +36,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         }
         primaryActions={isChat && chatContainer && <AgentConfigToggle agentId={agentId!} container={chatContainer} />}
       >
-        <h1 className="sr-only">{agentId}</h1>
+        {!viewHasHeading && <h1 className="sr-only">{agentId}</h1>}
         <div
           ref={setChatContainer}
           data-testid="agent-chat-canvas"

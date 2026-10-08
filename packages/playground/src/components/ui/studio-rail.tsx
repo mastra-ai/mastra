@@ -5,7 +5,9 @@ import { Search } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { StudioRailLayout } from './studio-rail-layout';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useStudioAreaVisibility } from '@/domains/navigation/hooks/use-studio-area-visibility';
 import { useStudioDestinations } from '@/domains/navigation/hooks/use-studio-destinations';
+import { STUDIO_AREA_SECTION_KEY } from '@/domains/navigation/utils/studio-area-visibility';
 import { useNavigationCommand } from '@/lib/command';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 
@@ -13,6 +15,7 @@ import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 export function StudioRail() {
   const { pathname } = useLocation();
   const { items, bottomItems } = useStudioDestinations();
+  const visibilityStorageKey = useStudioAreaVisibility();
   const { setOpen } = useNavigationCommand({ enableShortcut: false });
   const moreLinks = items.map(item => ({
     name: item.name,
@@ -50,8 +53,8 @@ export function StudioRail() {
       navigation={
         <Sidebar.Nav>
           <Sidebar.Sections
-            sections={[{ key: 'more', links: [], moreLinks }]}
-            visibilityStorageKey="mastra:studio:area-visibility:v1"
+            sections={[{ key: STUDIO_AREA_SECTION_KEY, links: [], moreLinks }]}
+            visibilityStorageKey={visibilityStorageKey}
           />
         </Sidebar.Nav>
       }

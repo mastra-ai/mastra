@@ -79,6 +79,7 @@ export default function Tools() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>

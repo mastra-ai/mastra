@@ -8,5 +8,5 @@ export function AgentResourcePage() {
   const { search } = useLocation();
   if (!agentConfigurationSections.some(section => section.id === resource))
     return <EmptyState titleSlot="Resource not found" />;
-  return <Navigate replace to={`/agents/${encodeURIComponent(agentId)}/overview${search}#${resource}`} />;
+  return <Navigate replace to={`/agents/${encodeURIComponent(agentId)}/configuration${search}#${resource}`} />;
 }

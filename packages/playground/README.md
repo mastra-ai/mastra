@@ -15,13 +15,14 @@ The router selects contextual navigation through pathless layouts:
   | Destination | Capabilities                                                                                       |
   | ----------- | -------------------------------------------------------------------------------------------------- |
   | Chat        | Last conversation, recent agents and threads                                                       |
-  | Agents      | Agents, Workflows (including schedules), Prompts, Tools, Processors, Agent Builder when configured |
+  | Build       | Agents, Workflows (including schedules), Prompts, Tools, Processors, Agent Builder when configured |
   | Evaluate    | Experiments, Datasets, Scorers, Review Queue, including their create/edit/detail/compare routes    |
-  | Observe     | Metrics, Traces, Logs, Intelligence when enabled                                                   |
-  | Connections | MCP Servers and Integrations                                                                       |
-  | Workspaces  | Workspace selection, files and skills                                                              |
+  | Monitor     | Metrics, Traces, Logs, Intelligence when enabled                                                   |
+  | Resources   | Workspaces, files and skills, MCP Servers and Integrations                                         |
 
-  `studioAreas` describes task membership, while `useStudioNavigation` remains the permission, CMS and feature-gating boundary. `useStudioDestinations` groups only authorized features, choosing the first accessible collection as the landing page. A logs-only user enters Observe directly at Logs; a tools-only user enters Agents at Tools. Desktop and mobile share this behavior and the same customization preference. All six destinations are discoverable by default; Customize sidebar still lets users move areas into More. Public URLs and feature-name command search are preserved.
+  `studioAreas` describes task membership, while `useStudioNavigation` remains the permission, CMS and feature-gating boundary. `useStudioDestinations` groups only authorized features, choosing the first accessible collection as the landing page. A logs-only user enters Monitor directly at Logs; a tools-only user enters Build at Tools. Desktop and mobile share this behavior and the same customization preference. All five destinations are discoverable by default; Customize sidebar still lets users move areas into More. Public URLs and feature-name command search are preserved. The bottom documentation link remains separate from Resources.
+
+  Build discovery shows pinned and recently opened resources across its five resource types. Entries are resolved from successfully loaded resources and retain the last section visited, without recording conversation routes or query strings. History and pins are local preferences scoped to the instance, API prefix and signed-in user; unauthorized categories are excluded. The main pane remains the complete searchable catalog.
 
 - `ToolsShell` and `ProcessorsShell` use `ResourceDetailShell` for detail routes. Tools use a searchable catalog in the sidebar and Playground/Overview tabs in the main pane. Request and response reuse the drawer components and switch between columns and stacked sections based on available content width. Tool input survives switching to Overview or resizing. Processor test controls use `ExecutionWorkspace` in the sidebar, with results in the main pane.
 - `McpShell` lists servers and the selected server's tools in one sidebar shared by
@@ -38,12 +39,12 @@ The router selects contextual navigation through pathless layouts:
 - `WorkflowShell` owns a full-height sidebar with recently opened workflows.
   `WorkflowLayout` supplies run controls and recent runs through `SidebarContent`,
   retaining the workflow execution providers while leaving the canvas unobstructed.
-- `PromptBlocksShell` spans create and edit routes; its collection lives in Agents. Its sidebar
+- `PromptBlocksShell` spans create and edit routes; its collection lives in Build. Its sidebar
   lists prompt blocks and receives the form's configuration, variables and save
   actions through the shared sidebar slot. The main pane contains prompt content.
 - Other CMS create and edit routes use their existing form layouts alongside the rail.
-- `WorkspaceShell` provides a compact workspace picker and a shared explorer slot. `WorkspaceBrowser` keeps one provider for file selection, search and expanded folders. `WorkspaceExplorer` composes a full-row search input, Files/Skills tabs, and relevant permission-gated actions. Installed skills open their SKILL.md in the main preview. Selecting a file closes the mobile navigation drawer.
-- Observe pages keep their filters, sorting, trace drill-down and metrics controls alongside one shared navigator. Evaluate pages retain experiment comparison, dataset versions, result drawers, scoring and human review.
+- `WorkspaceShell` provides Resources navigation, a compact workspace picker and a shared explorer slot. `WorkspaceBrowser` keeps one provider for file selection, search and expanded folders. `WorkspaceExplorer` composes a full-row search input, Files/Skills tabs, and relevant permission-gated actions. Installed skills open their SKILL.md in the main preview. Selecting a file closes the mobile navigation drawer.
+- Monitor pages keep their filters, sorting, trace drill-down and metrics controls alongside one shared navigator. Evaluate pages retain experiment comparison, dataset versions, result drawers, scoring and human review.
 
 Add pages beneath the appropriate shell in `src/App.tsx`. Keep contextual sidebar
 choices in the route tree instead of pathname checks in the shared frame. Reuse
@@ -66,6 +67,8 @@ signed-in user, and resolved against the current agent list before rendering.
 
 Use the design system's `ScrollArea` for layout scrolling. `ContextualSidebarLayout` owns the sidebar body's viewport and keeps its header and footer outside it; simple navigation lists should not add another scroller. Constrained sections, such as recent resources or workspace tabs, can own a `ScrollArea` when they need to scroll independently. Use `CollapsibleContent` with `fill` when its scroll area must fit remaining space. `PageLayout` owns document-page scrolling; fitted workspaces provide their own scroll areas for forms and results.
 
+Catalogs use `PageLayout variant="catalog"` with `DataList scroll="page"`. The layout owns vertical scrolling and keeps its search/view action row sticky within that viewport, with a themed gradient edge. Lists grow with their rows and retain only horizontal scrolling when needed. Embedded and virtualized lists retain the default contained scrolling mode.
+
 `SidebarSlotProvider`, `SidebarSlot` and `SidebarContent` compose view-owned
 controls into route-owned sidebars without duplicating a sidebar or losing the
 view's provider context. A stable portal destination also retains unfinished input
@@ -80,7 +83,7 @@ back to a new conversation, and inaccessible agents are skipped. Existing
 `/agents/:agentId/threads/:threadId` deep links remain supported and activate Chat.
 
 Agent collection links open `/agents/:agentId/overview`. The full-height sidebar
-keeps the active agent visible above Overview, Editor, Metrics and Traces. Agent
+keeps the active agent visible above Overview, Configuration, Editor, Metrics and Traces. Agent
 detail views also show recent conversations for that agent and an activity summary
 for the last 24 hours, subject to permissions and storage capabilities. Chat does
 not display Editor or Traces navigation. The editor keeps its test conversation,
@@ -88,14 +91,15 @@ versions, draft/publish and filesystem actions. Attached workflow cards show act
 steps without implying execution order; opening a card retains the existing graph,
 run controls, schedules and history. Resource sections reuse the configuration
 components, including tools, memory, model fallback ordering, skills and channels.
-Overview brings these sections together with links to each section. Attached tools
+Overview summarizes purpose, configured model, capabilities, relationships and activity.
+Configuration brings all resource sections together with links to each section. Attached tools
 show descriptions and expandable schemas, with their existing agent-scoped
 inspection and testing drawers. Legacy `/resources/:resource` URLs redirect to the
-corresponding overview section and preserve query parameters.
+corresponding configuration section and preserve query parameters.
 
 Chat Config opens as a floating panel inside the conversation, closed by default.
 It does not resize the shell. Its Advanced config action opens the selected agent's
-Overview; the existing close control, Escape key and `]` shortcut remain available.
+Configuration; the existing close control, Escape key and `]` shortcut remain available.
 
 Agent metrics reuse the global metrics dashboard and storage gate. The route pins
 `rootEntityType=agent` and `entityName` to the loaded agent; URL parameters and saved

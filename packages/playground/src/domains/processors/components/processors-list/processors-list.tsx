@@ -46,13 +46,13 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
-    return <DataListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
+    return <DataListSkeleton scroll="page" columns="auto 1fr auto auto auto auto auto auto" />;
   }
 
   const sortFor = (key: ProcessorsSortKey) => (sort?.key === key ? sort.direction : undefined);
 
   return (
-    <DataList columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
+    <DataList scroll="page" columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
       <DataList.Top>
         {onSortChange ? (
           <DataList.SortableTopCell sortKey="name" sort={sortFor('name')} onSortChange={onSortChange}>

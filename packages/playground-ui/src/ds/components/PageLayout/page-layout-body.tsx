@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
 import type { PageLayoutProps } from './page-layout';
+import { PageLayoutCatalogBody } from './page-layout-catalog-body';
 import { cn } from '@/lib/utils';
 
 /** Fitted workspaces own their scrolling; document pages share one body viewport. */
@@ -8,11 +9,19 @@ export function PageLayoutBody({
   children,
   header,
   variant,
+  actionRow,
 }: {
   children: ReactNode;
   header: ReactNode;
   variant: NonNullable<PageLayoutProps['variant']>;
+  actionRow?: ReactNode;
 }) {
+  if (variant === 'catalog')
+    return (
+      <PageLayoutCatalogBody actionRow={actionRow} header={header}>
+        {children}
+      </PageLayoutCatalogBody>
+    );
   if (variant === 'fit')
     return (
       <>

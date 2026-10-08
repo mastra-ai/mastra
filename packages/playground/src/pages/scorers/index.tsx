@@ -65,6 +65,7 @@ export default function Scorers() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<ScorersHeaderCreateAction />}
       actionRow={
@@ -80,6 +81,7 @@ export default function Scorers() {
     >
       <h1 className="sr-only">Scorers</h1>
       <ScorersList
+        scroll="page"
         scorers={scorers}
         isLoading={isLoading}
         search={search}

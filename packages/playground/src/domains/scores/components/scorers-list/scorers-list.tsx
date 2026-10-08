@@ -1,7 +1,7 @@
 import type { GetScorerResponse, RouteResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort, DataListScroll } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
@@ -22,6 +22,7 @@ const sortAccessors = {
 };
 
 export interface ScorersListProps {
+  scroll?: DataListScroll;
   scorers: RouteResponse<'GET /scores/scorers'>;
   isLoading: boolean;
   search?: string;
@@ -39,6 +40,7 @@ export interface ScorersListProps {
 const COLUMNS = 'minmax(0,1fr) minmax(0,1.5fr) auto auto auto';
 
 export function ScorersList({
+  scroll,
   scorers,
   isLoading,
   search = '',
@@ -76,13 +78,13 @@ export function ScorersList({
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton scroll={scroll} columns={COLUMNS} />;
   }
 
   const sortFor = (key: ScorersSortKey) => (sort?.key === key ? sort.direction : undefined);
 
   return (
-    <DataList columns={COLUMNS} scrollRef={containerRef}>
+    <DataList scroll={scroll} columns={COLUMNS} scrollRef={containerRef}>
       <DataList.Top>
         {onSortChange ? (
           <>

@@ -27,23 +27,23 @@ test.describe('Contextual sidebar resizing', () => {
       await page.goto('/tools');
       const header = page.getByRole('banner', { name: 'Studio header' });
       await expect(header.getByRole('navigation', { name: 'Breadcrumb' })).toBeVisible();
-      await expect(header.getByRole('button', { name: 'Agents navigation', exact: true })).toBeVisible();
+      await expect(header.getByRole('button', { name: 'Build navigation', exact: true })).toBeVisible();
       await expect(page.getByRole('banner')).toHaveCount(1);
       await page.setViewportSize({ width: 1440, height: 900 });
-      const sidebar = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
+      const sidebar = page.getByRole('complementary', { name: 'Build navigation', exact: true });
       await expect.poll(() => width(sidebar)).toBeGreaterThanOrEqual(200);
       await expect(sidebar.getByRole('link', { name: 'Tools', exact: true })).toBeVisible();
     });
 
     test('retains a saved desktop width after reloading on mobile', async ({ page }) => {
       await page.goto('/tools');
-      const sidebar = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
-      await dragDivider(page, page.getByRole('separator', { name: 'Resize Agents navigation' }), 120);
+      const sidebar = page.getByRole('complementary', { name: 'Build navigation', exact: true });
+      await dragDivider(page, page.getByRole('separator', { name: 'Resize Build navigation' }), 120);
       const savedWidth = await width(sidebar);
       await page.setViewportSize({ width: 390, height: 844 });
-      await expect(page.getByRole('button', { name: 'Agents navigation', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Build navigation', exact: true })).toBeVisible();
       await page.reload();
-      await expect(page.getByRole('button', { name: 'Agents navigation', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Build navigation', exact: true })).toBeVisible();
       await page.setViewportSize({ width: 1440, height: 900 });
       await expect.poll(async () => Math.abs((await width(sidebar)) - savedWidth)).toBeLessThan(2);
     });
@@ -63,7 +63,7 @@ test.describe('Contextual sidebar resizing', () => {
       await expect(sidebar).toBeVisible();
       await expect.poll(async () => Math.abs((await width(sidebar)) - resizedWidth)).toBeLessThan(2);
       await page.goto('/tools');
-      const tools = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
+      const tools = page.getByRole('complementary', { name: 'Build navigation', exact: true });
       await expect.poll(async () => Math.abs((await width(tools)) - resizedWidth)).toBeLessThan(2);
     });
   });

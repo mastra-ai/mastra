@@ -24,6 +24,7 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { RememberBuildResource } from '@/domains/navigation/components/remember-build-resource';
 import { NavigationCommand } from '@/lib/command';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
@@ -117,6 +118,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             >
               <ImpersonationBanner />
               <AuthRequired>
+                <RememberBuildResource />
                 <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
               </AuthRequired>
             </div>

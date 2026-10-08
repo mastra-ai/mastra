@@ -61,6 +61,7 @@ function Workflows() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>
@@ -79,6 +80,7 @@ function Workflows() {
     >
       <h1 className="sr-only">Workflows</h1>
       <WorkflowsList
+        scroll="page"
         workflows={workflows || {}}
         isLoading={isLoading}
         search={search}

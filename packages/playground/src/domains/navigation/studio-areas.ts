@@ -1,9 +1,9 @@
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { Activity, FlaskConical, MessageSquare, Plug } from 'lucide-react';
+import { Activity, FlaskConical, MessageSquare } from 'lucide-react';
 import type { NavIcon, NavItem } from '@/lib/nav/nav-items';
 
-export type StudioAreaId = 'chat' | 'build' | 'evaluate' | 'observe' | 'connections' | 'workspaces';
+export type StudioAreaId = 'chat' | 'build' | 'evaluate' | 'monitor' | 'resources';
 
 interface StudioArea {
   id: StudioAreaId;
@@ -17,7 +17,7 @@ export const studioAreas: StudioArea[] = [
   { id: 'chat', name: 'Chat', Icon: MessageSquare, paths: ['/chat'] },
   {
     id: 'build',
-    name: 'Agents',
+    name: 'Build',
     Icon: AgentIcon,
     paths: ['/agents', '/workflows', '/prompts', '/tools', '/processors', '/agent-builder'],
   },
@@ -27,9 +27,13 @@ export const studioAreas: StudioArea[] = [
     Icon: FlaskConical,
     paths: ['/experiments', '/datasets', '/scorers', '/experiments/review-queue'],
   },
-  { id: 'observe', name: 'Observe', Icon: Activity, paths: ['/metrics', '/traces', '/logs', '/intelligence'] },
-  { id: 'connections', name: 'Connections', Icon: Plug, paths: ['/mcps', '/integrations'] },
-  { id: 'workspaces', name: 'Workspaces', Icon: WorkspacesIcon, paths: ['/workspaces'] },
+  { id: 'monitor', name: 'Monitor', Icon: Activity, paths: ['/metrics', '/traces', '/logs', '/intelligence'] },
+  {
+    id: 'resources',
+    name: 'Resources',
+    Icon: WorkspacesIcon,
+    paths: ['/workspaces', '/mcps', '/integrations'],
+  },
 ];
 
 /** Apply grouping after authorization, so every destination has a usable landing page. */

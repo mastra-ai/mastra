@@ -43,11 +43,11 @@ export function PromptsList({
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton scroll="page" columns={COLUMNS} />;
   }
 
   return (
-    <DataList columns={COLUMNS} scrollRef={containerRef}>
+    <DataList scroll="page" columns={COLUMNS} scrollRef={containerRef}>
       <DataList.Top>
         <DataList.TopCell>Name</DataList.TopCell>
         <DataList.TopCell>Description</DataList.TopCell>

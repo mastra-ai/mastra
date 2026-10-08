@@ -7,7 +7,9 @@ import { Search } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useStudioAreaVisibility } from '@/domains/navigation/hooks/use-studio-area-visibility';
 import { useStudioDestinations } from '@/domains/navigation/hooks/use-studio-destinations';
+import { STUDIO_AREA_SECTION_KEY } from '@/domains/navigation/utils/studio-area-visibility';
 import { useNavigationCommand } from '@/lib/command';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import type { NavItem } from '@/lib/nav/nav-items';
@@ -42,9 +44,10 @@ export function AppSidebar() {
   };
 
   const { items, bottomItems: filteredBottom } = useStudioDestinations();
+  const visibilityStorageKey = useStudioAreaVisibility();
   const sections = [
     {
-      key: 'areas',
+      key: STUDIO_AREA_SECTION_KEY,
       links: [],
       moreLinks: items.map(item => ({
         ...toSidebarLink(item),
@@ -71,7 +74,7 @@ export function AppSidebar() {
       </Sidebar.CommandHeader>
 
       <Sidebar.Nav>
-        <Sidebar.Sections sections={sections} visibilityStorageKey="mastra:studio:area-visibility:v1" />
+        <Sidebar.Sections sections={sections} visibilityStorageKey={visibilityStorageKey} />
       </Sidebar.Nav>
 
       <Sidebar.Footer>

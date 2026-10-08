@@ -38,7 +38,7 @@ afterEach(cleanup);
 
 describe('AgentViewNavigation', () => {
   describe('when editor and observability are available', () => {
-    it('exposes Overview, Editor, Metrics and Traces as agent-scoped links', async () => {
+    it('exposes Overview, Configuration, Editor, Metrics and Traces as agent-scoped links', async () => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(enabledPackages)));
       renderNavigation();
       const editor = await screen.findByRole('link', { name: 'Editor' });
@@ -46,6 +46,9 @@ describe('AgentViewNavigation', () => {
       expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page');
       expect(screen.getByRole('link', { name: 'Traces' }).getAttribute('href')).toBe('/agents/agent-1/traces');
       expect(screen.getByRole('link', { name: 'Metrics' }).getAttribute('href')).toBe('/agents/agent-1/metrics');
+      expect(screen.getByRole('link', { name: 'Configuration' }).getAttribute('href')).toBe(
+        '/agents/agent-1/configuration',
+      );
       expect(screen.queryByRole('link', { name: 'Chat' })).toBeNull();
     });
     it('marks the Editor route as current', async () => {

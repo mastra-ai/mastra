@@ -15,7 +15,7 @@ for (const viewport of [
         const errors: string[] = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(`/agents/${agentId}/resources/tools`);
-        await expect(page).toHaveURL(new RegExp(`/agents/${agentId}/overview#tools$`));
+        await expect(page).toHaveURL(new RegExp(`/agents/${agentId}/configuration#tools$`));
         const tools = page.locator('#tools');
         await expect(tools.getByRole('link', { name: /^Inspect and test/ }).first()).toBeVisible();
         const position = await tools.boundingBox();
@@ -41,7 +41,9 @@ for (const viewport of [
           await page.keyboard.press('ArrowRight');
         }
         await page.goto(`/agents/${agentId}/overview`);
-        await expect(page.getByRole('heading', { name: 'Configuration & resources' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Connected capabilities' })).toBeVisible();
+        await expect(page.getByRole('region', { name: 'Configured model' })).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
         await page.screenshot({ path: testInfo.outputPath(`${viewport.name}.png`) });
         if (viewport.width < 1024) await page.getByRole('button', { name: 'Agent navigation', exact: true }).click();
         const sidebar = page.getByRole('complementary', { name: 'Agent navigation', exact: true });

@@ -115,6 +115,7 @@ export default function Datasets() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={headerCreateAction}
       actionRow={
@@ -137,9 +138,10 @@ export default function Datasets() {
     >
       <h1 className="sr-only">Datasets</h1>
       {isLoading ? (
-        <DatasetsListSkeleton />
+        <DatasetsListSkeleton scroll="page" />
       ) : (
         <DatasetsList
+          scroll="page"
           datasets={datasets}
           experiments={experiments}
           renderTrailingCell={dataset => {

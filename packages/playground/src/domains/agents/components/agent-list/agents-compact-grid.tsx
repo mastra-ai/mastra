@@ -1,6 +1,5 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentCompactCard } from './agent-compact-card';
@@ -34,7 +33,7 @@ function AgentsCompactGridSkeleton() {
 
 export function AgentsCompactGrid({ agents, isLoading, hasSearch }: AgentsCompactGridProps) {
   return (
-    <ScrollArea orientation="vertical" className="size-full">
+    <>
       {isLoading ? <AgentsCompactGridSkeleton /> : null}
 
       {!isLoading && agents.length === 0 && hasSearch ? (
@@ -50,6 +49,6 @@ export function AgentsCompactGrid({ agents, isLoading, hasSearch }: AgentsCompac
           ))}
         </ul>
       ) : null}
-    </ScrollArea>
+    </>
   );
 }

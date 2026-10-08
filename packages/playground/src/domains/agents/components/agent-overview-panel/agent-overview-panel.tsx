@@ -16,7 +16,7 @@ export interface AgentOverviewPanelProps {
 export function AgentOverviewPanel({ agentId, container, onClose }: AgentOverviewPanelProps) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
-  const { Link, paths } = useLinkComponent();
+  const { Link } = useLinkComponent();
 
   return (
     <PopoverContent
@@ -49,7 +49,11 @@ export function AgentOverviewPanel({ agentId, container, onClose }: AgentOvervie
         </ScrollAreaViewport>
       </ScrollArea>
       <div className="border-t border-border p-3">
-        <Button className="w-full" render={<Link href={paths.agentLink(agentId)} />} onClick={onClose}>
+        <Button
+          className="w-full"
+          render={<Link href={`/agents/${encodeURIComponent(agentId)}/configuration`} />}
+          onClick={onClose}
+        >
           Advanced config
           <ArrowUpRight />
         </Button>

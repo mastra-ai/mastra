@@ -25,6 +25,9 @@ export type DataListFit = 'content' | 'container';
  */
 export type DataListVariant = 'default' | 'light';
 
+/** Self-contained lists scroll both axes; page lists grow vertically and only scroll horizontally. */
+export type DataListScroll = 'self' | 'page';
+
 export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
   children: ReactNode;
   columns: string;
@@ -32,6 +35,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
+  /** Use `page` when the containing layout owns vertical scrolling. Defaults to `self` for embedded/virtualized lists. */
+  scroll?: DataListScroll;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
    * by default so it does not fade the sticky top header.
@@ -49,7 +54,11 @@ type DataListRootStyle = CSSProperties & {
   '--data-list-background'?: string;
 };
 
-function getDataListMask(mask: ScrollAreaMask | undefined): ScrollAreaMask {
+function getDataListMask(mask: ScrollAreaMask | undefined, scroll: DataListScroll): ScrollAreaMask {
+  if (scroll === 'page') {
+    if (mask === false) return false;
+    return { ...(typeof mask === 'object' ? mask : {}), y: false, top: false, bottom: false };
+  }
   if (mask === undefined) return { top: false };
   if (mask === true || mask === false) return mask;
 
@@ -116,6 +125,7 @@ export function DataListRoot({
   className,
   fit = 'content',
   variant = 'default',
+  scroll = 'self',
   mask,
   scrollRef,
   ...props
@@ -151,20 +161,23 @@ export function DataListRoot({
   return (
     <ScrollArea
       {...props}
-      orientation="both"
-      mask={getDataListMask(mask)}
+      data-slot="data-list"
+      data-scroll={scroll}
+      orientation={scroll === 'page' ? 'horizontal' : 'both'}
+      mask={getDataListMask(mask, scroll)}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
       // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
       // items out against the max-height-clamped container, so short lists stay
       // compact and long ones shrink the viewport and scroll. `self-start` stops
       // a grid/flex parent from stretching the root to the full row height.
       className={cn(
-        'flex max-h-full w-full flex-col self-start rounded-xl p-1',
+        'flex w-full flex-col self-start rounded-xl p-1',
+        scroll === 'self' && 'max-h-full',
         dataListVariantClasses[variant],
         className,
       )}
     >
-      <ScrollAreaViewport ref={scrollRef} className="min-h-0 flex-1 basis-auto">
+      <ScrollAreaViewport ref={scrollRef} className={scroll === 'page' ? 'h-auto' : 'min-h-0 flex-1 basis-auto'}>
         {grid}
       </ScrollAreaViewport>
     </ScrollArea>

@@ -54,6 +54,7 @@ function renderWorkspace(path = '/agents/researcher/threads/new') {
         children: [
           { path: 'threads/new', element: <ChatView /> },
           { path: 'overview', element: <ChatView /> },
+          { path: 'configuration', element: <ChatView /> },
           { path: 'editor', element: <EditorView /> },
         ],
       },
@@ -166,7 +167,9 @@ describe('Agent workspace composition', () => {
 
       await screen.findByRole('navigation', { name: 'Agent views' });
       expect(screen.queryByRole('dialog', { name: 'Config' })).toBeNull();
-      expect(screen.getByRole('link', { name: 'Overview', exact: true }).getAttribute('aria-current')).toBe('page');
+      expect(screen.getByRole('link', { name: 'Configuration', exact: true }).getAttribute('aria-current')).toBe(
+        'page',
+      );
     });
 
     it('can be dismissed without leaving the conversation', async () => {

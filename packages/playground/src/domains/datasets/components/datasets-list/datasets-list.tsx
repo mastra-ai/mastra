@@ -2,6 +2,7 @@ import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import type { DataListScroll } from '@mastra/playground-ui/components/DataList';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -13,6 +14,7 @@ import { DATASETS_LIST_COLUMNS } from './helpers';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface DatasetsListProps {
+  scroll?: DataListScroll;
   datasets: DatasetRecord[];
   experiments: Pick<DatasetExperiment, 'datasetId' | 'status'>[];
   search?: string;
@@ -172,6 +174,7 @@ function DatasetRow({
 }
 
 export function DatasetsList({
+  scroll,
   datasets,
   experiments,
   search = '',
@@ -213,7 +216,7 @@ export function DatasetsList({
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   return (
-    <DataList columns={DATASETS_LIST_COLUMNS} scrollRef={containerRef}>
+    <DataList scroll={scroll} columns={DATASETS_LIST_COLUMNS} scrollRef={containerRef}>
       <DataList.Top>
         {onSortChange ? (
           <DataList.SortableTopCell

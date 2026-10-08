@@ -17,6 +17,25 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
+  describe('when the page owns vertical scrolling', () => {
+    it('keeps only horizontal scrolling while preserving the row container ref', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" scroll="page" scrollRef={scrollRef}>
+          <Header />
+          <DataList.RowButton>
+            <DataList.Cell>Research agent</DataList.Cell>
+            <DataList.Cell>Find sources</DataList.Cell>
+          </DataList.RowButton>
+        </DataList>,
+      );
+      expect(scrollRef.current?.style.overflowY).toBe('hidden');
+      expect(scrollRef.current?.style.overflowX).toBe('scroll');
+      expect(scrollRef.current?.contains(screen.getByRole('button', { name: /Research agent.*Find sources/ }))).toBe(
+        true,
+      );
+    });
+  });
   describe('unified treatment — ScrollArea (overlay scrollbar + horizontal mask)', () => {
     it('frames the list and separates its uniform rows', () => {
       const { container } = render(

@@ -23,16 +23,19 @@ test.describe('Studio task areas', () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto('/agents');
       const rail = page.getByRole('complementary', { name: 'Studio navigation' });
-      const build = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
+      const build = page.getByRole('complementary', { name: 'Build navigation', exact: true });
       await expect(build).toBeVisible();
       const initial = await sidebarWidth(build);
       await resizeSidebar(page, 'Build');
       await expect.poll(() => sidebarWidth(build)).toBeGreaterThan(initial + 60);
       const resized = await sidebarWidth(build);
       const frame = await build.elementHandle();
-      for (const area of ['Evaluate', 'Observe', 'Connections', 'Build']) {
+      for (const area of ['Evaluate', 'Monitor', 'Resources', 'Build']) {
         await rail.getByRole('link', { name: area, exact: true }).click();
-        const sidebar = page.getByRole('complementary', { name: `${area} navigation`, exact: true });
+        const sidebar = page.getByRole('complementary', {
+          name: `${area === 'Resources' ? 'Workspace' : area} navigation`,
+          exact: true,
+        });
         await expect(sidebar).toBeVisible();
         expect(await sidebar.evaluate((element, previous) => element === previous, frame)).toBe(true);
         await expect.poll(async () => Math.abs((await sidebarWidth(sidebar)) - resized)).toBeLessThan(2);

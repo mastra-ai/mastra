@@ -45,17 +45,17 @@ function renderRail(path: string) {
 
 describe('StudioRail', () => {
   describe('when viewing a conversation', () => {
-    it('activates Chat without also activating Agents', async () => {
+    it('activates Chat without also activating Build', async () => {
       renderRail('/agents/researcher/threads/thread-1');
       expect((await screen.findByRole('link', { name: 'Chat' })).getAttribute('aria-current')).toBe('page');
-      expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('aria-current')).toBeNull();
+      expect(screen.getByRole('link', { name: 'Build' }).getAttribute('aria-current')).toBeNull();
     });
   });
   describe('when visiting a workflow graph', () => {
     it('marks Build as the current destination', async () => {
       renderRail('/workflows/intake/graph');
       const rail = await screen.findByRole('complementary', { name: 'Studio navigation' });
-      expect((await within(rail).findByRole('link', { name: 'Agents' })).getAttribute('aria-current')).toBe('page');
+      expect((await within(rail).findByRole('link', { name: 'Build' })).getAttribute('aria-current')).toBe('page');
     });
     it('keeps search accessible in the icon rail', async () => {
       renderRail('/workflows/intake/graph');
@@ -67,7 +67,7 @@ describe('StudioRail', () => {
       'marks the single Build destination active at %s',
       async path => {
         renderRail(path);
-        expect((await screen.findByRole('link', { name: 'Agents' })).getAttribute('aria-current')).toBe('page');
+        expect((await screen.findByRole('link', { name: 'Build' })).getAttribute('aria-current')).toBe('page');
         expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
         expect(screen.queryByRole('link', { name: 'Processors' })).toBeNull();
       },
@@ -75,15 +75,15 @@ describe('StudioRail', () => {
   });
   describe('when visiting a task area', () => {
     it.each([
-      ['/cms/prompts/create', 'Agents'],
+      ['/cms/prompts/create', 'Build'],
       ['/cms/scorers/create', 'Evaluate'],
       ['/datasets/example/edit', 'Evaluate'],
       ['/experiments/review-queue', 'Evaluate'],
-      ['/traces', 'Observe'],
-      ['/logs', 'Observe'],
-      ['/mcps/example', 'Connections'],
-      ['/integrations', 'Connections'],
-      ['/workspaces/example', 'Workspaces'],
+      ['/traces', 'Monitor'],
+      ['/logs', 'Monitor'],
+      ['/mcps/example', 'Resources'],
+      ['/integrations', 'Resources'],
+      ['/workspaces/example', 'Resources'],
     ])('keeps %s in the %s destination', async (path, destination) => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesWithPromptEditing)));
       renderRail(path);
@@ -93,7 +93,7 @@ describe('StudioRail', () => {
     });
     it('makes evaluation and observability visible without opening More', async () => {
       renderRail('/agents');
-      for (const name of ['Agents', 'Evaluate', 'Observe', 'Connections', 'Workspaces']) {
+      for (const name of ['Build', 'Evaluate', 'Monitor', 'Resources']) {
         expect(await screen.findByRole('link', { name })).toBeTruthy();
       }
       expect(screen.queryByRole('link', { name: 'Scorers' })).toBeNull();
@@ -101,14 +101,31 @@ describe('StudioRail', () => {
     });
   });
   describe('when only logs are permitted', () => {
-    it('opens logs directly from Observe without exposing unavailable areas', async () => {
+    it('opens logs directly from Monitor without exposing unavailable areas', async () => {
       server.use(
         authHandler({ ...adminSidebarCapabilities, access: { roles: ['logs-user'], permissions: ['logs:read'] } }),
       );
       renderRail('/logs');
-      expect((await screen.findByRole('link', { name: 'Observe' })).getAttribute('href')).toBe('/logs');
-      expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
+      expect((await screen.findByRole('link', { name: 'Monitor' })).getAttribute('href')).toBe('/logs');
+      expect(screen.queryByRole('link', { name: 'Build' })).toBeNull();
       expect(screen.queryByRole('link', { name: 'Evaluate' })).toBeNull();
+    });
+  });
+  describe('when only MCP server access is permitted', () => {
+    it('opens permitted servers from Resources without requiring workspace access', async () => {
+      server.use(
+        authHandler({ ...adminSidebarCapabilities, access: { roles: ['mcp-user'], permissions: ['mcp:read'] } }),
+      );
+      renderRail('/mcps');
+      expect((await screen.findByRole('link', { name: 'Resources' })).getAttribute('href')).toBe('/mcps');
+      expect(screen.queryByRole('link', { name: 'Workspaces' })).toBeNull();
+    });
+  });
+  describe('when browsing documentation', () => {
+    it('keeps documentation separate from the resource destination', async () => {
+      renderRail('/resources');
+      expect((await screen.findByRole('link', { name: 'Documentation' })).getAttribute('aria-current')).toBe('page');
+      expect((await screen.findByRole('link', { name: 'Resources' })).getAttribute('aria-current')).toBeNull();
     });
   });
   describe('when only tool access is permitted', () => {
@@ -117,14 +134,14 @@ describe('StudioRail', () => {
         authHandler({ ...adminSidebarCapabilities, access: { roles: ['tool-user'], permissions: ['tools:read'] } }),
       );
       renderRail('/tools');
-      expect((await screen.findByRole('link', { name: 'Agents' })).getAttribute('href')).toBe('/tools');
+      expect((await screen.findByRole('link', { name: 'Build' })).getAttribute('href')).toBe('/tools');
     });
   });
   describe('when a viewer can only read agents and workflows', () => {
     it('excludes tools from the rail', async () => {
       server.use(authHandler(viewerSidebarCapabilities));
       renderRail('/agents');
-      await screen.findByRole('link', { name: 'Agents' });
+      await screen.findByRole('link', { name: 'Build' });
       expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
     });
   });

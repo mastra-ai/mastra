@@ -104,6 +104,7 @@ export default function PromptBlocks() {
 
   return (
     <PageLayout
+      variant="catalog"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<PromptBlocksHeaderCreateAction />}
       actionRow={

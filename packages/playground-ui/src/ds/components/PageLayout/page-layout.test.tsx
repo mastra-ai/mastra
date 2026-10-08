@@ -6,6 +6,26 @@ import { PageLayout } from './index';
 afterEach(cleanup);
 
 describe('PageLayout', () => {
+  describe('when a catalog supplies search and view controls', () => {
+    it('keeps the controls inside the same body scroll container as the results', () => {
+      render(
+        <PageLayout
+          variant="catalog"
+          breadcrumbs={<span>Agents</span>}
+          actionRow={<input aria-label="Search agents" />}
+        >
+          <p>Catalog results</p>
+        </PageLayout>,
+      );
+
+      const main = screen.getByRole('main');
+      const search = screen.getByLabelText('Search agents');
+      const viewport = search.closest('[data-slot="page-layout-scroll"]');
+      expect(main.contains(search)).toBe(true);
+      expect(viewport?.contains(screen.getByText('Catalog results'))).toBe(true);
+      expect(viewport?.contains(screen.getByRole('banner'))).toBe(false);
+    });
+  });
   describe('when only an essential action is provided', () => {
     it('keeps it accessible in the page header', () => {
       render(

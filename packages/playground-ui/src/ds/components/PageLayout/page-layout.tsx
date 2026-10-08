@@ -11,15 +11,16 @@ export interface PageLayoutProps {
   headerActions?: ReactNode;
   /** Essential controls that remain directly accessible on compact headers. */
   primaryActions?: ReactNode;
-  /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
+  /** Search, filters and toggles. Catalogs keep them sticky inside the body viewport. */
   actionRow?: ReactNode;
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
   header?: ReactNode;
   /**
    * `container` pads the body (default); `narrow` centers the body in a max-width column;
-   * `fit` lets the body fill the page edge to edge.
+   * `fit` lets the body fill the page edge to edge; `catalog` owns list scrolling
+   * with a sticky action row and padded results. Use DataList's `scroll="page"` in catalogs.
    */
-  variant?: 'container' | 'fit' | 'narrow';
+  variant?: 'container' | 'fit' | 'narrow' | 'catalog';
 }
 
 export function PageLayout({
@@ -42,7 +43,7 @@ export function PageLayout({
       {(breadcrumbs || headerActions || primaryActions) && (
         <PageLayoutHeader breadcrumbs={breadcrumbs} headerActions={headerActions} primaryActions={primaryActions} />
       )}
-      {actionRow && (
+      {actionRow && variant !== 'catalog' && (
         <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
           {actionRow}
         </div>
@@ -56,7 +57,7 @@ export function PageLayout({
             (header ? 'grid grid-cols-1 grid-rows-[auto_minmax(0,1fr)]' : 'grid grid-cols-1 grid-rows-1'),
         )}
       >
-        <PageLayoutBody variant={variant} header={headerSlot}>
+        <PageLayoutBody variant={variant} header={headerSlot} actionRow={actionRow}>
           {children}
         </PageLayoutBody>
       </main>

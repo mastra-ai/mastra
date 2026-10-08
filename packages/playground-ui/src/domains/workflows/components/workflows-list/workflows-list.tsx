@@ -8,7 +8,7 @@ import type { WorkflowsSort, WorkflowsSortKey } from './workflows-sort';
 import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows';
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
 import { Badge } from '@/ds/components/Badge';
-import type { DataListSort } from '@/ds/components/DataList';
+import type { DataListSort, DataListScroll } from '@/ds/components/DataList';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
@@ -25,6 +25,7 @@ export interface WorkflowsListProps {
   sort?: WorkflowsSort;
   onSortChange?: (direction: DataListSort, key: WorkflowsSortKey) => void;
   requestContext?: Record<string, any>;
+  scroll?: DataListScroll;
 }
 
 // Leading fixed expander column (outside the row link), then Name /
@@ -220,6 +221,7 @@ export function WorkflowsList({
   sort,
   onSortChange,
   requestContext,
+  scroll,
 }: WorkflowsListProps) {
   const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(new Set());
   const runCounts = useWorkflowsRunCounts({ requestContext });
@@ -272,11 +274,11 @@ export function WorkflowsList({
   };
 
   if (isLoading) {
-    return <DataListSkeleton columns={GRID_COLUMNS} fit="container" />;
+    return <DataListSkeleton columns={GRID_COLUMNS} fit="container" scroll={scroll} />;
   }
 
   return (
-    <DataList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef}>
+    <DataList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef} scroll={scroll}>
       <DataList.Top>
         <DataList.TopCell>
           <span className="sr-only">Expand</span>

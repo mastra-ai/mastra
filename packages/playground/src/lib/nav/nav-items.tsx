@@ -167,7 +167,7 @@ export const mainNav: NavSection[] = [
 
 export const bottomNav: NavItem[] = [
   { name: 'Settings', url: '/settings', Icon: SettingsIcon, isOnMastraPlatform: false },
-  { name: 'Resources', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
+  { name: 'Documentation', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
 ];
 
 const allItems: NavItem[] = [...mainNav.flatMap(s => s.items), ...bottomNav];

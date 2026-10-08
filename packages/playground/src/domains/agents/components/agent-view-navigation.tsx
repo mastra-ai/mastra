@@ -1,7 +1,7 @@
 import { coreFeatures } from '@mastra/core/features';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { GitBranch, LayoutDashboard, ChartNoAxesCombined } from 'lucide-react';
+import { GitBranch, LayoutDashboard, ChartNoAxesCombined, Settings2 } from 'lucide-react';
 import { useMatch } from 'react-router';
 import { ContextualSidebarSection } from '@/components/ui/contextual-sidebar-section';
 import { UnavailableNavigationItem } from '@/components/ui/unavailable-navigation-item';
@@ -29,6 +29,11 @@ export function AgentViewNavigation({ agentId }: { agentId: string }) {
             state="default"
             link={{ name: 'Overview', url: `${base}/overview`, icon: <LayoutDashboard /> }}
             isActive={view === 'overview'}
+          />
+          <Sidebar.NavLink
+            state="default"
+            link={{ name: 'Configuration', url: `${base}/configuration`, icon: <Settings2 /> }}
+            isActive={view === 'configuration' || view === 'resources'}
           />
           {showEditor ? (
             <Sidebar.NavLink

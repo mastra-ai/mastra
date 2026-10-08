@@ -97,6 +97,7 @@ import { StudioShell } from '@/components/studio-shell';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentDetailShell } from '@/domains/agents/agent-detail-shell';
 import { AgentShell } from '@/domains/agents/agent-shell';
+import { AgentConfiguration } from '@/domains/agents/components/agent-configuration';
 import { AgentMetrics } from '@/domains/agents/components/agent-metrics';
 import { AgentOverview } from '@/domains/agents/components/agent-overview';
 import { AgentResourcePage } from '@/domains/agents/components/agent-resource-page';
@@ -320,6 +321,7 @@ export const routes: RouteObject[] = [
             children: [
               { path: 'threads/:threadId', element: <AgentThread /> },
               { path: 'overview', element: <AgentOverview /> },
+              { path: 'configuration', element: <AgentConfiguration /> },
               { path: 'resources/:resource', element: <AgentResourcePage /> },
               { path: 'metrics', element: <AgentMetrics /> },
               ...(isExperimentalFeatures ? [{ path: 'editor', element: <AgentPlayground /> }] : []),
@@ -389,8 +391,8 @@ export const routes: RouteObject[] = [
               ]),
 
           {
-            handle: { navigationLabel: 'Observe navigation' },
-            element: <StudioAreaShell areaId="observe" />,
+            handle: { navigationLabel: 'Monitor navigation' },
+            element: <StudioAreaShell areaId="monitor" />,
             children: [
               { path: '/logs', element: <Logs /> },
               { path: '/metrics', element: <Metrics /> },
@@ -419,7 +421,7 @@ export const routes: RouteObject[] = [
           },
           { path: '/resources', element: <Resources /> },
           {
-            handle: { navigationLabel: 'Agents navigation' },
+            handle: { navigationLabel: 'Build navigation' },
             element: <StudioAreaShell areaId="build" />,
             children: [
               { path: '/agents', element: <Agents /> },
@@ -449,8 +451,8 @@ export const routes: RouteObject[] = [
           },
 
           {
-            handle: { navigationLabel: 'Connections navigation' },
-            element: <StudioAreaShell areaId="connections" />,
+            handle: { navigationLabel: 'Resources navigation' },
+            element: <StudioAreaShell areaId="resources" />,
             children: [
               { path: '/mcps', element: <MCPs /> },
               { path: '/integrations', element: <IntegrationsPage /> },

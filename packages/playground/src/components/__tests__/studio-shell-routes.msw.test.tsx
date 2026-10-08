@@ -151,12 +151,12 @@ describe('Studio route shells', () => {
   describe('when switching from prompts to agents', () => {
     it('keeps the same sidebar frame mounted while changing its navigation', async () => {
       renderAt('/prompts');
-      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('Prompt Block 1');
-      const navigation = within(sidebar).getByRole('navigation', { name: 'Agents features' });
+      const navigation = within(sidebar).getByRole('navigation', { name: 'Build features' });
       fireEvent.click(within(sidebar).getByRole('link', { name: 'Agents', exact: true }));
-      expect(within(sidebar).getByRole('navigation', { name: 'Agents features' })).toBe(navigation);
-      const agents = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      expect(within(sidebar).getByRole('navigation', { name: 'Build features' })).toBe(navigation);
+      const agents = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('Research Agent');
       expect(within(agents).queryByText('Research Agent')).toBeNull();
       expect(agents).toBe(sidebar);
@@ -183,16 +183,16 @@ describe('Studio route shells', () => {
     });
   });
   describe('when moving from logs to traces', () => {
-    it('keeps Observe navigation and the resizable frame mounted', async () => {
+    it('keeps Monitor navigation and the resizable frame mounted', async () => {
       renderAt('/logs');
-      const sidebar = await screen.findByRole('complementary', { name: 'Observe navigation' });
-      const navigation = within(sidebar).getByRole('navigation', { name: 'Observe features' });
+      const sidebar = await screen.findByRole('complementary', { name: 'Monitor navigation' });
+      const navigation = within(sidebar).getByRole('navigation', { name: 'Monitor features' });
       fireEvent.click(within(sidebar).getByRole('link', { name: 'Traces' }));
       await waitFor(() =>
         expect(within(sidebar).getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page'),
       );
-      expect(screen.getByRole('complementary', { name: 'Observe navigation' })).toBe(sidebar);
-      expect(within(sidebar).getByRole('navigation', { name: 'Observe features' })).toBe(navigation);
+      expect(screen.getByRole('complementary', { name: 'Monitor navigation' })).toBe(sidebar);
+      expect(within(sidebar).getByRole('navigation', { name: 'Monitor features' })).toBe(navigation);
       expect(within(sidebar).getByRole('link', { name: 'Metrics' })).toBeTruthy();
       expect(screen.queryByText('Something went wrong')).toBeNull();
     });
@@ -211,16 +211,17 @@ describe('Studio route shells', () => {
     });
   });
   describe('when browsing MCP servers', () => {
-    it('offers connections categories without repeating the server list', async () => {
+    it('offers resource categories without repeating the server list', async () => {
       server.use(
         http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesWithPromptEditing)),
         http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [legacyServer] })),
       );
       renderAt('/mcps');
-      const sidebar = await screen.findByRole('complementary', { name: 'Connections navigation' });
+      const sidebar = await screen.findByRole('complementary', { name: 'Resources navigation' });
       await screen.findByText('Legacy Server');
       expect(screen.getAllByText('Legacy Server')).toHaveLength(1);
       expect(await within(sidebar).findByRole('link', { name: 'Integrations' })).toBeTruthy();
+      expect(within(sidebar).getByRole('link', { name: 'Workspaces' }).getAttribute('href')).toBe('/workspaces');
     });
   });
   describe('when opening a workspace', () => {
@@ -237,6 +238,10 @@ describe('Studio route shells', () => {
       expect(within(sidebar).getByRole('combobox', { name: 'Workspace' })).toBeTruthy();
       expect(within(sidebar).getByRole('button', { name: 'New folder' })).toBeTruthy();
       expect(screen.getAllByText('notes')).toHaveLength(1);
+      const categories = within(sidebar).getByRole('navigation', { name: 'Resources features' });
+      expect(within(categories).getByRole('link', { name: 'Workspaces' }).getAttribute('aria-current')).toBe('page');
+      fireEvent.click(within(categories).getByRole('link', { name: 'MCP Servers' }));
+      expect(await screen.findByRole('complementary', { name: 'Resources navigation' })).toBeTruthy();
     });
   });
   describe('when browsing scorers', () => {
@@ -256,7 +261,7 @@ describe('Studio route shells', () => {
     it('lists processors only in the content, with one search', async () => {
       server.use(http.get(`${BASE_URL}/api/processors`, () => HttpResponse.json(availableProcessors)));
       renderAt('/processors');
-      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('PII redactor');
       expect(screen.getAllByText('PII redactor')).toHaveLength(1);
       expect(within(sidebar).queryByText('PII redactor')).toBeNull();
@@ -270,7 +275,7 @@ describe('Studio route shells', () => {
       server.use(http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 })));
       renderAt('/tools');
       await screen.findByText(/permission to access/i);
-      expect(screen.getByRole('complementary', { name: 'Agents navigation' })).toBeTruthy();
+      expect(screen.getByRole('complementary', { name: 'Build navigation' })).toBeTruthy();
     });
   });
   describe('when browsing tools', () => {
@@ -282,15 +287,15 @@ describe('Studio route shells', () => {
       }));
       server.use(http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json(availableTools)));
       renderAt('/tools');
-      fireEvent.click(await screen.findByRole('button', { name: 'Agents navigation' }));
-      const drawer = await screen.findByRole('dialog', { name: 'Agents navigation' });
+      fireEvent.click(await screen.findByRole('button', { name: 'Build navigation' }));
+      const drawer = await screen.findByRole('dialog', { name: 'Build navigation' });
       fireEvent.click(await within(drawer).findByRole('link', { name: 'Processors' }));
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Agents navigation' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Build navigation' })).toBeNull());
     });
     it('lists registered and agent tools once in the content', async () => {
       server.use(http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json(availableTools)));
       renderAt('/tools');
-      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('weather');
       expect(screen.getAllByText('weather')).toHaveLength(1);
       expect(screen.getAllByText('search')).toHaveLength(1);
@@ -490,7 +495,7 @@ describe('Studio route shells', () => {
       );
       renderAt('/tools');
       await screen.findByText('weather');
-      const sidebar = screen.getByRole('complementary', { name: 'Agents navigation' });
+      const sidebar = screen.getByRole('complementary', { name: 'Build navigation' });
       expect(within(sidebar).getByRole('link', { name: 'Tools' })).toBeTruthy();
       expect(within(sidebar).queryByRole('link', { name: 'Agents' })).toBeNull();
       expect(agents).not.toHaveBeenCalled();
@@ -514,14 +519,14 @@ describe('Studio route shells', () => {
     it('renders agent data alongside agent navigation', async () => {
       renderAt('/agents');
       await screen.findAllByText('Research Agent');
-      expect(screen.getByRole('complementary', { name: 'Agents navigation' })).toBeTruthy();
+      expect(screen.getByRole('complementary', { name: 'Build navigation' })).toBeTruthy();
       expect(screen.queryByRole('complementary', { name: 'Browse navigation' })).toBeNull();
     });
   });
   describe('when loading the workflows collection', () => {
     it('offers workflow destinations without duplicating primitive navigation', async () => {
       renderAt('/workflows');
-      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       expect(within(sidebar).getByRole('link', { name: 'Workflows' }).getAttribute('aria-current')).toBe('page');
       expect(screen.getByRole('link', { name: 'Schedules' }).getAttribute('href')).toBe('/workflows/schedules');
       expect(within(sidebar).queryByText(WORKFLOW_ID)).toBeNull();
@@ -533,7 +538,7 @@ describe('Studio route shells', () => {
       renderAt(`/workflows/${WORKFLOW_ID}/graph`);
       await screen.findByRole('tab', { name: 'Graph' });
       const rail = screen.getByRole('complementary', { name: 'Studio navigation' });
-      expect(within(rail).getByRole('link', { name: 'Agents' }).getAttribute('aria-current')).toBe('page');
+      expect(within(rail).getByRole('link', { name: 'Build' }).getAttribute('aria-current')).toBe('page');
       expect(screen.queryByRole('complementary', { name: 'Browse navigation' })).toBeNull();
       const sidebar = screen.getByRole('complementary', { name: 'Workflow navigation' });
       expect(await within(sidebar).findByTestId('workflow-information-panel')).toBeTruthy();

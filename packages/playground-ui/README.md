@@ -336,6 +336,24 @@ import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 <CodeBlock lang="ts" code={snippet} />
 ```
 
+## Catalog scrolling
+
+Use `PageLayout variant="catalog"` for resource catalogs. The layout provides one vertical `ScrollArea` for the toolbar and results. Search and view controls remain sticky with a themed fade below them; breadcrumbs stay outside the scrolling body. Lists grow to their content height and keep horizontal overflow available on narrow screens.
+
+```tsx
+import { DataList } from '@mastra/playground-ui/components/DataList';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+
+<PageLayout variant="catalog" actionRow={<ListSearch label="Filter resources" onSearch={setSearch} />}>
+  <DataList columns="minmax(12rem, 1fr) minmax(20rem, 2fr)" scroll="page">
+    {rows}
+  </DataList>
+</PageLayout>;
+```
+
+Use `scroll="page"` on `DataListSkeleton` too so loading and loaded lists have the same scroll owner. Compact card grids should render directly inside the layout, without another vertical `ScrollArea`. `DataList` defaults to `scroll="self"`, retaining the existing viewport and `scrollRef` behavior for embedded and virtualized lists. `PageLayout variant="fit"` continues to let specialized workspaces own their scrolling.
+
 ## Documentation
 
 This README is the package guide. Import the global stylesheet once, then use the package's explicit `components/*`, `domains/*`, `hooks/*`, `icons/*`, `primitives/*`, `store/*`, `tokens`, and `utils/*` entry points rather than a package-root import.
