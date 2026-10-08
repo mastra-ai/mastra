@@ -157,6 +157,56 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it.each([false, true])(
+    'builds inactive source contexts without borrowing active preferences (storage: %s)',
+    async stored => {
+      const agent = new Agent({
+        id: 'inactive-context',
+        name: 'Inactive context',
+        instructions: 'Test',
+        model: new MastraLanguageModelV2Mock({}),
+      });
+      const controller = new AgentController<any>({
+        id: 'inactive-context',
+        agent,
+        storage: stored ? new InMemoryStore() : undefined,
+        initialState: { thinkingLevel: 'low' },
+        modes: [{ id: 'default', name: 'Default', default: true, defaultModelId: 'openai/gpt-5.5' }],
+      });
+      await controller.init();
+      const session = await controller.createSession({ createInitialThread: false });
+      const source = await session.thread.create({ id: 'context-source' });
+      await session.thread.create({ id: 'context-active' });
+      await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+      const context = await session.machinery.buildRequestContext(undefined, {
+        threadId: source.id,
+        resourceId: session.identity.getResourceId(),
+        execution: true,
+      });
+      const value = context.get('controller') as AgentControllerRequestContext;
+      expect(value.threadId).toBe(source.id);
+      expect(value.session.modelId).toBe('openai/gpt-5.5');
+      expect(value.getState()).toMatchObject({ thinkingLevel: 'low' });
+      expect(session.state.get().thinkingLevel).toBe('high');
+      if (stored) {
+        await expect(
+          session.machinery.buildRequestContext(undefined, {
+            threadId: 'missing-source',
+            resourceId: session.identity.getResourceId(),
+            execution: true,
+          }),
+        ).rejects.toThrow('Source thread is missing');
+        await expect(
+          session.machinery.buildRequestContext(undefined, {
+            threadId: source.id,
+            resourceId: 'foreign-resource',
+            execution: true,
+          }),
+        ).rejects.toThrow('Source thread is missing');
+      }
+      session.stream.detach();
+    },
+  );
   it('cancels navigation during startup model synchronization without dispatching or arming the successor', async () => {
     const controller = await createSettingsController(new InMemoryStore(), 'navigation-setup');
     const session = await controller.createSession({ id: 'navigation-setup' });

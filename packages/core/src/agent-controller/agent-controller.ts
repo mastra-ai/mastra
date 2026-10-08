@@ -2478,7 +2478,7 @@ export class AgentController<TState = {}> {
       cached.view.resourceId === resourceId &&
       (!retained || cached.retained);
     const readMetadata = async () => {
-      if (!threadId) return {};
+      if (!threadId || !this.#resolveStorage()) return {};
       const thread = await session.thread.getById({ threadId });
       if (!thread || thread.resourceId !== resourceId)
         throw new Error('Source thread is missing or belongs to another resource');
