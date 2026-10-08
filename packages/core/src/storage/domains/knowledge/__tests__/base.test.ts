@@ -31,6 +31,27 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(second > first).toBe(true);
   });
 
+  it('places an existing node when a write names it again with scope addresses', async () => {
+    const store = createStore();
+    const { scopes } = await store.reconcileStructure({ scopes: [{ address: 'features', name: 'features' }] });
+    const existing = await store.createNode({ name: 'Deploy', kind: 'doc', scope: resource });
+
+    const placed = await store.createNode({
+      name: 'deploy',
+      kind: 'doc',
+      scope: resource,
+      scopeAddresses: ['features'],
+    });
+
+    expect(placed.id).toBe(existing.id);
+    expect((await store.listScopeMembers({ scopeNodeId: scopes['features']! })).members).toEqual([
+      expect.objectContaining({ id: existing.id }),
+    ]);
+    await expect(
+      store.createNode({ name: 'Deploy', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+    ).rejects.toThrow(/scope/i);
+  });
+
   it('lists reconciled scope nodes with parent membership edges', async () => {
     const store = createStore();
     const plan = {

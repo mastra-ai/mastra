@@ -955,6 +955,8 @@ export class KnowledgePG extends KnowledgeStorage {
         if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
           throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
         }
+        // Writing about a node that already exists still places it where the caller asked.
+        await this.#placeNodeInScopes(tx, terminal.id, input.scopeAddresses, new Date());
         return terminal;
       }
       const now = new Date();

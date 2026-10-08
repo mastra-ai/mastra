@@ -330,12 +330,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
+    // Validate structural placement before mutating anything: every address must
+    // resolve to a live reconciled scope node.
+    const placementIds = (input.scopeAddresses ?? []).map(address => {
+      const target = this.#structureScopes.get(address);
+      if (!target || target.deletedAt) throw new KnowledgeNotFoundError('scope', address);
+      return target.id;
+    });
     const existingId = this.#db.knowledgeNodeKeys.get(key);
     if (existingId) {
       const terminal = this.#resolveTerminalNode(existingId)!;
       if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
         throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
       }
+      // Writing about a node that already exists still places it where the caller asked.
+      for (const scopeId of placementIds) this.#structureParents.add(`${terminal.id}\u0000${scopeId}`);
       return cloneNode(terminal);
     }
 
@@ -353,13 +362,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       updatedAt: now,
     };
     if (this.#db.knowledgeNodes.has(node.id)) throw new Error(`Knowledge node already exists: ${node.id}`);
-    // Validate structural placement before mutating anything: every address must
-    // resolve to a live reconciled scope node.
-    const placementIds = (input.scopeAddresses ?? []).map(address => {
-      const target = this.#structureScopes.get(address);
-      if (!target || target.deletedAt) throw new KnowledgeNotFoundError('scope', address);
-      return target.id;
-    });
     this.#db.knowledgeNodes.set(node.id, node);
     this.#db.knowledgeNodeKeys.set(key, node.id);
     this.#replaceMentions('node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
