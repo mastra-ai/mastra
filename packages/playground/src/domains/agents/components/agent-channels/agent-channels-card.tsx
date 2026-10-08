@@ -1,6 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMastraClient } from '@mastra/react';
 import { useChannelPlatforms } from '@mastra/react/hooks/agents';
@@ -31,13 +31,14 @@ export const AgentChannelsCard = ({ agentId }: { agentId: string }) => {
     return [{ platform, isPending: installations.some(i => i.status === 'pending') }];
   });
 
-  if (actions.length === 0) return null;
+  const hasConnection = installs.some(query => query.data?.length);
+
+  if (!hasConnection || actions.length === 0) return null;
 
   return (
     <Card elevation="flat" data-testid="agent-channels-card">
       <CardHeader>
-        <CardTitle>Choose how to talk to your agent</CardTitle>
-        <CardDescription>Add your agent to a channel to chat with it there.</CardDescription>
+        <CardTitle>Finish connecting your channels</CardTitle>
       </CardHeader>
       <CardContent density="compact" className="px-4">
         <ul className="divide-y divide-border">
