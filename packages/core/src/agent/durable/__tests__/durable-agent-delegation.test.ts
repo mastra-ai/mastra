@@ -18,11 +18,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { STEP_MODEL_MESSAGES_KEY } from '../../../loop/run-scope-keys';
+import { Mastra } from '../../../mastra';
 import { createTool } from '../../../tools';
 import type { ToolExecutionContext } from '../../../tools';
+import { createStep, createWorkflow } from '../../../workflows';
 import { Agent } from '../../agent';
+import { MessageList } from '../../message-list';
+import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { createDurableToolCallStep } from '../workflows/steps/tool-call';
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -168,6 +173,56 @@ describe('DurableAgent delegation hooks', () => {
     cleanup();
   });
 
+  it('restores the LLM conversation on a cold foreach tool worker', async () => {
+    const runId = 'cold-delegation-context';
+    const subAgentModel = makeSubAgentModel('Finished');
+    const modelSpy = vi.spyOn(subAgentModel, 'doStream');
+    const supervisor = new Agent({
+      id: 'cold-supervisor',
+      name: 'cold-supervisor',
+      instructions: 'Delegate to worker.',
+      model: makeSupervisorModel('worker', 'go'),
+      agents: { worker: makeSubAgent('worker', 'Finished', subAgentModel) },
+    });
+    const messageList = new MessageList();
+    messageList.add({ role: 'user', content: 'Original user request' }, 'input');
+    messageList.add({ role: 'user', content: 'Processor-added parent history' }, 'input');
+    messageList.add(
+      {
+        id: 'om-continuation',
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'Processor-added parent history' }] },
+      },
+      'input',
+    );
+    const workflow = createWorkflow({
+      id: 'cold-delegation-workflow',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+    })
+      .then(
+        createStep({
+          id: DurableStepIds.LLM_EXECUTION,
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async () => ({ messageListState: messageList.serialize() }),
+        }),
+      )
+      .map(async () => [{ toolCallId: 'cold-call', toolName: 'agent-worker', args: { prompt: 'go' } }])
+      .foreach(createDurableToolCallStep())
+      .commit();
+    const mastra = new Mastra({ agents: { supervisor }, workflows: { workflow } });
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    const run = await mastra.getWorkflow('workflow').createRun();
+    const result = await run.start({ inputData: { runId, agentId: supervisor.id, options: {}, state: {} } });
+    expect(result.status).toBe('success');
+    expect(modelSpy).toHaveBeenCalledTimes(1);
+    const prompt = JSON.stringify(modelSpy.mock.calls[0]?.[0].prompt);
+    expect(prompt).toContain('Original user request');
+    expect(prompt.split('Processor-added parent history')).toHaveLength(2);
+  });
+
   it.each(['intact', 'missing-key', 'missing-scope'] as const)(
     'forwards filtered parent conversation to the sub-agent (%s)',
     async scopeState => {
@@ -304,6 +359,70 @@ describe('DurableAgent delegation hooks', () => {
     expect(JSON.stringify(messages)).toContain('Observed parent history');
     expect(JSON.stringify(messages)).toContain('Real user request');
     expect(JSON.stringify(messages)).not.toContain('Synthetic continuation hint');
+    output.cleanup();
+  });
+
+  it.each([false, true])('retains real user messages matching the continuation text (image: %s)', async withImage => {
+    const continuationText = 'Matching continuation text';
+    const messageFilter = vi.fn(({ messages }: { messages: ModelMessage[] }) => messages);
+    const supervisor = new Agent({
+      id: 'supervisor-matching-continuation',
+      name: 'supervisor-matching-continuation',
+      instructions: 'Delegate to worker.',
+      model: makeSupervisorModel('worker', 'go'),
+      agents: { worker: makeSubAgent('worker', 'Finished') },
+      inputProcessors: [
+        {
+          id: 'observational-memory',
+          processInput: ({ messages }) => ({
+            messages: [
+              ...messages,
+              {
+                id: 'om-continuation',
+                role: 'user',
+                content: { format: 2, parts: [{ type: 'text', text: continuationText }] },
+                createdAt: new Date(),
+              },
+            ],
+          }),
+          processLLMRequest: ({ prompt }) => ({ prompt: prompt.map(message => ({ ...message })) }),
+        },
+      ],
+    });
+    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+    const userMessage: ModelMessage = {
+      role: 'user',
+      content: [
+        { type: 'text', text: continuationText },
+        ...(withImage
+          ? [
+              {
+                type: 'image' as const,
+                image:
+                  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+                mediaType: 'image/png',
+              },
+            ]
+          : []),
+      ],
+    };
+    const output = await durableAgent.stream([userMessage], { maxSteps: 3, delegation: { messageFilter } });
+    for await (const _chunk of output.fullStream) {
+      // no-op
+    }
+    expect(messageFilter).toHaveBeenCalledTimes(1);
+    const userMessages = messageFilter.mock.calls[0]?.[0].messages.filter(message => message.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages?.[0]).toEqual(
+      expect.objectContaining({
+        content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: continuationText })]),
+      }),
+    );
+    if (withImage) {
+      expect(userMessages?.[0]?.content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ mediaType: 'image/png', data: expect.any(String) })]),
+      );
+    }
     output.cleanup();
   });
 

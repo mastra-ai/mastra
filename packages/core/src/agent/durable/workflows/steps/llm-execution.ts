@@ -59,6 +59,7 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { durableOptionsSchema } from '../shared/schemas';
 
 /**
@@ -820,6 +821,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ? messageList.get.all.aiV6.llmPrompt
                   : messageList.get.all.aiV5.llmPrompt;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            // Identify OM's prompt message by its source ID and position before request
+            // processors run. Equal text in real user messages is not synthetic context.
+            const dbMessages = messageList.get.all.db();
+            const continuationIndex = dbMessages.findIndex(message => message.id === 'om-continuation');
+            let omContinuationPrompt: LanguageModelV2Prompt[number] | undefined;
+            if (continuationIndex !== -1) {
+              const precedingMessages = createRunMessageList({ mastra });
+              precedingMessages.add(dbMessages.slice(0, continuationIndex), 'input');
+              const precedingUserCount = precedingMessages.get.all.aiV5
+                .model()
+                .filter(message => message.role === 'user' && message.content.length > 0).length;
+              omContinuationPrompt = inputMessages.filter(message => message.role === 'user')[precedingUserCount];
+            }
             await persistUnavailableAttachments({
               messageList,
               memory: globalRunRegistry.get(runId)?.memory,
@@ -933,20 +947,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Share the effective prompt with agent tools without putting it on the wire.
             // OM's synthetic continuation is not part of the parent's conversation.
-            const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
-            const omContinuationText = omContinuation?.content.parts
-              .filter(part => part.type === 'text')
-              .map(part => part.text)
-              .join('');
-            const delegationMessages = omContinuationText
-              ? inputMessages.filter(message => {
-                  if (message.role !== 'user' || !Array.isArray(message.content)) return true;
-                  const text = message.content
-                    .filter(part => part.type === 'text')
-                    .map(part => part.text)
-                    .join('');
-                  return text !== omContinuationText;
-                })
+            const delegationMessages = omContinuationPrompt
+              ? inputMessages.filter(
+                  message => message !== omContinuationPrompt && message.content !== omContinuationPrompt.content,
+                )
               : inputMessages;
             if (registryEntry) {
               registryEntry.runScope ??= createRunScope();

@@ -47,6 +47,7 @@ import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableToolCallOutput,
+  DurableLLMStepOutput,
   SerializableDurableOptions,
   AgentSuspendedEventData,
   RunRegistryEntry,
@@ -57,6 +58,7 @@ import {
   restoreRequestContext,
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
 
 /**
@@ -330,6 +332,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
+        getStepResult,
       } = params;
 
       // Access pubsub via symbol
@@ -605,15 +608,16 @@ export function createDurableToolCallStep() {
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       let threadExists = state?.threadExists ?? false;
 
-      // Reconstruct MessageList from workflow state if available
-      // Note: In foreach mode, the message list from the registry may be available
-      // but for durability, we access what's available through the registry
-      let messageList: MessageList | undefined;
-      // For local execution, the globalRunRegistry might have an ExtendedRunRegistry entry
-      // that stores the messageList. We cast and check safely.
-      const extendedEntry = globalRunRegistry.get(runId) as any;
-      if (extendedEntry?.messageList) {
-        messageList = extendedEntry.messageList;
+      let messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      if (!messageList) {
+        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        if (llmOutput?.messageListState) {
+          messageList = createRunMessageList({
+            mastra,
+            threadId: state?.threadId,
+            resourceId: state?.resourceId,
+          }).deserialize(llmOutput.messageListState);
+        }
       }
 
       const doFlush = async () => {
@@ -1088,11 +1092,20 @@ export function createDurableToolCallStep() {
           }
         : undefined;
 
+      let delegationMessages = registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY);
+      if (isAgentTool && !delegationMessages && messageList) {
+        // Cold workers must exclude synthetic context by ID before model conversion drops IDs.
+        const delegationList = createRunMessageList({ mastra });
+        delegationList.add(
+          messageList.get.all.db().filter(message => message.id !== 'om-continuation'),
+          'input',
+        );
+        delegationMessages = delegationList.get.all.aiV5.model();
+      }
+
       const toolOptions = {
         toolCallId,
-        messages: isAgentTool
-          ? (registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY) ?? messageList?.get.all.aiV5.model() ?? [])
-          : (messageList?.get.input.aiV5.model() ?? []),
+        messages: isAgentTool ? (delegationMessages ?? []) : (messageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
