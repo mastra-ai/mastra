@@ -5,9 +5,6 @@ import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
 const FACTORY_PROJECTS = 'factory_projects';
 
-/** Resources today's hosts hardcode; the backfill writes them onto projects that predate the columns. */
-export const DEFAULT_SANDBOX_CPU_COUNT = 4;
-export const DEFAULT_SANDBOX_MEMORY_MB = 8192;
 const INSTALLATIONS = 'source_control_installations';
 const REPOSITORIES = 'source_control_repositories';
 const CONNECTIONS = 'factory_project_source_control_connections';
@@ -473,8 +470,7 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
 interface EnvironmentProjectRow extends Record<string, unknown> {
   id: string;
   sandbox_workdir: string | null;
-  sandbox_cpu_count: number | null;
-  sandbox_memory_mb: number | null;
+  environment_backfilled_at: Date | null;
 }
 
 interface SessionDbRow extends Record<string, unknown> {
@@ -609,7 +605,9 @@ export class SourceControlStorage extends FactoryStorageDomain {
     let missingRepositories = 0;
     const failedProjects: string[] = [];
     try {
-      const projects = await this.ops.findMany<EnvironmentProjectRow>(FACTORY_PROJECTS, { sandbox_cpu_count: null });
+      const projects = await this.ops.findMany<EnvironmentProjectRow>(FACTORY_PROJECTS, {
+        environment_backfilled_at: null,
+      });
       if (projects.length === 0) return;
       const connections = await this.ops.findMany<ConnectionDbRow>(CONNECTIONS, {});
       const links = await this.ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {});
@@ -665,8 +663,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             { id: project.id },
             {
               sandbox_workdir: project.sandbox_workdir ?? oldest?.sandbox_workdir ?? null,
-              sandbox_cpu_count: DEFAULT_SANDBOX_CPU_COUNT,
-              sandbox_memory_mb: project.sandbox_memory_mb ?? DEFAULT_SANDBOX_MEMORY_MB,
+              environment_backfilled_at: new Date(),
             },
           );
         } catch {

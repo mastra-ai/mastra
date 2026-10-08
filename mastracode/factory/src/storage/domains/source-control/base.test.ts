@@ -561,7 +561,7 @@ describe('SourceControlStorage', () => {
       await backend.ops.updateMany(
         'factory_projects',
         { id: projectId },
-        { sandbox_workdir: null, sandbox_cpu_count: null, sandbox_memory_mb: null },
+        { sandbox_workdir: null, environment_backfilled_at: null },
       );
     }
 
@@ -619,8 +619,8 @@ describe('SourceControlStorage', () => {
       expect(await linkRow(fourth.id)).toMatchObject({ position: 4, in_environment: false });
       expect(await projects.getById({ id: project.id })).toMatchObject({
         sandboxWorkdir: '/workspace/oldest',
-        sandboxCpuCount: 4,
-        sandboxMemoryMb: 8192,
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
       });
     });
 
@@ -633,12 +633,17 @@ describe('SourceControlStorage', () => {
       expect(await snapshot()).toEqual(before);
 
       // Same when the project is selected again but its links already carry positions.
-      await backend.ops.updateMany('factory_projects', { id: project.id }, { sandbox_cpu_count: null });
+      await backend.ops.updateMany('factory_projects', { id: project.id }, { environment_backfilled_at: null });
       await domain.init();
-      expect(await snapshot()).toEqual(before);
+      const again = await snapshot();
+      // Only the marker moves; every other column and every link is untouched.
+      const stripMarker = (rows: Array<Record<string, unknown>>) =>
+        rows.map(({ environment_backfilled_at: _marker, ...row }) => row);
+      expect(stripMarker(again.projects)).toEqual(stripMarker(before.projects));
+      expect(again.links).toEqual(before.links);
     });
 
-    it('leaves a new project unconfigured until the next init, then fills resources and the oldest link', async () => {
+    it('leaves a new project unconfigured until the next init, then copies the oldest link and never sets resources', async () => {
       const withLink = await createProject({ name: 'with link' });
       const withoutLink = await createProject({ name: 'without link' });
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
@@ -662,13 +667,13 @@ describe('SourceControlStorage', () => {
 
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
         sandboxWorkdir: '/workspace/linked',
-        sandboxCpuCount: 4,
-        sandboxMemoryMb: 8192,
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
       });
       expect(await projects.getById({ id: withoutLink.id })).toMatchObject({
         sandboxWorkdir: null,
-        sandboxCpuCount: 4,
-        sandboxMemoryMb: 8192,
+        sandboxCpuCount: null,
+        sandboxMemoryMb: null,
       });
     });
 
@@ -679,7 +684,11 @@ describe('SourceControlStorage', () => {
       try {
         await sourceControl.init();
         expect(
-          await fresh.ops.findMany('factory_projects', { sandbox_cpu_count: null }, { orderBy: [['id', 'asc']] }),
+          await fresh.ops.findMany(
+            'factory_projects',
+            { environment_backfilled_at: null },
+            { orderBy: [['id', 'asc']] },
+          ),
         ).toEqual([]);
 
         await Promise.all([sourceControl.init(), projectsDomain.init()]);
@@ -695,13 +704,14 @@ describe('SourceControlStorage', () => {
       await domain.init();
       await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxWorkdir: '/workspace/custom' } });
       await gitlab.projectRepositories.update({ orgId: 'org-1', id: second.id, input: { inEnvironment: true } });
-      await backend.ops.updateMany('factory_projects', { id: project.id }, { sandbox_cpu_count: null });
+      await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxCpuCount: 2 } });
+      await backend.ops.updateMany('factory_projects', { id: project.id }, { environment_backfilled_at: null });
 
       await domain.init();
 
       expect(await projects.getById({ id: project.id })).toMatchObject({
         sandboxWorkdir: '/workspace/custom',
-        sandboxCpuCount: 4,
+        sandboxCpuCount: 2,
       });
       expect(await gitlab.projectRepositories.get({ orgId: 'org-1', id: second.id })).toMatchObject({
         position: 2,
