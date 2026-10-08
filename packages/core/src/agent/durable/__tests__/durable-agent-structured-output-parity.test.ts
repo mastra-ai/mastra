@@ -23,8 +23,9 @@
  * validation failure, so no engine carries a `type` key on the error payload and every engine forwards
  * the serialised error. `checkEngine` runs the stale check before any scenario declaration
  * (`parity-harness.ts:1322`, `staleKnownDifferences` returning early), so no per-scenario `differences`
- * can rescue it. The helper stays frozen on this branch; the case is checked per engine instead, and
- * the gap is reported.
+ * can rescue it — COR-1429 covers letting a scenario run past a built-in difference that does not
+ * apply. The helper stays frozen on this branch; the case is checked per engine instead, and the gap is
+ * reported.
  *
  * The unconditional part of the harness checks is the F15 regression guard — the model request must
  * carry `responseFormat: { type: 'json' }` with a plain JSON schema, never the raw Zod schema.
@@ -35,8 +36,8 @@
  * `output.object` where the wrapped engines omit it. `strict` has the same split one chunk over: plain
  * emits `error` before `step-finish`/`finish`, durable and evented emit it after `finish` (identical
  * payload). That ordering is recorded per engine in the harness but is not one of its checks; the
- * `strict` test below pins plain's order literally and asserts the wrapped engines emit the same
- * chunk types in some order, and the divergence is reported rather than encoded as required.
+ * `strict` test below pins each engine's own order (COR-1390), so the wrapped engines go red when the
+ * error chunk moves back before `step-finish`.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -253,17 +254,17 @@ const PLAIN_CONTRACTS: Record<Variant, Record<string, unknown>> = {
 
 const STRICT_ERROR_MESSAGE = 'Structured output validation failed';
 
-/** Plain's chunk order for `strict`, from the recording (…/plain-strict-none-post). */
-const STRICT_PLAIN_CHUNK_TYPES = [
-  'start',
-  'step-start',
-  'text-start',
-  'text-delta',
-  'text-end',
-  'error',
-  'step-finish',
-  'finish',
-];
+/**
+ * Chunk order per engine for `strict`, pinned from the recording (…/plain-strict-none-post and the
+ * wrapped cells). The wrappers emit the `error` chunk after `finish`; plain emits it before
+ * `step-finish` (COR-1390), so pinning each engine's own order makes the wrappers go red when that is
+ * fixed.
+ */
+const STRICT_CHUNK_TYPES: Record<ParityEngine, string[]> = {
+  plain: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'error', 'step-finish', 'finish'],
+  durable: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'finish', 'error'],
+  evented: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'finish', 'error'],
+};
 
 interface StrictCaseState {
   /** Chunk types the public stream yielded, in order. */
@@ -284,7 +285,7 @@ interface StrictCaseState {
 /**
  * Drives one engine through the `strict` variant, mirroring what the parity helper does per engine
  * (wrapper, host, one streamed turn), because the helper's own `error` chunk declaration goes stale on
- * any failure that is not a live-`Error` model failure (see the header).
+ * any failure that is not a live-`Error` model failure (see the header; COR-1429).
  */
 async function runStrictDirect(engine: ParityEngine): Promise<StrictCaseState> {
   const requests: unknown[] = [];
@@ -458,12 +459,9 @@ describe('T47 structured output errors (plain, durable, evented)', () => {
       expect(format.rfType, `${engine}: response format type`).toBe('json');
       expect(format.schemaKind, `${engine}: response format schema`).toBe('json-schema');
 
-      // The same failure, byte for byte: only its position in the stream differs (see the header).
+      // The same failure, byte for byte; only its position in the stream differs (COR-1390).
       expect(state.errorPayloads[0], `${engine}: error payload`).toEqual(plain.errorPayloads[0]);
-      expect([...state.chunkTypes].sort(), `${engine}: chunk types emitted`).toEqual([...plain.chunkTypes].sort());
+      expect(state.chunkTypes, `${engine}: chunk types in order`).toEqual(STRICT_CHUNK_TYPES[engine]);
     }
-
-    // Plain's order, pinned from the recording (results/2026-09-25T16-41-52.784Z/plain-strict-none-post).
-    expect(plain.chunkTypes).toEqual(STRICT_PLAIN_CHUNK_TYPES);
   });
 });
