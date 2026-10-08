@@ -980,3 +980,68 @@ describe('restart when a foreach item with an undefined output finished before t
     expect((result as any).result).toEqual([{ charged: 0 }, undefined, { charged: 2 }]);
   });
 });
+
+describe('restart after a crash while a failed arm has a running sibling', () => {
+  it('reports the failure without re-running the failed arm', async () => {
+    let restartedRun = false;
+    const calls: string[] = [];
+    const build = () => {
+      const a = step('a', async () => {
+        calls.push('a');
+        throw new Error('charge declined');
+      });
+      const b = step('b', async () => {
+        calls.push('b');
+        return restartedRun ? { b: true } : never();
+      });
+      const workflow = createWorkflow({ id: 'parallel-failed-arm', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([a.step, b.step])
+        .commit();
+      return { workflow, fns: { a: a.fn, b: b.fn } };
+    };
+    const { runId, snapshot } = await crashedCheckpoint(build, {}, () => calls.includes('a') && calls.includes('b'));
+    expect(snapshot.context.a?.status).toBe('failed');
+    expect(Object.keys(snapshot.activeStepsPath)).toEqual(['b']);
+
+    restartedRun = true;
+    const { restarted: result, fns } = await restartFrom(build, runId, snapshot);
+
+    expect(fns.a).not.toHaveBeenCalled();
+    expect(result.status).toBe('failed');
+  });
+});
+
+describe('cancel while an arm checkpoint is being written', () => {
+  it('keeps the run canceled when the checkpoint lands after cancel()', async () => {
+    const build = () => {
+      const a = step('a', async () => ({ a: true }));
+      const b = step('b', async () => never());
+      const workflow = createWorkflow({ id: 'cancel-arm-checkpoint', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([a.step, b.step])
+        .commit();
+      return { workflow };
+    };
+    const { workflow } = build();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    const run = await workflow.createRun();
+    let canceledMidWrite = false;
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      const snapshot = JSON.parse(JSON.stringify(args.snapshot)) as WorkflowRunState;
+      // Cancel after a's checkpoint was issued but before it is stored, so it lands last.
+      if (!canceledMidWrite && snapshot.status === 'running' && snapshot.context.a?.status === 'success') {
+        canceledMidWrite = true;
+        await run.cancel();
+      }
+      await persist({ ...args, snapshot });
+    });
+    void run.start({ inputData: {} }).catch(() => {});
+    await vi.waitFor(() => expect(canceledMidWrite).toBe(true));
+    await settle();
+
+    const stored = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+    expect(stored?.status).toBe('canceled');
+  });
+});

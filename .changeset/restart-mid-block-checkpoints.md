@@ -25,3 +25,5 @@ const workflow = createWorkflow({
 If a parallel child rejects before returning a step result, the block now waits for already-started siblings to settle and save successful results before propagating the original error.
 
 If publishing a foreach progress event fails after an item succeeds, the run still saves that item's successful result. The run reports the publication failure but recovery skips the completed item's side effects.
+
+A parallel arm that fails while a sibling is still running is saved as failed too, so recovery reports the failure instead of running the failed arm's side effects again. Arm and item checkpoints no longer overwrite a `canceled` status written by `run.cancel()`, so a canceled run is not picked up by restart.

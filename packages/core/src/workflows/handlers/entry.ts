@@ -164,6 +164,11 @@ export interface PersistStepUpdateParams {
    * Used when a resumed step starts, so its resume data survives a crash mid-step.
    */
   recordResumedStepStart?: boolean;
+  /**
+   * The run's abort signal. `Run.cancel()` stores `canceled` directly, outside the ordered
+   * write queue, so a queued `running` checkpoint must not overwrite it.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /** Persists a step snapshot in run order while honoring persistence and resume guards. */
@@ -185,7 +190,9 @@ export async function persistStepUpdate(
     tracingContext,
     phase,
     recordResumedStepStart,
+    abortSignal,
   } = params;
+  const isCanceled = () => abortSignal?.reason === WORKFLOW_CANCELLED_SYMBOL;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
@@ -218,6 +225,11 @@ export async function persistStepUpdate(
         if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
           return;
         }
+      }
+
+      // A checkpoint queued before cancellation would leave the canceled run restartable.
+      if (workflowStatus === 'running' && isCanceled()) {
+        return;
       }
 
       const requestContextObj = engine.serializeRequestContext(requestContext);
@@ -270,6 +282,10 @@ export async function persistStepUpdate(
         snapshot: persistedSnapshot,
       });
       engine.setLastPersistedStatus(runId, workflowStatus);
+      // Cancellation can land while this write is in flight and be overwritten by it.
+      if (workflowStatus === 'running' && isCanceled()) {
+        await workflowsStore?.updateWorkflowState({ workflowName: workflowId, runId, opts: { status: 'canceled' } });
+      }
     }),
   );
 }

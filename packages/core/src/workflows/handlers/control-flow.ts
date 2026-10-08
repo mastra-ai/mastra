@@ -239,6 +239,7 @@ export async function executeParallel(
       workflowStatus: 'running',
       requestContext,
       phase: `arm-end.${armIndex}`,
+      abortSignal: abortController?.signal,
     });
   };
   const arms = steps.map(async (step, i) => {
@@ -284,7 +285,9 @@ export async function executeParallel(
     // Apply context changes from parallel step execution
     engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
     Object.assign(stepResults, stepExecResult.stepResults);
-    if (stepExecResult.result.status === 'success' && !abortController?.signal?.aborted) {
+    // A failed arm is final too: restart must report its failure, not repeat its side effects.
+    const armFinished = stepExecResult.result.status === 'success' || stepExecResult.result.status === 'failed';
+    if (armFinished && !abortController?.signal?.aborted) {
       await checkpointArm(i);
     }
     return stepExecResult.result;
@@ -1225,6 +1228,7 @@ export async function executeForeach(
       workflowStatus: 'running',
       requestContext,
       phase: `item-end.${k}`,
+      abortSignal: abortController?.signal,
     });
   };
 
