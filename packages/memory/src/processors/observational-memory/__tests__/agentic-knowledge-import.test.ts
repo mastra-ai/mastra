@@ -84,4 +84,41 @@ describe('agentic Knowledge importer observational memory', () => {
     expect(resourceIds[1]).toBe(resourceIds[0]);
     expect(secondThread?.id).not.toBe(firstThread?.id);
   });
+
+  it('reports write activity so a completion marker with zero writes is visible', async () => {
+    const storage = new InMemoryStore({ id: 'agentic-import-writes' });
+    const model = completionModel();
+    const memory = new Memory({
+      storage,
+      options: { observationalMemory: { scope: 'resource', model, observation: { messageTokens: 10_000 } } },
+    });
+    const agent = new Agent({ id: 'import-agent', name: 'Import agent', instructions: 'Import.', model, memory });
+    const binding = { source: 'slack:workspace-1', scope: 'project:mastra' } as const;
+    const results: unknown[] = [];
+    const knowledge = new Knowledge({
+      id: 'shipyard',
+      storage,
+      structure: { scopes: [{ address: binding.scope, name: 'Mastra' }] },
+      importers: [
+        {
+          id: 'slack-distiller',
+          access: { 'project:$projectId': 'edit' },
+          agentic: { agent },
+          handler: async context => {
+            results.push(
+              await context.agentImport!({ instructions: 'Import.', data: { messages: [] }, checkpoint: 'cursor-1' }),
+            );
+          },
+        },
+      ],
+    });
+    await knowledge.reconcile();
+
+    const run = await knowledge.getImporter('slack-distiller')!.run(binding);
+
+    expect(run).toMatchObject({ status: 'succeeded' });
+    expect(results[0]).toMatchObject({
+      writes: { nodesUpserted: 0, nodesRemoved: 0, recordsAppended: 0, recordsRemoved: 0 },
+    });
+  });
 });

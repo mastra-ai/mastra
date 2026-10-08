@@ -282,6 +282,13 @@ export class KnowledgeImporterRunner {
                   request,
                 });
                 transcriptThreadId = result.transcriptThreadId;
+                if (Object.values(result.writes).every(count => count === 0)) {
+                  this.#getLogger()?.warn('Knowledge agentic import acknowledged its checkpoint without writing', {
+                    importerId: importer.importerId,
+                    runId: run.id,
+                    checkpoint: result.checkpoint,
+                  });
+                }
                 return result;
               },
             }

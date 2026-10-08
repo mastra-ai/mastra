@@ -59,6 +59,15 @@ export interface KnowledgeAgentImportResult {
   readonly resourceId: string;
   readonly transcriptThreadId: string;
   readonly text: string;
+  /** Importer tool writes that completed during this run. All zero means the Agent acknowledged the checkpoint without writing. */
+  readonly writes: KnowledgeAgentImportWrites;
+}
+
+export interface KnowledgeAgentImportWrites {
+  readonly nodesUpserted: number;
+  readonly nodesRemoved: number;
+  readonly recordsAppended: number;
+  readonly recordsRemoved: number;
 }
 
 /** A source-qualified identity: importer addresses are unique only together with their source. */
