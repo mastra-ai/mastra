@@ -19,6 +19,8 @@ export interface FactoryDecisionSummary {
   evaluationId: string;
   workItemId: string | null;
   type: string;
+  plan?: { title: string };
+  approvedAt?: string | null;
   /** Session slot a proposed run fills, so the card can name what it starts. */
   role: string | null;
   /** Where a linked card is synced from; `null` for effects that are not `upsertLinkedWorkItem`. */
@@ -32,6 +34,28 @@ export interface FactoryDecisionSummary {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+}
+
+export interface FactoryDecisionDetail extends FactoryDecisionSummary {
+  plan?: { title: string; content: string; path?: string };
+  canApprovePlan?: boolean;
+}
+
+export async function fetchFactoryDecision(
+  baseUrl: string,
+  factoryProjectId: string,
+  decisionId: string,
+): Promise<FactoryDecisionDetail> {
+  const response = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/decisions/${encodeURIComponent(decisionId)}`,
+    {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    },
+  );
+  if (!response.ok) return throwRequestError(response);
+  const body: { decision: FactoryDecisionDetail } = await response.json();
+  return body.decision;
 }
 
 export interface FactoryDecisionPage {

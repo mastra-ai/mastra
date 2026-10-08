@@ -2378,3 +2378,97 @@ describe('parseUpdateWorkItem', () => {
     expect(parseUpdateWorkItem({ url: null })).toBeNull();
   });
 });
+
+describe('Factory plan decision routes', () => {
+  async function proposal() {
+    const prepared = await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { input: { title: 'Plan this work', stages: ['planning'], sessions: {}, metadata: {} } },
+      role: 'plan',
+      session: { sessionId: 'session-plan', branch: 'factory/plan', threadId: 'thread-plan' },
+      resourceId: 'session-plan',
+      kickoffKey: 'plan-start',
+      kickoffMessage: null,
+    });
+    const now = new Date();
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      ingress: { identity: 'plan-submission', triggerType: 'plan.submitted' },
+      configVersion: 'test',
+      expectedRevision: prepared.item.revision,
+      submitPlan: true,
+      actor: { type: 'agent', bindingId: prepared.binding.id, role: 'plan' },
+      outcome: { status: 'accepted' },
+      causalChain: [],
+      now,
+      decisions: [
+        {
+          type: 'transition',
+          idempotencyKey: 'plan-submission',
+          board: 'work',
+          stage: 'execute',
+          planApproval: {
+            bindingId: prepared.binding.id,
+            threadId: 'thread-plan',
+            revision: prepared.item.revision + 1,
+            submissionKey: 'plan-submission',
+            approved: false,
+            submission: { title: 'Reviewed version', content: 'This exact content is approved.' },
+          },
+        },
+      ],
+    });
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected plan decision');
+    await seed.workItems.proposeDeferredDecision(
+      { id: claimed.id, orgId: 'org1', factoryProjectId: PROJECT_ID, ownerId: 'worker' },
+      now,
+    );
+    return { id: claimed.id, itemId: prepared.item.id };
+  }
+
+  it('returns the immutable plan to its tenant and records the authenticated approver', async () => {
+    const plan = await proposal();
+    const path = `/web/factory/projects/${PROJECT_ID}/decisions/${plan.id}`;
+    const read = await json('GET', path);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      decision: { canApprovePlan: true, plan: { content: 'This exact content is approved.' } },
+    });
+    expect((await json('GET', path, undefined, null)).status).toBe(401);
+    expect((await json('GET', path, undefined, { workosId: 'other', organizationId: 'other-org' })).status).toBe(404);
+    expect((await json('POST', `${path}/approve`)).status).toBe(200);
+    expect((await seed.workItems.getDeferredDecision('org1', PROJECT_ID, plan.id))?.approvedBy).toBe('u1');
+    expect((await json('POST', `${path}/approve`)).status).toBe(409);
+  });
+
+  it('refuses approval after a new planning attempt starts', async () => {
+    const plan = await proposal();
+    await seed.workItems.prepareRunStart({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { id: plan.itemId, input: { title: 'Plan again' } },
+      role: 'plan',
+      session: { sessionId: 'session-plan', branch: 'factory/plan', threadId: 'thread-plan' },
+      resourceId: 'session-plan',
+      kickoffKey: 'another-plan',
+      kickoffMessage: null,
+    });
+    const path = `/web/factory/projects/${PROJECT_ID}/decisions/${plan.id}`;
+    expect(await (await json('GET', path)).json()).toMatchObject({ decision: { canApprovePlan: false } });
+    const response = await json('POST', `${path}/approve`);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'plan_superseded' });
+    expect((await seed.workItems.getDeferredDecision('org1', PROJECT_ID, plan.id))?.approvedBy).toBeNull();
+  });
+});

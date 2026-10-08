@@ -61,6 +61,8 @@ export interface FactoryTransitionRequest {
   triageType?: FactoryTriageType;
   /** Internal proof that this move consumes an approved `submit_plan` result. */
   planApproved?: true;
+  /** Internal immutable submission to hand to the build queued by this transition. */
+  approvedPlan?: import('./plan-approval.js').FactoryPlanContent;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -506,6 +508,12 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
+          if (request.approvedPlan && fromStage === 'planning' && request.stage === 'execute') {
+            for (const decision of validated) {
+              if (decision.type === 'invokeSkill' && decision.role === 'work')
+                decision.approvedPlan = request.approvedPlan;
+            }
+          }
           if (humanMove) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
@@ -578,6 +586,7 @@ export class FactoryTransitionService {
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
       expectedRevision: request.expectedRevision,
+      resetPlanSubmission: request.stage === 'planning' && request.reenter === true,
       destinationStage: request.stage,
       actorId: actorId(request.actor),
       ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },

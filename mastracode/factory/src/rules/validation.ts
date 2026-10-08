@@ -1,4 +1,5 @@
 import type { BoardRegistry } from '../boards/registry.js';
+import { factoryPlanApprovalSchema, factoryPlanContentSchema } from './plan-approval.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
@@ -203,7 +204,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'transition': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter', 'planApproval'],
         'Factory transition decision',
       );
       if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
@@ -231,6 +232,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         stage: boardIdentifier(value.stage, 'Factory transition stage'),
         ...(message ? { message } : {}),
         ...(value.reenter === true ? { reenter: true } : {}),
+        ...(value.planApproval === undefined
+          ? {}
+          : { planApproval: factoryPlanApprovalSchema.parse(value.planApproval) }),
       };
     }
     case 'upsertLinkedWorkItem': {
@@ -290,6 +294,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'arguments',
           'precedingMessage',
           'cancelInFlight',
+          'approvedPlan',
           'resume',
         ],
         'Factory invoke skill decision',
@@ -330,6 +335,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
+        ...(value.approvedPlan === undefined
+          ? {}
+          : { approvedPlan: factoryPlanContentSchema.parse(value.approvedPlan) }),
       };
     }
     case 'sendMessage': {

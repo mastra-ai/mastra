@@ -1,4 +1,5 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import type { FactoryPlanApproval, FactoryPlanContent } from './plan-approval.js';
 
 export type WorkItemSource =
   | 'github-issue'
@@ -516,6 +517,8 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
   type: 'transition';
   board: FactoryRuleBoard;
   stage: FactoryRuleStage;
+  /** Approval belongs to this planning attempt and survives deferred execution. */
+  planApproval?: FactoryPlanApproval;
   /**
    * Delivered to the item's active session (waking it if idle) after the
    * transition commits. Skipped when the item has no active run binding, so
@@ -568,6 +571,8 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /** The immutable plan a person reviewed, carried through the build kickoff. */
+  approvedPlan?: FactoryPlanContent;
 }
 
 /**

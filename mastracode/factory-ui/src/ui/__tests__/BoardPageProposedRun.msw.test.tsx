@@ -6,12 +6,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createMemoryRouter, RouterProvider, MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { ToolFactory } from '../domains/chat/components/ToolFactory';
+import type { FactoryDecisionDetail } from '../domains/factory/services/decisions';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -212,11 +214,25 @@ function stubBoardEndpoints({
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    http.get(`${TEST_BASE_URL}/web/linear/projects`, () => HttpResponse.json({ projects: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues/:number`, ({ params }) =>
+      HttpResponse.json({
+        number: Number(params.number),
+        title: 'Fix login bug',
+        url: 'https://github.com/acme/app/issues/1',
+        author: 'octocat',
+        labels: [],
+        comments: 0,
+        createdAt: '2026-08-10T00:00:00.000Z',
+        updatedAt: '2026-08-10T00:00:00.000Z',
+        description: 'Fix login.',
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
@@ -409,5 +425,109 @@ describe('Board card with a proposed run', () => {
     await waitFor(() =>
       expect(transitions).toEqual([expect.objectContaining({ stage: 'execute', cause: 'card_action', reenter: true })]),
     );
+  });
+});
+
+describe('Factory plan review', () => {
+  function planEndpoints(canApprovePlan = true) {
+    const base = stubBoardEndpoints({ withLiveSession: true });
+    let plan: FactoryDecisionDetail = {
+      id: DECISION_ID,
+      evaluationId: 'evaluation-plan',
+      workItemId: ITEM_ID,
+      type: 'transition',
+      role: 'work',
+      source: null,
+      status: 'proposed',
+      attempts: 0,
+      failureOccurrence: 0,
+      failureCode: null,
+      canRetry: false,
+      lastError: null,
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      completedAt: null,
+      approvedAt: null,
+      canApprovePlan,
+      plan: { title: 'Fix login', content: 'Preserve the reviewed plan content.', path: '.artifacts/plans/issue-1.md' },
+    };
+    const approvals: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({ decisions: [plan] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/${DECISION_ID}`, () =>
+        HttpResponse.json({ decision: plan }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [liveSessionWorkItem],
+          runningSessionIds: [],
+          parkedSessionIds: [SESSION_ID],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'finishing-plan-run', resourceId: SESSION_ID, threadId: 'thread-1' }] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/${DECISION_ID}/approve`, () => {
+        approvals.push(DECISION_ID);
+        plan = { ...plan, status: 'pending', canApprovePlan: false, approvedAt: '2026-08-10T01:00:00.000Z' };
+        return HttpResponse.json({ decision: plan });
+      }),
+    );
+    return { ...base, approvals };
+  }
+
+  it('keeps plan review available on a busy card and releases the reviewed decision', async () => {
+    const { approvals, transitions } = planEndpoints();
+    const { client } = renderWorkBoard();
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    const user = userEvent.setup();
+    await user.click(await within(card).findByRole('button', { name: 'Review plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Review plan' });
+    expect(await within(dialog).findByText('Preserve the reviewed plan content.')).toBeVisible();
+    await user.click(await within(dialog).findByRole('button', { name: 'Approve the plan and switch to build' }));
+    await waitForMutationsIdle(client);
+    expect(approvals).toEqual([DECISION_ID]);
+    expect(transitions).toEqual([]);
+    expect(await within(dialog).findByText('Plan approved. Build queued.')).toBeVisible();
+  });
+
+  it('uses the same saved decision from the chat tool result', async () => {
+    const { approvals } = planEndpoints();
+    const { client } = renderWithProviders(
+      <MemoryRouter>
+        <ToolFactory
+          toolName="factory_submit_plan"
+          toolCallId="tool-1"
+          status="done"
+          output={{ factoryProjectId: FACTORY_ID, decisionId: DECISION_ID }}
+          fallback={() => null}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Preserve the reviewed plan content.')).toBeVisible();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Approve the plan and switch to build' }));
+    await waitForMutationsIdle(client);
+    expect(approvals).toEqual([DECISION_ID]);
+    expect(screen.queryByRole('button', { name: 'Approve the plan and switch to build' })).toBeNull();
+  });
+
+  it('shows an obsolete plan without letting it approve newer work', async () => {
+    const { approvals } = planEndpoints(false);
+    renderWithProviders(
+      <MemoryRouter>
+        <ToolFactory
+          toolName="factory_submit_plan"
+          toolCallId="tool-1"
+          status="done"
+          output={{ factoryProjectId: FACTORY_ID, decisionId: DECISION_ID }}
+          fallback={() => null}
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/This plan is no longer current/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Approve the plan and switch to build' })).toBeNull();
+    expect(approvals).toEqual([]);
   });
 });

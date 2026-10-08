@@ -256,6 +256,7 @@ export class FactoryStartCoordinator {
     // someone pressed Start — a person is reading the plan, not an approval queue.
     // Starting the run was already the say-so; the rules engine still governs.
     await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
+    await session.permissions.setForTool({ toolName: 'factory_submit_plan', policy: 'allow' });
     const threadId = await configureThread(session, request);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,

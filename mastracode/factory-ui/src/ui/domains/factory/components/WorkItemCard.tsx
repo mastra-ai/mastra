@@ -4,6 +4,8 @@ import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { useParams } from 'react-router';
 
 import { boardCardState } from '../boardCardState';
@@ -39,6 +41,7 @@ import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
 import { WorkItemListRow } from './WorkItemListRow';
+import { FactoryPlanApproval } from './FactoryPlanApproval';
 
 export function WorkItemCard({
   item,
@@ -99,6 +102,11 @@ export function WorkItemCard({
   layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
+  const [reviewingPlan, setReviewingPlan] = useState<string>();
+  const reviewOrApprove = (decisionId: string) => {
+    if (proposal?.plan && proposal.id === decisionId) setReviewingPlan(decisionId);
+    else onApproveProposal(decisionId);
+  };
   const morph = useCardMorph({ openFor: deepLinkCommentId });
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
@@ -116,11 +124,11 @@ export function WorkItemCard({
       ? undefined
       : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
   const proposedRun = proposedCardRun(proposal, custom, definition, moves, primaryMove);
-  const proposedRunLabel = proposedRun?.label;
+  const proposedRunLabel = proposal?.plan ? 'Review plan' : proposedRun?.label;
 
   const activity = workItemActivity(item, activityPage);
   const state = boardCardState({
-    proposal: proposedRun,
+    proposal: proposal?.plan ? { label: 'Plan approval', decisionId: proposal.id } : proposedRun,
     moving: movingCardStatus(evaluatingStage, definition, item),
     preparing: startingLabel,
     retryRequested: decision !== undefined && retryingDecisionId === decision.id,
@@ -144,7 +152,7 @@ export function WorkItemCard({
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
-    onApproveProposal,
+    onApproveProposal: reviewOrApprove,
     onCreateSession,
     onMove,
   });
@@ -157,7 +165,7 @@ export function WorkItemCard({
     proposedRunLabel,
     approvingDecisionId,
     owner,
-    onApproveProposal,
+    onApproveProposal: reviewOrApprove,
     onDismissProposal,
     onMove,
     onRemove,
@@ -169,7 +177,7 @@ export function WorkItemCard({
     ...menu,
     onApproveProposal: decisionId => {
       morph.closeDetails();
-      onApproveProposal(decisionId);
+      reviewOrApprove(decisionId);
     },
     onMove: toStage => {
       morph.closeDetails();
@@ -206,25 +214,49 @@ export function WorkItemCard({
 
   // A held card's decision, like a parked suggestion, is the person's to
   // release, so it stays on the card beside a finished triage session.
-  const actions = cardActions({
-    state,
-    session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
-    run: primaryAction,
-  });
+  const actions = proposal?.plan
+    ? [
+        { label: 'Review plan', urgent: true, start: () => setReviewingPlan(proposal.id) },
+        ...(sessionHref ? [{ label: 'Open session', href: sessionHref }] : []),
+      ]
+    : cardActions({
+        state,
+        session: sessionLink(sessionHref),
+        retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
+        run: primaryAction,
+      });
 
   const detailsPanel = (
-    <WorkItemDetailsPanel
-      item={item}
-      columnStage={columnStage}
-      projectRepositoryId={projectRepositoryId}
-      activityPage={activityPage}
-      morph={morph}
-      relatedLinks={relatedItems.map(relatedLink)}
-      status={status}
-      actions={actions}
-      menu={<WorkItemMenuItems {...panelMenu} />}
-    />
+    <>
+      {reviewingPlan && (
+        <Dialog
+          open
+          onOpenChange={(open: boolean) => {
+            if (!open) setReviewingPlan(undefined);
+          }}
+        >
+          <DialogContent aria-label="Review plan">
+            <DialogHeader>
+              <DialogTitle>Review plan</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <FactoryPlanApproval factoryProjectId={item.githubProjectId} decisionId={reviewingPlan} />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      )}
+      <WorkItemDetailsPanel
+        item={item}
+        columnStage={columnStage}
+        projectRepositoryId={projectRepositoryId}
+        activityPage={activityPage}
+        morph={morph}
+        relatedLinks={relatedItems.map(relatedLink)}
+        status={status}
+        actions={actions}
+        menu={<WorkItemMenuItems {...panelMenu} />}
+      />
+    </>
   );
 
   if (layout === 'list') {

@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { SubmitPlanCard } from './SubmitPlanCard';
+import { FactoryPlanApproval } from '../../factory/components/FactoryPlanApproval';
 
 type ToolStatus = 'running' | 'done' | 'error';
 
@@ -95,6 +96,14 @@ function ToolFactoryComponent({
   }
 
   if (isTaskTool(toolName)) return null;
+
+  if (toolName === 'factory_submit_plan') {
+    const result = record(output);
+    const factoryProjectId = stringValue(result?.factoryProjectId);
+    const decisionId = stringValue(result?.decisionId);
+    if (factoryProjectId && decisionId)
+      return <FactoryPlanApproval factoryProjectId={factoryProjectId} decisionId={decisionId} />;
+  }
 
   if (toolName === 'skill') {
     const name = stringValue(record(input)?.name);

@@ -146,7 +146,15 @@ const releaseBoard = defineBoard({
 
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
-Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+Work declares one interactive tool-result rule: `submit_plan`. An approved structured result from the current planning attempt advances the card to Execute; older results without a structured action retain the `Plan approved.` compatibility check. Approval evidence is saved with the deferred transition so recovery uses the same permission as immediate execution. Reconciliation cannot reuse an earlier planning attempt’s approval. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+
+### Factory plan review
+
+The stock `factory-plan` skill ends with `factory_submit_plan`, supplying the current `expectedRevision`, a title, and the complete plan markdown (`content`, up to 65,536 characters). An optional artifact `path` is descriptive; approval and implementation use the saved content rather than rereading a mutable file.
+
+Submission atomically advances the work-item revision and queues a transition tied to the current planning binding. With **Auto-approve plans** off, the dispatcher parks it for review. The board shows **Review plan** even while the session is finishing or paused, and the chat renders the same saved submission. Both **Approve & build** controls release that decision through the authenticated Factory approval route. Factory queues implementation once and includes the approved snapshot in the build request; the planning agent does not resume through the interactive `submit_plan` gate.
+
+A new submission or planning attempt invalidates an earlier submission. A server-owned submission key keeps approval valid across unrelated card metadata updates; revision checks still protect concurrent commits. Approval cannot be transferred to another plan. Existing plans written only as chat messages need to be submitted through `factory_submit_plan` to acquire these review controls. Human board moves and project plan auto-approval remain available.
 
 ### Config version
 

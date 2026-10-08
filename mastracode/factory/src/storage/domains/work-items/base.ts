@@ -118,6 +118,8 @@ export interface CommitFactoryRuleEvaluationInput {
   ingress: { identity: string; triggerType: string };
   configVersion: string;
   expectedRevision: number | null;
+  /** A new plan invalidates older submissions in the same atomic commit as its queued transition. */
+  submitPlan?: true;
   actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
   decisions: Record<string, unknown>[];
@@ -451,6 +453,8 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
 }
 
 export interface CommitFactoryTransitionInput {
+  /** Clear the previous plan when a person restarts Planning in the same stage. */
+  resetPlanSubmission?: boolean;
   orgId: string;
   factoryProjectId: string;
   workItemId: string;
@@ -548,6 +552,8 @@ export interface WorkItemRow {
   commentCount: number;
   /** Bumps on every feed mutation (create/edit/delete) — the clients' change hint. */
   feedActivityAt: Date | null;
+  /** Current server-owned submission, independent of metadata and feed revisions. */
+  planSubmissionKey?: string | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -611,6 +617,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     comment_count: { type: 'integer', default: 0 },
     feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
+    plan_submission_key: { type: 'text', nullable: true },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
@@ -663,6 +670,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   autonomy_armed_at: Date | null;
   plans_preapproved_at: Date | null;
   accepted_at: Date | null;
+  plan_submission_key?: string | null;
   comment_count: number;
   feed_activity_at: Date | null;
   revision: number;
@@ -700,6 +708,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     plansPreapprovedAt: row.plans_preapproved_at ?? null,
     acceptedAt: row.accepted_at ?? null,
+    planSubmissionKey: row.plan_submission_key ?? null,
     commentCount: row.comment_count ?? 0,
     feedActivityAt: row.feed_activity_at ?? null,
     revision: row.revision,
@@ -724,6 +733,7 @@ function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
     ...(changes.triageType !== undefined ? { triage_type: changes.triageType } : {}),
     ...(changes.autonomyArmedAt !== undefined ? { autonomy_armed_at: changes.autonomyArmedAt } : {}),
     ...(changes.acceptedAt !== undefined ? { accepted_at: changes.acceptedAt } : {}),
+    ...(changes.planSubmissionKey !== undefined ? { plan_submission_key: changes.planSubmissionKey } : {}),
     ...(changes.revision !== undefined ? { revision: changes.revision } : {}),
     ...(changes.updatedAt !== undefined ? { updated_at: changes.updatedAt } : {}),
   };
@@ -834,6 +844,9 @@ function applyUpdate({
       ? {
           stages: input.stages,
           stage_history: applyStageTransition(current.stage_history, current.stages, input.stages, userId, now),
+          ...(input.stages.includes('planning') && !current.stages.includes('planning')
+            ? { plan_submission_key: null }
+            : {}),
         }
       : {}),
     ...(input.sessions !== undefined
@@ -1787,15 +1800,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
+            const resetPlan = input.resetPlanSubmission && existing.planSubmissionKey != null;
             if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
-              return arm || disarm || accept || classified
+              return arm || disarm || accept || classified || resetPlan
                 ? patchColumns({
                     ...(arm ? { autonomyArmedAt: now } : {}),
                     ...(disarm ? { autonomyArmedAt: null } : {}),
                     ...(accept ? { acceptedAt: now } : {}),
-                    ...(classified ? { triageType, revision: existing.revision + 1, updatedAt: now } : {}),
+                    ...(classified ? { triageType } : {}),
+                    ...(resetPlan ? { planSubmissionKey: null } : {}),
+                    ...(classified || resetPlan ? { revision: existing.revision + 1, updatedAt: now } : {}),
                   })
                 : null;
             }
@@ -1808,6 +1824,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               // filed afresh wherever it is routed next.
               ...(this.#isTerminal({ ...existing, stages: [input.destinationStage] }) ? { claimKey: null } : {}),
               stages: [input.destinationStage],
+              ...(input.destinationStage === 'planning' ? { planSubmissionKey: null } : {}),
               stageHistory: applyStageTransition(
                 existing.stageHistory,
                 existing.stages,
@@ -1975,8 +1992,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             })
           : null;
         if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
-        const item = itemRow ? toRow(itemRow) : null;
-        const stale = item !== null && item.revision !== input.expectedRevision;
+        let item = itemRow ? toRow(itemRow) : null;
+        let stale = item !== null && item.revision !== input.expectedRevision;
+        if (input.submitPlan && item && !stale && input.outcome.status === 'accepted') {
+          const updated = await ops.updateAtomic<WorkItemDbRow>(
+            'work_items',
+            { id: item.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+            current =>
+              current.revision === input.expectedRevision
+                ? { revision: current.revision + 1, updated_at: input.now, plan_submission_key: input.ingress.identity }
+                : null,
+          );
+          if (updated) item = toRow(updated);
+          else stale = true;
+        }
         const outcome = stale ? 'rejected' : input.outcome.status;
         const code = stale ? 'stale' : (input.outcome.code ?? null);
         const reason = stale
@@ -1991,6 +2020,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           reason,
           decisions,
         };
+        if (input.submitPlan && stale) return { status: 'committed' as const, result };
+        if (input.submitPlan && outcome === 'accepted' && item) {
+          const older = await ops.findMany<GovernanceDbRow>('factory_deferred_decisions', {
+            org_id: input.orgId,
+            factory_project_id: input.factoryProjectId,
+            work_item_id: item.id,
+            status: 'proposed',
+          });
+          for (const row of older) {
+            const decision = row.decision as Record<string, unknown>;
+            if (!decision.planApproval) continue;
+            await ops.updateAtomic<GovernanceDbRow>(
+              'factory_deferred_decisions',
+              { id: row.id, org_id: input.orgId },
+              current =>
+                current.status === 'proposed'
+                  ? { status: 'superseded', updated_at: input.now, completed_at: input.now }
+                  : null,
+            );
+          }
+        }
         const ingress = await ops.insertOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -2089,6 +2139,19 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { orderBy: [['created_at', 'asc']] },
       )
     ).map(toDeferredDecision);
+  }
+
+  async getDeferredDecisionByKey(
+    orgId: string,
+    factoryProjectId: string,
+    key: string,
+  ): Promise<FactoryDeferredDecisionRecord | null> {
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_deferred_decisions', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      idempotency_key: key,
+    });
+    return row ? toDeferredDecision(row) : null;
   }
 
   async listDecisionsForEvaluations(
@@ -3047,7 +3110,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               input: { sessions: { [input.role]: input.session } },
             });
             const adopt = this.#claimToAdopt(current, next, create);
-            return adopt ? { ...next, claim_key: adopt } : next;
+            return {
+              ...next,
+              ...(adopt ? { claim_key: adopt } : {}),
+              ...(input.role === 'plan' ? { plan_submission_key: null } : {}),
+            };
           });
           item = toRow(row!);
         } else {

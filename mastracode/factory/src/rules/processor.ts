@@ -14,6 +14,7 @@ import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
+import { isApprovedSubmitPlan } from './plan-approval.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { workItemSource } from './types.js';
 import type {
@@ -63,11 +64,7 @@ type CompletedToolResult = {
 };
 
 function isApprovedPlanResult(result: CompletedToolResult): boolean {
-  if (result.toolName !== 'submit_plan' || result.status !== 'success') return false;
-  if (typeof result.value === 'string') return result.value.startsWith('Plan approved.');
-  if (!result.value || typeof result.value !== 'object' || Array.isArray(result.value)) return false;
-  const content = result.value.content;
-  return typeof content === 'string' && content.startsWith('Plan approved.');
+  return result.toolName === 'submit_plan' && result.status === 'success' && isApprovedSubmitPlan(result.value);
 }
 
 type RuntimeSnapshot = {
@@ -327,7 +324,12 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ((board === 'work' || board === 'review') && stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
         : '') +
-      `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.${escapeText(linkedText)}`;
+      (board === 'work' && stage === 'planning' && binding.role === 'plan'
+        ? item.planSubmissionKey
+          ? 'A plan has been submitted. Finish the planning run; Factory owns the approval and build handoff. For requested revisions, submit a new version.'
+          : `Use factory_submit_plan with expectedRevision ${item.revision} to submit the completed plan for review, then stop.`
+        : `Use factory_transition_work_item with expectedRevision ${item.revision} to request a phase change.`) +
+      escapeText(linkedText);
     const isDelta = hasBase && prior?.status === 'active';
     return {
       id: STATE_ID,
@@ -402,6 +404,15 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
+        // Both recovery and a late UI resume must reject an older attempt's
+        // approval. A fresh binding does not inherit pending approvals in its thread.
+        if (
+          boardForWorkItem(item) === 'work' &&
+          binding.role === 'plan' &&
+          isApprovedPlanResult(toolResult) &&
+          toolResult.messageCreatedAt <= binding.createdAt
+        )
+          continue;
         try {
           await this.options.recordPullRequestProvenance?.({
             binding,
@@ -430,7 +441,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const rule = resolveBoardToolRule(this.options.boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
-      binding.id,
+      isApprovedPlanResult(toolResult) ? 'plan-approval' : binding.id,
       binding.threadId,
       toolResult.assistantMessageId,
       toolResult.toolCallId,
@@ -478,7 +489,24 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       } else if (decision) {
         const validated = validateFactoryRuleDecisions([decision]);
         for (const entry of validated) assertFactoryDecisionTarget(entry, this.options.boards, board);
-        decisions = validated;
+        decisions = validated.map(entry =>
+          entry.type === 'transition' &&
+          entry.board === 'work' &&
+          entry.stage === 'execute' &&
+          binding.role === 'plan' &&
+          isApprovedPlanResult(toolResult)
+            ? {
+                ...entry,
+                planApproval: {
+                  bindingId: binding.id,
+                  threadId: binding.threadId,
+                  revision: item.revision + 1,
+                  submissionKey: ingressId,
+                  approved: true,
+                },
+              }
+            : entry,
+        );
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -499,6 +527,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ingress: { identity: ingressId, triggerType: 'tool.result' },
       configVersion: this.options.configVersion,
       expectedRevision: item.revision,
+      ...(decisions.some(entry => entry.type === 'transition' && entry.planApproval)
+        ? { submitPlan: true as const }
+        : {}),
       actor: { ...context.actor },
       outcome,
       decisions: decisions.map(entry => ({ ...entry })),
@@ -514,7 +545,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         workItemId: item.id,
         board: entry.board,
         stage: entry.stage,
-        expectedRevision: item.revision,
+        expectedRevision: entry.planApproval?.revision ?? item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
         cause: 'tool_result_rule',

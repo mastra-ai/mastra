@@ -9,11 +9,14 @@ import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
+import { factoryPlanContentSchema } from './plan-approval.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { FACTORY_TRIAGE_TYPES } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
+const PLAN_SUBMITTED_MESSAGE =
+  'Plan saved. End this planning run. Factory will start the build after approval, or automatically if project plan auto-approval is enabled.';
 
 const transitionInputSchema = z
   .object({
@@ -42,7 +45,8 @@ const triageTransitionInputSchema = transitionInputSchema.extend({
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
-  transitionService: Pick<FactoryTransitionService, 'transition'>;
+  transitionService: Pick<FactoryTransitionService, 'transition'> &
+    Partial<Pick<FactoryTransitionService, 'configVersion'>>;
   sessions?: FactorySessionSourceLookup;
   boards?: BoardRegistry;
 }): Promise<IntegrationTools> {
@@ -78,6 +82,77 @@ export async function createFactoryTransitionTools(options: {
   }
 
   return {
+    factory_submit_plan: createTool({
+      id: 'factory_submit_plan',
+      description:
+        'Submit the complete Factory plan for review and end the planning run. Saves an immutable plan with a Review plan action in the board and chat. Does not resume this agent to implement it; Factory dispatches the build after approval.',
+      inputSchema: factoryPlanContentSchema.extend({ expectedRevision: z.number().int().positive() }).strict(),
+      execute: async ({ expectedRevision, ...submission }, execution) => {
+        const current = await resolveFactorySessionAddress({
+          requestContext: execution.requestContext,
+          storage: options.storage,
+          sessions: options.sessions,
+        });
+        const toolCallId = execution.agent?.toolCallId;
+        const binding = current && (await options.storage.findActiveRunBinding(current.address));
+        if (!toolCallId || !binding || binding.id !== availableBinding.id || binding.role !== 'plan') {
+          throw new Error('Factory plans require the current planning agent binding.');
+        }
+        const key = `${binding.id}:${toolCallId}:plan`;
+        const prior = await options.storage.getDeferredDecisionByKey(binding.orgId, binding.factoryProjectId, key);
+        if (prior)
+          return {
+            status: 'submitted',
+            factoryProjectId: binding.factoryProjectId,
+            decisionId: prior.id,
+            content: PLAN_SUBMITTED_MESSAGE,
+          };
+        const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
+        if (!item || boardForWorkItem(item) !== 'work' || item.stages.length !== 1 || item.stages[0] !== 'planning') {
+          throw new Error('The work item is no longer in Planning.');
+        }
+        const committed = await options.storage.commitRuleEvaluation({
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: item.id,
+          ingress: { identity: key, triggerType: 'plan.submitted' },
+          configVersion: options.transitionService.configVersion ?? 'factory-config-v1',
+          expectedRevision,
+          submitPlan: true,
+          actor: { type: 'agent', bindingId: binding.id, role: binding.role },
+          outcome: { status: 'accepted' },
+          causalChain: [],
+          now: new Date(),
+          decisions: [
+            {
+              type: 'transition',
+              idempotencyKey: key,
+              board: 'work',
+              stage: 'execute',
+              planApproval: {
+                bindingId: binding.id,
+                threadId: binding.threadId,
+                revision: expectedRevision + 1,
+                submissionKey: key,
+                approved: false,
+                submission,
+              },
+            },
+          ],
+        });
+        if (committed.status === 'missing' || committed.result.status !== 'accepted') {
+          throw new Error('The work item changed. Read the current factory-phase revision and submit the plan again.');
+        }
+        const decision = await options.storage.getDeferredDecisionByKey(binding.orgId, binding.factoryProjectId, key);
+        if (!decision) throw new Error('The submitted plan could not be read.');
+        return {
+          status: 'submitted',
+          factoryProjectId: binding.factoryProjectId,
+          decisionId: decision.id,
+          content: PLAN_SUBMITTED_MESSAGE,
+        };
+      },
+    }),
     ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',

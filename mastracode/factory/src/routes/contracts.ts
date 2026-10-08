@@ -492,6 +492,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectDecisionPathSchema,
     responseSchema: decisionResponseSchema,
   },
+  decisionGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/decisions/:decisionId',
+    description: 'Read a Factory decision and its submitted plan',
+    pathSchema: projectDecisionPathSchema,
+    responseSchema: decisionResponseSchema,
+  },
   decisionDismiss: {
     method: 'POST',
     path: '/web/factory/projects/:id/decisions/:decisionId/dismiss',

@@ -124,6 +124,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "decisions"
     }
   },
+  "GET /web/factory/projects/:id/decisions/:decisionId": {
+    "contractKey": "decisionGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/decisions/:decisionId",
+    "description": "Read a Factory decision and its submitted plan",
+    "pathParams": [
+      "id",
+      "decisionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/health/thresholds": {
     "contractKey": "healthThresholdsGet",
     "method": "GET",
@@ -900,6 +917,46 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "decisions"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/decisions/:decisionId": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "decisionId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "decisionId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "decision"
       ]
     }
   },
@@ -2342,6 +2399,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "attentionList": "GET /web/factory/projects/:id/attention",
   "boardCatalog": "GET /web/factory/projects/:id/boards",
   "decisionList": "GET /web/factory/projects/:id/decisions",
+  "decisionGet": "GET /web/factory/projects/:id/decisions/:decisionId",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "supervisorHealth": "GET /web/factory/projects/:id/supervisor/health",

@@ -2,7 +2,11 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { actOnFactoryDecision, fetchFactoryDecisions } from '../ui/domains/factory/services/decisions';
+import {
+  actOnFactoryDecision,
+  fetchFactoryDecisions,
+  fetchFactoryDecision,
+} from '../ui/domains/factory/services/decisions';
 import type {
   FactoryDecisionAction,
   FactoryDecisionPage,
@@ -21,6 +25,16 @@ export function useFactoryDecisionStatus(githubProjectId: string | undefined, st
   });
 }
 
+export function useFactoryDecision(factoryProjectId: string, decisionId: string) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: [...queryKeys.factoryDecisionsRoot(factoryProjectId), 'detail', decisionId],
+    queryFn: () => fetchFactoryDecision(baseUrl, factoryProjectId, decisionId),
+    refetchInterval: query =>
+      ['pending', 'proposed', 'leased', 'retry'].includes(query.state.data?.status ?? '') ? 2_000 : false,
+  });
+}
+
 /** Release, turn down, or requeue one queued effect. */
 export function useFactoryDecisionAction(githubProjectId: string | undefined, action: FactoryDecisionAction) {
   const { baseUrl } = useApiConfig();
@@ -34,6 +48,7 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(githubProjectId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(githubProjectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) }),
       ]);
     },
   });

@@ -224,17 +224,20 @@ describe('FactoryPhaseStateProcessor', () => {
 
     await processor.processInputStep(
       inputArgs(requestContext(), [
-        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
+        toolMessage({
+          createdAt: new Date(prepared.binding.createdAt.getTime() + 1),
+          result: { content: 'Plan approved. Proceed with implementation.' },
+        }),
       ]),
     );
 
     await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
-      revision: 2,
+      revision: 3,
       stages: ['execute'],
     });
     const signal = await processor.computeStateSignal(stateArgs(requestContext()));
     expect(signal).toMatchObject({
-      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
+      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 3 },
     });
     expect(signal?.contents).toContain('Factory work phase: Building (execute)');
     expect(signal?.contents).toContain('Config: rules-v1');
@@ -269,7 +272,11 @@ describe('FactoryPhaseStateProcessor', () => {
           storage,
           transitionService,
         });
-        await processor.processInputStep(inputArgs(requestContext(), [c.message]));
+        await processor.processInputStep(
+          inputArgs(requestContext(), [
+            { ...c.message, createdAt: new Date(prepared.binding.createdAt.getTime() + 1) },
+          ]),
+        );
         expect(await stageOf(storage, prepared.item.id)).toEqual(c.stages);
       }
     });

@@ -16,6 +16,7 @@ import type { BoardRegistry } from '../boards/index.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { factoryPlanApprovalSchema, isCurrentFactoryPlan } from '../rules/plan-approval.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -181,14 +182,17 @@ function summarySource(decision: Record<string, unknown>): WorkItemSource | null
 }
 
 function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord, overtaken = false) {
+  const plan = factoryPlanApprovalSchema.safeParse(decision.decision.planApproval);
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
     type: factoryDecisionType(decision),
+    ...(plan.success && plan.data.submission ? { plan: { title: plan.data.submission.title } } : {}),
     role: summaryRole(boards, decision.decision),
     source: summarySource(decision.decision),
     status: decision.status,
+    approvedAt: decision.approvedAt?.toISOString() ?? null,
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
     failureCode: decision.failureCode,
@@ -302,6 +306,24 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         const { decisionId } = parsedPath.data;
         await workItems.ensureReady();
         const now = new Date();
+        if (verb === 'approve') {
+          const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
+          const plan = factoryPlanApprovalSchema.safeParse(current?.decision.planApproval);
+          if (plan.success) {
+            const item = current?.workItemId
+              ? await workItems.get({ orgId: resolved.orgId, id: current.workItemId })
+              : null;
+            if (!item || !(await isCurrentFactoryPlan(workItems, item, plan.data))) {
+              return c.json(
+                {
+                  error: 'plan_superseded',
+                  message: 'This plan is no longer current. Review the latest plan before building.',
+                },
+                409,
+              );
+            }
+          }
+        }
         const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
         if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
         // Releasing a proposal is a person taking the item on. Approval arms the
@@ -467,6 +489,45 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
       this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
+
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionGet.path, {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const parsed = FACTORY_ROUTE_CONTRACTS.decisionGet.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            decisionId: loose(c).req.param('decisionId'),
+          });
+          if (!parsed.success) return c.json({ error: 'invalid_decision_id' }, 422);
+          await workItems.ensureReady();
+          const decision = await workItems.getDeferredDecision(
+            resolved.orgId,
+            resolved.factoryProjectId,
+            parsed.data.decisionId,
+          );
+          if (!decision) return c.json({ error: 'decision_not_found' }, 404);
+          const plan = factoryPlanApprovalSchema.safeParse(decision.decision.planApproval);
+          const item = decision.workItemId
+            ? await workItems.get({ orgId: resolved.orgId, id: decision.workItemId })
+            : null;
+          return c.json({
+            decision: {
+              ...decisionSummary(this.#boards, decision),
+              ...(plan.success && plan.data.submission
+                ? {
+                    plan: plan.data.submission,
+                    canApprovePlan:
+                      decision.status === 'proposed' &&
+                      item !== null &&
+                      (await isCurrentFactoryPlan(workItems, item, plan.data)),
+                  }
+                : {}),
+            },
+          });
+        },
+      }),
 
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionRetry.path, {
         method: FACTORY_ROUTE_CONTRACTS.decisionRetry.method,

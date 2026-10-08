@@ -37,6 +37,7 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import { isCurrentFactoryPlan } from './plan-approval.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
@@ -716,6 +717,19 @@ export class FactoryDecisionDispatcher {
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
       if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
+      if (decision.type === 'transition' && decision.planApproval) {
+        const replay = await this.#storage.getTransitionResultByIngress(
+          record.orgId,
+          record.factoryProjectId,
+          `decision:${record.idempotencyKey}`,
+        );
+        if (
+          !replay &&
+          !(await isCurrentFactoryPlan(this.#storage, await this.#requireItem(record), decision.planApproval))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
+      }
       if (await this.#needsApproval(record, decision)) {
         const proposed = await this.#storage.proposeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
         if (!proposed) throw new Error('Factory decision lease was lost before approval could be requested.');
@@ -798,6 +812,11 @@ export class FactoryDecisionDispatcher {
   // Effects a person owns: starting a run (compute + code execution), and an
   // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
+    if (decision.type === 'transition' && decision.planApproval) {
+      return (
+        !decision.planApproval.approved && record.approvedAt === null && !(await this.#plansAreAutoApproved(record))
+      );
+    }
     if (record.approvedAt !== null || !requestsConsent(this.#boards, record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
@@ -826,6 +845,13 @@ export class FactoryDecisionDispatcher {
           record.factoryProjectId,
           `decision:${record.idempotencyKey}`,
         );
+        if (
+          !replay &&
+          decision.planApproval &&
+          !(await isCurrentFactoryPlan(this.#storage, item, decision.planApproval))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
         if (!replay) assertFactoryDecisionTarget(decision, this.#boards, item.board ?? undefined);
         const result = await this.#transitionService.transition({
           orgId: record.orgId,
@@ -841,6 +867,8 @@ export class FactoryDecisionDispatcher {
           cause: 'rule_decision',
           causalChain: nextChain,
           ...(decision.reenter ? { reenter: true } : {}),
+          ...(decision.planApproval?.approved ? { planApproved: true } : {}),
+          ...(decision.planApproval?.submission ? { approvedPlan: decision.planApproval.submission } : {}),
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
         const transitionMessage = decision.message;
@@ -916,7 +944,9 @@ export class FactoryDecisionDispatcher {
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
                   resourceId: binding.resourceId,
-                  prompt: decision.prompt,
+                  prompt: decision.approvedPlan
+                    ? `${decision.prompt}\n\nApproved plan snapshot:\n${decision.approvedPlan.content}`
+                    : decision.prompt,
                 })
               : decision.resume === true
                 ? await resolveSkillResumeInvocation(this.#controller, {

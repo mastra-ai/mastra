@@ -1,14 +1,8 @@
+import { isApprovedSubmitPlan } from '../rules/plan-approval.js';
 import type { FactoryToolResultRuleContext } from '../rules/types.js';
 
-function resultContent(value: unknown): string | undefined {
-  if (typeof value === 'string') return value;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
-  const content = (value as { content?: unknown }).content;
-  return typeof content === 'string' ? content : undefined;
-}
-
 // Interactive-session path only: factory-plan never calls submit_plan — it
-// advances planning → execute via factory_transition_work_item directly.
+// submits a durable Factory plan decision instead.
 export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   if (
     context.result.status !== 'success' ||
@@ -16,7 +10,7 @@ export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
     context.item.stages[0] !== 'planning' ||
     context.actor.type !== 'agent' ||
     context.actor.role !== 'plan' ||
-    !resultContent(context.result.value)?.startsWith('Plan approved.')
+    !isApprovedSubmitPlan(context.result.value)
   ) {
     return;
   }
