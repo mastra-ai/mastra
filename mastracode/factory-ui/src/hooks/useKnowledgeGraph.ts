@@ -92,8 +92,6 @@ export function useKnowledgeGraph(
   });
 }
 
-const MAX_POLLED_ACTIVITY_PAGES = 5;
-
 export function useKnowledgeActivity(
   factoryProjectId: string | undefined,
   selection: KnowledgeSelection | undefined,
@@ -112,9 +110,9 @@ export function useKnowledgeActivity(
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
     // Never evict pages: the first page holds the newest rows and nothing
-    // fetches it back. Polling refetches every loaded page, so stop once the
-    // reader has paged far back into history.
-    refetchInterval: query => ((query.state.data?.pages.length ?? 0) > MAX_POLLED_ACTIVITY_PAGES ? false : 5_000),
+    // fetches it back. Polling refetches every loaded page, and older pages do
+    // not change, so poll only until the reader loads older history.
+    refetchInterval: query => ((query.state.data?.pages.length ?? 0) > 1 ? false : 5_000),
   });
 }
 
