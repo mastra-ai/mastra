@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeNodeRecord } from '../../services/knowledge';
+import { RequestError } from '../../services/request';
 import { parseRecordSegments } from './recordText';
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
@@ -23,7 +24,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
       ) : null}
       <ChevronDown
         size={14}
-        className="text-muted-foreground ml-auto transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
+        className="text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
       />
     </CollapsibleTrigger>
   );
@@ -199,6 +200,18 @@ export function KnowledgeFlyout({
     >
       {nodeQuery.isPending ? (
         <div className="text-muted-foreground p-4 text-sm">Loading knowledge node…</div>
+      ) : nodeQuery.isError && nodeQuery.error instanceof RequestError && nodeQuery.error.status === 404 ? (
+        <div className="flex items-start justify-between gap-2 p-4">
+          <p className="text-muted-foreground text-sm">This knowledge node is no longer available.</p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close node details"
+            className="text-muted-foreground hover:text-foreground rounded p-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>

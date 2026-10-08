@@ -886,6 +886,43 @@ describe('KnowledgePage', () => {
     expect(breadcrumb).toHaveTextContent('Payments Service');
   });
 
+  it('keeps the selected node addressable through ?node= and reopens it from the link', async () => {
+    stubKnowledgeRoute();
+    const { router, unmount } = renderRoute();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(nodes[0]!);
+    expect(await screen.findByTestId('knowledge-flyout')).toHaveTextContent('Payments Service');
+    await waitFor(() => expect(router.state.location.search).toMatch(/[?&]node=/));
+    const link = `${router.state.location.pathname}${router.state.location.search}`;
+
+    const user = userEvent.setup();
+    await user.click(screen.getAllByRole('button', { name: 'Close details' })[0]!);
+    await waitFor(() => expect(router.state.location.search).not.toMatch(/[?&]node=/));
+
+    unmount();
+    renderRoute(link);
+    const reopened = await screen.findByTestId('knowledge-flyout');
+    expect(await within(reopened).findByText('Payments Service')).toBeInTheDocument();
+  });
+
+  it('renders the calm not-available state for a stale node deep link', async () => {
+    stubKnowledgeRoute();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>
+        HttpResponse.json({ error: 'node_not_found' }, { status: 404 }),
+      ),
+    );
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?node=kn_stale&nodeName=Old`);
+
+    const flyout = await screen.findByTestId('knowledge-flyout');
+    expect(await within(flyout).findByText('This knowledge node is no longer available.')).toBeInTheDocument();
+    expect(within(flyout).queryByText('Unable to load this knowledge node.')).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(within(flyout).getByRole('button', { name: 'Close node details' }));
+    await waitFor(() => expect(router.state.location.search).not.toMatch(/[?&]node=/));
+  });
+
   it('renders the calm not-available state for a stale thread deep link', async () => {
     stubKnowledgeRoute();
     renderRoute(`/factories/${FACTORY_ID}/knowledge?thread=gone-thread`);
