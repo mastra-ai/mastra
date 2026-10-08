@@ -46,7 +46,11 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
-import { createProviderThinkingMiddleware } from '../providers/provider-thinking.js';
+import {
+  defaultProviderOptionsMiddleware,
+  ModelRouterLanguageModelWithProviderOptions,
+  providerThinkingOptions,
+} from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
@@ -547,7 +551,13 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (this.#routeThroughMastraGateway) {
-      return this.#withProviderThinking(this.#mastraGateway.resolveLanguageModel(args), 'openrouter', args);
+      const gatewayModel = this.#mastraGateway.resolveLanguageModel(args);
+      const thinkingOptions = this.#providerThinkingOptions('openrouter', args);
+      if (!thinkingOptions || gatewayModel.specificationVersion !== 'v3') return gatewayModel;
+      return wrapLanguageModel({
+        model: gatewayModel,
+        middleware: [defaultProviderOptionsMiddleware(thinkingOptions)],
+      });
     }
 
     if (args.providerId === 'kimi-for-coding') {
@@ -558,29 +568,18 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    const routerModel = new ModelRouterLanguageModel({
-      id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
-      apiKey: args.apiKey,
-      headers: args.headers,
-    }) as unknown as GatewayLanguageModel;
-    return this.#withProviderThinking(routerModel, args.providerId, args);
+    return new ModelRouterLanguageModelWithProviderOptions(
+      { id: `${args.providerId}/${args.modelId}`, apiKey: args.apiKey, headers: args.headers },
+      this.#providerThinkingOptions(args.providerId, args),
+    ) as unknown as GatewayLanguageModel;
   }
 
-  #withProviderThinking(
-    model: GatewayLanguageModel,
-    optionsProvider: string,
-    args: { providerId: string; modelId: string },
-  ): GatewayLanguageModel {
-    const thinkingMiddleware = createProviderThinkingMiddleware({
+  #providerThinkingOptions(optionsProvider: string, args: { providerId: string; modelId: string }) {
+    return providerThinkingOptions({
       optionsProvider,
       catalogModelId: `${args.providerId}/${args.modelId}`,
       level: this.#thinkingLevel,
     });
-    if (!thinkingMiddleware) return model;
-    return wrapLanguageModel({
-      model: model as any,
-      middleware: [thinkingMiddleware],
-    }) as unknown as GatewayLanguageModel;
   }
 
   #resolveAnthropicModel(args: {

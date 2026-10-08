@@ -1,10 +1,11 @@
-import { getModelReasoningOptions } from '@mastra/core/llm';
+import { getModelReasoningOptions, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import type { JSONValue, LanguageModelMiddleware } from 'ai';
 import { runThinkingLevel, THINKING_LEVEL_VALUES } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 
 type ThinkingProviderOptions = Record<string, JSONValue>;
+type ProviderOptions = Record<string, Record<string, JSONValue | undefined>>;
 type ReasoningOptions = readonly ModelReasoningOption[] | undefined;
 
 interface ModelThinking {
@@ -85,7 +86,7 @@ function optionsProviderFor(providerId: string): string {
   return providerId.includes('alibaba') ? 'alibaba' : providerId;
 }
 
-export function createProviderThinkingMiddleware({
+export function providerThinkingOptions({
   optionsProvider,
   catalogModelId,
   level,
@@ -93,7 +94,7 @@ export function createProviderThinkingMiddleware({
   optionsProvider: string;
   catalogModelId: string;
   level: ThinkingLevelSetting | undefined;
-}): LanguageModelMiddleware | undefined {
+}): ProviderOptions | undefined {
   const optionsKey = optionsProviderFor(optionsProvider);
   const thinkingOptionsFor = THINKING_OPTIONS_BY_PROVIDER[optionsKey];
   if (!thinkingOptionsFor || !level) return undefined;
@@ -102,16 +103,45 @@ export function createProviderThinkingMiddleware({
     runLevel: runThinkingLevel(catalogModelId, level, reasoningOptions),
     reasoningOptions,
   });
-  if (!thinkingOptions) return undefined;
+  return thinkingOptions && { [optionsKey]: thinkingOptions };
+}
 
+function withDefaultProviderOptions<CallOptions extends { providerOptions?: ProviderOptions }>(
+  callOptions: CallOptions,
+  defaults: ProviderOptions | undefined,
+): CallOptions {
+  if (!defaults) return callOptions;
+  const providerOptions: ProviderOptions = { ...callOptions.providerOptions };
+  for (const [key, options] of Object.entries(defaults)) {
+    providerOptions[key] = { ...options, ...callOptions.providerOptions?.[key] };
+  }
+  return { ...callOptions, providerOptions };
+}
+
+type RouterConfig = ConstructorParameters<typeof ModelRouterLanguageModel>[0];
+type RouterCallOptions = Parameters<ModelRouterLanguageModel['doStream']>[0];
+type RouterCallResult = ReturnType<ModelRouterLanguageModel['doStream']>;
+
+export class ModelRouterLanguageModelWithProviderOptions extends ModelRouterLanguageModel {
+  readonly #defaultProviderOptions: ProviderOptions | undefined;
+
+  constructor(config: RouterConfig, defaultProviderOptions: ProviderOptions | undefined) {
+    super(config);
+    this.#defaultProviderOptions = defaultProviderOptions;
+  }
+
+  override doGenerate(options: RouterCallOptions): RouterCallResult {
+    return super.doGenerate(withDefaultProviderOptions(options, this.#defaultProviderOptions));
+  }
+
+  override doStream(options: RouterCallOptions): RouterCallResult {
+    return super.doStream(withDefaultProviderOptions(options, this.#defaultProviderOptions));
+  }
+}
+
+export function defaultProviderOptionsMiddleware(defaults: ProviderOptions): LanguageModelMiddleware {
   return {
     specificationVersion: 'v3',
-    transformParams: async ({ params }) => {
-      params.providerOptions = {
-        ...params.providerOptions,
-        [optionsKey]: { ...thinkingOptions, ...params.providerOptions?.[optionsKey] },
-      };
-      return params;
-    },
+    transformParams: async ({ params }) => withDefaultProviderOptions(params, defaults),
   };
 }
