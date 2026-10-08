@@ -54,6 +54,20 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(screen.getAllByRole('combobox').filter(select => select.hasAttribute('aria-invalid'))).toEqual([]);
   });
 
+  it('starts the range editor fresh each time it opens', () => {
+    renderCustom({ dateFrom: new Date(2026, 0, 10), dateTo: new Date(2026, 0, 5) });
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    expect(screen.queryByRole('alert')).not.toBeNull();
+
+    const trigger = screen.getAllByRole('button').find(button => button.getAttribute('aria-haspopup') === 'dialog');
+    if (!trigger) throw new Error('missing range trigger');
+    fireEvent.click(trigger);
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('group', { name: 'Custom date range' }).getAttribute('aria-invalid')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('names each time select on its own, with its own id', () => {
     renderCustom();
 
