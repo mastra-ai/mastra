@@ -21,9 +21,10 @@ function rerank(
 ## Usage example
 
 ```typescript
+import { ModelRouterLanguageModel } from '@mastra/core/llm'
 import { rerank } from '@mastra/rag'
 
-const model = '__GATEWAY_OPENAI_MODEL__'
+const model = new ModelRouterLanguageModel('__GATEWAY_OPENAI_MODEL__')
 
 const rerankedResults = await rerank(vectorSearchResults, 'How do I deploy to production?', model, {
   weights: {
