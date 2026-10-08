@@ -250,6 +250,22 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         store.createNode({ name: 'Lost', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
       ).rejects.toThrow(/scope/i);
       expect(await store.getNodeByName({ name: 'Lost', scope: resource })).toBeNull();
+
+      // Writing about a node that already exists still places it, and still rejects unknown addresses.
+      const existing = await store.createNode({ name: 'Existing', kind: 'doc', scope: resource });
+      const placed = await store.createNode({
+        name: 'existing',
+        kind: 'doc',
+        scope: resource,
+        scopeAddresses: ['org:acme'],
+      });
+      expect(placed.id).toBe(existing.id);
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['org:acme']! })).members).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: existing.id })]),
+      );
+      await expect(
+        store.createNode({ name: 'Existing', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+      ).rejects.toThrow(/scope/i);
     });
 
     it('treats scope identifiers literally when checking visibility', async () => {
