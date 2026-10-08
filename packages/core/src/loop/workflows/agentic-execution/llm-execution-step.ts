@@ -2654,6 +2654,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         return bail({
           messageId: outputStream.messageId,
+          backgroundTaskPending: inputData.backgroundTaskPending,
           stepResult: {
             reason,
             warnings,
