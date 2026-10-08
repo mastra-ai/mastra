@@ -192,7 +192,6 @@ export interface ProjectRoutesDeps extends RouteDependencies {
 
 /** Environment fields whose change alters the template, so a PATCH touching them queues a build. */
 const TEMPLATE_AFFECTING_PROJECT_FIELDS = [
-  'sandboxProvider',
   'sandboxWorkdir',
   'sandboxCpuCount',
   'sandboxMemoryMb',

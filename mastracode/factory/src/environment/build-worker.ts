@@ -146,12 +146,14 @@ export class FactoryEnvironmentBuildWorker extends MastraWorker {
   }
 
   /**
-   * One sweep over every platform project; exposed for tests and the rig.
+   * One sweep over every project; exposed for tests and the rig. Whether the
+   * host can build a project's template is only known once the hook is asked,
+   * so a project the host declines records a failed build with that reason.
    * Projects are considered a few at a time and a build runs detached, so
    * one factory's long build never delays another's triggers.
    */
   async tick(): Promise<void> {
-    const projects = (await this.#options.projects.listAll()).filter(project => project.sandboxProvider === 'platform');
+    const projects = await this.#options.projects.listAll();
     let index = 0;
     const next = async (): Promise<void> => {
       while (index < projects.length) {

@@ -12,14 +12,9 @@ const T0 = new Date('2026-10-07T12:00:00Z');
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 const hours = (n: number) => minutes(n * 60);
 
-async function seedEnvironment(options: { sandboxProvider?: string } = {}) {
+async function seedEnvironment() {
   const seed = await createFactoryStorageForTests();
-  const created = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
-  const project = (await seed.projects.update({
-    orgId: 'org-1',
-    id: created.id,
-    input: { sandboxProvider: options.sandboxProvider ?? 'platform' },
-  }))!;
+  const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
   const github = seed.sourceControl.forIntegration('github');
   const installation = await github.installations.upsert({
     orgId: 'org-1',
@@ -55,6 +50,8 @@ function worker(
     heads: () => string;
     results?: EnvironmentTemplateBuildResult[];
     claims?: { wait: Promise<void> };
+    /** Host declines to build this project's template. */
+    noTemplate?: boolean;
   },
 ) {
   const github = seed.sourceControl.forIntegration('github');
@@ -63,7 +60,7 @@ function worker(
     if (input.claims) await input.claims.wait;
     return results.shift() ?? { status: 'ready' as const, templateId: 'tpl-again' };
   });
-  const sandboxTemplate = vi.fn(() => async () => ({ build }));
+  const sandboxTemplate = vi.fn(() => (input.noTemplate ? undefined : async () => ({ build })));
   const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => input.heads() }));
   vi.stubGlobal('fetch', fetchMock);
   const logger = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
@@ -300,15 +297,22 @@ describe('FactoryEnvironmentBuildWorker', () => {
     vi.unstubAllGlobals();
   });
 
-  it('leaves projects on other sandbox providers alone', async () => {
-    const { seed, project } = await seedEnvironment({ sandboxProvider: 'local' });
+  it('records a failed build when the host declines to provide a template', async () => {
+    const { seed, project } = await seedEnvironment();
     await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildRequestedAt: T0 } });
-    const { instance, build, fetchMock } = worker(seed, { now: () => T0, heads: () => SHA_A });
+    const { instance, build, sandboxTemplate } = worker(seed, { now: () => T0, heads: () => SHA_A, noTemplate: true });
 
     await instance.tick();
+    await instance.stop();
 
+    expect(sandboxTemplate).toHaveBeenCalledTimes(1);
     expect(build).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
+      lastBuildStatus: 'failed',
+      lastBuildError: 'The host provides no environment template for this factory.',
+      buildClaimedAt: null,
+      buildRequestedAt: null,
+    });
     vi.unstubAllGlobals();
   });
 
