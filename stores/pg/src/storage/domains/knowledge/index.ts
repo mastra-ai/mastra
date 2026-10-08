@@ -547,21 +547,40 @@ export class KnowledgePG extends KnowledgeStorage {
     ];
   }
 
-  readonly #client: DbClient;
-  readonly #executor: Executor;
+  readonly #rawClient: DbClient;
+  readonly #rawExecutor: Executor;
   /** Reader-backed executor for standalone reads; mutations and read-modify-write stay on #executor. */
-  readonly #readExecutor: Executor;
-  readonly #db: PgDB;
+  readonly #rawReadExecutor: Executor;
+  readonly #rawDb: PgDB;
+  #initError?: Error;
+
+  // A failed schema check latches: every operation rethrows it until init() succeeds or dangerouslyReset() runs.
+  #guard<T>(handle: T): T {
+    if (this.#initError) throw this.#initError;
+    return handle;
+  }
+  get #client(): DbClient {
+    return this.#guard(this.#rawClient);
+  }
+  get #executor(): Executor {
+    return this.#guard(this.#rawExecutor);
+  }
+  get #readExecutor(): Executor {
+    return this.#guard(this.#rawReadExecutor);
+  }
+  get #db(): PgDB {
+    return this.#guard(this.#rawDb);
+  }
   readonly #schemaName?: string;
 
   constructor(config: PgDomainConfig) {
     super({ storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config) });
     const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
-    this.#client = client;
+    this.#rawClient = client;
     this.#schemaName = schemaName;
-    this.#executor = createExecutor(client, schemaName);
-    this.#readExecutor = createExecutor(readClient, schemaName);
-    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
+    this.#rawExecutor = createExecutor(client, schemaName);
+    this.#rawReadExecutor = createExecutor(readClient, schemaName);
+    this.#rawDb = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
   }
 
   override getCapabilities() {
@@ -573,6 +592,17 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    this.#initError = undefined;
+    try {
+      await this.#init();
+    } catch (error) {
+      const { KnowledgeSchemaError } = await loadKnowledgeCore();
+      if (error instanceof KnowledgeSchemaError) this.#initError = error;
+      throw error;
+    }
+  }
+
+  async #init(): Promise<void> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
     let snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
     let existingNames = await this.#knowledgeTableNames(snapshot);
@@ -753,6 +783,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
+    this.#initError = undefined;
     const schema = this.#schemaName ? `"${parseSchemaName(this.#schemaName)}".` : '';
     const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
       .map(table => `${schema}"${table}"`)
