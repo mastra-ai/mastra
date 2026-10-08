@@ -1392,6 +1392,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       );
     } else if (step?.type === 'foreach' && (executionPath.length === 1 || restart)) {
+      const foreachResult = stepResults[getEntryId(step.step)];
+      // An in-flight child owns a durable run; recover it before scheduling more iterations.
+      if (
+        restart &&
+        executionPath.length > 1 &&
+        getEntryWorkflow(step.step) &&
+        foreachResult?.metadata?.nestedRunId &&
+        'output' in foreachResult &&
+        foreachResult.output?.[executionPath[1]!] === null
+      ) {
+        return this.runLeafStep({ ...args, step });
+      }
       return processWorkflowForEach(
         {
           workflow,
