@@ -6,6 +6,7 @@ import {
   type KnowledgeImportRun,
   type KnowledgeImportTriggerKind,
 } from '../../storage/domains/knowledge';
+import type { IMastraLogger } from '../../logger';
 import type { Knowledge } from '../index';
 import { createStaticKnowledgeImporterOperations } from './static-importer';
 import type { KnowledgeImporterBindingInput, KnowledgeImporterHandle } from './types';
@@ -46,6 +47,7 @@ function delay(ms: number): Promise<void> {
 /** @internal Coordinates durable Knowledge importer runs for one Knowledge instance. */
 export class KnowledgeImporterRunner {
   readonly #knowledge: Knowledge;
+  readonly #getLogger: () => IMastraLogger | undefined;
   readonly #workerId = randomUUID();
   readonly #drains = new Map<string, Promise<void>>();
   readonly #cronJobs: Cron[] = [];
@@ -55,8 +57,9 @@ export class KnowledgeImporterRunner {
   #accepting = true;
   #started = false;
 
-  constructor(knowledge: Knowledge) {
+  constructor(knowledge: Knowledge, getLogger: () => IMastraLogger | undefined = () => undefined) {
     this.#knowledge = knowledge;
+    this.#getLogger = getLogger;
   }
 
   schedule<TPayload>(importer: KnowledgeImporterHandle<TPayload>): void {
@@ -225,6 +228,7 @@ export class KnowledgeImporterRunner {
         binding: run.binding,
         workerId: this.#workerId,
         leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
+        payloadKey: `${PAYLOAD_KEY_PREFIX}${run.id}`,
         status: 'succeeded',
         state: [...pendingState].map(([key, value]) => ({ key, value })),
       });
@@ -237,6 +241,7 @@ export class KnowledgeImporterRunner {
           binding: run.binding,
           workerId: this.#workerId,
           leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
+          payloadKey: `${PAYLOAD_KEY_PREFIX}${run.id}`,
           status: 'failed',
           error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
           state: [],
@@ -270,7 +275,7 @@ export class KnowledgeImporterRunner {
       const runs = await this.#listAll(importer.importerId, undefined, 'running');
       for (const run of runs) {
         const replacementId = randomUUID();
-        await storage.recoverImportRun({
+        const recovered = await storage.recoverImportRun({
           id: run.id,
           replacementId,
           payloadKey: `${PAYLOAD_KEY_PREFIX}${run.id}`,
@@ -278,6 +283,14 @@ export class KnowledgeImporterRunner {
           leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
           staleBefore,
         });
+        if (recovered) {
+          this.#getLogger()?.info('Knowledge importer recovered a stale run; replaying it from its durable payload', {
+            importerId: run.importerId,
+            binding: run.binding,
+            interruptedRunId: run.id,
+            replacementRunId: replacementId,
+          });
+        }
       }
       const queued = await this.#listAll(importer.importerId, undefined, 'queued');
       for (const binding of new Set(queued.map(run => run.binding))) this.#startDrain(importer, binding);
@@ -285,13 +298,64 @@ export class KnowledgeImporterRunner {
   }
 
   async #waitForTerminal(id: string): Promise<KnowledgeImportRun> {
+    let loggedForeignLease = false;
     while (true) {
       if (!this.#accepting) throw new Error('Knowledge importer runner shut down before the run completed');
       const run = await this.#knowledge.getImportRun(id);
       if (!run) throw new Error(`Knowledge import run ${id} disappeared before completion`);
-      if (isTerminal(run)) return run;
+      if (isTerminal(run)) {
+        if (run.status === 'interrupted') {
+          this.#getLogger()?.info('Knowledge import run was interrupted; its replay is queued separately', {
+            importerId: run.importerId,
+            binding: run.binding,
+            runId: run.id,
+          });
+        }
+        return run;
+      }
+      if (!loggedForeignLease && !this.#activeControllers.has(run.id)) {
+        const blocker = (await this.#listAll(run.importerId, run.binding, 'running')).find(
+          candidate => !this.#activeControllers.has(candidate.id),
+        );
+        if (blocker) {
+          loggedForeignLease = true;
+          await this.#logForeignLeaseWait(run, blocker);
+        }
+      }
       await delay(25);
     }
+  }
+
+  async #logForeignLeaseWait(run: KnowledgeImportRun, blocker: KnowledgeImportRun): Promise<void> {
+    const logger = this.#getLogger();
+    if (!logger) return;
+    const lease = await this.#knowledge.getImportState({
+      importerId: run.importerId,
+      binding: run.binding,
+      key: `${LEASE_KEY_PREFIX}${blocker.id}`,
+    });
+    let heartbeatAt: number | undefined;
+    let holder: string | undefined;
+    try {
+      const parsed = lease ? (JSON.parse(lease.value) as { workerId?: string; heartbeatAt?: string }) : undefined;
+      holder = parsed?.workerId;
+      heartbeatAt = parsed?.heartbeatAt ? Date.parse(parsed.heartbeatAt) : undefined;
+    } catch {
+      // Malformed leases are treated as stale by recovery.
+    }
+    const msUntilLeaseExpiry =
+      heartbeatAt === undefined || Number.isNaN(heartbeatAt)
+        ? 0
+        : Math.max(0, heartbeatAt + LEASE_TIMEOUT_MS - Date.now());
+    logger.debug('Waiting on a knowledge import run leased by another worker; recovery replays it once the lease expires', {
+      importerId: run.importerId,
+      binding: run.binding,
+      runId: run.id,
+      leasedRunId: blocker.id,
+      leaseHolder: holder,
+      msUntilLeaseExpiry,
+      recoveryScanIntervalMs: RECOVERY_SCAN_MS,
+    });
   }
 
   async #listAll(importerId: string, binding?: string, status?: KnowledgeImportRun['status']) {
