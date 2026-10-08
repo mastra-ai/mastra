@@ -1243,8 +1243,8 @@ describe('buffer()', () => {
   it('retries a transient database connection timeout while persisting buffered observations', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     const messages = createBulkMessages(5, threadId);
-    const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
-    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+    const updateBufferedObservations = storage.appendBufferedObservations.bind(storage);
+    const updateSpy = vi.spyOn(storage, 'appendBufferedObservations').mockImplementationOnce(async input => {
       await updateBufferedObservations(input);
       throw new Error('Connection terminated due to connection timeout');
     });
@@ -1264,7 +1264,7 @@ describe('buffer()', () => {
     const onIndexObservations = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined);
     const model = createMockObserverModel();
     const observe = vi.spyOn(model, 'doStream');
-    const persist = vi.spyOn(storage, 'updateBufferedObservations');
+    const persist = vi.spyOn(storage, 'appendBufferedObservations');
     const om = new ObservationalMemory({
       storage,
       scope: 'thread',

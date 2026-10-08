@@ -41,6 +41,7 @@ import {
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 import {
+  assertActiveObservationsApplied,
   compareObservationalMemoryHeadOrder,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
@@ -972,8 +973,12 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.observationalMemory.set(key, existing);
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
-    this.assertFence(undefined, 'updateActiveObservations');
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+    this.assertFence(undefined, 'commitActiveObservations');
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -1006,8 +1011,12 @@ export class InMemoryMemory extends MemoryStorage {
     return { applied: true };
   }
 
-  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
-    this.assertFence(undefined, 'updateBufferedObservations');
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
+    this.assertFence(undefined, 'appendBufferedObservations');
     const { id, chunk } = input;
     if (!this.findObservationalMemoryRecordById(id)) {
       throw new Error(`Observational memory record not found: ${id}`);

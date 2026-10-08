@@ -1,4 +1,4 @@
-import type { ObservationalMemoryRecord } from '../../types';
+import type { ObservationalMemoryRecord, UpdateActiveObservationsResult } from '../../types';
 
 /**
  * Shared rules for observational memory lifecycle writes. Every storage adapter applies
@@ -85,6 +85,20 @@ export function planReflectionGenerationText(input: {
       input.tokenCount +
       Math.max(0, (input.storedObservationTokenCount ?? 0) - (input.snapshotObservationTokenCount ?? 0)),
   };
+}
+
+/**
+ * Backs `updateActiveObservations` in adapters that implement `commitActiveObservations`.
+ * Callers of `updateActiveObservations` (which resolves `void`) can't see a commit result, so a
+ * write that was not applied throws instead of resolving as if it had committed.
+ */
+export function assertActiveObservationsApplied(result: UpdateActiveObservationsResult, id: string): void {
+  if (result.applied) return;
+  throw new Error(
+    result.reason === 'retired'
+      ? `Observational memory record ${id} was superseded by a newer generation; observations were not written`
+      : `Observational memory record ${id} changed since the observations were composed; observations were not written`,
+  );
 }
 
 /**

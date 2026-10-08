@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  assertActiveObservationsApplied,
   filterByDateRange,
   MemoryStorage,
   TABLE_MESSAGES,
@@ -1048,8 +1049,13 @@ export class MemoryConvex extends MemoryStorage {
     });
   }
 
-  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult | void> {
-    return this.#db.omUpdateActive<UpdateActiveObservationsResult | undefined>({
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+    // A server deployed before commit results existed returns nothing for a completed write.
+    const result = await this.#db.omUpdateActive<UpdateActiveObservationsResult | undefined>({
       id: input.id,
       observations: input.observations,
       tokenCount: input.tokenCount,
@@ -1060,11 +1066,14 @@ export class MemoryConvex extends MemoryStorage {
         ? { expectedActiveObservations: input.expectedActiveObservations }
         : {}),
     });
+    return result ?? { applied: true };
   }
 
-  async updateBufferedObservations(
-    input: UpdateBufferedObservationsInput,
-  ): Promise<UpdateBufferedObservationsResult | void> {
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     const chunk: SerializedOMChunk = {
       id: `ombuf-${crypto.randomUUID()}`,
       cycleId: input.chunk.cycleId,
@@ -1081,12 +1090,13 @@ export class MemoryConvex extends MemoryStorage {
       extractionFailures: input.chunk.extractionFailures,
     };
 
-    return this.#db.omAppendBufferedChunk<UpdateBufferedObservationsResult | undefined>({
+    const result = await this.#db.omAppendBufferedChunk<UpdateBufferedObservationsResult | undefined>({
       id: input.id,
       chunk,
       lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
       updatedAt: new Date().toISOString(),
     });
+    return result ?? { persisted: true, recordId: input.id };
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {

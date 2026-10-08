@@ -439,15 +439,20 @@ export abstract class ObservationStrategy {
   }): Promise<{ processed: ProcessedObservation; record: ObservationalMemoryRecord } | null> {
     let { processed, composedFrom, target } = opts;
     for (let attempt = 0; attempt <= MAX_HEAD_COMMIT_RETRIES; attempt++) {
-      const result = await this.storage.updateActiveObservations({
+      const input = {
         id: target.id,
         observations: processed.observations,
         tokenCount: processed.observationTokens,
         lastObservedAt: processed.lastObservedAt,
         observedMessageIds: processed.observedMessageIds,
         expectedActiveObservations: composedFrom,
-      });
-      if (!result || result.applied) return { processed, record: target };
+      };
+      // Cores older than commitActiveObservations only offer the void-returning write.
+      const result =
+        typeof this.storage.commitActiveObservations === 'function'
+          ? await this.storage.commitActiveObservations(input)
+          : (await this.storage.updateActiveObservations(input), { applied: true as const });
+      if (result.applied) return { processed, record: target };
 
       omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); recomposing against the head`);
       if (attempt === MAX_HEAD_COMMIT_RETRIES) break;

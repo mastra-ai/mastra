@@ -138,8 +138,8 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
   const seeded = async (prefix: string) => {
     const key = newKey(prefix);
     const record = await a.initializeObservationalMemory(key);
-    await a.updateBufferedObservations({ id: record.id, chunk: chunk('one', 101), lastBufferedAtTime: at(101) });
-    await a.updateBufferedObservations({
+    await a.appendBufferedObservations({ id: record.id, chunk: chunk('one', 101), lastBufferedAtTime: at(101) });
+    await a.appendBufferedObservations({
       id: record.id,
       chunk: chunk('two', 201, '<observation-group id="g-two"> two'),
       lastBufferedAtTime: at(201),
@@ -246,7 +246,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
   it('writes aimed at a fenced record (rollover in flight) land on the successor', async () => {
     const { key, record } = await seeded('fenced-write');
     const newId = await fence(record);
-    expect(await b.updateBufferedObservations({ id: record.id, chunk: chunk('late', 301) })).toEqual({
+    expect(await b.appendBufferedObservations({ id: record.id, chunk: chunk('late', 301) })).toEqual({
       persisted: true,
       recordId: newId,
     });
@@ -298,7 +298,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
     await raw.insertOne(legacyDoc(threadId, `${threadId}-0`, 0, 0));
     const record = (await a.getObservationalMemory(threadId, 'resource'))!;
     expect(record.supersededBy ?? null).toBeNull();
-    expect(await a.updateBufferedObservations({ id: record.id, chunk: chunk('first', 101) })).toEqual({
+    expect(await a.appendBufferedObservations({ id: record.id, chunk: chunk('first', 101) })).toEqual({
       persisted: true,
       recordId: record.id,
     });
@@ -311,7 +311,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
     });
     expect(next.id).toBe(nextId);
     expect(next.bufferedObservationChunks?.map(c => c.cycleId)).toEqual(['first']);
-    expect(await a.updateBufferedObservations({ id: record.id, chunk: chunk('second', 201) })).toEqual({
+    expect(await a.appendBufferedObservations({ id: record.id, chunk: chunk('second', 201) })).toEqual({
       persisted: true,
       recordId: nextId,
     });
@@ -327,7 +327,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
     const doc: Record<string, unknown> = legacyDoc(threadId, `${threadId}-0`, 0, 0);
     if (value !== undefined) doc.bufferedObservationChunks = value;
     await raw.insertOne(doc);
-    expect(await a.updateBufferedObservations({ id: `${threadId}-0`, chunk: chunk('only', 101) })).toEqual({
+    expect(await a.appendBufferedObservations({ id: `${threadId}-0`, chunk: chunk('only', 101) })).toEqual({
       persisted: true,
       recordId: `${threadId}-0`,
     });
@@ -337,7 +337,7 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
   it('stores chunk text starting with $ literally', async () => {
     const record = await a.initializeObservationalMemory(newKey('dollar'));
     const dollar = { ...chunk('dollar', 101, '$activeObservations'), messageIds: ['$lookupKey'] };
-    await a.updateBufferedObservations({ id: record.id, chunk: dollar });
+    await a.appendBufferedObservations({ id: record.id, chunk: dollar });
     const stored = (await raw.findOne({ id: record.id }))!.bufferedObservationChunks[0];
     expect(stored.observations).toBe('$activeObservations');
     expect(stored.messageIds).toEqual(['$lookupKey']);
@@ -348,8 +348,8 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
       const record = await a.initializeObservationalMemory(newKey(`dup-append-${i}`));
       const same = chunk(`same-${i}`, 101);
       const results = await Promise.all([
-        a.updateBufferedObservations({ id: record.id, chunk: same }),
-        b.updateBufferedObservations({ id: record.id, chunk: same }),
+        a.appendBufferedObservations({ id: record.id, chunk: same }),
+        b.appendBufferedObservations({ id: record.id, chunk: same }),
       ]);
       expect(results.filter(r => r?.persisted)).toHaveLength(1);
       expect(cycleIds(await raw.findOne({ id: record.id }))).toEqual([same.cycleId]);
@@ -379,9 +379,9 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
     const record = await a.initializeObservationalMemory(newKey('cursor-past'));
     const c = chunk('covered', 101); // max message time = 100ms
     interceptAppend(() =>
-      b.updateActiveObservations({ id: record.id, observations: '- synced', tokenCount: 1, lastObservedAt: at(100) }),
+      b.commitActiveObservations({ id: record.id, observations: '- synced', tokenCount: 1, lastObservedAt: at(100) }),
     );
-    expect(await a.updateBufferedObservations({ id: record.id, chunk: c })).toEqual({
+    expect(await a.appendBufferedObservations({ id: record.id, chunk: c })).toEqual({
       persisted: false,
       recordId: record.id,
     });
@@ -392,9 +392,9 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
     const record = await a.initializeObservationalMemory(newKey('cursor-before'));
     const c = chunk('partial', 101);
     interceptAppend(() =>
-      b.updateActiveObservations({ id: record.id, observations: '- synced', tokenCount: 1, lastObservedAt: at(99) }),
+      b.commitActiveObservations({ id: record.id, observations: '- synced', tokenCount: 1, lastObservedAt: at(99) }),
     );
-    expect(await a.updateBufferedObservations({ id: record.id, chunk: c })).toEqual({
+    expect(await a.appendBufferedObservations({ id: record.id, chunk: c })).toEqual({
       persisted: true,
       recordId: record.id,
     });
@@ -404,8 +404,8 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
   it('skips the chunk when another store appends the same cycle between the read and the write', async () => {
     const record = await a.initializeObservationalMemory(newKey('cycle-race'));
     const c = chunk('raced', 101);
-    interceptAppend(() => b.updateBufferedObservations({ id: record.id, chunk: c }));
-    expect(await a.updateBufferedObservations({ id: record.id, chunk: c })).toEqual({
+    interceptAppend(() => b.appendBufferedObservations({ id: record.id, chunk: c }));
+    expect(await a.appendBufferedObservations({ id: record.id, chunk: c })).toEqual({
       persisted: false,
       recordId: record.id,
     });
