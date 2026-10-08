@@ -594,7 +594,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   /**
    * One-time fill of the environment columns from the rows that predate them.
    * Idempotent and non-destructive: a project is touched only while its
-   * `sandbox_cpu_count` is null, every other write lands only where the
+   * `environment_backfilled_at` is null, every other write lands only where the
    * stored value is still the column default, and nothing is deleted. Runs
    * on every start; reports what it could not resolve instead of throwing,
    * because a throwing `init()` only leaves the domain not-ready.
