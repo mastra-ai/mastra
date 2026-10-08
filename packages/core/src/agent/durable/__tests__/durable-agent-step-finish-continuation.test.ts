@@ -74,6 +74,7 @@ async function run(
   model: LanguageModelV2,
   options: Record<string, unknown>,
   tools?: Record<string, unknown>,
+  outputProcessors: any[] = [],
 ) {
   const stepFinishes: boolean[] = [];
   const pubsub = new EventEmitterPubSub();
@@ -94,6 +95,7 @@ async function run(
           return part;
         },
       },
+      ...outputProcessors,
     ],
   });
   const wrapped = engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
@@ -121,6 +123,27 @@ describe.each<Engine>(['durable', 'evented'])('%s step-finish continuation state
 
   it('reports false when maxSteps stops a tool-calling iteration', async () => {
     const stepFinishes = await run(engine, toolCallingModel() as LanguageModelV2, { maxSteps: 1 }, { step });
+
+    expect(stepFinishes).toEqual([false]);
+  });
+
+  it('preserves a completed text step continuation value when its output processor aborts the run', async () => {
+    const abortController = new AbortController();
+    const stepFinishes = await run(
+      engine,
+      textModel() as LanguageModelV2,
+      { abortSignal: abortController.signal },
+      undefined,
+      [
+        {
+          id: 'abort-after-output-step',
+          async processOutputStep({ messageList }: any) {
+            abortController.abort();
+            return messageList;
+          },
+        },
+      ],
+    );
 
     expect(stepFinishes).toEqual([false]);
   });

@@ -665,7 +665,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         }
         // The parked step completed before the run-level abort was observed. Emit its own outcome
         // before recording the abort on loop state so consumers keep the completed step boundary.
-        await emitStepFinish(true);
+        await emitStepFinish(state.lastStepResult?.isContinued === true);
         if (state.lastStepResult) {
           state.lastStepResult.reason = isTotalTimeout ? 'error' : 'abort';
         }

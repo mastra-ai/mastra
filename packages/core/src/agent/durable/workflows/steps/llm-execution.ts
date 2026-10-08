@@ -1664,11 +1664,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // fatal error is propagated via emitError (mirrors the regular agent's
                 // deferredErrorChunk pattern).
                 //
-                // Defer 'step-finish': for intermediate steps (hasToolCalls) we save it
-                // on the output so llm-mapping can emit it AFTER tool-result chunks,
-                // matching the regular agent's ordering (tool-result → step-finish).
-                // For final steps (no tool calls) we emit it after the assistant message
-                // is added to messageList.
+                // Defer 'step-finish' until the loop predicate resolves whether the run continues.
+                // Carry it through llm-mapping so tool-result chunks are emitted first, matching the
+                // regular agent's ordering (tool-result → step-finish).
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
