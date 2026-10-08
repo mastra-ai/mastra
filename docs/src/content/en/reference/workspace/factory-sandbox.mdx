@@ -83,13 +83,13 @@ abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record
     name: 'settings',
     type: 'PublicSchema<TSettings>',
     description:
-      'Schema of the settings a user can tune per project: a Zod schema, a JSON Schema or a Standard Schema that can emit JSON Schema. Factory serves the input side as JSON Schema. Author an object of primitive fields; nested objects are not rendered.',
+      'Schema of the settings a user can tune per project: a Zod schema, a JSON Schema or a Standard Schema that can emit JSON Schema. Factory serves the input side as JSON Schema. Author an object of primitive fields; nested objects are not rendered. Defaults to no settings.',
   },
   {
     name: 'templateFields',
     type: 'string[]',
     description:
-      'Settings that change the template identity. Changing one of them makes the next session build a new template.',
+      'Settings that change the template identity. Changing one of them makes the next session build a new template. Defaults to none.',
   },
   {
     name: 'create',

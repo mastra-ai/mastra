@@ -1,10 +1,7 @@
-import type { PublicSchema } from '@mastra/core/schema';
 import { FactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext, MastraSandbox } from '@mastra/core/workspace';
 
 import type { MastraFactorySandboxConfig } from './session-sandbox.js';
-
-const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: false } as const satisfies PublicSchema;
 
 /**
  * Wraps the deprecated `sandbox: ctx => new SomeSandbox(...)` host callback
@@ -13,8 +10,6 @@ const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: fals
  */
 export class CallbackFactorySandbox extends FactorySandbox<Record<string, never>> {
   readonly provider = 'custom';
-  readonly settings: PublicSchema<Record<string, never>> = NO_SETTINGS;
-  readonly templateFields = [] as const;
 
   readonly #callback: MastraFactorySandboxConfig;
 

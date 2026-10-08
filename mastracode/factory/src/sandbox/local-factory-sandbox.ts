@@ -1,9 +1,6 @@
 import { join } from 'node:path';
-import type { PublicSchema } from '@mastra/core/schema';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
-
-const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: false } as const satisfies PublicSchema;
 
 export interface LocalFactorySandboxOptions {
   /** Directory under which every session gets its own working directory. */
@@ -19,8 +16,6 @@ export interface LocalFactorySandboxOptions {
  */
 export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
   readonly provider = 'local';
-  readonly settings: PublicSchema<Record<string, never>> = NO_SETTINGS;
-  readonly templateFields = [] as const;
 
   readonly #options: LocalFactorySandboxOptions;
 

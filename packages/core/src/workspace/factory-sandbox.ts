@@ -132,13 +132,18 @@ export interface FactorySandboxBuilds<TSettings> {
  * ignore `ctx.resolveHead` and resolve heads themselves. `templateFields` names the settings whose change
  * produces a different template.
  */
+/** The settings schema of a provider with nothing to tune. */
+const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: false } as const satisfies PublicSchema;
+
 export abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
   /** Brand factory detects the class by; never test by shape. */
   readonly [FACTORY_SANDBOX_BRAND] = true as const;
   /** Provider id, e.g. `platform`, `e2b`, `docker`, `local`, `custom`. */
   abstract readonly provider: string;
-  abstract readonly settings: PublicSchema<TSettings>;
-  abstract readonly templateFields: ReadonlyArray<keyof TSettings & string>;
+  /** Defaults to no settings; override with the provider's schema. */
+  readonly settings: PublicSchema<TSettings> = NO_SETTINGS as PublicSchema<TSettings>;
+  /** Defaults to none; override with the settings that change the template identity. */
+  readonly templateFields: ReadonlyArray<keyof TSettings & string> = [];
   abstract create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox;
   /**
    * The environment's repo template for the given context and settings, in
