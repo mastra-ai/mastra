@@ -99,12 +99,14 @@ async function run(
   const wrapped = engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
   new Mastra({ agents: { [id]: wrapped }, storage: new InMemoryStore(), logger: false });
 
+  let cleanup: (() => void) | undefined;
   try {
-    const { output, cleanup } = await wrapped.stream('Run it.', options as any);
-    await output.consumeStream();
-    cleanup();
+    const result = await wrapped.stream('Run it.', options as any);
+    cleanup = result.cleanup;
+    await result.output.consumeStream();
     return stepFinishes;
   } finally {
+    cleanup?.();
     await pubsub.close();
   }
 }
