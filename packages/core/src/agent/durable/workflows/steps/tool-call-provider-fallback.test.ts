@@ -95,7 +95,7 @@ describe('durable tool-call provider-tool fallback', () => {
     expect(result.result).toEqual({ snippet: 'result' });
   });
 
-  it('falls back to resolveTool() against the Mastra-wide registry when not in run registry', async () => {
+  it('falls back to resolveTool() when a recovered registry entry has no per-step snapshot', async () => {
     const executeMock = vi.fn().mockResolvedValue({ ok: true });
     const mastraTool = {
       id: 'mastraTool',
@@ -104,11 +104,9 @@ describe('durable tool-call provider-tool fallback', () => {
     };
     vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(mastraTool as any);
 
-    // A cold worker has only a placeholder entry, so the Mastra-wide fallback remains available.
+    // Recovery can hydrate the model before an LLM step writes the current tool snapshot.
     globalRunRegistry.set(RUN_ID, {
-      isPlaceholder: true,
-      tools: {},
-      model: undefined as any,
+      model: {} as any,
     } as any);
 
     const step = createDurableToolCallStep();

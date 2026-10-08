@@ -450,7 +450,8 @@ export function createDurableToolCallStep() {
         !!registryEntry &&
         registryEntry.isPlaceholder !== true &&
         !!registryModel &&
-        registryModel.__metadataOnly !== true;
+        registryModel.__metadataOnly !== true &&
+        (registryEntry.baseTools !== undefined || registryEntry.tools !== undefined);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
