@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import * as storage from '../../..';
 import {
   assertKnowledgeScopeWithinCeiling,
   canonicalizeKnowledgeScope,
@@ -7,7 +8,6 @@ import {
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
 } from '../base';
-import * as storage from '../../..';
 
 const context = ['thread:t1', 'org:o1', 'resource:r1'];
 
