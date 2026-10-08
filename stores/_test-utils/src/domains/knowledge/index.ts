@@ -453,6 +453,22 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       }
     });
 
+    it('serializes semantic work for successive versions of the same document', async () => {
+      const node = await store.createNode({ name: 'Atlas', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.updateNode({ id: node.id, version: node.version, kind: 'project' });
+      const documentId = knowledgeSemanticDocumentId('node', node.id);
+      const forNode = (entries: { documentId: string }[]) => entries.filter(entry => entry.documentId === documentId);
+
+      const first = forNode(await store.claimSemanticOutbox({ workerId: 'first', limit: 100 }));
+      expect(first).toHaveLength(1);
+      expect(forNode(await store.claimSemanticOutbox({ workerId: 'second', limit: 100 }))).toEqual([]);
+
+      await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+      const second = forNode(await store.claimSemanticOutbox({ workerId: 'second', limit: 100 }));
+      expect(second).toHaveLength(1);
+      expect(second[0]!.id).not.toBe(first[0]!.id);
+    });
+
     it('updates node memberships with optimistic concurrency and refreshes record semantics', async () => {
       const node = await store.createNode({ name: 'Movable', scopeIds: [PROJECT_SCOPE_ID] });
       const record = await store.createRecord({ node, text: 'Attached record', scopeIds: [PROJECT_SCOPE_ID] });
