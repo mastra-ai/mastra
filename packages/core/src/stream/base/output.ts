@@ -393,6 +393,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options,
     messageId,
     initialState,
+    initialToolCalls,
     finishUsageIsTotal,
   }: {
     model: {
@@ -405,6 +406,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
     initialState?: any;
+    initialToolCalls?: ToolCallChunk[];
     finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
@@ -976,6 +978,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 processorId: chunk.payload?.processorId,
               };
               self.#finishReason = 'other';
+              // The tripwire terminates the stream without a `finish` chunk, so settle the
+              // status here; otherwise the run stays 'running' forever.
+              if (self.#status !== 'failed' && self.#status !== 'canceled') {
+                self.#status = 'tripwire';
+              }
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 
@@ -1477,6 +1484,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     if (initialState) {
       this.deserializeState(initialState);
+    } else if (initialToolCalls) {
+      this.#toolCalls = initialToolCalls;
     }
   }
 

@@ -14,6 +14,7 @@ import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
+import { askUserAnswerHoldsPromptScenario } from './ask-user-answer-holds-prompt.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -217,6 +218,7 @@ import { taskPatchToolsScenario } from './task-patch-tools.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
 import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-turn.js';
 import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
+import { thinkPickerPerModelScenario } from './think-picker-per-model.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
@@ -257,6 +259,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-prompt': apiKeyPromptScenario,
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
+  'ask-user-answer-holds-prompt': askUserAnswerHoldsPromptScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'background-adoption-deferred': backgroundAdoptionDeferredScenario,
@@ -451,6 +454,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-progress-events': taskProgressEventsScenario,
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
   'terminal-resize-reflow': terminalResizeReflowScenario,
+  'think-picker-per-model': thinkPickerPerModelScenario,
   'thread-history': threadHistoryScenario,
   'resume-locked-thread': resumeLockedThreadScenario,
   'resume-missing-thread': resumeMissingThreadScenario,
