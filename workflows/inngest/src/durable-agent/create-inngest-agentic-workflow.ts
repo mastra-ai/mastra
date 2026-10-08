@@ -15,6 +15,7 @@ import {
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   globalRunRegistry,
+  pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -23,6 +24,7 @@ import type {
   DurableToolCallOutput,
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
@@ -55,6 +57,7 @@ const durableAgenticInputSchema = z.object({
   agentId: z.string(),
   agentName: z.string().optional(),
   messageListState: z.any(),
+  initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
   options: z.any(),
@@ -156,6 +159,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+      pruneSnapshot: pruneAgentLoopSnapshot,
       evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
       emitStepEvents: false,
@@ -171,6 +175,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           agentId: state.agentId,
           agentName: state.agentName,
           messageListState: state.messageListState,
+          initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
           toolsMetadata: state.toolsMetadata,
           modelConfig: state.modelConfig,
           options: state.options,
@@ -289,6 +294,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+        pruneSnapshot: pruneAgentLoopSnapshot,
         evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
         emitStepEvents: false,
@@ -301,6 +307,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .map(
         async ({ inputData }) => {
           const input = inputData as DurableAgenticWorkflowInput;
+          const initialMessageList = new MessageList().deserialize(input.messageListState);
 
           // Use the agent span data passed from InngestAgent.stream()
           // This span was created before the workflow started, making it the trace root
@@ -311,6 +318,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           const iterationState: IterationState = {
             ...input,
+            initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
             iterationCount: 0,
             accumulatedSteps: [],
             accumulatedUsage: {

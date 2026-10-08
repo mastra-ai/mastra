@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
@@ -46,6 +47,7 @@ import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableToolCallOutput,
+  DurableLLMStepOutput,
   SerializableDurableOptions,
   AgentSuspendedEventData,
   RunRegistryEntry,
@@ -56,7 +58,9 @@ import {
   restoreRequestContext,
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { readMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable tool call step.
@@ -329,6 +333,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
+        getStepResult,
       } = params;
 
       // Access pubsub via symbol
@@ -445,6 +450,13 @@ export function createDurableToolCallStep() {
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
       const registryEntry = globalRunRegistry.get(runId);
+      const registryModel = registryEntry?.model as { __metadataOnly?: boolean } | undefined;
+      const hasAuthoritativeToolSnapshot =
+        !!registryEntry &&
+        registryEntry.isPlaceholder !== true &&
+        !!registryModel &&
+        registryModel.__metadataOnly !== true &&
+        (registryEntry.baseTools !== undefined || registryEntry.tools !== undefined);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
@@ -505,7 +517,7 @@ export function createDurableToolCallStep() {
       // threadId regardless. Without this guard every tool call on a memoryless durable run would
       // pay for a full rebuild to obtain something that can neither exist nor be used.
       const needsSaveQueueForFlush = !registryEntry?.saveQueueManager && !!state?.threadId;
-      if ((!tool || needsSaveQueueForFlush) && mastra) {
+      if (((!tool && !hasAuthoritativeToolSnapshot) || needsSaveQueueForFlush) && mastra) {
         const rebuilt = await rebuildRunToolsFromMastra({
           mastra: mastra as Mastra,
           runId,
@@ -524,13 +536,15 @@ export function createDurableToolCallStep() {
           rebuiltRequestContext = rebuilt.requestContext;
           // Keep an already-resolved tool: we may have rebuilt purely to obtain the
           // SaveQueueManager, and the registry's instance is the live per-request closure.
-          if (!tool) {
+          // A hydrated registry's per-step snapshot is authoritative, so a tool omitted
+          // from it must not be restored from the agent's full toolset.
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = rebuiltTools[toolName] as typeof tool;
           }
-          if (!tool) {
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = findProviderToolByName(rebuiltTools as any, toolName) as typeof tool;
           }
-          if (!tool) {
+          if (!tool && !hasAuthoritativeToolSnapshot) {
             tool = Object.values(rebuiltTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
@@ -538,14 +552,16 @@ export function createDurableToolCallStep() {
         }
       }
 
-      // Mastra-wide lookup runs only after the owning agent's tools (registry or
-      // rebuild) miss: tool ids are not unique across agents, so a global lookup
-      // first could execute another agent's same-id tool on a cold worker.
-      if (!tool) {
+      // Mastra-wide lookup runs only after a cold worker's rebuilt agent tools
+      // miss: tool ids are not unique across agents, so a global lookup first
+      // could execute another agent's same-id tool. A hydrated registry's
+      // per-step snapshot is authoritative and must not fall back to this full
+      // catalog when prepareStep or an input processor omitted a tool.
+      if (!tool && !hasAuthoritativeToolSnapshot) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && mastra) {
+      if (!tool && !hasAuthoritativeToolSnapshot && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
@@ -575,7 +591,11 @@ export function createDurableToolCallStep() {
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
 
       if (!tool || isHiddenByActiveTools) {
-        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
+        const availableToolNames =
+          effectiveActiveTools ??
+          Object.keys(
+            hasAuthoritativeToolSnapshot ? (registryEntry?.tools ?? {}) : (rebuiltTools ?? registryEntry?.tools ?? {}),
+          );
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
@@ -604,15 +624,19 @@ export function createDurableToolCallStep() {
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       let threadExists = state?.threadExists ?? false;
 
-      // Reconstruct MessageList from workflow state if available
-      // Note: In foreach mode, the message list from the registry may be available
-      // but for durability, we access what's available through the registry
-      let messageList: MessageList | undefined;
-      // For local execution, the globalRunRegistry might have an ExtendedRunRegistry entry
-      // that stores the messageList. We cast and check safely.
-      const extendedEntry = globalRunRegistry.get(runId) as any;
-      if (extendedEntry?.messageList) {
-        messageList = extendedEntry.messageList;
+      const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      // Recovered transcripts supply context only; persistence belongs to the live registry list.
+      let contextMessageList = messageList;
+      if (!contextMessageList) {
+        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const messageListState = readMessageListState(params.state, llmOutput ?? {});
+        if (messageListState) {
+          contextMessageList = createRunMessageList({
+            mastra,
+            threadId: state?.threadId,
+            resourceId: state?.resourceId,
+          }).deserialize(messageListState);
+        }
       }
 
       const doFlush = async () => {
@@ -1087,9 +1111,20 @@ export function createDurableToolCallStep() {
           }
         : undefined;
 
+      let delegationMessages = registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY);
+      if (isAgentTool && !delegationMessages && contextMessageList) {
+        // Cold workers must exclude synthetic context by ID before model conversion drops IDs.
+        const delegationList = createRunMessageList({ mastra });
+        delegationList.add(
+          contextMessageList.get.all.db().filter(message => message.id !== 'om-continuation'),
+          'input',
+        );
+        delegationMessages = delegationList.get.all.aiV5.prompt();
+      }
+
       const toolOptions = {
         toolCallId,
-        messages: [],
+        messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,

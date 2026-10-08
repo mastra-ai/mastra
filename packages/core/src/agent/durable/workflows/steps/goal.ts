@@ -8,6 +8,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { createRunMessageList } from '../../utils/run-message-list';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Create the durable goal step.
@@ -32,7 +33,8 @@ export function createDurableGoalStep() {
       const state = inputData as {
         runId: string;
         iterationCount: number;
-        messageListState: any;
+        /** Present only on runs that thread the transcript through step payloads. */
+        messageListState?: any;
         messageId: string;
         accumulatedSteps: Array<{
           text?: string;
@@ -74,7 +76,7 @@ export function createDurableGoalStep() {
       let messageList: ReturnType<ReturnType<typeof createRunMessageList>['deserialize']> | undefined;
       const list = () => {
         if (!messageList) {
-          messageList = createRunMessageList({ mastra }).deserialize(state.messageListState);
+          messageList = createRunMessageList({ mastra }).deserialize(readMessageListState(params.state, state));
         }
         return messageList;
       };
@@ -125,7 +127,7 @@ export function createDurableGoalStep() {
         // The transcript gained the feedback signal (and the response message
         // id may have rotated) — persist both back into serialized state.
         nextState.messageId = outcome.messageId;
-        nextState.messageListState = list().serialize();
+        Object.assign(nextState, await storeMessageListState(params, list().serialize()));
       }
       return nextState;
     },

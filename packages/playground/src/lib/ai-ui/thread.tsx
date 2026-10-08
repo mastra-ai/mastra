@@ -41,6 +41,7 @@ import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { AgentChannelsCard } from '@/domains/agents/components/agent-channels/agent-channels-card';
 import { ChatMessagesLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
@@ -287,7 +288,10 @@ export const Thread = ({
               {landingShown ? null : <ChatShell.ScrollButton />}
               <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
                 {landingShown ? (
-                  <ThreadWelcome agentName={agentName} />
+                  <>
+                    <ThreadWelcome agentName={agentName} />
+                    {agentId ? <AgentChannelsCard agentId={agentId} /> : null}
+                  </>
                 ) : (
                   <>
                     {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}

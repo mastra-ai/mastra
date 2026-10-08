@@ -156,7 +156,11 @@ export const baseIterationStateSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
+  // Immutable untagged system-message baseline captured before the first
+  // iteration. Each model attempt restores it before input-step processors run.
+  initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: z.any(),
   options: durableOptionsSchema,

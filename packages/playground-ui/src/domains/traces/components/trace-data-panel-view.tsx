@@ -418,7 +418,6 @@ export function TraceDataPanelView({
               </>
             ) : (
               <>
-                <DataPanel.CloseButton onClick={onClose} />
                 <DataPanel.HeaderContent>
                   <DataPanel.Heading>
                     Trace
@@ -443,6 +442,7 @@ export function TraceDataPanelView({
                       nextLabel="Go to next trace"
                     />
                   )}
+                  <DataPanel.CloseButton icon="x" onClick={onClose} label="Close trace" tooltip="Close trace" />
                 </DataPanel.HeaderActions>
               </>
             )}
@@ -476,6 +476,7 @@ export function TraceDataPanelView({
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
+                        tooltipPosition="bottom"
                         onClick={() => setSpanView('tree')}
                       >
                         <ListTreeIcon />
@@ -484,6 +485,7 @@ export function TraceDataPanelView({
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"
+                        tooltipPosition="bottom"
                         onClick={() => setSpanView('timeline')}
                       >
                         <ChartGanttIcon />
