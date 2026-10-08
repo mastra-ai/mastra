@@ -38,6 +38,7 @@ import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,
   TRACE_QUERY_NUMERIC_FIELD_IDS,
+  TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from './trace-query-filters';
 import type {
@@ -427,10 +428,7 @@ const TRACE_FILTER_BAR_RELATED_FIELD_IDS = [
 ] as const;
 type TraceFilterRelatedFieldId = (typeof TRACE_FILTER_BAR_RELATED_FIELD_IDS)[number];
 
-const TRACE_FILTER_BAR_PRESENCE_FIELD_IDS = new Set<string>(['spans.error']);
-const TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS = new Set<string>(['spans.name', 'feedback.comment']);
-/** Free text with no value discovery: the values endpoint rejects these paths. */
-const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.comment']);
+const TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS = new Set<string>(['spans.name']);
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
 
@@ -499,7 +497,7 @@ export function createTraceFilterBarFields({
   });
   const relatedPick = (id: TraceFilterRelatedFieldId): FilterBarField => {
     const [scope, path] = id.split('.') as [TraceQueryRelatedScope, string];
-    const resolver = TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS.has(id) ? undefined : valueSuggestions?.(scope, path);
+    const resolver = valueSuggestions?.(scope, path);
     return {
       ...traceFieldBase(id),
       operators: TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS.has(id) ? TRACE_TEXT_OPERATORS : TRACE_STRING_OPERATORS,
@@ -539,7 +537,7 @@ export function createTraceFilterBarFields({
     TRACE_FILTER_BAR_RELATED_FIELD_IDS.filter(id => id.startsWith(`${scope}.`))
       .map(id => {
         if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(id)) return number(id);
-        if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(id)) return presence(id);
+        if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(id)) return presence(id);
         return relatedPick(id);
       })
       .sort(byLabel),
@@ -683,7 +681,7 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
     // Presence-only fields can't match a value; a hand-edited URL that gives
     // them one would show a chip for a filter that is never applied. A pending
     // chip (empty value, no operator yet) must still survive the round-trip.
-    if (TRACE_FILTER_BAR_PRESENCE_FIELD_IDS.has(fieldId)) {
+    if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(fieldId)) {
       if (operatorId ? !isPresenceOperator(operatorId) : Boolean(raw[0])) continue;
     }
 

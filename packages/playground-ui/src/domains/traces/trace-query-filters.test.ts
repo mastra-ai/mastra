@@ -106,63 +106,22 @@ describe('buildTraceQueryRequest', () => {
   });
 
   describe('when a presence-only field carries a value operator (hand-edited URL)', () => {
-    it.each(['is', 'in', 'matches'] as const)(
-      'drops the span error token with operator %s instead of sending it',
-      operatorId => {
-        expect(
-          buildTraceQueryRequest({
-            tokens: [{ fieldId: 'spans.error', value: 'wrong answer', operatorId }],
-            now,
-          }).where,
-        ).toBeUndefined();
-      },
-    );
-  });
-
-  describe('when a feedback comment carries an equality operator', () => {
     it.each([
-      [undefined, 'some'],
-      ['is', 'some'],
-      ['isNot', 'none'],
-    ] as const)('applies %s with feedback.%s', (operatorId, quantifier) => {
+      ['feedback.comment', 'is'],
+      ['feedback.comment', undefined],
+      ['feedback.comment', 'notIn'],
+      ['spans.error', 'is'],
+    ] as const)('drops the %s token with operator %s instead of sending it', (fieldId, operatorId) => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'wrong answer', operatorId }],
+          tokens: [{ fieldId, value: 'wrong answer', ...(operatorId ? { operatorId } : {}) }],
           now,
         }).where,
-      ).toEqual({
-        op: 'and',
-        args: [
-          { feedback: { [quantifier]: { op: 'eq', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } },
-        ],
-      });
+      ).toBeUndefined();
     });
   });
 
-  describe('when a feedback comment carries a set operator', () => {
-    it.each([
-      ['in', 'some'],
-      ['notIn', 'none'],
-    ] as const)('applies %s with feedback.%s', (operatorId, quantifier) => {
-      expect(
-        buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: ['wrong answer', 'incorrect dosage'], operatorId }],
-          now,
-        }).where,
-      ).toEqual({
-        op: 'and',
-        args: [
-          {
-            feedback: {
-              [quantifier]: { op: 'in', value: { path: 'comment' }, set: ['wrong answer', 'incorrect dosage'] },
-            },
-          },
-        ],
-      });
-    });
-  });
-
-  describe('when a feedback comment carries a presence operator', () => {
+  describe('when a presence-only field carries a presence operator', () => {
     it('keeps the predicate', () => {
       expect(
         buildTraceQueryRequest({
@@ -402,7 +361,6 @@ describe('buildTraceQueryRequest', () => {
     ['spans', 'spans.name'],
     ['scores', 'scores.scorerId'],
     ['feedback', 'feedback.feedbackType'],
-    ['feedback', 'feedback.comment'],
   ] as const)('when a %s token carries a negative operator', (scope, fieldId) => {
     it.each(['isNot', 'notIn', 'notExists', 'notMatches'] as const)(
       '%s never emits a negative op inside some',
@@ -419,7 +377,7 @@ describe('buildTraceQueryRequest', () => {
     it('drops a literal with no letters or digits instead of sending a query the server rejects', () => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: '!!! ---', operatorId: 'matches' }],
+          tokens: [{ fieldId: 'spans.name', value: '!!! ---', operatorId: 'matches' }],
           now,
         }).where,
       ).toBeUndefined();
@@ -428,30 +386,24 @@ describe('buildTraceQueryRequest', () => {
     it('keeps the word Any, which is only a neutral sentinel for pick lists', () => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' }],
+          tokens: [{ fieldId: 'spans.name', value: 'Any', operatorId: 'matches' }],
           now,
         }).where,
       ).toEqual({
         op: 'and',
-        args: [{ feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'Any' } } } }],
+        args: [{ spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'Any' } } } }],
       });
     });
 
     it('emits matches with the field on the left and the words on the right', () => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId: 'feedback.comment', value: 'incorrect dosage', operatorId: 'matches' }],
+          tokens: [{ fieldId: 'spans.name', value: 'agent run', operatorId: 'matches' }],
           now,
         }).where,
       ).toEqual({
         op: 'and',
-        args: [
-          {
-            feedback: {
-              some: { op: 'matches', left: { path: 'comment' }, right: { literal: 'incorrect dosage' } },
-            },
-          },
-        ],
+        args: [{ spans: { some: { op: 'matches', left: { path: 'name' }, right: { literal: 'agent run' } } } }],
       });
     });
   });

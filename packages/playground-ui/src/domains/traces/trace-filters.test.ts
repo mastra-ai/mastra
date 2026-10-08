@@ -281,12 +281,20 @@ describe('createTraceFilterBarFields', () => {
 
   it('offers only presence operators on presence fields', () => {
     expect(byId('spans.error')?.operators).toEqual(['exists', 'notExists']);
+    expect(byId('feedback.comment')?.operators).toEqual(['exists', 'notExists']);
   });
 
   it('offers word matching on human-text fields', () => {
-    const text = ['is', 'isNot', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'];
-    expect(byId('feedback.comment')?.operators).toEqual(text);
-    expect(byId('spans.name')?.operators).toEqual(text);
+    expect(byId('spans.name')?.operators).toEqual([
+      'is',
+      'isNot',
+      'in',
+      'notIn',
+      'exists',
+      'notExists',
+      'matches',
+      'notMatches',
+    ]);
     expect(byId('spans.model')?.operators).toEqual(['is', 'isNot', 'in', 'notIn', 'exists', 'notExists']);
   });
 
@@ -295,20 +303,6 @@ describe('createTraceFilterBarFields', () => {
     expect(byOperatorId.matches?.freeText).toBe(true);
     expect(byOperatorId.notMatches?.freeText).toBe(true);
     expect(byOperatorId.is?.freeText).toBeUndefined();
-  });
-
-  it('keeps feedback comment free text because the values endpoint rejects it', () => {
-    const fields = createTraceFilterBarFields({
-      availableRootEntityNames: [],
-      availableEnvironments: [],
-      metadataFields: [],
-      valueSuggestions: () => async () => [],
-      withQueryTrace: true,
-    });
-    const find = (id: string) => fields.find(field => field.id === id);
-    expect(find('feedback.comment')?.strict).toBeUndefined();
-    expect(find('feedback.comment')?.suggestions).toBeUndefined();
-    expect(find('spans.name')?.strict).toBe(true);
   });
 
   it('lists picker fields, then free-text, then span, score and feedback fields, alphabetically', () => {
@@ -527,32 +521,24 @@ describe('filter group URL params', () => {
 });
 
 describe('presence-only filter URL params', () => {
-  describe('when a hand-edited URL gives a span error a many-value operator', () => {
-    it('drops the token', () => {
-      expect(
-        getTracePropertyFilterTokens(
-          new URLSearchParams('filterSpanError=boom&filterSpanError.op=in&filterTraceId=abc'),
-        ),
-      ).toEqual([{ fieldId: 'traceId', value: 'abc' }]);
-    });
+  describe('when a hand-edited URL gives the feedback comment a text value', () => {
+    it.each(['filterFeedbackComment=wrong%20answer', 'filterFeedbackComment=wrong&filterFeedbackComment.op=is'])(
+      'drops the token for %s',
+      query => {
+        expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
+          { fieldId: 'traceId', value: 'abc' },
+        ]);
+      },
+    );
   });
-});
 
-describe('feedback comment filter URL params', () => {
-  describe('when the URL gives a feedback comment a value operator', () => {
+  describe('when a hand-edited URL gives a presence-only field a many-value operator', () => {
     it.each([
-      ['filterFeedbackComment=wrong%20answer', { value: 'wrong answer' }],
-      ['filterFeedbackComment=wrong&filterFeedbackComment.op=is', { value: 'wrong', operatorId: 'is' }],
-      [
-        'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
-        { value: ['a', 'b'], operatorId: 'in' },
-      ],
-      ['filterFeedbackComment=a&filterFeedbackComment.op=notIn', { value: ['a'], operatorId: 'notIn' }],
-      ['filterFeedbackComment=wrong&filterFeedbackComment.op=matches', { value: 'wrong', operatorId: 'matches' }],
-      ['filterFeedbackComment=wrong&filterFeedbackComment.op=notMatches', { value: 'wrong', operatorId: 'notMatches' }],
-    ] as const)('keeps the token for %s', (query, token) => {
+      'filterFeedbackComment=a&filterFeedbackComment=b&filterFeedbackComment.op=in',
+      'filterFeedbackComment=a&filterFeedbackComment.op=notIn',
+      'filterSpanError=boom&filterSpanError.op=in',
+    ])('drops the token for %s', query => {
       expect(getTracePropertyFilterTokens(new URLSearchParams(`${query}&filterTraceId=abc`))).toEqual([
-        { fieldId: 'feedback.comment', ...token },
         { fieldId: 'traceId', value: 'abc' },
       ]);
     });
@@ -721,13 +707,13 @@ describe('traceTokensToFilterBarItems', () => {
         { fieldId: 'traceId', value: '' },
         { fieldId: 'status', value: 'Any' },
         { fieldId: 'tags', value: [] },
-        { fieldId: 'feedback.comment', value: 'Any', operatorId: 'matches' },
+        { fieldId: 'spans.name', value: 'Any', operatorId: 'matches' },
       ]),
     ).toEqual([
       { id: 'traceId', fieldId: 'traceId', operatorId: 'is', value: '' },
       { id: 'status', fieldId: 'status', operatorId: 'is', value: '' },
       { id: 'tags', fieldId: 'tags', operatorId: 'in', value: [] },
-      { id: 'feedback.comment', fieldId: 'feedback.comment', operatorId: 'matches', value: 'Any' },
+      { id: 'spans.name', fieldId: 'spans.name', operatorId: 'matches', value: 'Any' },
     ]);
   });
 });
