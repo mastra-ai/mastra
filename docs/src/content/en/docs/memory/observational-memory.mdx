@@ -923,7 +923,7 @@ Resource scope (deprecated) automatically disables async buffering.
 
 ## Observer Context Optimization
 
-By default, the Observer receives the full observation history as context when processing new messages. The Observer also receives prior `current-task` and `suggested-response` metadata (when available), so it can stay oriented even when observation context is truncated. For long-running conversations where observations grow large, you can opt into context optimization to reduce Observer input costs.
+By default, the Observer receives up to \~40k tokens of the most recent observations as context when processing new messages. The Observer also receives prior `current-task` and `suggested-response` metadata (when available), so it can stay oriented even when observation context is truncated. For long-running conversations where observations grow large, you can lower this budget to reduce Observer input costs.
 
 Set `observation.previousObserverTokens` to limit how many tokens of previous observations are sent to the Observer. Observations are tail-truncated, keeping the most recent entries. When a buffered reflection is pending, the already-reflected lines are automatically replaced with the reflection summary before truncation is applied.
 
@@ -940,7 +940,7 @@ const memory = new Memory({
 })
 ```
 
-- `previousObserverTokens: 2000` → default. Keeps \~2k tokens of recent observations.
+- `previousObserverTokens: 40_000` → default. Keeps \~40k tokens of recent observations.
 - `previousObserverTokens: 0` → omit previous observations completely.
 - `previousObserverTokens: false` → disable truncation and keep full previous observations.
 

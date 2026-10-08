@@ -96,16 +96,19 @@ describe('observation.previousObserverTokens reaches the Observer', () => {
     expect(result.record.activeObservations).toContain('New observation from this cycle');
   });
 
-  it('applies the 2,000-token default when the option is not set', async () => {
+  it('applies the 40,000-token default when the option is not set', async () => {
     const { om, messages } = await setup('thread');
-    expect(tokenCounter.countObservations(previousObservations)).toBeGreaterThan(2000);
+    expect(om.config.observation.previousObserverTokens).toBe(40_000);
+    expect(tokenCounter.countObservations(previousObservations)).toBeLessThan(40_000);
     const call = stubObserverCall(om);
 
     await om.observe({ threadId, resourceId, messages });
 
+    // History under the default budget reaches the Observer untruncated.
     const [context, , , options] = call.mock.calls[0]!;
-    expect(tokenCounter.countObservations(context!)).toBeLessThanOrEqual(2000);
-    expect(options?.wasTruncated).toBe(true);
+    expect(context).toContain(OLDEST);
+    expect(context).toContain(NEWEST);
+    expect(options?.wasTruncated).toBeFalsy();
   });
 
   it('sends the full previous observations when the budget is disabled', async () => {
