@@ -659,7 +659,7 @@ in name, and existence needs no dedupe. Equivalence 16 / 16 (T7, T10; small to h
 | T7 heavy p99   | 37 → 26                          | 131 → 26 |
 | T7 largest 7d  | 99 → 65                          | 212 → 44 |
 | T10 p99        | 46 → 36                          | 64 → 22  |
-| T10 largest 7d | 165 → 145                        | 212 → 44 |
+| T10 largest 7d | 165 → 130                        | 212 → 44 |
 
 Bytes read drop 3–6×. T7's cold timeouts on prod come from reading spans; this is the change most likely to fix them,
 but cold can only be confirmed on prod once the table exists there. `spans.none(status eq error)` (T9) doesn't use
