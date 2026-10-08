@@ -326,8 +326,9 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
     }
 
     // How often the predicate is consulted differs across engines: plain and durable ask once,
-    // evented asks more because its worker re-runs the step and re-reads the decision. That is the
-    // divergence COR-1412 already records for this harness case, so only the vacuity floor is pinned.
+    // evented asks more because its worker re-runs the step and re-reads the decision. COR-1430
+    // records that count alongside the settle-path difference this leg declares — COR-1412 covers
+    // only the `isContinued` flag — so plain and durable are pinned and evented keeps the floor.
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
     expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
     expect(calls.get('evented')!.length, 'evented: the predicate was consulted').toBeGreaterThanOrEqual(1);
