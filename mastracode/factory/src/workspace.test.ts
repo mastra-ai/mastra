@@ -3126,14 +3126,12 @@ describe('factory environment sandbox context', () => {
       id: 'factory-1',
       orgId: 'org-1',
       sandboxWorkdir: '/workspace',
-      sandboxCpuCount: 8,
-      sandboxMemoryMb: 16384,
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
     };
     const projects = { get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)) };
     const resolver = createWorkspaceFactory({
-      sandbox: mocks.createSandbox as any,
+      sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
       github: github as any,
       projects: projects as any,
     });
@@ -3153,7 +3151,7 @@ describe('factory environment sandbox context', () => {
     { id: 'link-3', repositoryId: 'repository-3', slug: 'octocat/legacy', position: 3, inEnvironment: false },
   ];
 
-  it('builds the list-form context from every inEnvironment link in position order with the project resources', async () => {
+  it('builds the list-form context from every inEnvironment link in position order', async () => {
     const { resolver } = environmentFixture({ links: [...twoLinks].reverse() });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
@@ -3168,9 +3166,10 @@ describe('factory environment sandbox context', () => {
       workspaceSetupCommand: 'touch .workspace-ready',
       continueOnSetupFailure: true,
       workingDirectory: '/workspace',
-      cpuCount: 8,
-      memoryMB: 16384,
     });
+    // Resources are environment settings the provider reads through create(ctx, settings), never context keys.
+    expect('cpuCount' in ctx).toBe(false);
+    expect('memoryMB' in ctx).toBe(false);
     // Mutually exclusive for the template: the key is present and undefined.
     expect('getRepositoryAccess' in ctx).toBe(true);
     expect(ctx.getRepositoryAccess).toBeUndefined();
@@ -3188,13 +3187,11 @@ describe('factory environment sandbox context', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
   });
 
-  it('applies the default resources and no working directory when the project leaves them unset', async () => {
+  it('passes no working directory or workspace setup when the project leaves them unset', async () => {
     const { resolver } = environmentFixture({
       links: twoLinks,
       project: {
         sandboxWorkdir: '~/relative',
-        sandboxCpuCount: null,
-        sandboxMemoryMb: null,
         workspaceSetupCommand: null,
       },
     });
@@ -3205,9 +3202,6 @@ describe('factory environment sandbox context', () => {
 
     const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
     expect(ctx).toMatchObject({ continueOnSetupFailure: true });
-    // Unset resources leave the provider default, so the keys are absent.
-    expect('cpuCount' in ctx).toBe(false);
-    expect('memoryMB' in ctx).toBe(false);
     expect('workingDirectory' in ctx).toBe(false);
     expect('workspaceSetupCommand' in ctx).toBe(false);
     expect(ctx.repos).toHaveLength(2);

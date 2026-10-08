@@ -404,8 +404,6 @@ export interface SessionEnvironment {
   /** Only an absolute root is passed on; the templates reject anything else. */
   workingDirectory: string | undefined;
   /** vCPUs and memory; null leaves the provider default (identity-bearing in the template). */
-  cpuCount: number | null;
-  memoryMB: number | null;
 }
 
 /**
@@ -476,8 +474,6 @@ async function resolveSessionEnvironment(
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
-    cpuCount: project.sandboxCpuCount,
-    memoryMB: project.sandboxMemoryMb,
   };
 }
 
