@@ -94,6 +94,25 @@ describe('structured output persistence (issue #26432)', () => {
     },
   );
 
+  // Refinements and transforms do not survive the JSON Schema conversion, so in-process
+  // runs must validate with the live schema to match the object returned to the caller.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'applies live-schema refinements and transforms (%s)',
+    async engine => {
+      const liveSchema = z.object({
+        name: z.string().transform(name => name.toUpperCase()),
+        age: z.number().refine(age => age >= 18),
+      });
+
+      const saved = await runAndRecall(engine, { schema: liveSchema }, JSON.stringify(expected));
+      expect(saved.object).toEqual({ name: 'ALICE', age: 30 });
+      expect(saved.metadata?.structuredOutput).toEqual({ name: 'ALICE', age: 30 });
+
+      const rejected = await runAndRecall(engine, { schema: liveSchema }, JSON.stringify({ name: 'Bob', age: 12 }));
+      expect(rejected.metadata?.structuredOutput).toBeUndefined();
+    },
+  );
+
   // A separate structuring model is not run on the durable path yet (#26431), so the caller
   // gets no object. Persisting one parsed from the main model's text would disagree with it.
   it('does not save structuredOutput when a structuring model is configured (durable)', async () => {

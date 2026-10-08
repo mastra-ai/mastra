@@ -194,9 +194,12 @@ export async function runDurableFinishSideEffects({
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
   // validated object here so the saved assistant message matches plain Agent output.
+  // Prefer the live schema (keeps Zod refinements/transforms). Remote and recovered runs
+  // only have the persisted JSON Schema, which is what cross-process observers validate with too.
   const structuredOutput = initData.options?.structuredOutput;
-  if (structuredOutput?.schema && !structuredOutput.hasStructuringModel && outputText) {
-    const result = await createOutputHandler({ schema: structuredOutput.schema }).validateAndTransformFinal(outputText);
+  const structuredOutputSchema = registryEntry?.structuredOutput?.schema ?? structuredOutput?.schema;
+  if (structuredOutputSchema && !structuredOutput?.hasStructuringModel && outputText) {
+    const result = await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(outputText);
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
