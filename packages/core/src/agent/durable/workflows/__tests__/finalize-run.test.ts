@@ -260,4 +260,56 @@ describe('runDurableFinishSideEffects', () => {
       ).resolves.toBeUndefined();
     });
   });
+
+  // Observational memory saves the turn from its output processor and the finish-step
+  // flush is skipped, so the object must already be on the message when processors run.
+  it('attaches structured output before output processors run (observational memory)', async () => {
+    let seenByProcessor: unknown;
+    const flushMessages = vi.fn();
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [
+        {
+          id: 'om-like',
+          processOutputResult: async ({ messages }: { messages: any[] }) => {
+            seenByProcessor = messages.findLast(m => m.role === 'assistant')?.content.metadata?.structuredOutput;
+            return messages;
+          },
+        },
+      ],
+      saveQueueManager: { flushMessages },
+      memory: { createThread: vi.fn() },
+    } as unknown as RunRegistryEntry);
+
+    const text = JSON.stringify({ name: 'Alice', age: 30 });
+    const list = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+    list.add({ role: 'user', content: 'who is it?' }, 'user');
+    list.add({ role: 'assistant', content: text }, 'response');
+
+    await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: {
+        ...makeInitData({
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          threadExists: true,
+          observationalMemory: true,
+        }),
+        options: {
+          structuredOutput: {
+            schema: {
+              type: 'object',
+              properties: { name: { type: 'string' }, age: { type: 'number' } },
+              required: ['name', 'age'],
+            },
+          },
+        },
+      } as unknown as DurableAgenticWorkflowInput,
+      messageListState: list.serialize(),
+      outputResult: { text, finishReason: 'stop' } as any,
+    });
+
+    expect(seenByProcessor).toEqual({ name: 'Alice', age: 30 });
+    expect(flushMessages).not.toHaveBeenCalled();
+  });
 });
