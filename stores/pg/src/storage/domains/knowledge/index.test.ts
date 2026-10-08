@@ -8,7 +8,6 @@ import {
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   KNOWLEDGE_TABLE_NAMES,
   KnowledgeSchemaResetRequiredError,
-  MastraCompositeStore,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_MENTIONS,
@@ -261,11 +260,8 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
         `INSERT INTO "${schemaName}"."${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",scope,"scopeKey",version,"createdAt","updatedAt") VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,NOW(),NOW())`,
       );
       // Published Core releases without the knowledge-v2 feature init every domain from super.init().
-      const preV2CoreInit = vi
-        .spyOn(MastraCompositeStore.prototype, 'init')
-        .mockImplementation(async function (this: MastraCompositeStore) {
-          await Promise.all(Object.values(this.stores ?? {}).map(domain => domain?.init()));
-        });
+      // PostgresStore initializes its domains itself and never calls super.init(), so Knowledge stays
+      // untouched under those releases too.
       const knowledgeInit = vi.spyOn(store.stores.knowledge!, 'init');
 
       await store.init();
@@ -284,7 +280,6 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
       expect((await pool.query(`SELECT id FROM "${schemaName}"."${TABLE_KNOWLEDGE_NODES}"`)).rows).toEqual([
         { id: 'legacy' },
       ]);
-      preV2CoreInit.mockRestore();
       const knowledge = await store.getStore('knowledge');
       expect(await knowledge?.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
       expect(await knowledge?.getNode('legacy')).toBeNull();
