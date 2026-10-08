@@ -255,4 +255,28 @@ describe('knowledge semantic search hit shape', () => {
       expect(hit).toEqual({ ...joinKey(hit), text: expect.any(String), score: 0.5 });
     }
   });
+
+  it('fills the limit with confirmed hits when higher-ranked candidates are no longer visible', async () => {
+    const { store, scopeIds, coordinator, upserts } = await fixture();
+    const node = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
+    await coordinator.drain(scopeIds);
+    const indexed = upserts.flatMap(batch => batch.ids.map((id, index) => ({ id, metadata: batch.metadata[index]! })));
+    const stale = {
+      id: 'knowledge:record:00000000-0000-4000-8000-00000000dead',
+      metadata: { document_type: 'record', scope_ids: [...(indexed[0]!.metadata.scope_ids as string[])] },
+    };
+    const queryable = new KnowledgeSemanticIndexCoordinator({
+      knowledge: store,
+      vector: {
+        ...createFakes().vector,
+        listIndexes: async () => ['knowledge_documents_dimension_3'],
+        query: async () => [{ ...stale, score: 0.9 }, ...indexed.map(hit => ({ ...hit, score: 0.5 }))],
+      },
+      embedder: createFakes().embedder,
+    });
+
+    const semantic = await queryable.search('Atlas', scopeIds, 1);
+
+    expect(semantic.map(hit => ({ type: hit.type, id: hit.id }))).toEqual([{ type: 'node', id: node.id }]);
+  });
 });

@@ -101,11 +101,17 @@ export class KnowledgeSemanticIndexCoordinator {
       const existing = deduped.get(candidate.id);
       if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
     }
-    const ranked = [...deduped.values()]
-      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+    // Confirm against storage before ranking so hidden hits cannot crowd visible ones out of the limit.
+    const confirmed = await Promise.all(
+      [...deduped.values()].map(candidate => this.#toSearchResult(candidate, scopeIds)),
+    );
+    return confirmed
+      .filter((result): result is KnowledgeSemanticSearchResult => result !== null)
+      .sort(
+        (left, right) =>
+          right.score - left.score || `${left.type}:${left.id}`.localeCompare(`${right.type}:${right.id}`),
+      )
       .slice(0, limit);
-    const results = await Promise.all(ranked.map(candidate => this.#toSearchResult(candidate, scopeIds)));
-    return results.filter((result): result is KnowledgeSemanticSearchResult => result !== null);
   }
 
   // Shape semantic hits like lexical SearchKnowledgeResult so callers can join on type + id.
