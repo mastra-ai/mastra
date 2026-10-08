@@ -65,6 +65,12 @@ describe('guardedSetupCommand', () => {
     );
   });
 
+  it('rejects a repo dir that would need shell quoting', () => {
+    for (const repoDir of ['', 'a b', 'a/b', `a'b`, 'a$(x)']) {
+      expect(() => guardedSetupCommand({ repoDir, command: 'true', continueOnFailure: true })).toThrow(TypeError);
+    }
+  });
+
   it('wraps the command and appends the repo dir to the failure list when the guard is on', () => {
     expect(guardedSetupCommand({ repoDir: 'x', command: 'pnpm i && pnpm build', continueOnFailure: true })).toBe(
       `( cd "x" && sh -c 'pnpm i && pnpm build' ) || { mkdir -p ".mastra-sandbox" && grep -qxF -- 'x' ".mastra-sandbox/setup-failed" 2>/dev/null || printf '%s\\n' 'x' >> ".mastra-sandbox/setup-failed"; }`,

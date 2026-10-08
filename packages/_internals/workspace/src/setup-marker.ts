@@ -56,6 +56,9 @@ export function setupMarkerCommand(content: string, markerPath: string = SETUP_M
   return `mkdir -p "$(dirname "${markerPath}")" && printf '%s' '${content}' > "${markerPath}"`;
 }
 
+/** A clone directory name is one path segment of word characters, dots and dashes, so it never needs quoting. */
+const REPO_DIR_PATTERN = /^[\w.-]+$/;
+
 export interface GuardedSetupCommandOptions {
   /** Clone directory the command runs in, relative to the build cwd. Shell-safe (`[\w.-]` only). */
   repoDir: string;
@@ -74,6 +77,9 @@ export interface GuardedSetupCommandOptions {
  * level, never inside the repository.
  */
 export function guardedSetupCommand({ repoDir, command, continueOnFailure }: GuardedSetupCommandOptions): string {
+  if (!REPO_DIR_PATTERN.test(repoDir)) {
+    throw new TypeError(`Repository directory "${repoDir}" must match ${REPO_DIR_PATTERN}.`);
+  }
   if (!continueOnFailure) return `cd "${repoDir}" && ${command}`;
   // The command runs through `sh -c` so a trailing comment, heredoc or stray
   // quote inside it cannot swallow the guard, and the whole step stays on one
