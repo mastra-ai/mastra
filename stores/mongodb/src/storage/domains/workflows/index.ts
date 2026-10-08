@@ -1,15 +1,24 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
+  resolveRunFence,
   WorkflowsStorage,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
   PruneOptions,
   PruneResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
   RetentionTablesDescriptor,
+  RunFence,
+  RunOwnershipRecord,
   TableRetentionPolicy,
   WorkflowRun,
   WorkflowRuns,
@@ -17,10 +26,34 @@ import type {
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { Document, Filter } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { getRunClaims, isDuplicateKeyError, withRunFence } from '../run-fencing';
+import type { RunClaimDocument, RunFenceCheck } from '../run-fencing';
+
+// Ownership documents are keyed by runId and judged on the database clock.
+const RUN_OWNER_PROJECTION = {
+  generation: 1,
+  ownerId: 1,
+  leaseExpiresAt: 1,
+  live: { $gt: ['$leaseExpiresAt', '$$NOW'] },
+};
+const NOT_LIVE: Filter<RunClaimDocument> = {
+  $or: [{ leaseExpiresAt: null }, { $expr: { $lte: ['$leaseExpiresAt', '$$NOW'] } }],
+};
+
+function toRunOwnershipRecord(doc: Document): RunOwnershipRecord {
+  return {
+    runId: doc._id,
+    generation: Number(doc.generation),
+    ownerId: doc.ownerId,
+    leaseExpiresAt: doc.leaseExpiresAt ?? null,
+    live: Boolean(doc.live),
+  };
+}
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   #connector: MongoDBConnector;
@@ -28,7 +61,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT] as const;
+  static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT, TABLE_WORKFLOW_RUN_OWNERS] as const;
 
   /**
    * Anchor is `updatedAt` (BSON date), so the policy reads as inactivity:
@@ -62,6 +95,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     return true;
   }
 
+  /**
+   * Fenced writes need multi-document transactions, so only replica sets and
+   * sharded clusters fence. Rejects while the deployment can't be probed.
+   */
+  supportsRunFencing(): Promise<boolean> {
+    return this.#connector.probeTransactions();
+  }
+
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }
@@ -69,6 +110,127 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence, runId);
+    return resolved && { claims: TABLE_WORKFLOW_RUN_OWNERS, fence: resolved, operation };
+  }
+
+  async #readRunOwner(runId: string): Promise<RunOwnershipRecord | null> {
+    const owners = await getRunClaims(this.#connector, TABLE_WORKFLOW_RUN_OWNERS);
+    const doc = await owners.findOne({ _id: runId }, { projection: RUN_OWNER_PROJECTION });
+    return doc ? toRunOwnershipRecord(doc) : null;
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('MONGODB', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  // Each claim, renewal and release is one conditional write to the run's
+  // ownership document, so racing claimers resolve one at a time. A claim
+  // first tries to create the document; once it exists, the claim advances its
+  // generation only when the expected generation and lease conditions still
+  // hold.
+
+  async claimRunOwnership({
+    runId,
+    ownerId,
+    leaseMs,
+    force,
+    expectedGeneration,
+  }: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    try {
+      const owners = await getRunClaims(this.#connector, TABLE_WORKFLOW_RUN_OWNERS);
+      const claim = (generation: unknown) => [
+        {
+          $set: {
+            generation,
+            ownerId: { $literal: ownerId },
+            leaseExpiresAt: { $add: ['$$NOW', leaseMs] },
+          },
+        },
+      ];
+
+      if (!expectedGeneration) {
+        try {
+          // Matches only a document that doesn't exist; an existing one makes
+          // the upsert's insert fail on the duplicate _id.
+          const created = await owners.findOneAndUpdate({ _id: runId, generation: { $exists: false } }, claim(1), {
+            upsert: true,
+            returnDocument: 'after',
+            projection: RUN_OWNER_PROJECTION,
+          });
+          if (created) return { acquired: true, record: toRunOwnershipRecord(created) };
+        } catch (error) {
+          if (!isDuplicateKeyError(error)) throw error;
+        }
+        if (expectedGeneration === 0) return { acquired: false, record: await this.#readRunOwner(runId) };
+      }
+
+      const advanced = await owners.findOneAndUpdate(
+        {
+          _id: runId,
+          ...(expectedGeneration !== undefined ? { generation: expectedGeneration } : {}),
+          ...(force ? {} : NOT_LIVE),
+        },
+        claim({ $add: ['$generation', 1] }),
+        { returnDocument: 'after', projection: RUN_OWNER_PROJECTION },
+      );
+      if (advanced) return { acquired: true, record: toRunOwnershipRecord(advanced) };
+      return { acquired: false, record: await this.#readRunOwner(runId) };
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      const owners = await getRunClaims(this.#connector, TABLE_WORKFLOW_RUN_OWNERS);
+      const renewed = await owners.findOneAndUpdate(
+        {
+          _id: fence.runId,
+          generation: fence.generation,
+          ownerId: fence.ownerId,
+          leaseExpiresAt: { $ne: null },
+        },
+        [{ $set: { leaseExpiresAt: { $add: ['$$NOW', leaseMs] } } }],
+        { returnDocument: 'after', projection: RUN_OWNER_PROJECTION },
+      );
+      if (renewed) return { renewed: true, record: toRunOwnershipRecord(renewed) };
+      return { renewed: false, record: await this.#readRunOwner(fence.runId) };
+    } catch (error) {
+      throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      const owners = await getRunClaims(this.#connector, TABLE_WORKFLOW_RUN_OWNERS);
+      const released = await owners.updateOne(
+        { _id: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        { $set: { leaseExpiresAt: null } },
+      );
+      return released.matchedCount > 0;
+    } catch (error) {
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await this.#readRunOwner(runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
   }
 
   /**
@@ -126,6 +288,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   async dangerouslyClearAll(): Promise<void> {
     const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
     await collection.deleteMany({});
+    const owners = await this.getCollection(TABLE_WORKFLOW_RUN_OWNERS);
+    await owners.deleteMany({});
   }
 
   async updateWorkflowResults({
@@ -135,6 +299,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     result,
     requestContext,
     state,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -142,7 +307,9 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
     state?: Record<string, any>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const check = this.#runFenceCheck(fence, runId, 'updateWorkflowResults');
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const now = new Date();
@@ -169,45 +336,51 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
-      const updatedDoc = await collection.findOneAndUpdate(
-        { workflow_name: workflowName, run_id: runId },
-        [
-          {
-            $set: {
-              workflow_name: workflowName,
-              run_id: runId,
-              // If snapshot doesn't exist, use default; otherwise merge
-              snapshot: {
-                $mergeObjects: [
-                  // Start with default snapshot if document is new
-                  { $ifNull: ['$snapshot', defaultSnapshot] },
-                  // Merge the new context entry
-                  {
-                    context: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, contextUpdate],
+      const updatedDoc = await withRunFence(this.#connector, check, session =>
+        collection.findOneAndUpdate(
+          { workflow_name: workflowName, run_id: runId },
+          [
+            {
+              $set: {
+                workflow_name: workflowName,
+                run_id: runId,
+                // If snapshot doesn't exist, use default; otherwise merge
+                snapshot: {
+                  $mergeObjects: [
+                    // Start with default snapshot if document is new
+                    { $ifNull: ['$snapshot', defaultSnapshot] },
+                    // Merge the new context entry
+                    {
+                      context: {
+                        $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, contextUpdate],
+                      },
                     },
-                  },
-                  // Merge the new request context
-                  {
-                    requestContext: {
-                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] }, requestContext],
+                    // Merge the new request context
+                    {
+                      requestContext: {
+                        $mergeObjects: [
+                          { $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] },
+                          requestContext,
+                        ],
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
+                updatedAt: now,
+                // Only set createdAt if it doesn't exist
+                createdAt: { $ifNull: ['$createdAt', now] },
               },
-              updatedAt: now,
-              // Only set createdAt if it doesn't exist
-              createdAt: { $ifNull: ['$createdAt', now] },
             },
-          },
-        ],
-        { upsert: true, returnDocument: 'after' },
+          ],
+          { upsert: true, returnDocument: 'after', session },
+        ),
       );
 
       const snapshot =
         typeof updatedDoc?.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc?.snapshot;
       return snapshot?.context || {};
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
@@ -227,11 +400,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    const check = this.#runFenceCheck(fence, runId, 'updateWorkflowState');
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
 
@@ -246,19 +422,21 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
-      const updatedDoc = await collection.findOneAndUpdate(
-        filter,
-        [
-          {
-            $set: {
-              snapshot: {
-                $mergeObjects: ['$snapshot', state],
+      const updatedDoc = await withRunFence(this.#connector, check, session =>
+        collection.findOneAndUpdate(
+          filter,
+          [
+            {
+              $set: {
+                snapshot: {
+                  $mergeObjects: ['$snapshot', state],
+                },
+                updatedAt: new Date(),
               },
-              updatedAt: new Date(),
             },
-          },
-        ],
-        { returnDocument: 'after' },
+          ],
+          { returnDocument: 'after', session },
+        ),
       );
 
       if (!updatedDoc) {
@@ -279,7 +457,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       return snapshot;
     } catch (error) {
-      if (error instanceof MastraError) throw error;
+      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
@@ -302,6 +480,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -309,27 +488,32 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
+    const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
     try {
       const now = new Date();
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-      await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
-        {
-          $set: {
-            workflow_name: workflowName,
-            run_id: runId,
-            resourceId,
-            snapshot,
-            updatedAt: updatedAt ?? now,
+      await withRunFence(this.#connector, check, session =>
+        collection.updateOne(
+          { workflow_name: workflowName, run_id: runId },
+          {
+            $set: {
+              workflow_name: workflowName,
+              run_id: runId,
+              resourceId,
+              snapshot,
+              updatedAt: updatedAt ?? now,
+            },
+            $setOnInsert: {
+              createdAt: createdAt ?? now,
+            },
           },
-          $setOnInsert: {
-            createdAt: createdAt ?? now,
-          },
-        },
-        { upsert: true },
+          { upsert: true, session },
+        ),
       );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -481,11 +665,23 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }
   }
 
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
+    const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-      await collection.deleteOne({ workflow_name: workflowName, run_id: runId });
+      await withRunFence(this.#connector, check, session =>
+        collection.deleteOne({ workflow_name: workflowName, run_id: runId }, { session }),
+      );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

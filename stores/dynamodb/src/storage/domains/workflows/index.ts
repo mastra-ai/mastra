@@ -1,12 +1,21 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   normalizePerPage,
+  resolveRunFence,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -19,6 +28,8 @@ import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
+import { assertRunFence, goWithRunFence, retryOnTransactionConflict } from '../run-fencing';
+import type { RunFenceCheck } from '../run-fencing';
 import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
@@ -43,6 +54,23 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
   };
 }
 
+interface RunOwnerItem {
+  run_id: string;
+  generation: number;
+  ownerId: string;
+  leaseExpiresAt?: number;
+}
+
+function toRunOwnershipRecord(item: RunOwnerItem): RunOwnershipRecord {
+  return {
+    runId: item.run_id,
+    generation: Number(item.generation),
+    ownerId: item.ownerId,
+    leaseExpiresAt: item.leaseExpiresAt === undefined ? null : new Date(item.leaseExpiresAt),
+    live: item.leaseExpiresAt !== undefined && item.leaseExpiresAt > Date.now(),
+  };
+}
+
 // Maximum retry attempts for optimistic locking conflicts
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 50;
@@ -62,8 +90,146 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     return true;
   }
 
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await deleteTableData(this.service, TABLE_WORKFLOW_SNAPSHOT);
+    await deleteTableData(this.service, TABLE_WORKFLOW_RUN_OWNERS);
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence, runId);
+    return resolved && { claims: 'workflow_run_owner', fence: resolved, operation };
+  }
+
+  #runOwnerKey(runId: string) {
+    return { entity: 'workflow_run_owner', run_id: runId };
+  }
+
+  async #readRunOwner(runId: string): Promise<RunOwnershipRecord | null> {
+    const { data } = await this.service.entities.workflow_run_owner!.get(this.#runOwnerKey(runId)).go({
+      consistent: true,
+    });
+    return data ? toRunOwnershipRecord(data as RunOwnerItem) : null;
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('DYNAMODB', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  // Each claim, renewal and release is one conditional write to the run's
+  // ownership item, so racing claimers resolve one at a time. DynamoDB has no
+  // server clock, so leases are computed on this process's clock: clock skew
+  // between processes can move when an expired lease becomes claimable, but
+  // fenced writes stay safe because they check the generation, not the lease.
+
+  async claimRunOwnership({
+    runId,
+    ownerId,
+    leaseMs,
+    force,
+    expectedGeneration,
+  }: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    try {
+      const owners = this.service.entities.workflow_run_owner!;
+      const now = Date.now();
+
+      if (!expectedGeneration) {
+        try {
+          // create() only succeeds when the item does not exist yet.
+          const item = { ...this.#runOwnerKey(runId), generation: 1, ownerId, leaseExpiresAt: now + leaseMs };
+          await retryOnTransactionConflict(() => owners.create(item).go());
+          return { acquired: true, record: toRunOwnershipRecord(item) };
+        } catch (error) {
+          if (!this.isConditionalCheckFailed(error)) throw error;
+        }
+        if (expectedGeneration === 0) return { acquired: false, record: await this.#readRunOwner(runId) };
+      }
+
+      try {
+        const { data } = await retryOnTransactionConflict<{ data: RunOwnerItem }>(() =>
+          owners
+            .patch(this.#runOwnerKey(runId))
+            .set({ ownerId, leaseExpiresAt: now + leaseMs })
+            .add({ generation: 1 })
+            .where((attr: any, op: any) =>
+              [
+                expectedGeneration !== undefined ? op.eq(attr.generation, expectedGeneration) : '',
+                force ? '' : `(${op.notExists(attr.leaseExpiresAt)} OR ${op.lte(attr.leaseExpiresAt, now)})`,
+              ]
+                .filter(Boolean)
+                .join(' AND '),
+            )
+            .go({ response: 'all_new' }),
+        );
+        return { acquired: true, record: toRunOwnershipRecord(data) };
+      } catch (error) {
+        if (!this.isConditionalCheckFailed(error)) throw error;
+        return { acquired: false, record: await this.#readRunOwner(runId) };
+      }
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      const { data } = await retryOnTransactionConflict<{ data: RunOwnerItem }>(() =>
+        this.service.entities
+          .workflow_run_owner!.patch(this.#runOwnerKey(fence.runId))
+          .set({ leaseExpiresAt: Date.now() + leaseMs })
+          .where(
+            (attr: any, op: any) =>
+              `${op.eq(attr.generation, fence.generation)} AND ${op.eq(attr.ownerId, fence.ownerId)} AND ${op.exists(attr.leaseExpiresAt)}`,
+          )
+          .go({ response: 'all_new' }),
+      );
+      return { renewed: true, record: toRunOwnershipRecord(data) };
+    } catch (error) {
+      if (!this.isConditionalCheckFailed(error)) throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, error);
+      try {
+        return { renewed: false, record: await this.#readRunOwner(fence.runId) };
+      } catch (readError) {
+        throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, readError);
+      }
+    }
+  }
+
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      await retryOnTransactionConflict(() =>
+        this.service.entities
+          .workflow_run_owner!.patch(this.#runOwnerKey(fence.runId))
+          .remove(['leaseExpiresAt'])
+          .where(
+            (attr: any, op: any) =>
+              `${op.eq(attr.generation, fence.generation)} AND ${op.eq(attr.ownerId, fence.ownerId)}`,
+          )
+          .go(),
+      );
+      return true;
+    } catch (error) {
+      if (this.isConditionalCheckFailed(error)) return false;
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await this.#readRunOwner(runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
   }
 
   /**
@@ -111,6 +277,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     result,
     requestContext,
     state,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -118,7 +285,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
     state?: Record<string, any>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const check = this.#runFenceCheck(fence, runId, 'updateWorkflowResults');
     // Use optimistic locking with retry for atomic updates
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
@@ -173,19 +342,15 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           ...getTtlProps('workflow_snapshot', this.ttlConfig),
         };
 
-        if (previousUpdatedAt) {
-          // Use conditional update - only succeed if updatedAt hasn't changed
-          await this.service.entities.workflow_snapshot
-            .upsert(data)
-            .where((attr: any, op: any) => op.eq(attr.updatedAt, previousUpdatedAt!))
-            .go();
-        } else {
-          // New record - use condition that item doesn't exist
-          await this.service.entities.workflow_snapshot
-            .create(data)
-            .where((attr: any, op: any) => op.notExists(attr.run_id))
-            .go();
-        }
+        // Existing record: only succeed if updatedAt hasn't changed. New record: only if it still doesn't exist.
+        const write = previousUpdatedAt
+          ? this.service.entities.workflow_snapshot
+              .upsert(data)
+              .where((attr: any, op: any) => op.eq(attr.updatedAt, previousUpdatedAt!))
+          : this.service.entities.workflow_snapshot
+              .create(data)
+              .where((attr: any, op: any) => op.notExists(attr.run_id));
+        await goWithRunFence(this.service, check, write);
 
         return snapshot.context;
       } catch (error) {
@@ -229,11 +394,14 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    const check = this.#runFenceCheck(fence, runId, 'updateWorkflowState');
     // Use optimistic locking with retry for atomic updates
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
@@ -246,22 +414,14 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           })
           .go();
 
-        if (!existingRecord.data) {
-          return undefined;
-        }
-
-        const existingSnapshot = existingRecord.data.snapshot as WorkflowRunState;
-
-        if (!existingSnapshot || !existingSnapshot.context) {
+        const existingSnapshot = existingRecord.data?.snapshot as WorkflowRunState | undefined;
+        const { expectedStatus, ...state } = opts;
+        if (!existingSnapshot?.context || !matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus)) {
+          await assertRunFence(this.service, check);
           return undefined;
         }
 
         const previousUpdatedAt = existingRecord.data.updatedAt;
-
-        const { expectedStatus, ...state } = opts;
-        if (!matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus)) {
-          return undefined;
-        }
 
         // Merge the new options with the existing snapshot
         const updatedSnapshot = { ...existingSnapshot, ...state };
@@ -279,10 +439,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         };
 
         // Use conditional update - only succeed if updatedAt hasn't changed
-        await this.service.entities.workflow_snapshot
-          .upsert(data)
-          .where((attr: any, op: any) => op.eq(attr.updatedAt, previousUpdatedAt))
-          .go();
+        await goWithRunFence(
+          this.service,
+          check,
+          this.service.entities.workflow_snapshot
+            .upsert(data)
+            .where((attr: any, op: any) => op.eq(attr.updatedAt, previousUpdatedAt)),
+        );
 
         return updatedSnapshot;
       } catch (error) {
@@ -328,6 +491,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence,
   }: {
     workflowName: string;
     runId: string;
@@ -335,8 +499,10 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
+    const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
 
     try {
       const now = new Date();
@@ -355,30 +521,35 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       };
 
       try {
-        await this.service.entities.workflow_snapshot
-          .create(data)
-          .where((attr: any, op: any) => op.notExists(attr.run_id))
-          .go();
+        await goWithRunFence(
+          this.service,
+          check,
+          this.service.entities.workflow_snapshot.create(data).where((attr: any, op: any) => op.notExists(attr.run_id)),
+        );
       } catch (error) {
         if (!this.isConditionalCheckFailed(error)) {
           throw error;
         }
 
-        await this.service.entities.workflow_snapshot
-          .update({
-            entity: 'workflow_snapshot',
-            workflow_name: workflowName,
-            run_id: runId,
-          })
-          .set({
-            snapshot: JSON.stringify(snapshot),
-            updatedAt: updatedAtValue,
-            resourceId,
-            ...getTtlProps('workflow_snapshot', this.ttlConfig),
-          })
-          .go();
+        await goWithRunFence(
+          this.service,
+          check,
+          this.service.entities.workflow_snapshot
+            .update({
+              entity: 'workflow_snapshot',
+              workflow_name: workflowName,
+              run_id: runId,
+            })
+            .set({
+              snapshot: JSON.stringify(snapshot),
+              updatedAt: updatedAtValue,
+              resourceId,
+              ...getTtlProps('workflow_snapshot', this.ttlConfig),
+            }),
+        );
       }
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -621,18 +792,29 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     }
   }
 
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
     this.logger.debug('Deleting workflow run by ID', { runId, workflowName });
 
     try {
-      await this.service.entities.workflow_snapshot
-        .delete({
+      await goWithRunFence(
+        this.service,
+        this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById'),
+        this.service.entities.workflow_snapshot.delete({
           entity: 'workflow_snapshot',
           workflow_name: workflowName,
           run_id: runId,
-        })
-        .go();
+        }),
+      );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DYNAMODB', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),

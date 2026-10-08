@@ -14,7 +14,7 @@ export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
  * Kept as a closed union (never `| string`) so table-name typos stay
  * compile-time errors instead of routing to the mastra_documents fallback.
  */
-export type ConvexStorageTable = TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY;
+export type ConvexStorageTable = TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY | RunClaimTable;
 
 export type EqualityFilter = {
   field: string;
@@ -283,6 +283,52 @@ export type StorageRequest =
       config: string;
       /** ISO timestamp */
       updatedAt: string;
+    };
+
+/**
+ * Tables holding a run's current claim: its ownership (workflows) or raised
+ * fence (memory). Claims live in the generic documents table under these
+ * names. Spelled out rather than imported from core for the same reason as
+ * TABLE_OBSERVATIONAL_MEMORY.
+ */
+export type RunClaimTable = 'mastra_workflow_run_owners' | 'mastra_memory_run_fences';
+
+export type RunClaimFence = { runId: string; generation: number; ownerId: string };
+
+/** A run's claim as stored. `leaseExpiresAt` is epoch ms on the Convex clock, null once released. */
+export type StoredRunClaim = RunClaimFence & { leaseExpiresAt: number | null };
+
+/** Reply to the ownership operations. `now` is the Convex clock the operation ran at. */
+export type RunClaimResult = { applied: boolean; claim: StoredRunClaim | null; now: number };
+
+/**
+ * Run fencing operations. They are routed by `op` before `tableName`, so a
+ * storage function deployed before run fencing rejects them as unsupported
+ * operations rather than running a write unfenced.
+ */
+export type RunClaimRequest =
+  | {
+      op: 'claimRunOwnership';
+      tableName: RunClaimTable;
+      runId: string;
+      ownerId: string;
+      leaseMs: number;
+      force: boolean;
+      expectedGeneration?: number;
+    }
+  | { op: 'renewRunOwnership'; tableName: RunClaimTable; fence: RunClaimFence; leaseMs: number }
+  | { op: 'releaseRunOwnership'; tableName: RunClaimTable; fence: RunClaimFence }
+  | { op: 'getRunOwnership'; tableName: RunClaimTable; runId: string }
+  | { op: 'raiseRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
+  | {
+      /**
+       * Runs `request` only if `fence` is the run's current claim in
+       * `tableName`, in the same mutation. Without `request`, only checks.
+       */
+      op: 'fenced';
+      tableName: RunClaimTable;
+      fence: RunClaimFence;
+      request?: StorageRequest;
     };
 
 export type StorageResponse =
