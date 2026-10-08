@@ -176,6 +176,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     await Promise.all([
       nodes.createIndex({ type: 1, scopeKey: 1, canonicalName: 1 }, { unique: true }),
       nodes.createIndex({ scopeKey: 1, type: 1 }),
+      nodes.createIndex({ type: 1, canonicalName: 1 }),
       knowledge.createIndex({ node: 1, id: -1 }),
       knowledge.createIndex({ sourceThreadId: 1, id: -1 }),
       knowledge.createIndex({ scopeKey: 1, id: -1 }),
