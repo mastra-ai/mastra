@@ -342,6 +342,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
 
   const resolveForRun = async (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord> => {
     if (!requestHost) return resolve();
+    assertCompletionSource(requestHost);
     const given = ctx?.requestContext as RequestContext | undefined;
     const requestContext = typeof given?.get === 'function' ? given : new RequestContext();
     const snapshot = await resolve();
@@ -426,18 +427,6 @@ function createRequestHost(
   }
   const webhookUrl = process.env.MASTRA_CONNECT_WEBHOOK_URL?.trim() || undefined;
   const webhookSecret = process.env.MASTRA_CONNECT_WEBHOOK_SECRET?.trim() || undefined;
-  if (!webhookUrl && process.env.MASTRA_DEV !== 'true') {
-    throw new MastraConnectError(
-      'invalid_options',
-      'requestConnections needs MASTRA_CONNECT_WEBHOOK_URL outside `mastra dev`, so Platform can report finished connections.',
-    );
-  }
-  if (webhookUrl && !webhookSecret) {
-    throw new MastraConnectError(
-      'invalid_options',
-      'MASTRA_CONNECT_WEBHOOK_URL is set without MASTRA_CONNECT_WEBHOOK_SECRET, so Platform webhooks could not be verified.',
-    );
-  }
   return {
     client,
     projectId,
@@ -451,6 +440,21 @@ function createRequestHost(
     disposers: new Set(),
     ...snapshot,
   };
+}
+
+function assertCompletionSource({ webhookUrl, webhookSecret }: ConnectRequestHost): void {
+  if (!webhookUrl && process.env.MASTRA_DEV !== 'true') {
+    throw new MastraConnectError(
+      'invalid_options',
+      'requestConnections needs MASTRA_CONNECT_WEBHOOK_URL outside `mastra dev`, so Platform can report finished connections.',
+    );
+  }
+  if (webhookUrl && !webhookSecret) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'MASTRA_CONNECT_WEBHOOK_URL is set without MASTRA_CONNECT_WEBHOOK_SECRET, so Platform webhooks could not be verified.',
+    );
+  }
 }
 
 /**
