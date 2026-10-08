@@ -1,0 +1,107 @@
+name: Knowledge split E2E (branch-only)
+
+# The vitest-all stores/workflows/pubsub E2E jobs run every package in one
+# 30-minute job and time out on main too. This runs each E2E project on its own,
+# at the Knowledge final-proof tip and at the W1 base, with the same secrets.
+# Lives only on ci/knowledge-v21-e2e-split; never merged.
+on:
+  push:
+    branches: [ci/knowledge-v21-e2e-split]
+
+permissions: {}
+
+jobs:
+  e2e:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    name: e2e (${{ matrix.side }} ${{ matrix.project }})
+    strategy:
+      fail-fast: false
+      max-parallel: 24
+      matrix:
+        side: [stack, w1]
+        project:
+          - pubsub/google-cloud-pubsub
+          - pubsub/redis-streams
+          - pubsub/valkey-streams
+          - stores/_test-utils
+          - stores/astra
+          - stores/azure-ai-search
+          - stores/chroma
+          - stores/clickhouse
+          - stores/cloudflare
+          - stores/cloudflare-d1
+          - stores/convex
+          - stores/couchbase
+          - stores/duckdb
+          - stores/dynamodb
+          - stores/elasticsearch
+          - stores/lance
+          - stores/libsql
+          - stores/mongodb
+          - stores/mssql
+          - stores/mysql
+          - stores/opensearch
+          - stores/oracledb
+          - stores/pg
+          - stores/pinecone
+          - stores/qdrant
+          - stores/s3vectors
+          - stores/spanner
+          - stores/turbopuffer
+          - stores/turso
+          - stores/upstash
+          - stores/vectorize
+          - stores/weaviate
+          - workflows/inngest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 10
+        with:
+          persist-credentials: false
+          ref: ${{ matrix.side == 'stack' && 'aa0f70bd6d934fc6a704b3391da2c75bce915215' || 'fa21353a6bcf42e880f07a29aa03a8dac3a8b99f' }}
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Build ${{ matrix.project }}
+        run: pnpm turbo build --filter "./${{ matrix.project }}"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+      - name: Normalize project name
+        id: normalize
+        run: echo "id=$(echo '${{ matrix.side }}-${{ matrix.project }}' | tr '/' '-')" >> $GITHUB_OUTPUT
+      - name: Run e2e:${{ matrix.project }}
+        timeout-minutes: 18
+        run: >-
+          pnpm vitest run --project 'e2e:${{ matrix.project }}'
+          --reporter=default --reporter=junit
+          --outputFile.junit=.e2e-reports/${{ steps.normalize.outputs.id }}.xml
+          --passWithNoTests
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+      - name: Upload JUnit
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: junit-${{ steps.normalize.outputs.id }}
+          path: .e2e-reports/
+          if-no-files-found: ignore
+          retention-days: 7
