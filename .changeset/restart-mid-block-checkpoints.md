@@ -6,4 +6,20 @@ Fixed `restart()` and boot-time recovery re-running work that had already finish
 
 Running foreach snapshots have a cumulative 16 MiB write budget per execution attempt to bound repeated writes of accumulated outputs. Exceeding it fails the run explicitly while allowing the final failure snapshot to preserve completed results. For larger trusted workloads, set `options.maxForeachCheckpointBytes` to a larger positive safe integer. Terminal snapshots are outside the budget; a fresh process or a new attempt after a terminal result receives a fresh budget.
 
+Large foreach blocks that previously succeeded may now fail when their cumulative snapshot writes exceed the default limit. To raise the budget to 64 MiB for a trusted workflow:
+
+```typescript
+import { createWorkflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+const workflow = createWorkflow({
+  id: 'batch-workflow',
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(z.string()),
+  options: {
+    maxForeachCheckpointBytes: 64 * 1024 * 1024,
+  },
+});
+```
+
 If a parallel child rejects before returning a step result, the block now waits for already-started siblings to settle and save successful results before propagating the original error.
