@@ -109,7 +109,9 @@ export function useKnowledgeActivity(
     initialPageParam: '',
     getNextPageParam: page => page.nextCursor,
     enabled: Boolean(factoryProjectId),
-    refetchInterval: 5_000,
+    // Polling refetches every loaded page, and older pages do not change, so
+    // poll only until the reader loads older history.
+    refetchInterval: query => ((query.state.data?.pages.length ?? 0) > 1 ? false : 5_000),
   });
 }
 
