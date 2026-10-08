@@ -31,6 +31,7 @@ function AccountMenu({ select, withRail = true }: { select: () => void; withRail
           <DropdownMenu.Item>Account settings</DropdownMenu.Item>
           <DropdownMenu.Item>Sign out</DropdownMenu.Item>
         </DropdownMenu.Group>
+        <input aria-label="Search organizations" />
       </DropdownMenu.Content>
     </DropdownMenu>
   );
@@ -73,6 +74,10 @@ describe('DropdownMenu.Content', () => {
       const { user } = await openAccountMenu({ select: vi.fn() });
       await user.keyboard('{ArrowLeft}');
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mastra' }));
+      const search = screen.getByRole('textbox', { name: 'Search organizations' });
+      search.focus();
+      await user.keyboard('{ArrowLeft}');
+      expect(document.activeElement).toBe(search);
     });
 
     it('roves the rail without selecting an organization', async () => {

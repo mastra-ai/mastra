@@ -20,8 +20,8 @@ import { AvatarRail } from '@mastra/playground-ui/components/AvatarRail';
 ```
 
 `DropdownMenu.IdentityTrigger` takes an `avatar` slot and an optional `description`.
-`layout="account"` on `DropdownMenu.Content` gives the popup dialog semantics and
-renders the optional `rail` beside the actions; set the trigger's `aria-haspopup="dialog"`, name the content, and group action items with
-`DropdownMenu.Group role="menu"`. Left and right arrow keys move between the rail
-and actions. Leave out `rail` to keep the account layout without the rail column, for example when the user belongs to a single organization. The toolbar's up and down arrows move focus without selecting an
-organization; Enter or Space activates it.
+`DropdownMenu.Content` with `layout="account"`:
+
+- Renders a dialog with the optional `rail` beside the actions. Leave out `rail` for a single organization.
+- Set `aria-haspopup="dialog"` on the trigger, name the content, and wrap actions in `DropdownMenu.Group role="menu"`.
+- Left and right arrows move between the rail and actions. Up and down move within the rail without switching; Enter or Space switches.

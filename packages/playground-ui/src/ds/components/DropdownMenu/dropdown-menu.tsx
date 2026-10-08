@@ -43,8 +43,13 @@ function dropGeneratedLabelledBy(props: { 'aria-label'?: string }) {
 
 const railNavigationKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ']);
 
+function isEditable(target: EventTarget) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches('input, textarea, select');
+}
+
 function focusRailFromActions(event: React.KeyboardEvent<HTMLDivElement>) {
-  if (event.defaultPrevented || event.key !== 'ArrowLeft') return;
+  if (event.defaultPrevented || event.key !== 'ArrowLeft' || isEditable(event.target)) return;
   const rail = event.currentTarget.querySelector('[data-slot=dropdown-menu-rail]');
   if (!rail) return;
   const target =
