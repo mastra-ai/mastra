@@ -424,15 +424,18 @@ export class KnowledgeImporterRunner {
       heartbeatAt === undefined || Number.isNaN(heartbeatAt)
         ? 0
         : Math.max(0, heartbeatAt + LEASE_TIMEOUT_MS - Date.now());
-    logger.debug('Waiting on a knowledge import run leased by another worker; recovery replays it once the lease expires', {
-      importerId: run.importerId,
-      binding: run.binding,
-      runId: run.id,
-      leasedRunId: blocker.id,
-      leaseHolder: holder,
-      msUntilLeaseExpiry,
-      recoveryScanIntervalMs: RECOVERY_SCAN_MS,
-    });
+    logger.debug(
+      'Waiting on a knowledge import run leased by another worker; recovery replays it once the lease expires',
+      {
+        importerId: run.importerId,
+        binding: run.binding,
+        runId: run.id,
+        leasedRunId: blocker.id,
+        leaseHolder: holder,
+        msUntilLeaseExpiry,
+        recoveryScanIntervalMs: RECOVERY_SCAN_MS,
+      },
+    );
   }
 
   async #listAll(importerId: string, binding?: string, status?: KnowledgeImportRun['status']) {

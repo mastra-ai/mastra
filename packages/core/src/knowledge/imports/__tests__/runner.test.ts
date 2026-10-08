@@ -339,7 +339,11 @@ describe('Knowledge importer runner', () => {
       for (const run of runs) {
         for (const prefix of ['import-payload', 'import-lease']) {
           expect(
-            await live.getImportState({ importerId: 'calendar', binding, key: `__mastra_internal/${prefix}/${run.id}` }),
+            await live.getImportState({
+              importerId: 'calendar',
+              binding,
+              key: `__mastra_internal/${prefix}/${run.id}`,
+            }),
           ).toBeNull();
         }
       }
