@@ -116,12 +116,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
@@ -145,6 +147,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local workflowName = ARGV[6]
         local runId = ARGV[7]
         local timestamp = tonumber(ARGV[8])
+        local stateJson = ARGV[9]
 
         -- Get existing data
         local existing = redis.call('GET', key)
@@ -191,6 +194,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local stepResult = cjson.decode(resultJson)
         snapshot.context[stepId] = stepResult
 
+        -- Record workflow state in the same write when provided
+        if stateJson ~= '' then
+          snapshot.context['__state'] = cjson.decode(stateJson)
+        end
+
         -- Merge request context
         local newRequestContext = cjson.decode(requestContextJson)
         if snapshot.requestContext == nil then
@@ -223,6 +231,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           workflowName,
           runId,
           String(Date.now()),
+          state === undefined ? '' : JSON.stringify(state),
         ],
       );
 

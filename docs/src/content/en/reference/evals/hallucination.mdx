@@ -111,12 +111,11 @@ The scorer evaluates hallucination through contradiction detection and unsupport
 
 ### Scoring Process
 
-1. Analyzes factual content:
-   - Extracts statements from context
-   - Identifies numerical values and dates
-   - Maps statement relationships
-1. Analyzes output for hallucinations:
-   - Compares against context statements
+1. Extracts claims from the output:
+   - Breaks the agent's response into factual claims
+   - Includes numerical values and dates
+1. Checks each claim against the provided context:
+   - Compares the claim with the context
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
@@ -179,7 +178,7 @@ Use `getContext` for live scoring scenarios where context comes from tool result
 
 ```typescript title="src/example-dynamic-context.ts"
 import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
-import { extractToolResults } from '@mastra/evals/scorers'
+import { extractToolResults } from '@mastra/evals/scorers/utils'
 
 const scorer = createHallucinationScorer({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -200,7 +199,7 @@ Attach the scorer to an agent for live evaluation:
 ```typescript title="src/example-live-scoring.ts"
 import { Agent } from '@mastra/core/agent'
 import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
-import { extractToolResults } from '@mastra/evals/scorers'
+import { extractToolResults } from '@mastra/evals/scorers/utils'
 
 const hallucinationScorer = createHallucinationScorer({
   model: '__GATEWAY_OPENAI_MODEL__',

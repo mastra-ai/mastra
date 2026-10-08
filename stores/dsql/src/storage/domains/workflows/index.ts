@@ -120,12 +120,14 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       const { result: context } = await withRetry(
@@ -163,6 +165,9 @@ export class WorkflowsDSQL extends WorkflowsStorage {
             }
 
             snapshot.context[stepId] = result;
+            if (state !== undefined) {
+              (snapshot.context as Record<string, unknown>).__state = state;
+            }
             snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
             const now = new Date();

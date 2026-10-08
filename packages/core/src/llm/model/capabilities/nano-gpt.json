@@ -34,6 +34,7 @@
     "anthropic/claude-fable-latest",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-haiku-4.5:thinking",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-haiku-latest",
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.1:thinking",
@@ -585,6 +586,7 @@
     "anthropic/claude-fable-latest",
     "anthropic/claude-haiku-4.5",
     "anthropic/claude-haiku-4.5:thinking",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-haiku-latest",
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.1:thinking",
@@ -1096,12 +1098,8 @@
     ],
     "anthropic/claude-haiku-latest": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [

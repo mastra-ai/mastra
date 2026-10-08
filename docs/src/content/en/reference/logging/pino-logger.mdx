@@ -148,7 +148,7 @@ Writes structured logs to a file using the `FileTransport`. The logger accepts a
 
 ```typescript title="src/mastra/loggers/file-transport.ts"
 import { FileTransport } from '@mastra/loggers/file'
-import { PinoLogger } from '@mastra/loggers/pino'
+import { PinoLogger } from '@mastra/loggers'
 
 export const fileLogger = new PinoLogger({
   name: 'Mastra',
@@ -172,7 +172,7 @@ Streams structured logs to a remote Redis list using the `UpstashTransport`. The
 
 ```typescript title="src/mastra/loggers/upstash-transport.ts"
 import { UpstashTransport } from '@mastra/loggers/upstash'
-import { PinoLogger } from '@mastra/loggers/pino'
+import { PinoLogger } from '@mastra/loggers'
 
 export const upstashLogger = new PinoLogger({
   name: 'Mastra',
@@ -207,7 +207,7 @@ Creates a custom transport using `createCustomTransport` and integrates it with 
 
 ```typescript title="src/mastra/loggers/sentry-transport.ts"
 import { createCustomTransport } from '@mastra/core/logger'
-import { PinoLogger } from '@mastra/loggers/pino'
+import { PinoLogger } from '@mastra/loggers'
 import pinoSentry from 'pino-sentry-transport'
 
 const sentryStream = await pinoSentry({
