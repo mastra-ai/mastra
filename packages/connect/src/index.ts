@@ -6,9 +6,10 @@ export type {
   ToolsResolverContext,
   ToolsWithInput,
 } from './tools.js';
-export { CONNECT_REQUEST_PART, CONNECT_SIGNAL_SOURCE, ConnectSignalProvider } from './connect-requests.js';
+export { CONNECT_REQUEST_PART, CONNECT_SIGNAL_SOURCE } from './connect-requests.js';
 export type {
   ConnectRequestData,
+  ConnectSignalProvider,
   ConnectSignalAttributes,
   RequestConnectionsContext,
   RequestConnectionsOptions,

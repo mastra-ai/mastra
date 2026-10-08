@@ -8,8 +8,7 @@ import { listIntegrations, listProjectConnections, platformMcpTransport, resolve
 import {
   buildConnectIntegrationTool,
   CONNECT_INTEGRATION_TOOL,
-  CONNECT_REFRESH_KEY,
-  connectWebhookRoute,
+  connectRoutes,
   ConnectSignalProvider,
 } from './connect-requests.js';
 import type { ConnectRequestHost, RequestConnectionsOptions } from './connect-requests.js';
@@ -164,7 +163,7 @@ export interface ToolsResolver {
    */
   with(extra: ToolsWithInput): ToolsResolver;
   signalProvider(): ConnectSignalProvider;
-  webhookRoute(): ApiRoute;
+  routes(): ApiRoute[];
 }
 
 interface NormalizedRequest {
@@ -345,7 +344,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     if (!requestHost) return resolve();
     const given = ctx?.requestContext as RequestContext | undefined;
     const requestContext = typeof given?.get === 'function' ? given : new RequestContext();
-    const snapshot = requestContext.get(CONNECT_REFRESH_KEY) ? await refresh() : await resolve();
+    const snapshot = await resolve();
     const allowed = await requestHost.allow({
       requestContext,
       threadId: requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined,
@@ -372,6 +371,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
         try {
           while (inflight) await inflight.catch(() => undefined);
           cache = undefined;
+          for (const poller of requestHost?.pollers ?? []) poller.abort();
           const clients = Array.from(mcpClients.values(), entry => entry.client);
           mcpClients.clear();
           await Promise.allSettled(clients.map(mcp => mcp.disconnect()));
@@ -383,7 +383,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     },
     with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
     signalProvider: (): ConnectSignalProvider => new ConnectSignalProvider(requireRequestHost('signalProvider')),
-    webhookRoute: (): ApiRoute => connectWebhookRoute(requireRequestHost('webhookRoute').providers),
+    routes: (): ApiRoute[] => connectRoutes(requireRequestHost('routes').webhookSecret),
   });
   return resolver;
 }
@@ -399,18 +399,18 @@ function createRequestHost(
   if (typeof requestConnections.allow !== 'function') {
     throw new MastraConnectError('invalid_options', 'requestConnections.allow must be a function.');
   }
-  const offerable = Array.isArray(options.providers)
+  const integrations = Array.isArray(options.providers)
     ? options.providers
     : Object.entries(options.providers ?? {}).flatMap(([id, value]) => (value === true ? [id] : []));
-  if (offerable.length === 0) {
+  if (integrations.length === 0) {
     throw new MastraConnectError(
       'invalid_options',
       'requestConnections needs a providers allowlist: an array of ids, or `true` entries in the record form.',
     );
   }
-  if (offerable.length > 25) {
+  if (integrations.length > 25) {
     console.warn(
-      `[@mastra/connect] requestConnections offers ${offerable.length} providers; connect_integration lists each one, so narrow the allowlist to keep its description short.`,
+      `[@mastra/connect] requestConnections offers ${integrations.length} providers; connect_integration lists each one, so narrow the allowlist to keep its description short.`,
     );
   }
   const webhookUrl = process.env.MASTRA_CONNECT_WEBHOOK_URL?.trim() || undefined;
@@ -427,16 +427,17 @@ function createRequestHost(
       'MASTRA_CONNECT_WEBHOOK_URL is set without MASTRA_CONNECT_WEBHOOK_SECRET, so Platform webhooks could not be verified.',
     );
   }
-  return {
+  const host: ConnectRequestHost = {
     client,
     projectId,
     allow: requestConnections.allow,
     webhookUrl,
     webhookSecret,
-    offerable,
-    providers: new Map(),
+    integrations,
+    pollers: new Set(),
     ...snapshot,
   };
+  return host;
 }
 
 /**
@@ -458,7 +459,7 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
     disconnect: (): Promise<void> => base.disconnect(),
     with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
     signalProvider: (): ConnectSignalProvider => base.signalProvider(),
-    webhookRoute: (): ApiRoute => base.webhookRoute(),
+    routes: (): ApiRoute[] => base.routes(),
   });
   return resolver;
 }

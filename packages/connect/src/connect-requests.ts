@@ -6,20 +6,21 @@ import { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import { WebhookSignalProvider } from '@mastra/core/signals';
-import type { SignalProviderWebhookRequest } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { createConnectSession, listProjectConnections } from './client.js';
+import { runUntraced } from './instrumentation.js';
 
 export const CONNECT_REQUEST_PART = 'data-mastra-connect-request';
 export const CONNECT_SIGNAL_SOURCE = 'mastra-connect';
-export const CONNECT_REFRESH_KEY = 'mastra.connect.refresh';
 export const CONNECT_INTEGRATION_TOOL = 'connect_integration';
 
 const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 const POLL_INTERVAL_MS = 2_000;
+const IDLE_CHECK_MS = 250;
+const IDLE_WAIT_MS = 15_000;
 
 export type ConnectRequestData = {
   requestId: string;
@@ -79,8 +80,8 @@ export interface ConnectRequestHost {
   allow: RequestConnectionsOptions['allow'];
   webhookUrl: string | undefined;
   webhookSecret: string | undefined;
-  offerable: string[];
-  providers: Map<string, ConnectSignalProvider>;
+  integrations: string[];
+  pollers: Set<AbortController>;
   refresh(): Promise<unknown>;
   catalog(): IntegrationCatalogEntry[];
 }
@@ -110,9 +111,33 @@ export function verifyConnectSignature(
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
+export type DeliverOutcome = 'delivered' | 'duplicate' | 'in_flight' | 'rejected' | 'failed';
+
+const OUTCOME_STATUS: Record<DeliverOutcome, 200 | 403 | 409 | 503> = {
+  delivered: 200,
+  duplicate: 200,
+  in_flight: 409,
+  rejected: 403,
+  failed: 503,
+};
+
+const connectProviders = new Map<string, ConnectSignalProvider>();
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function waitForIdleThread(agent: Agent<any, any, any, any>, target: { resourceId: string; threadId: string }) {
+  const deadline = Date.now() + IDLE_WAIT_MS;
+  while (agent.getActiveThreadRunId(target)) {
+    if (Date.now() > deadline) return false;
+    await sleep(IDLE_CHECK_MS);
+  }
+  return true;
+}
+
 export class ConnectSignalProvider extends WebhookSignalProvider {
   readonly #host: ConnectRequestHost;
-  readonly #handled = new Set<string>();
+  readonly #completed = new Set<string>();
+  readonly #inFlight = new Set<string>();
 
   constructor(host: ConnectRequestHost) {
     super({ id: CONNECT_SIGNAL_SOURCE, name: 'Mastra Connect' });
@@ -121,42 +146,49 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
 
   connect(agent: Agent<any, any, any, any>): void {
     super.connect(agent);
-    this.#host.providers.set(agent.id, this);
+    connectProviders.set(agent.id, this);
   }
 
-  async handleWebhook(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }> {
-    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
-    const secret = this.#host.webhookSecret;
-    if (!secret || !verifyConnectSignature(rawBody, request.headers['x-mastra-signature'], secret)) {
-      return { status: 401, body: { error: 'invalid_signature' } };
+  async deliver(event: ConnectEvent): Promise<DeliverOutcome> {
+    if (this.#completed.has(event.key)) return 'duplicate';
+    if (this.#inFlight.has(event.key)) return 'in_flight';
+    this.#inFlight.add(event.key);
+    try {
+      const outcome = await this.#wake(event);
+      if (outcome === 'delivered' || outcome === 'duplicate') this.#completed.add(event.key);
+      return outcome;
+    } catch (error) {
+      console.warn(
+        `[@mastra/connect] Could not report the ${event.context.integration} connection result: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return 'failed';
+    } finally {
+      this.#inFlight.delete(event.key);
     }
-    const parsed = connectEventSchema.safeParse(JSON.parse(rawBody));
-    if (!parsed.success) return { status: 400, body: { error: 'invalid_payload' } };
-    const delivered = await this.deliver(parsed.data);
-    return { status: 200, body: { delivered } };
   }
 
-  async deliver(event: ConnectEvent): Promise<boolean> {
-    if (this.#handled.has(event.key)) return false;
+  async #wake(event: ConnectEvent): Promise<DeliverOutcome> {
     const { context, connection } = event;
-    const notifications = await this.mastra?.getStorage()?.getStore('notifications');
-    if (!notifications) {
-      throw new Error('[@mastra/connect] Connection requests need a notifications storage domain.');
+    const target = { resourceId: context.resourceId, threadId: context.threadId };
+    if (!this.#host.integrations.includes(context.integration)) return 'rejected';
+    const storage = this.mastra?.getStorage();
+    const notifications = await storage?.getStore('notifications');
+    const memory = await storage?.getStore('memory');
+    if (!notifications || !memory) {
+      throw new Error('Connection requests need agent memory and a notifications storage domain.');
     }
+    const thread = await memory.getThreadById({ threadId: context.threadId });
+    if (thread?.resourceId !== context.resourceId) return 'rejected';
     const existing = await notifications.listNotifications({
       threadId: context.threadId,
       source: CONNECT_SIGNAL_SOURCE,
     });
-    if (existing.some(record => record.dedupeKey === event.key)) {
-      this.#handled.add(event.key);
-      return false;
-    }
+    if (existing.some(record => record.dedupeKey === event.key && record.deliveredSignalId)) return 'duplicate';
 
-    await this.#host.refresh().catch((error: unknown) => {
-      console.warn(
-        `[@mastra/connect] Tool refresh after ${event.type} failed; the woken run refreshes again: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
+    const agent = this.agent;
+    if (!agent) throw new Error('The connect signal provider is not connected to an agent.');
+    await this.#host.refresh();
+    if (!(await waitForIdleThread(agent, target))) return 'failed';
 
     const outcome = event.type === 'connection.active' ? 'connected' : 'failed';
     const name = displayNameOf(this.#host, context.integration);
@@ -169,21 +201,21 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
       outcome,
       ...(label ? { accountLabel: label } : {}),
     };
-    await this.notify(
+    const result = await agent.sendNotificationSignal(
       {
         source: CONNECT_SIGNAL_SOURCE,
         kind: event.type,
         priority: 'urgent',
         summary:
           outcome === 'connected'
-            ? `${name} connected${label ? ` (${label})` : ''}. Continue the task.`
-            : `${name} could not be connected${event.error?.code ? ` (${event.error.code})` : ''}. Tell the user.`,
+            ? `${name} connected. Continue the task.`
+            : `${name} could not be connected. Tell the user.`,
         dedupeKey: event.key,
         attributes,
       },
       {
-        threadId: context.threadId,
-        resourceId: context.resourceId,
+        ...target,
+        ifActive: { behavior: 'discard' },
         ifIdle: {
           behavior: 'wake',
           streamOptions: {
@@ -195,38 +227,57 @@ export class ConnectSignalProvider extends WebhookSignalProvider {
                 outcome,
               },
             }),
-            requestContext: new RequestContext([[CONNECT_REFRESH_KEY, true]]),
           },
         },
       },
     );
-    this.#handled.add(event.key);
-    return true;
+    const accepted = await result.accepted?.catch(() => undefined);
+    return accepted?.action === 'wake' || accepted?.action === 'deliver' ? 'delivered' : 'failed';
   }
 }
 
-export function connectWebhookRoute(providers: Map<string, ConnectSignalProvider>): ApiRoute {
-  return registerApiRoute('/connect/webhook', {
-    method: 'POST',
-    requiresAuth: false,
-    handler: async c => {
-      const rawBody = await c.req.text();
-      let agentId: unknown;
-      try {
-        agentId = (JSON.parse(rawBody) as { context?: { agentId?: unknown } }).context?.agentId;
-      } catch {
-        return c.json({ error: 'invalid_payload' }, 400);
-      }
-      const provider = typeof agentId === 'string' ? providers.get(agentId) : undefined;
-      if (!provider) return c.json({ error: 'unknown_agent' }, 404);
-      const result = await provider.handleWebhook({ body: rawBody, headers: c.req.header() });
-      return c.json(result.body ?? {}, (result.status ?? 200) as 200);
-    },
+export function pollUntil(host: ConnectRequestHost, deadline: number, step: () => Promise<boolean>): void {
+  const controller = new AbortController();
+  host.pollers.add(controller);
+  void runUntraced(async () => {
+    while (!controller.signal.aborted && Date.now() < deadline) {
+      if (await step().catch(() => false)) break;
+      await sleep(POLL_INTERVAL_MS);
+    }
+    host.pollers.delete(controller);
   });
 }
 
+const retryable = (outcome: DeliverOutcome) => outcome === 'failed' || outcome === 'in_flight';
+
+export function connectRoutes(secret: string | undefined): ApiRoute[] {
+  return [
+    registerApiRoute('/connect/webhook', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const rawBody = await c.req.text();
+        if (!secret || !verifyConnectSignature(rawBody, c.req.header('x-mastra-signature'), secret)) {
+          return c.json({ error: 'invalid_signature' }, 401);
+        }
+        let parsed: ReturnType<typeof connectEventSchema.safeParse>;
+        try {
+          parsed = connectEventSchema.safeParse(JSON.parse(rawBody));
+        } catch {
+          return c.json({ error: 'invalid_payload' }, 400);
+        }
+        if (!parsed.success) return c.json({ error: 'invalid_payload' }, 400);
+        const provider = connectProviders.get(parsed.data.context.agentId);
+        if (!provider) return c.json({ error: 'unknown_agent' }, 404);
+        const outcome = await provider.deliver(parsed.data);
+        return c.json({ outcome }, OUTCOME_STATUS[outcome]);
+      },
+    }),
+  ];
+}
+
 export function buildConnectIntegrationTool(host: ConnectRequestHost, connections: ProjectConnection[]) {
-  const offers = host.offerable.flatMap(id => {
+  const offers = host.integrations.flatMap(id => {
     const own = connections.filter(connection => connection.integrationId === id);
     if (own.some(connection => connection.status === 'active')) return [];
     const needsReauth = own.some(connection => connection.status === 'needs_reauth');
@@ -259,16 +310,39 @@ export function buildConnectIntegrationTool(host: ConnectRequestHost, connection
       if (!agentId || !threadId || !resourceId || !context.agent?.toolCallId) {
         return { status: 'error', message: 'Connection requests need agent memory (a thread and resource id).' };
       }
-      if (!(await context.mastra?.getStorage()?.getStore('notifications'))) {
+      if (!context.mastra || !(await context.mastra.getStorage()?.getStore('notifications'))) {
         return { status: 'error', message: 'Connection requests need a notifications storage domain.' };
       }
-      const provider = host.providers.get(agentId);
+      const provider = connectProviders.get(agentId);
       if (!provider) {
         return {
           status: 'error',
           message: `Agent '${agentId}' has no connect signal provider: add signals: [connectTools.signalProvider()] to it.`,
         };
       }
+
+      const requestId = context.agent.toolCallId;
+      const span = context.tracingContext?.currentSpan;
+      const trace = span?.traceId ? { traceId: span.traceId, spanId: span.id } : undefined;
+      const callbackContext = { requestId, agentId, threadId, resourceId, integration, ...(trace ? { trace } : {}) };
+      const logoUrl = host.catalog().find(entry => entry.id === integration)?.logoUrl;
+      const writeRequest = async (target: Pick<ConnectRequestData, 'connectionId' | 'connectUrl' | 'expiresAt'>) => {
+        span?.update({ metadata: { connectionId: target.connectionId, connectRequestId: requestId, integration } });
+        const data: ConnectRequestData = {
+          requestId,
+          integration,
+          displayName: displayNameOf(host, integration),
+          ...(logoUrl ? { logoUrl } : {}),
+          reason,
+          ...target,
+          agentId,
+          threadId,
+          resourceId,
+          ...(trace ? { trace } : {}),
+        };
+        await context.writer?.custom({ type: CONNECT_REQUEST_PART, data });
+        return { status: 'pending' };
+      };
 
       const own = (await listProjectConnections(host.client, host.projectId)).filter(
         connection => connection.integrationId === integration,
@@ -278,72 +352,38 @@ export function buildConnectIntegrationTool(host: ConnectRequestHost, connection
         return { status: 'connected' };
       }
 
-      const requestId = context.agent.toolCallId;
-      const span = context.tracingContext?.currentSpan;
-      const trace = span?.traceId ? { traceId: span.traceId, spanId: span.id } : undefined;
-      const callbackContext = { requestId, agentId, threadId, resourceId, integration, ...(trace ? { trace } : {}) };
       const session = await createConnectSession(host.client, {
         projectId: host.projectId,
         integrationId: integration,
         reconnectConnectionId: own.find(connection => connection.status === 'needs_reauth')?.id,
         ...(host.webhookUrl ? { callback: { url: host.webhookUrl, context: callbackContext } } : {}),
       });
-      span?.update({ metadata: { connectionId: session.connectionId, connectRequestId: requestId, integration } });
-
-      const logoUrl = host.catalog().find(entry => entry.id === integration)?.logoUrl;
-      const data: ConnectRequestData = {
-        requestId,
-        integration,
-        displayName: displayNameOf(host, integration),
-        ...(logoUrl ? { logoUrl } : {}),
-        reason,
-        connectionId: session.connectionId,
-        connectUrl: session.connectUrl,
-        expiresAt: session.expiresAt,
-        agentId,
-        threadId,
-        resourceId,
-        ...(trace ? { trace } : {}),
-      };
-      await context.writer?.custom({ type: CONNECT_REQUEST_PART, data });
-      if (!host.webhookUrl) void pollForOutcome(host, provider, session, callbackContext);
-      return { status: 'pending' };
+      const result = await writeRequest(session);
+      if (!host.webhookUrl) pollForConnection(host, provider, session, callbackContext);
+      return result;
     },
   });
 }
 
-async function pollForOutcome(
+function pollForConnection(
   host: ConnectRequestHost,
   provider: ConnectSignalProvider,
   session: { connectionId: string; expiresAt: string },
   context: ConnectEvent['context'],
-): Promise<void> {
-  const deadline = Date.parse(session.expiresAt);
-  while (Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-    let connection: ProjectConnection | undefined;
-    try {
-      connection = (await listProjectConnections(host.client, host.projectId)).find(
-        candidate => candidate.id === session.connectionId,
-      );
-    } catch {
-      continue;
-    }
+): void {
+  pollUntil(host, Date.parse(session.expiresAt), async () => {
+    const connection = (await listProjectConnections(host.client, host.projectId)).find(
+      candidate => candidate.id === session.connectionId,
+    );
     const outcome = connection?.status === 'active' ? 'active' : connection?.status === 'error' ? 'failed' : undefined;
-    if (!connection || !outcome) continue;
-    await provider
-      .deliver({
-        key: `${connection.id}:${context.requestId}:${outcome}`,
-        type: `connection.${outcome}`,
-        connection,
-        error: null,
-        context,
-      })
-      .catch((error: unknown) => {
-        console.warn(
-          `[@mastra/connect] Could not report the ${context.integration} connection result: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-    return;
-  }
+    if (!connection || !outcome) return false;
+    const delivered = await provider.deliver({
+      key: `${connection.id}:${context.requestId}:${outcome}`,
+      type: `connection.${outcome}`,
+      connection,
+      error: null,
+      context,
+    });
+    return !retryable(delivered);
+  });
 }
