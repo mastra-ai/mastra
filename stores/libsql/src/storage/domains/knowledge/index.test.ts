@@ -111,6 +111,12 @@ describe('KnowledgeLibSQL storage isolation', () => {
     expect(new KnowledgeLibSQL({ url: 'file:first.db' }).getStorageIsolationKey()).not.toBe(
       new KnowledgeLibSQL({ url: 'file:second.db' }).getStorageIsolationKey(),
     );
+    expect(new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }).getStorageIsolationKey()).toBe(
+      new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }).getStorageIsolationKey(),
+    );
+    expect(new KnowledgeLibSQL({ url: ':memory:' }).getStorageIsolationKey()).not.toBe(
+      new KnowledgeLibSQL({ url: ':memory:' }).getStorageIsolationKey(),
+    );
   });
 });
 

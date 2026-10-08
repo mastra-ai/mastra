@@ -22,6 +22,8 @@ import { PoolAdapter } from '../../client';
 import { generateTableSQL } from '../../db';
 import { PostgresStore } from '../../index';
 import { connectionString } from '../../test-utils';
+import type { DbClient } from '../../db';
+
 import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -64,6 +66,40 @@ describe('KnowledgePG storage isolation', () => {
         database: 'knowledge',
         schemaName: 'shared',
       }),
+    );
+  });
+
+  it('identifies pools that reach the same database through PG environment defaults', () => {
+    const saved = { PGHOST: process.env.PGHOST, PGPORT: process.env.PGPORT, PGDATABASE: process.env.PGDATABASE };
+    Object.assign(process.env, { PGHOST: 'db.internal', PGPORT: '6543', PGDATABASE: 'knowledge' });
+    const first = new Pool();
+    const second = new Pool();
+    try {
+      const key = getPgKnowledgeIsolationKey({ pool: first, schemaName: 'shared' });
+      expect(key).toBe('pg:db.internal:6543/knowledge:schema:shared');
+      expect(getPgKnowledgeIsolationKey({ pool: second, schemaName: 'shared' })).toBe(key);
+      expect(
+        getPgKnowledgeIsolationKey({ host: 'DB.internal', port: 6543, database: 'knowledge', schemaName: 'shared' }),
+      ).toBe(key);
+      expect(getPgKnowledgeIsolationKey({ pool: second, schemaName: 'other' })).not.toBe(key);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      void first.end();
+      void second.end();
+    }
+  });
+
+  it('treats stores whose database cannot be determined as possibly shared', () => {
+    const first = { query: async () => ({ rows: [] }) } as unknown as DbClient;
+    const second = { query: async () => ({ rows: [] }) } as unknown as DbClient;
+    expect(getPgKnowledgeIsolationKey({ client: first, schemaName: 'shared' })).toBe(
+      getPgKnowledgeIsolationKey({ client: second, schemaName: 'shared' }),
+    );
+    expect(getPgKnowledgeIsolationKey({ client: first, schemaName: 'first' })).not.toBe(
+      getPgKnowledgeIsolationKey({ client: second, schemaName: 'second' }),
     );
   });
 

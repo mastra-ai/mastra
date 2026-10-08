@@ -196,7 +196,10 @@ const knowledgeV2TableSchemas = new Map([
 ]);
 
 function canonicalizeLibSQLUrl(url: string): string | undefined {
-  if (url.includes(':memory:')) return undefined;
+  if (url.includes(':memory:')) {
+    // Every connection to a shared-cache in-memory URI in this process opens the same database.
+    return /[?&]cache=shared(?:&|$)/.test(url) ? 'file::memory:?cache=shared' : undefined;
+  }
   if (url.startsWith('file:')) {
     const [path] = url.slice('file:'.length).split('?');
     if (url.startsWith('file://')) {

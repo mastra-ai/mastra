@@ -75,6 +75,8 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { defaults as pgDefaults } from 'pg';
+
 import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
@@ -414,37 +416,48 @@ const knowledgeTableDefinitions: Array<{
   { tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA },
 ];
 
-const pgKnowledgeIsolationKeys = new WeakMap<object, Map<string, object>>();
-
 type PgKnowledgeIsolationConfig = {
   schemaName?: string;
   client?: DbClient;
   pool?: object;
   connectionString?: string;
   host?: string;
-  port?: number;
+  port?: number | string;
   database?: string;
+  user?: string;
 };
+
+type PgConnectionField = 'host' | 'port' | 'database' | 'user';
+
+// Mirrors how `pg` resolves each connection field: explicit option, then PG* env var, then pg.defaults.
+function pgSetting(config: Partial<Record<PgConnectionField, unknown>>, key: PgConnectionField): string | undefined {
+  const value = config[key] || process.env[`PG${key.toUpperCase()}`] || pgDefaults[key];
+  return value === undefined || value === null || value === '' ? undefined : String(value);
+}
+
+function effectivePgTarget(config: Partial<Record<PgConnectionField, unknown>>): string | undefined {
+  const host = pgSetting(config, 'host');
+  const database = pgSetting(config, 'database') ?? pgSetting(config, 'user');
+  if (!host || !database) return undefined;
+  const canonicalHost = host.startsWith('/') ? host : host.toLocaleLowerCase();
+  return `${canonicalHost}:${pgSetting(config, 'port') ?? '5432'}/${database}`;
+}
 
 function canonicalPgTarget(config: PgKnowledgeIsolationConfig): string | undefined {
   if (config.connectionString) {
     try {
       const parsed = new URL(config.connectionString);
-      const host = decodeURIComponent(parsed.hostname).toLocaleLowerCase();
-      const port = parsed.port || '5432';
-      const database = decodeURIComponent(parsed.pathname.slice(1));
-      return `${host}:${port}/${database}`;
+      return effectivePgTarget({
+        host: decodeURIComponent(parsed.hostname) || config.host,
+        port: parsed.port || config.port,
+        database: decodeURIComponent(parsed.pathname.slice(1)) || config.database,
+        user: decodeURIComponent(parsed.username) || config.user,
+      });
     } catch {
       return config.connectionString;
     }
   }
-
-  if (config.host && config.database) {
-    const host = config.host.startsWith('/') ? config.host : config.host.toLocaleLowerCase();
-    return `${host}:${config.port ?? 5432}/${config.database}`;
-  }
-
-  return undefined;
+  return effectivePgTarget(config);
 }
 
 function pgSourceConfig(source: object | undefined): PgKnowledgeIsolationConfig | undefined {
@@ -460,24 +473,13 @@ function pgClientPool(client: DbClient | undefined): object | undefined {
 export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): unknown {
   const schema = config.schemaName ?? 'public';
   const pool = config.pool ?? pgClientPool(config.client);
-  const target = canonicalPgTarget(config) ?? canonicalPgTarget(pgSourceConfig(pool) ?? {});
+  const poolConfig = pgSourceConfig(pool);
+  const hasOwnTarget = Boolean(config.connectionString || config.host || config.database);
+  const target = hasOwnTarget ? canonicalPgTarget(config) : poolConfig ? canonicalPgTarget(poolConfig) : undefined;
   if (target) return `pg:${target}:schema:${schema}`;
-
-  const source = pool ?? config.client;
-  if (source) {
-    let schemaKeys = pgKnowledgeIsolationKeys.get(source);
-    if (!schemaKeys) {
-      schemaKeys = new Map();
-      pgKnowledgeIsolationKeys.set(source, schemaKeys);
-    }
-    let key = schemaKeys.get(schema);
-    if (!key) {
-      key = {};
-      schemaKeys.set(schema, key);
-    }
-    return key;
-  }
-  return config;
+  // Without a resolvable target, assume any two such stores may share a database so registration fails closed.
+  // Callers that know the stores are distinct can pass storageIsolationKey.
+  return `pg:unidentified:schema:${schema}`;
 }
 
 export class KnowledgePG extends KnowledgeStorage {
