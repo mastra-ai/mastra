@@ -75,23 +75,29 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
     );
   }
 
+  // Resolves either way: callers fire and forget, the toast carries the failure.
   const save = (input: FactoryEnvironmentPatch) =>
-    saveMutation.mutateAsync(
-      { factoryId, input },
-      {
-        onSuccess: saved => {
-          if (saved.buildRequested) setBuildRequested(true);
-          toast.success('Environment saved');
+    saveMutation
+      .mutateAsync(
+        { factoryId, input },
+        {
+          onSuccess: saved => {
+            setBuildRequested(Boolean(saved.buildRequested));
+            toast.success('Environment saved');
+          },
+          onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
         },
-        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
-      },
-    );
+      )
+      .then(
+        () => true,
+        () => false,
+      );
 
   const buildNow = () =>
     buildMutation.mutate(
       { factoryId },
       {
-        onSuccess: () => toast.success('Build requested'),
+        onSuccess: () => toast.success('Build queued'),
         onError: err => toast.error(err instanceof Error ? err.message : 'Failed to request a build'),
       },
     );

@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -42,6 +43,7 @@ function renderEnvironmentSettings() {
       <Routes>
         <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
       </Routes>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }
@@ -119,8 +121,7 @@ describe('Environment settings', () => {
     expect(screen.getByRole('switch', { name: 'Include Repository unavailable in the environment' })).toBeDisabled();
 
     expect(screen.queryByText('pnpm build exited with 1')).not.toBeInTheDocument();
-    const buttons = screen.getAllByRole('button', { name: 'Details' });
-    await userEvent.setup().click(buttons[1]!);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show details for acme/link-api' }));
     expect(screen.getByText('pnpm build exited with 1')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
   });
@@ -190,8 +191,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    const [details] = await screen.findAllByRole('button', { name: 'Details' });
-    await user.click(details!);
+    await user.click(await screen.findByRole('button', { name: 'Show details for acme/web' }));
     const input = screen.getByRole('textbox', { name: 'Setup command for acme/web' });
     await user.type(input, 'pnpm i{Enter}');
 
@@ -222,6 +222,77 @@ describe('Environment settings', () => {
     await user.tab();
     await waitFor(() => expect(patches).toHaveLength(2));
     expect(patches[1]).toEqual({ sandboxIdleTimeoutMinutes: null });
+  });
+
+  it('drops the build notice once a later save does not queue one', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    let queue = true;
+    const patches: FactoryEnvironmentPatch[] = [];
+    server.use(
+      http.patch(ENVIRONMENT_URL, async ({ request }) => {
+        patches.push((await request.json()) as FactoryEnvironmentPatch);
+        return HttpResponse.json(queue ? { environment, buildRequested: true } : { environment });
+      }),
+    );
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const cpu = await screen.findByRole('spinbutton', { name: 'CPU cores' });
+    await user.clear(cpu);
+    await user.type(cpu, '4{Enter}');
+    expect(await screen.findByText('Changes to the environment start a new build.')).toBeInTheDocument();
+
+    queue = false;
+    await user.click(screen.getByRole('switch', { name: 'Rebuild on a schedule' }));
+    await waitFor(() => expect(patches).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.queryByText('Changes to the environment start a new build.')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('rejects a non-integer or out-of-range number without a PATCH', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const cpu = await screen.findByRole('spinbutton', { name: 'CPU cores' });
+    await user.clear(cpu);
+    await user.type(cpu, '1.5{Enter}');
+    expect(await screen.findByText('Enter a whole number between 1 and 64')).toBeInTheDocument();
+    expect(cpu).toHaveValue(2);
+
+    await user.clear(cpu);
+    await user.type(cpu, '99{Enter}');
+    await waitFor(() => expect(screen.getAllByText('Enter a whole number between 1 and 64').length).toBeGreaterThan(0));
+    expect(cpu).toHaveValue(2);
+    expect(patches).toHaveLength(0);
+  });
+
+  it('surfaces a failed save as a toast and shows the stored value again', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    server.use(http.patch(ENVIRONMENT_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.click(await screen.findByRole('switch', { name: 'Include acme/api in the environment' }));
+    expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Include acme/api in the environment' })).toBeChecked();
+
+    const cpu = screen.getByRole('spinbutton', { name: 'CPU cores' });
+    await user.clear(cpu);
+    await user.type(cpu, '4{Enter}');
+    await waitFor(() => expect(screen.getAllByText('Failed to save environment (500)').length).toBeGreaterThan(1));
+    await waitFor(() => expect(cpu).toHaveValue(2));
   });
 
   it('saves the workspace setup command', async () => {
@@ -302,6 +373,22 @@ describe('Environment settings', () => {
     renderEnvironmentSettings();
 
     expect(await screen.findByText(/Pushes are not delivered to this Factory/)).toBeInTheDocument();
+  });
+
+  it('keeps the push warning quiet while the push trigger is off', async () => {
+    useFactory();
+    const base = environmentPayload();
+    useEnvironment(
+      environmentPayload({
+        build: { ...base.build, pushSignal: 'none' },
+        buildTriggers: { ...base.buildTriggers, onPush: { ...base.buildTriggers.onPush, enabled: false } },
+      }),
+    );
+
+    renderEnvironmentSettings();
+
+    await screen.findByRole('switch', { name: 'Rebuild on push' });
+    expect(screen.queryByText(/Pushes are not delivered to this Factory/)).not.toBeInTheDocument();
   });
 
   it('shows no push warning while the polling worker delivers pushes', async () => {

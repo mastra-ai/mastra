@@ -7,13 +7,7 @@ import type {
   FactoryEnvironmentBuildTriggers,
   FactoryEnvironmentPushSignal,
 } from '../../../workspaces/services/environment';
-import { CommittedInput } from './CommittedInput';
-import type { SaveEnvironment } from './ResourcesBlock';
-
-function integer(raw: string): number | undefined {
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
+import { CommittedInput, wholeNumber, type SaveEnvironment } from './CommittedInput';
 
 /**
  * When the template is rebuilt: on a schedule (only if a repository head moved),
@@ -63,8 +57,10 @@ export function BuildTriggersBlock({
               value={String(schedule.hours)}
               disabled={disabled || !schedule.enabled}
               onCommit={raw => {
-                const hours = integer(raw);
-                return hours === undefined ? Promise.resolve() : onSave({ buildTriggers: { schedule: { hours } } });
+                const hours = wholeNumber(raw, 1, 168);
+                return hours === undefined
+                  ? Promise.resolve(false)
+                  : onSave({ buildTriggers: { schedule: { hours } } });
               }}
             />
           </div>
@@ -87,9 +83,9 @@ export function BuildTriggersBlock({
               value={String(onPush.debounceMinutes)}
               disabled={disabled || !onPush.enabled}
               onCommit={raw => {
-                const debounceMinutes = integer(raw);
+                const debounceMinutes = wholeNumber(raw, 0, 1440);
                 return debounceMinutes === undefined
-                  ? Promise.resolve()
+                  ? Promise.resolve(false)
                   : onSave({ buildTriggers: { onPush: { debounceMinutes } } });
               }}
             />
@@ -110,16 +106,16 @@ export function BuildTriggersBlock({
               disabled={disabled || !onPush.enabled}
               onCommit={raw => {
                 if (raw === '') return onSave({ buildTriggers: { onPush: { maxPerHour: null } } });
-                const maxPerHour = integer(raw);
+                const maxPerHour = wholeNumber(raw, 1, 60);
                 return maxPerHour === undefined
-                  ? Promise.resolve()
+                  ? Promise.resolve(false)
                   : onSave({ buildTriggers: { onPush: { maxPerHour } } });
               }}
             />
           </div>
         </SettingsRow>
       </SettingsContainer>
-      {pushSignal === 'none' && (
+      {pushSignal === 'none' && onPush.enabled && (
         <Notice variant="warning">
           Pushes are not delivered to this Factory (no GitHub polling or webhook), so this trigger will not fire.
         </Notice>

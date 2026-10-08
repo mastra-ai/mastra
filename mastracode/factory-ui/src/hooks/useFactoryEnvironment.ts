@@ -9,6 +9,8 @@ import {
 } from '../ui/domains/workspaces/services/environment';
 import type { FactoryEnvironmentPatch } from '../ui/domains/workspaces/services/environment';
 
+const BUILD_POLL_MS = 10_000;
+
 /**
  * A Factory's environment (resources, ordered repositories, setup, build
  * triggers and status) through the shared React Query cache. Idle without a
@@ -20,6 +22,11 @@ export function useFactoryEnvironmentQuery(factoryId: string | undefined) {
     queryKey: queryKeys.factoryEnvironment(factoryId),
     queryFn: () => getFactoryEnvironment(baseUrl, factoryId!),
     enabled: Boolean(factoryId),
+    // A build in flight (or one just requested) finishes on the server; poll so the status moves.
+    refetchInterval: query => {
+      const build = query.state.data?.build;
+      return build && (build.status === 'building' || build.requestedAt) ? BUILD_POLL_MS : false;
+    },
   });
 }
 

@@ -1,10 +1,8 @@
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
-import { CommittedInput } from './CommittedInput';
-
-export type SaveEnvironment = (input: FactoryEnvironmentPatch) => Promise<unknown>;
+import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
+import { CommittedInput, wholeNumber, type SaveEnvironment } from './CommittedInput';
 
 /** The sandbox every session boots: provider, size, idle timeout and working directory. */
 export function ResourcesBlock({
@@ -16,11 +14,6 @@ export function ResourcesBlock({
   disabled: boolean;
   onSave: SaveEnvironment;
 }) {
-  const integer = (raw: string): number | undefined => {
-    const parsed = Number.parseInt(raw, 10);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  };
-
   return (
     <div className="flex flex-col gap-2">
       <Txt as="h3" variant="label">
@@ -42,8 +35,8 @@ export function ResourcesBlock({
               value={String(environment.sandboxCpuCount)}
               disabled={disabled}
               onCommit={raw => {
-                const sandboxCpuCount = integer(raw);
-                return sandboxCpuCount === undefined ? Promise.resolve() : onSave({ sandboxCpuCount });
+                const sandboxCpuCount = wholeNumber(raw, 1, 64);
+                return sandboxCpuCount === undefined ? Promise.resolve(false) : onSave({ sandboxCpuCount });
               }}
             />
           </div>
@@ -58,8 +51,8 @@ export function ResourcesBlock({
               value={String(environment.sandboxMemoryMb)}
               disabled={disabled}
               onCommit={raw => {
-                const sandboxMemoryMb = integer(raw);
-                return sandboxMemoryMb === undefined ? Promise.resolve() : onSave({ sandboxMemoryMb });
+                const sandboxMemoryMb = wholeNumber(raw, 512, 65536);
+                return sandboxMemoryMb === undefined ? Promise.resolve(false) : onSave({ sandboxMemoryMb });
               }}
             />
           </div>
@@ -81,8 +74,8 @@ export function ResourcesBlock({
               disabled={disabled}
               onCommit={raw => {
                 if (raw === '') return onSave({ sandboxIdleTimeoutMinutes: null });
-                const minutes = integer(raw);
-                return minutes === undefined ? Promise.resolve() : onSave({ sandboxIdleTimeoutMinutes: minutes });
+                const minutes = wholeNumber(raw, 1, 1440);
+                return minutes === undefined ? Promise.resolve(false) : onSave({ sandboxIdleTimeoutMinutes: minutes });
               }}
             />
           </div>

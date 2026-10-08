@@ -1,5 +1,23 @@
 import { Input } from '@mastra/playground-ui/components/Input';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
+
+import type { FactoryEnvironmentPatch } from '../../../workspaces/services/environment';
+
+/** Persists one environment change; resolves to whether it saved (failures are toasted by the caller). */
+export type SaveEnvironment = (input: FactoryEnvironmentPatch) => Promise<boolean>;
+
+/**
+ * A whole number within [min, max], or undefined after telling the user why
+ * the value was not saved. `Number()` rejects "1.5" and "12abc" where parseInt
+ * would have silently truncated them.
+ */
+export function wholeNumber(raw: string, min: number, max: number): number | undefined {
+  const value = Number(raw);
+  if (Number.isInteger(value) && value >= min && value <= max) return value;
+  toast.error(`Enter a whole number between ${min} and ${max}`);
+  return undefined;
+}
 
 /**
  * A text or number input that keeps a local draft and commits it on blur or

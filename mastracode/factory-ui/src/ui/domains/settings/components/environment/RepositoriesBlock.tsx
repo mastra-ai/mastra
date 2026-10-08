@@ -10,8 +10,7 @@ import type {
   FactoryEnvironmentRepository,
   FactoryEnvironmentRepositoryPatch,
 } from '../../../workspaces/services/environment';
-import { CommittedInput } from './CommittedInput';
-import type { SaveEnvironment } from './ResourcesBlock';
+import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
 /**
  * The route validates positions as a permutation of 1..n over the rows it is
@@ -67,7 +66,20 @@ export function RepositoriesBlock({
       <Txt as="p" variant="meta" tone="muted">
         Cloned in this order; the first one is where chats start. Excluded repositories stay linked but are not cloned.
       </Txt>
-      <ContentBlocks items={ordered} onChange={next => void save(next)} className="flex flex-col gap-2">
+      <ContentBlocks
+        items={ordered}
+        onChange={next => {
+          // A drop in place, or one that only crosses dead links, changes nothing the route would see.
+          const same = (list: FactoryEnvironmentRepository[]) =>
+            list
+              .filter(r => r.slug !== null)
+              .map(r => r.projectRepositoryId)
+              .join('\n');
+          if (disabled || same(next) === same(ordered)) return;
+          void save(next);
+        }}
+        className="flex flex-col gap-2"
+      >
         {ordered.map((repository, index) => (
           <ContentBlock key={repository.projectRepositoryId} draggableId={repository.projectRepositoryId} index={index}>
             {dragHandleProps => (
@@ -163,7 +175,14 @@ function RepositoryRow({
           disabled={rowDisabled}
           onCheckedChange={value => onToggle(value)}
         />
-        <Button variant="ghost" size="sm" aria-expanded={expanded} disabled={dead} onClick={() => setExpanded(v => !v)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`${expanded ? 'Hide' : 'Show'} details for ${label}`}
+          aria-expanded={expanded}
+          disabled={dead}
+          onClick={() => setExpanded(v => !v)}
+        >
           {expanded ? 'Hide' : 'Details'}
         </Button>
       </div>

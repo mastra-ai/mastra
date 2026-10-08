@@ -1,8 +1,7 @@
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { CommittedInput } from './CommittedInput';
-import type { SaveEnvironment } from './ResourcesBlock';
+import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
 /** One command that runs in the working directory after every repository is cloned and set up. */
 export function WorkspaceSetupBlock({
