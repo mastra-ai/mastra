@@ -1259,7 +1259,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               if (!(error instanceof SetupCommandError)) throw error;
               recordFailedSetupCommand(session.id, `workspace:${workspaceCommand}`);
               throw new SetupCommandError(
-                `${error.message}. The sandbox stays usable: the workspace setup command is skipped for the rest of the session — retry your command, then fix it in the environment settings or run it manually.`,
+                `${error.message}. The sandbox stays usable: the workspace setup command is skipped for the rest of the session. Retry your command, then fix it in the environment settings or run it manually.`,
                 error.code,
               );
             }
