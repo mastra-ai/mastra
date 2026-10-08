@@ -43,6 +43,7 @@ export const THREAD_EXISTS_KEY = createRunScopeKey<boolean>('loop:threadExists')
 // --- Step-local tool/workspace mutations -----------------------------------
 
 export const STEP_TOOLS_KEY = createRunScopeKey<ToolSet>('loop:stepTools');
+export const REQUEST_TOOLS_KEY = createRunScopeKey<ToolSet>('loop:requestTools');
 export const STEP_ACTIVE_TOOLS_KEY = createRunScopeKey<string[]>('loop:stepActiveTools');
 export const STEP_WORKSPACE_KEY = createRunScopeKey<Workspace>('loop:stepWorkspace');
 export const TOOL_APPROVAL_VERDICTS_KEY = createRunScopeKey<Map<string, boolean>>('loop:toolApprovalVerdicts');

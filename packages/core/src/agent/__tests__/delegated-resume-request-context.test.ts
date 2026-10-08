@@ -181,4 +181,54 @@ describe('delegated resume request context (#25960)', () => {
 
     expect(seen).toEqual(['added #1']);
   });
+  it('keeps a configured tool an input processor replaced when an in-process resume approves its call', async () => {
+    const seen: string[] = [];
+
+    function pingTool(label: string) {
+      return createTool({
+        id: 'ping',
+        description: 'Ping',
+        inputSchema: z.object({ n: z.number() }),
+        requireApproval: true,
+        execute: async ({ n }) => {
+          seen.push(`${label} #${n}`);
+          return { pong: n };
+        },
+      });
+    }
+
+    const agent = new Agent({
+      id: 'with-replacing-processor',
+      name: 'with-replacing-processor',
+      instructions: 'Call ping.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) =>
+          toolResultCount(prompt) === 0 ? reply(toolCall('ping-1', 'ping', { n: 1 })) : reply(text('done')),
+      }),
+      tools: { ping: pingTool('configured') },
+      inputProcessors: [
+        {
+          id: 'replace-tool',
+          processInputStep: async ({ tools }: { tools?: Record<string, unknown> }) => ({
+            tools: { ...tools, ping: pingTool('replacement') },
+          }),
+        } as any,
+      ],
+    });
+
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+    const first = await agent.stream('call ping');
+    let toolCallId: string | undefined;
+    for await (const chunk of first.fullStream) {
+      if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+    }
+    expect(toolCallId).toBe('ping-1');
+
+    const resumed = await agent.resumeStream({ approved: true }, { runId: first.runId, toolCallId: 'ping-1' });
+    for await (const _chunk of resumed.fullStream) {
+    }
+
+    expect(seen).toEqual(['replacement #1']);
+  });
 });

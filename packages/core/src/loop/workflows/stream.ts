@@ -14,7 +14,7 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
-import { STEP_TOOLS_KEY } from '../run-scope-keys';
+import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -331,11 +331,22 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
         // A scope kept alive across suspension still holds the previous request's step tools,
         // which close over that request's requestContext. Let the tools built for this call
-        // replace them, but keep the ones only a processor added, since the suspended call may
-        // be one of them and the processors do not run again before it resumes.
-        const runScope = resumeContext ? rest.mastra.__getRunScope(runId) : undefined;
-        const previousStepTools = runScope?.get(STEP_TOOLS_KEY);
-        if (previousStepTools) runScope!.set(STEP_TOOLS_KEY, { ...previousStepTools, ...rest.tools });
+        // replace the ones the previous request configured, but keep the ones a processor added
+        // or swapped in, since the suspended call may be one of them and the processors do not
+        // run again before it resumes.
+        const runScope = rest.mastra.__getRunScope(runId);
+        const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
+        if (previousStepTools) {
+          const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
+          const stepTools = { ...previousStepTools };
+          for (const [name, tool] of Object.entries(rest.tools ?? {})) {
+            if (!(name in previousStepTools) || previousStepTools[name] === previousRequestTools?.[name]) {
+              stepTools[name] = tool;
+            }
+          }
+          runScope!.set(STEP_TOOLS_KEY, stepTools);
+        }
+        if (rest.tools) runScope?.set(REQUEST_TOOLS_KEY, rest.tools);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer
