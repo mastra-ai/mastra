@@ -1,6 +1,23 @@
 // Workspace
 export * from './workspace';
 
+// Factory host contract
+export {
+  FACTORY_SANDBOX_BRAND,
+  BaseFactorySandbox,
+  isFactorySandbox,
+  describeFactorySandbox,
+  normalizeFactorySandboxSettings,
+  type FactorySandbox,
+  type FactorySandboxContext,
+  type FactoryRepositoryAccess,
+  type FactorySandboxBuilds,
+  type FactorySandboxBuild,
+  type FactorySandboxBuildStart,
+  type FactorySandboxBuildStatus,
+  type FactorySandboxDescription,
+} from './factory-sandbox';
+
 // LSP
 export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
 
