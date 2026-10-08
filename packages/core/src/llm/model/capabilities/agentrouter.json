@@ -1,5 +1,40 @@
 {
   "attachment": ["claude-opus-4-8", "claude-opus-5", "gpt-5.6-sol"],
   "temperature": ["deepseek-v4-flash", "glm-5.3"],
-  "structuredOutput": ["deepseek-v4-flash", "glm-5.3", "gpt-5.6-sol"]
+  "structuredOutput": ["deepseek-v4-flash", "glm-5.3", "gpt-5.6-sol"],
+  "reasoning": {
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
 }

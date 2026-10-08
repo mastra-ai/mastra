@@ -71,6 +71,27 @@ function compareStreamIds(a: string, b: string): number {
 }
 
 /**
+ * Disconnect a client, standalone or cluster.
+ *
+ * node-redis 5 `quit()` never settles on a client that is open but waiting to
+ * reconnect: it marks the socket closed, which ends the reconnect loop before
+ * QUIT is ever written. Such a client has nothing on the wire to drain, and its
+ * offline-queued commands could not be sent after `quit()` either, so destroy
+ * it instead. A cluster's `quit()` quits every node client, so one
+ * reconnecting node is enough to hang it.
+ */
+async function disconnect(client: RedisClientType): Promise<void> {
+  const reconnecting = (c?: { isOpen: boolean; isReady?: boolean }) => !!c && c.isOpen && c.isReady === false;
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, 'masters' | 'replicas'>>;
+  const nodes = [...(cluster.masters ?? []), ...(cluster.replicas ?? [])];
+  if (reconnecting(client) || nodes.some(node => reconnecting(node.client))) {
+    client.destroy();
+    return;
+  }
+  await client.quit();
+}
+
+/**
  * Mastra PubSub backed by Redis Streams.
  *
  * - Each topic maps to a Redis stream key `<prefix>:<topic>`.
@@ -814,7 +835,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   async #stopSubscription(sub: Subscription): Promise<void> {
     // Cancel the in-flight blocking XREADGROUP by closing the reader.
     try {
-      await sub.readClient.quit();
+      await disconnect(sub.readClient);
     } catch (err) {
       this.#logger?.debug?.('redis-streams: reader quit failed', {
         topic: sub.topic,
@@ -1088,7 +1109,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     if (this.#writeClient.isOpen) {
       try {
-        await this.#writeClient.quit();
+        await disconnect(this.#writeClient);
       } catch (err) {
         this.#logger?.debug?.('redis-streams: writer quit failed', {
           err: err instanceof Error ? err.message : err,

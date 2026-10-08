@@ -57,11 +57,13 @@ export function mergeWorkflowStepResult({
   stepId,
   result,
   requestContext,
+  state,
 }: {
   snapshot: Record<string, any>;
   stepId: string;
   result: Record<string, any>;
   requestContext: Record<string, any>;
+  state?: Record<string, any>;
 }): Record<string, any> {
   if (!snapshot?.context) {
     throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
@@ -104,6 +106,10 @@ export function mergeWorkflowStepResult({
     };
   } else {
     snapshot.context[stepId] = result;
+  }
+
+  if (state !== undefined) {
+    snapshot.context.__state = state;
   }
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };

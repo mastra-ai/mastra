@@ -270,12 +270,34 @@ export class MastraTUI {
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
+      // Setup (onboarding) covers the terminal, so it takes keys before any inline prompt: a key meant for
+      // setup must never approve a pending tool call or answer a hidden question.
+      if (this.state.activeOnboarding) {
+        // Ctrl+C during onboarding — cancel it
+        if (data === '\x03') {
+          this.state.activeOnboarding.cancel();
+          this.state.activeOnboarding = undefined;
+          // Fall through to let the editor's 'clear' action fire
+          originalHandleInput(data);
+        } else {
+          this.state.activeOnboarding.handleInput(data);
+        }
+        return;
+      }
       // If there's an active plan approval, route input to it. Ctrl+C still
       // aborts: in raw mode the terminal delivers it as \x03 to the editor (the
       // process SIGINT never fires), so the inline component would otherwise
       // swallow it and leave the suspended submit_plan run parked. Fall through
       // to the editor's Ctrl+C handler (which clears inline state and aborts).
-      if (this.state.activeInlinePlanApproval) {
+      if (this.state.activeInlineApproval) {
+        // Inline tool approval: y / a / Y / n / Esc. Ctrl+C falls through (declines via the editor), and so
+        // does Ctrl+E unless the card lists the arguments itself, so the tool row above can be expanded.
+        const expandsRow = data === '\x05' && !this.state.activeInlineApproval.handlesExpand?.();
+        if (data !== '\x03' && !expandsRow) {
+          this.state.activeInlineApproval.handleInput(data);
+          return;
+        }
+      } else if (this.state.activeInlinePlanApproval) {
         if (data !== '\x03') {
           this.state.activeInlinePlanApproval.handleInput(data);
           return;
@@ -289,18 +311,6 @@ export class MastraTUI {
           return;
         }
       }
-      // If onboarding is active, route input there
-      if (this.state.activeOnboarding) {
-        // Ctrl+C during onboarding — cancel it
-        if (data === '\x03') {
-          this.state.activeOnboarding.cancel();
-          this.state.activeOnboarding = undefined;
-          // Fall through to let the editor's 'clear' action fire
-        } else {
-          this.state.activeOnboarding.handleInput(data);
-          return;
-        }
-      }
       // Otherwise, handle normally
       originalHandleInput(data);
     };
@@ -311,7 +321,6 @@ export class MastraTUI {
       this.state.editor.insertTextAtCursor?.('[image] ');
       flushRender(this.state);
     };
-    this.state.editor.getPromptAnimator = () => this.state.gradientAnimator;
 
     setupKeyboardShortcuts(this.state, {
       stop: () => this.stop(),
@@ -1649,7 +1658,13 @@ export class MastraTUI {
       });
 
       this.state.activeOnboarding = component;
-      showModalOverlay(this.state.ui, component, { maxHeight: '80%' });
+      // Setup takes over the whole terminal (the component centers itself and fills every row).
+      showModalOverlay(this.state.ui, component, {
+        widthPercent: 1,
+        maxWidth: 10_000,
+        maxHeight: '100%',
+        minHeightPercent: 1,
+      });
       component.focused = true;
     });
   }

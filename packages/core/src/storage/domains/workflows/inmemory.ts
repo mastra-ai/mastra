@@ -195,12 +195,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
@@ -225,7 +227,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+    const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
     this.db.workflows.set(key, {
       ...run,
