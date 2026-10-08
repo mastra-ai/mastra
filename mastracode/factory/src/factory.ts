@@ -89,6 +89,7 @@ import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { canCallerActAsFactorySession } from './session/authorize-session-resource.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { createSourceControlSessionLookup, refreshFactorySessionMemorySettings } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -363,6 +364,8 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+/** Resource policies Factory installed on an auth provider, so a later boot can replace its own. */
+const factoryResourcePolicies = new WeakSet<object>();
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   readonly #boards: BoardRegistry;
@@ -638,6 +641,27 @@ export class MastraFactory {
     ];
     const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
     const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
+    // Under `mapUserToResourceId` a signed-in caller carries a mapped resource,
+    // but Factory sessions own their threads under the session id. Server auth
+    // asks this when a request names a session's resource; approve only when
+    // the Factory access rule would let the caller open that session anyway.
+    // An unready domain denies rather than provisioning storage from an
+    // authorization check. A host-supplied policy is kept as-is; Factory's own
+    // policy is replaced on every boot so it never points at a previous boot's
+    // storage.
+    if (auth && (!auth.authorizeUserResource || factoryResourcePolicies.has(auth.authorizeUserResource))) {
+      const policy: NonNullable<IMastraAuthProvider['authorizeUserResource']> = (_user, resourceId, requestContext) =>
+        canCallerActAsFactorySession(
+          {
+            ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+            ...(storage.isDomainReady('projects') ? { projects: factoryProjectsStorage } : {}),
+          },
+          resourceId,
+          requestContext,
+        );
+      factoryResourcePolicies.add(policy);
+      auth.authorizeUserResource = policy;
+    }
 
     // Every integration uses generic integration storage. Version-control
     // providers additionally require the source-control storage domain. Readiness

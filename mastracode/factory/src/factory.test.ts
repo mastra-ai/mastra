@@ -211,6 +211,11 @@ function fakeProvider(
   } as unknown as IMastraAuthProvider & { init: ReturnType<typeof vi.fn> };
 }
 
+/** A minimal auth provider the factory can attach its resource policy to. */
+function resourceAuth(): IMastraAuthProvider {
+  return { authenticateToken: async () => null, authorizeUser: () => true } as unknown as IMastraAuthProvider;
+}
+
 async function prepareFactory(config: ConstructorParameters<typeof MastraFactory>[0]) {
   const factory = new MastraFactory({ secretEncryption, ...config });
   await factory.prepare();
@@ -397,6 +402,120 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
+
+  it('lets a mapped caller act as the Factory session or supervisor they can access', async () => {
+    const storage = fakeStorage();
+    const auth = resourceAuth();
+    await prepareFactory({ storage, auth });
+    const authorize = (args: { resourceId: string; requestContext: RequestContext }) =>
+      auth.authorizeUserResource!(args.requestContext.get('user'), args.resourceId, args.requestContext);
+
+    await storage.init();
+    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+    const project = await storage
+      .getDomain<FactoryProjectsStorage>('projects')
+      .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-1',
+      baseBranch: 'main',
+    });
+
+    await sourceControl.sessions.create({
+      sessionId: 'session-private',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-private',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+
+    const as = (organizationId: string, workosId = 'user-1') => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId, organizationId });
+      return requestContext;
+    };
+    const check = (resourceId: string, organizationId: string, workosId?: string) =>
+      authorize({ resourceId, requestContext: as(organizationId, workosId) });
+
+    await expect(check('session-1', 'org-1')).resolves.toBe(true);
+    // Rows created without a visibility read as org-visible, so an org peer
+    // may act as them; a private session stays owner-only.
+    await expect(check('session-1', 'org-1', 'peer')).resolves.toBe(true);
+    await expect(check('session-private', 'org-1')).resolves.toBe(true);
+    await expect(check('session-private', 'org-1', 'peer')).resolves.toBe(false);
+    await expect(check('session-1', 'org-2')).resolves.toBe(false);
+    await expect(check(`factory-supervisor:${project.id}`, 'org-1')).resolves.toBe(true);
+    await expect(check(`factory-supervisor:${project.id}`, 'org-2')).resolves.toBe(false);
+    await expect(check('shared-workspace', 'org-1')).resolves.toBe(false);
+  });
+
+  it('replaces its own resource policy when the same provider boots again', async () => {
+    const auth = resourceAuth();
+    await prepareFactory({ storage: fakeStorage(), auth });
+    const first = auth.authorizeUserResource;
+    prepareMock.mockClear();
+    await prepareFactory({ storage: fakeStorage(), auth });
+    expect(auth.authorizeUserResource).toBeTypeOf('function');
+    expect(auth.authorizeUserResource).not.toBe(first);
+  });
+
+  it('keeps a resource policy the host already put on its auth provider', async () => {
+    const own = vi.fn(() => true);
+    const auth = { ...resourceAuth(), authorizeUserResource: own };
+    await prepareFactory({ storage: fakeStorage(), auth });
+    expect(auth.authorizeUserResource).toBe(own);
+  });
+
+  it.each(['source-control', 'projects'])(
+    'denies a mapped caller without touching the %s domain while it is not ready',
+    async domain => {
+      const storage = fakeStorage();
+      const auth = resourceAuth();
+      await prepareFactory({ storage, auth });
+      const isDomainReady = storage.isDomainReady.bind(storage);
+      vi.spyOn(storage, 'isDomainReady').mockImplementation(name => name !== domain && isDomainReady(name));
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      const projectsGet = vi.spyOn(storage.getDomain<FactoryProjectsStorage>('projects'), 'get');
+
+      await expect(
+        auth.authorizeUserResource!(
+          requestContext.get('user'),
+          domain === 'projects' ? 'factory-supervisor:project-1' : 'session-1',
+          requestContext,
+        ),
+      ).resolves.toBe(false);
+      if (domain === 'projects') expect(projectsGet).not.toHaveBeenCalled();
+    },
+  );
 
   it('passes the sandbox callback through to integrations', async () => {
     const create = () => ({ id: 'sb-cb' }) as never;
