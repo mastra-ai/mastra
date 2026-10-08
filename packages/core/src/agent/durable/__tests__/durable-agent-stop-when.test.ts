@@ -33,8 +33,10 @@
  * three engines report `Error: T23 stopWhen failure`), but the recorded divergence is not one any
  * ticket owns — durable and evented stream `step-finish` plus an `error` chunk where plain's
  * stream simply rejects, and evented consults the predicate three times — so driving it through
- * the helper would mean declaring a difference against no ticket. It is reported as the F-5
- * finding instead.
+ * the helper would mean declaring a difference against no ticket — the obstacle is the missing
+ * ticket, not the helper: a scenario-level `expect` can add the wrapped engines' extra chunks to
+ * plain's observation, which is how other ports declare presence differences. It is reported as the
+ * F-5 finding instead.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
