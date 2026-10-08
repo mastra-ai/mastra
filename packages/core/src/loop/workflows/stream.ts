@@ -330,9 +330,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
         // A scope kept alive across suspension still holds the previous request's step tools,
-        // which close over that request's requestContext. Drop them so a resume runs the tools
-        // built for this call, as a resume in a fresh process does.
-        if (resumeContext) rest.mastra.__getRunScope(runId)?.delete(STEP_TOOLS_KEY);
+        // which close over that request's requestContext. Let the tools built for this call
+        // replace them, but keep the ones only a processor added, since the suspended call may
+        // be one of them and the processors do not run again before it resumes.
+        const runScope = resumeContext ? rest.mastra.__getRunScope(runId) : undefined;
+        const previousStepTools = runScope?.get(STEP_TOOLS_KEY);
+        if (previousStepTools) runScope!.set(STEP_TOOLS_KEY, { ...previousStepTools, ...rest.tools });
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer

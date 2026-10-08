@@ -135,4 +135,50 @@ describe('delegated resume request context (#25960)', () => {
       'tool ping #2 turn 3',
     ]);
   });
+
+  it('keeps a tool added by an input processor when an in-process resume approves its call', async () => {
+    const seen: string[] = [];
+
+    const added = createTool({
+      id: 'added',
+      description: 'Added by a processor',
+      inputSchema: z.object({ n: z.number() }),
+      requireApproval: true,
+      execute: async ({ n }) => {
+        seen.push(`added #${n}`);
+        return { ok: n };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'with-processor',
+      name: 'with-processor',
+      instructions: 'Call added.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) =>
+          toolResultCount(prompt) === 0 ? reply(toolCall('added-1', 'added', { n: 1 })) : reply(text('done')),
+      }),
+      inputProcessors: [
+        {
+          id: 'add-tool',
+          processInputStep: async ({ tools }: { tools?: Record<string, unknown> }) => ({ tools: { ...tools, added } }),
+        } as any,
+      ],
+    });
+
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+    const first = await agent.stream('call added');
+    let toolCallId: string | undefined;
+    for await (const chunk of first.fullStream) {
+      if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+    }
+    expect(toolCallId).toBe('added-1');
+
+    const resumed = await agent.resumeStream({ approved: true }, { runId: first.runId, toolCallId: 'added-1' });
+    for await (const _chunk of resumed.fullStream) {
+    }
+
+    expect(seen).toEqual(['added #1']);
+  });
 });
