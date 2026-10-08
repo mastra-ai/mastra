@@ -343,6 +343,32 @@ describe('Extractor', () => {
     expect(result.values).toBeUndefined();
   });
 
+  it('does not overwrite JSON working memory when the extractor returns an empty object', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"name":"Tyler"}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': {} },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+  });
+
   it('returns extractor failures when the structured extraction call fails', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const profile = new Extractor({
@@ -505,6 +531,34 @@ describe('Extractor', () => {
     expect(result.failures).toEqual([]);
     expect(stream).toHaveBeenCalledTimes(2);
     expect(stream.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('retries schema working-memory extraction when the extractor value is an empty object', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"name":"Tyler"}'),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {} }) })
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': { name: 'Tyler', city: 'Lisbon' } }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [resolved!],
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { name: 'Tyler', city: 'Lisbon' } });
+    expect(stream).toHaveBeenCalledTimes(2);
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 

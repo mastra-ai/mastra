@@ -104,7 +104,9 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
 
         let document: unknown = current;
         if (configuredSchema) {
-          if (current === null) {
+          // An empty object carries no update (e.g. a provider that can only emit `{}` for the record schema);
+          // writing it would wipe the stored working memory.
+          if (current === null || (typeof current === 'object' && Object.keys(current).length === 0)) {
             return undefined;
           }
           document = await validateAgainstConfiguredSchema(configuredSchema, current);

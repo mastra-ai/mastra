@@ -23,9 +23,12 @@ function shouldRetryEmptyStructuredObject(
   object: Record<string, unknown>,
   extractors: readonly Extractor<any>[],
 ): boolean {
-  return (
-    Object.keys(object).length === 0 && extractors.some(extractor => extractor.retryStructuredExtractionOnEmptyObject)
-  );
+  return extractors.some(extractor => {
+    if (!extractor.retryStructuredExtractionOnEmptyObject) return false;
+    if (Object.keys(object).length === 0) return true;
+    const value = object[extractor.slug];
+    return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+  });
 }
 
 export async function extractStructuredValues(opts: {
