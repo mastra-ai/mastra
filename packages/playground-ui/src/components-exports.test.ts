@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+export const scannedRoots = ['packages/playground-ui/package.json', 'packages/playground-ui/src/ds/components'];
+
 // Guards the @mastra/playground-ui/components/* contract: component folders are
 // published as their own entrypoints (wired up dynamically in vite.config.ts),
 // including components nested below namespace-only folders. Every published

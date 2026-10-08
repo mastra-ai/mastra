@@ -2,6 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+export const scannedRoots = ['packages/playground-ui/src/ds/components'];
+
 const componentsDir = resolve(__dirname, '../components');
 
 const collectComponentSources = (directory: string): string[] =>

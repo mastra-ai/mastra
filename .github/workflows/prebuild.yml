@@ -171,8 +171,9 @@ jobs:
           const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
           const changedFiles = fs.readFileSync('/tmp/changed-files.txt', 'utf-8').split(/\r?\n/).filter(Boolean);
           const nonMarkdownChangedFiles = changedFiles.filter(file => !file.endsWith('.md'));
-          const affectedTests = (data.affectedTests || []).sort();
-          const count = data.count || 0;
+          const { selectScanTests } = require('./.github/scripts/scan-test-routing.cjs');
+          const affectedTests = [...new Set([...(data.affectedTests || []), ...selectScanTests(nonMarkdownChangedFiles)])].sort();
+          const count = affectedTests.length;
           const total = data.testFiles || 1;
           const ratio = count / total;
           const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));

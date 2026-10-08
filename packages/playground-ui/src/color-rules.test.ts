@@ -3,7 +3,7 @@ import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '../../..');
-const sourceRoots = ['packages/playground-ui/src', 'packages/playground/src', 'mastracode/factory-ui/src'];
+export const scannedRoots = ['packages/playground-ui/src', 'packages/playground/src', 'mastracode/factory-ui/src'];
 const sourceFile = /\.(css|tsx?)$/;
 
 const walk = (dir: string): string[] =>
@@ -13,7 +13,7 @@ const walk = (dir: string): string[] =>
     return sourceFile.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
   });
 
-const files = sourceRoots
+const files = scannedRoots
   .flatMap(root => walk(join(repoRoot, root)))
   .map(path => ({
     path: relative(repoRoot, path),

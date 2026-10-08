@@ -9,6 +9,8 @@ import { TextRoles } from './ds/tokens/fonts';
 import { Shadows } from './ds/tokens/shadows';
 import { Sizes } from './ds/tokens/sizes';
 
+export const scannedRoots = ['packages/playground-ui'];
+
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
 
