@@ -331,6 +331,38 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
     }
   });
 
+  it('keeps working on v2 tables created while records still had a maxScope column', async () => {
+    const schemaName = `knowledge_maxscope_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      await createStore(schemaName).init();
+      await pool.query(`ALTER TABLE "${schemaName}".mastra_knowledge_records ADD COLUMN "maxScope" TEXT`);
+
+      const store = createStore(schemaName);
+      expect(await store.inspectSchema()).toMatchObject({ status: 'compatible' });
+      await store.init();
+      const resource = ['org:acme', 'resource:mastra'];
+      const node = await store.createNode({ name: 'Team practice', kind: 'task', scope: resource });
+      const record = await store.appendKnowledge({
+        node: node.id,
+        text: 'Reviews happen on Tuesdays',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: resource,
+        defaultScope: resource,
+      });
+      await store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] });
+
+      expect(await store.getKnowledge({ id: record.id })).toMatchObject({ scope: ['org:acme'] });
+      const row = await pool.query(`SELECT "maxScope" FROM "${schemaName}".mastra_knowledge_records WHERE id=$1`, [
+        record.id,
+      ]);
+      expect(row.rows[0]?.maxScope).toBeNull();
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
   it('rejects an interrupted v2 initialization without its completion marker', async () => {
     const schemaName = `knowledge_unmarked_${Date.now()}`;
     await pool.query(`CREATE SCHEMA "${schemaName}"`);

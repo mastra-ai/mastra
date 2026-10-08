@@ -269,6 +269,38 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
+  it('keeps working on v2 tables created while records still had a maxScope column', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      await client.execute('ALTER TABLE mastra_knowledge_records ADD COLUMN maxScope TEXT');
+
+      const store = new KnowledgeLibSQL({ client });
+      expect(await store.inspectSchema()).toMatchObject({ status: 'compatible' });
+      await store.init();
+      const resource = ['org:acme', 'resource:mastra'];
+      const node = await store.createNode({ name: 'Team practice', kind: 'task', scope: resource });
+      const record = await store.appendKnowledge({
+        node: node.id,
+        text: 'Reviews happen on Tuesdays',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: resource,
+        defaultScope: resource,
+      });
+      await store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] });
+
+      expect(await store.getKnowledge({ id: record.id })).toMatchObject({ scope: ['org:acme'] });
+      const row = await client.execute({
+        sql: 'SELECT maxScope FROM mastra_knowledge_records WHERE id=?',
+        args: [record.id],
+      });
+      expect(row.rows[0]?.maxScope).toBeNull();
+    } finally {
+      client.close();
+    }
+  });
+
   it('rejects an interrupted v2 initialization without its completion marker', async () => {
     const client = createClient({ url: ':memory:' });
     try {

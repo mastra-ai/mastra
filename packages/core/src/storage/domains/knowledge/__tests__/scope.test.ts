@@ -7,6 +7,7 @@ import {
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
 } from '../base';
+import * as storage from '../../..';
 
 const context = ['thread:t1', 'org:o1', 'resource:r1'];
 
@@ -41,5 +42,20 @@ describe('knowledge scopes', () => {
   it('keeps the deprecated ceiling assertion as a no-op for published memory versions', () => {
     expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'resource')).not.toThrow();
     expect(() => assertKnowledgeScopeWithinCeiling(['org:o1'], 'thread')).not.toThrow();
+  });
+
+  it('keeps every @mastra/core/storage export that published @mastra/memory 1.36.0 imports', () => {
+    for (const name of [
+      'InMemoryStore',
+      'MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH',
+      'assertKnowledgeScopeWithinCeiling',
+      'canonicalizeKnowledgeScope',
+      'createKnowledgeNodeCursor',
+      'expandKnowledgeScope',
+      'isKnowledgeScopeVisible',
+      'knowledgeScopeKey',
+    ]) {
+      expect(storage, name).toHaveProperty(name);
+    }
   });
 });
