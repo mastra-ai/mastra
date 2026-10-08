@@ -17,21 +17,12 @@
  * contracts across engines — the cross-engine divergence is COR-1430, declared below.
  *
  * COR-1430 (declared below, for durable and evented): a throwing `stopWhen` rejects plain's stream
- * — its turn simply ends after the tool result — where durable and evented append `step-finish`
- * and `error` chunks to that same turn and resolve. The declaration's `expect` adds exactly those
- * two chunks, so the helper's leaf-by-leaf comparison still covers everything else, and its own
- * staleness check fails the moment either side stops behaving this way.
+ * — its turn simply ends after the tool result — where durable and evented append an `error` chunk
+ * to that same turn and resolve. The declaration's `expect` adds exactly that chunk, so the helper's
+ * leaf-by-leaf comparison still covers everything else, and its own staleness check fails the
+ * moment either side stops behaving this way.
  *
- * COR-1412 (declared below, for durable and evented): the durable loop emits `step-finish` before
- * the continuation decision is made, so on durable and evented the step a run stops on reports
- * `stepResult.isContinued: true` where plain reports `false` (finding F-1). That flag is what the
- * loop and the channel layer read to close a run — `channels/output-processor.ts:196` only closes a
- * render queue on a `step-finish` whose `isContinued !== true` — so a durable or evented run that
- * stops on a tool step leaves it open. The declaration derives the wrong value from plain's own
- * observation rather than ignoring the field, so these legs fail again the moment either side is
- * fixed (and the helper refuses a declaration that stops reproducing at all).
- *
- * plain's own values are pinned literally, read from the observation the helper returns, so the
+ * Plain's own values are pinned literally, read from the observation the helper returns, so the
  * reference stays visible next to the declaration.
  */
 import { describe, expect, it } from 'vitest';
@@ -65,58 +56,29 @@ type StopWhen = NonNullable<ParityStreamOptions['stopWhen']>;
 const EXPECTED_TURNS: Partial<Record<Variant, number>> = { predicate: 1, 'has-tool-call': 1, array: 2 };
 
 /**
- * COR-1412: the durable loop emits `step-finish` before the continuation decision, so on durable
- * and evented the step the run stops on reports `stepResult.isContinued: true` where plain reports
- * `false` — the value `channels/output-processor.ts:196` reads to close a render queue. The
- * expectation derives the wrong value from plain's own observation, so it fails the moment either
- * side is fixed (and the helper's own "no longer reproduces" check fails if it stops differing).
- */
-function terminatingStepStaysContinued(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => {
-      const index = turn.chunkTypes.lastIndexOf('step-finish');
-      if (index < 0) return turn;
-      const payload = turn.chunkPayloads[index] as { stepResult?: Record<string, unknown> } | undefined;
-      const chunkPayloads = [...turn.chunkPayloads];
-      chunkPayloads[index] = { ...payload, stepResult: { ...payload?.stepResult, isContinued: true } };
-      return { ...turn, chunkPayloads };
-    }),
-  };
-}
-
-const COR_1412: EngineDifference = {
-  reason:
-    'COR-1412: durable and evented emit the terminating step-finish before the continuation decision, so stepResult.isContinued stays true where plain reports false (channels/output-processor.ts:196 only closes a render queue on isContinued !== true).',
-  expect: terminatingStepStaysContinued,
-};
-
-/**
  * COR-1430: the same run settles differently. plain rejects the stream on the throwing predicate,
- * so its turn ends after the tool result; durable and evented append `step-finish` and `error`
- * chunks to that turn and resolve. The expectation adds exactly those two chunks — and only those,
- * so the helper still compares everything else leaf by leaf.
+ * so its turn ends after the tool result; durable and evented append an `error` chunk to that turn
+ * and resolve. The expectation adds exactly that chunk — and only that chunk — so the helper still
+ * compares everything else leaf by leaf.
  *
- * `chunkPayloads` is ignored because the two extra payloads are not derivable from plain's
- * observation: the wrapped `step-finish` payload is itself reshaped by the helper's own
- * `KNOWN_CHUNK_DIFFERENCES`, so pinning it here would pin helper internals rather than the engine
- * contract. The test body pins the parts that matter instead — the extra chunks' types, and the
- * error they carry.
+ * `chunkPayloads` is ignored because the extra error payload is not derivable from plain's
+ * observation. The test body pins the parts that matter instead — the extra chunk's type and the
+ * error it carries.
  */
 function settledAfterThrowingStopWhen(plain: EngineObservation): EngineObservation {
   return {
     ...plain,
     turns: plain.turns.map(turn => ({
       ...turn,
-      chunks: [...turn.chunks, 'AGENT:step-finish', 'undefined:error'],
-      chunkTypes: [...turn.chunkTypes, 'step-finish', 'error'],
+      chunks: [...turn.chunks, 'undefined:error'],
+      chunkTypes: [...turn.chunkTypes, 'error'],
     })),
   };
 }
 
 const COR_1430: EngineDifference = {
   reason:
-    "COR-1430: a throwing stopWhen rejects plain's stream, where durable and evented stream a `step-finish` and an `error` chunk instead and resolve.",
+    "COR-1430: a throwing stopWhen rejects plain's stream, where durable and evented stream an `error` chunk instead and resolve.",
   ignore: ['chunkPayloads'],
   expect: settledAfterThrowingStopWhen,
 };
@@ -211,10 +173,8 @@ async function runT23(variant: Variant) {
 
   const results = await expectEngineParity({
     model: script,
-    // `throws` settles differently on the wrapped engines (COR-1430); the other variants only ever
-    // hit the terminating-step flag (COR-1412).
-    differences:
-      variant === 'throws' ? { durable: COR_1430, evented: COR_1430 } : { durable: COR_1412, evented: COR_1412 },
+    // `throws` settles differently on the wrapped engines (COR-1430).
+    differences: variant === 'throws' ? { durable: COR_1430, evented: COR_1430 } : undefined,
     buildAgent: ({ engine, model }) => {
       commits.set(engine, 0);
       calls.set(engine, []);
@@ -259,18 +219,20 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
         expect(calls.get(engine)!.length).toBeGreaterThanOrEqual(1);
       }
 
-      // plain's reference values, read off the observation the helper returned. plain stamps the
-      // terminating `step-finish` with `isContinued: false`, which is what the loop and the channel
-      // layer read to close the run (`channels/output-processor.ts:196` only closes on a `step-finish`
-      // whose `isContinued !== true`). durable and evented report the opposite value — COR-1412,
-      // declared above — so these literals are the reference that declaration is measured against.
-      const plainFlags = stepFinishStepResults(results.plain!.turns.at(-1)!);
-      expect(plainFlags).toHaveLength(expected);
-      expect(
-        plainFlags.map(flag => flag.isContinued),
-        'plain: every step before the last continued, the step stopWhen ended on did not',
-      ).toEqual([...Array<boolean>(expected - 1).fill(true), false]);
-      expect(plainFlags.map(flag => flag.reason)).toEqual(Array<unknown>(expected).fill('tool-calls'));
+      // Every engine must report that each step before the last continued and the step stopWhen
+      // ended on did not. The channel layer uses this flag to close its render queue.
+      for (const engine of ENGINES) {
+        const flags = stepFinishStepResults(results[engine]!.turns.at(-1)!);
+        expect(flags, `${engine}: step-finish results`).toHaveLength(expected);
+        expect(
+          flags.map(flag => flag.isContinued),
+          `${engine}: every step before the last continued, the step stopWhen ended on did not`,
+        ).toEqual([...Array<boolean>(expected - 1).fill(true), false]);
+        expect(
+          flags.map(flag => flag.reason),
+          `${engine}: step-finish reasons`,
+        ).toEqual(Array<unknown>(expected).fill('tool-calls'));
+      }
     },
   );
 
@@ -300,9 +262,9 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
       expect((turn.chunkPayloads[3] as { result?: unknown }).result, `${engine}: tool result`).toEqual({ done: 1 });
     }
 
-    // plain's reference, read off the observation the helper returned: the rejection ends the turn
-    // after the tool result, so nothing else reaches the stream. durable and evented settle the same
-    // run by appending the two chunks the COR-1430 declaration adds — its `expect` is what makes the
+    // Plain's reference, read off the observation the helper returned: the rejection ends the turn
+    // after the tool result, so nothing else reaches the stream. Durable and evented settle the same
+    // run by appending the error chunk the COR-1430 declaration adds — its `expect` is what makes the
     // comparison above possible, and its `reason` records why they are allowed to differ.
     const plainTypes = results.plain!.turns.at(-1)!.chunkTypes;
     expect(plainTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
@@ -315,20 +277,13 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
         'step-start',
         'tool-call',
         'tool-result',
-        'step-finish',
         'error',
       ]);
       expect(errorMessages(turn), `${engine}: error chunk`).toEqual(['T23 stopWhen failure']);
-      expect(
-        (turn.chunkPayloads[4] as { stepResult?: { reason?: unknown } }).stepResult?.reason,
-        `${engine}: the step-finish the error closed`,
-      ).toBe('tool-calls');
     }
 
     // How often the predicate is consulted differs across engines: plain and durable ask once,
-    // evented asks more because its worker re-runs the step and re-reads the decision. COR-1430
-    // records that count alongside the settle-path difference this leg declares — COR-1412 covers
-    // only the `isContinued` flag — so plain and durable are pinned and evented keeps the floor.
+    // while evented may ask more because its worker re-runs the step and re-reads the decision.
     expect(calls.get('plain')!.length, 'plain: the predicate was consulted once').toBe(1);
     expect(calls.get('durable')!.length, 'durable: the predicate was consulted once').toBe(1);
     expect(calls.get('evented')!.length, 'evented: the predicate was consulted').toBeGreaterThanOrEqual(1);
