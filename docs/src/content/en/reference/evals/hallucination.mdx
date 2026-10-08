@@ -111,12 +111,11 @@ The scorer evaluates hallucination through contradiction detection and unsupport
 
 ### Scoring Process
 
-1. Analyzes factual content:
-   - Extracts statements from context
-   - Identifies numerical values and dates
-   - Maps statement relationships
-1. Analyzes output for hallucinations:
-   - Compares against context statements
+1. Extracts claims from the output:
+   - Breaks the agent's response into factual claims
+   - Includes numerical values and dates
+1. Checks each claim against the provided context:
+   - Compares the claim with the context
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
