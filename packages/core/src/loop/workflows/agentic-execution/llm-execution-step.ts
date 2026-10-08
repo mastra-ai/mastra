@@ -2780,6 +2780,38 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
         cleanupProviderToolSpans(true);
+        // The retry throws this attempt away like the processor-retry paths
+        // below, so the failed attempt's streamed output must not survive into
+        // it: processOutputStream already committed this attempt's
+        // text-deltas to messageList under the response message id, and the
+        // error path below only clears the error state — it never rolls that
+        // output back. Without this, the retry prompt replays the failed
+        // prefix as accepted assistant history, and the run's final text
+        // concatenates it onto the recovered answer (issue #26081).
+        //
+        // The retry throws this attempt away like the processor-retry paths
+        // below, so a failed attempt's streamed text must not survive into it:
+        // processOutputStream already committed it to messageList under the
+        // response message id, and the error path above only clears the error
+        // state. Without the rollback the retry prompt replays the failed
+        // prefix as accepted assistant history, and the run's final text
+        // concatenates it onto the recovered answer (issue #26081).
+        //
+        // Gated on streamed text, and ordered exactly like the tripwire-retry
+        // rollback below — recarry, roll back, then discard — so eager work
+        // that settled under this attempt goes back into the carry buffer
+        // before the rollback removes it, and the discard writes it back out.
+        // The gate matters: an attempt that streamed nothing (a model that
+        // threw before the first delta) must not roll back, because its
+        // response message can predate the attempt, and with no step boundary
+        // to splice at — a first iteration opens none — the rollback removes
+        // that message whole. Targets `attemptMessageId`, the id this attempt
+        // materialized under, which an error processor may have since rotated
+        // for the retry.
+        if (runState.state.partialText) {
+          eagerCoordinator?.recarryCommittedWork(attemptMessageId);
+          messageList.rollbackToStepBoundary(attemptMessageId, iterationBoundary);
+        }
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         await discardAttemptEagerWork();
@@ -2792,6 +2824,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
           return bailFromExecution();
         }
+
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;

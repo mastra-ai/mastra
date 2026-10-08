@@ -287,6 +287,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #bufferedObject: OUTPUT | undefined;
   #usedFallbackValue = false;
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
+  /**
+   * Run-lifetime `#bufferedText` length as of the last accepted step's finish,
+   * and the response message ids streamed since then. A retried attempt's text
+   * is rolled back to this boundary so earlier accepted steps keep their text
+   * (issue #26081).
+   */
+  #lastAcceptedStepTextLength = 0;
+  #pendingAttemptTextIds = new Set<string>();
   #bufferedSources: LLMStepResult<OUTPUT>['sources'] = [];
   #bufferedReasoning: LLMStepResult<OUTPUT>['reasoning'] = [];
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
@@ -663,6 +671,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#bufferedText.push(chunk.payload.text);
               self.#bufferedByStep.text += chunk.payload.text;
               if (chunk.payload.id) {
+                self.#pendingAttemptTextIds.add(chunk.payload.id);
                 const ary = self.#bufferedTextChunks[chunk.payload.id] ?? [];
                 ary.push(chunk.payload.text);
                 self.#bufferedTextChunks[chunk.payload.id] = ary;
@@ -848,8 +857,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
-              // If step has tripwire, text should be empty (rejected response)
-              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
+              // If step has tripwire, text should be empty (rejected response).
+              // A retried attempt's streamed text is excluded for the same
+              // reason: it failed, and keeping it would join the failed prefix
+              // onto the recovered answer through getFullOutput() (issue
+              // #26081).
+              const isRetryStep = chunk.payload.stepResult?.reason === 'retry';
+              const stepText = stepTripwire || isRetryStep ? '' : self.#bufferedByStep.text;
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
@@ -964,6 +978,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#truncateAtNextStepFinish = false;
                 self.#truncateRunBuffers();
               }
+
+              // A retried attempt: this step-finish closes a failed attempt
+              // (API error or processor rejection) whose text-deltas were
+              // already streamed and buffered. Roll the run-lifetime text back
+              // to where the last accepted step left it — never below it, so
+              // earlier accepted steps keep their text — and forget the ids the
+              // failed attempt streamed under. The retried step stays in the
+              // step history with its excluded step text, and the failed
+              // attempt's usage still counts (issue #26081).
+              if (isRetryStep) {
+                self.#bufferedText.length = self.#lastAcceptedStepTextLength;
+                for (const textId of self.#pendingAttemptTextIds) {
+                  delete this.#bufferedTextChunks[textId];
+                }
+              } else {
+                self.#lastAcceptedStepTextLength = self.#bufferedText.length;
+              }
+              self.#pendingAttemptTextIds.clear();
 
               break;
             }
@@ -2169,6 +2201,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * output, and the MessageList are intentionally untouched.
    */
   #truncateRunBuffers() {
+    this.#lastAcceptedStepTextLength = 0;
+    this.#pendingAttemptTextIds.clear();
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
     this.#bufferedText.length = 0;
@@ -2267,6 +2301,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
       bufferedTextChunks: this.#bufferedTextChunks,
+      lastAcceptedStepTextLength: this.#lastAcceptedStepTextLength,
+      pendingAttemptTextIds: [...this.#pendingAttemptTextIds],
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
       bufferedFiles: this.#bufferedFiles,
@@ -2293,6 +2329,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
     this.#bufferedTextChunks = state.bufferedTextChunks;
+    // Restore the retry-rollback boundary with the text it indexes. Legacy
+    // snapshots predate the field: fall back to the restored length, since a
+    // snapshot that carries buffered text has by definition accepted it.
+    this.#lastAcceptedStepTextLength =
+      state.lastAcceptedStepTextLength ?? this.#bufferedText.length;
+    this.#pendingAttemptTextIds = new Set(state.pendingAttemptTextIds ?? []);
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
     this.#bufferedFiles = state.bufferedFiles;
