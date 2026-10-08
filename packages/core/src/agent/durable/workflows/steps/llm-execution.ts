@@ -7,6 +7,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
@@ -26,6 +27,7 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
+import { createRunScope } from '../../../../mastra/run-scope';
 import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
@@ -57,6 +59,7 @@ import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../ru
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { durableOptionsSchema } from '../shared/schemas';
 
@@ -828,6 +831,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ? messageList.get.all.aiV6.llmPrompt
                   : messageList.get.all.aiV5.llmPrompt;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            // Identify OM's prompt message by its source ID and position before request
+            // processors run. Equal text in real user messages is not synthetic context.
+            const dbMessages = messageList.get.all.db();
+            const continuationIndex = dbMessages.findIndex(message => message.id === 'om-continuation');
+            let omContinuationPrompt: LanguageModelV2Prompt[number] | undefined;
+            if (continuationIndex !== -1) {
+              const precedingMessages = createRunMessageList({ mastra });
+              precedingMessages.add(dbMessages.slice(0, continuationIndex), 'input');
+              const precedingUserCount = precedingMessages.get.all.aiV5
+                .model()
+                .filter(message => message.role === 'user' && message.content.length > 0).length;
+              omContinuationPrompt = inputMessages.filter(message => message.role === 'user')[precedingUserCount];
+              // Keep source identity in supported Mastra metadata so request processors
+              // can clone or reorder messages without changing their prompt shape.
+              if (omContinuationPrompt) {
+                omContinuationPrompt.providerOptions = {
+                  ...omContinuationPrompt.providerOptions,
+                  mastra: { ...omContinuationPrompt.providerOptions?.mastra, messageId: 'om-continuation' },
+                };
+              }
+            }
             await persistUnavailableAttachments({
               messageList,
               memory: globalRunRegistry.get(runId)?.memory,
@@ -937,6 +961,20 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 logger?.error?.('Error in processLLMRequest processors:', error);
                 throw error;
               }
+            }
+
+            // Share the effective prompt with agent tools without putting it on the wire.
+            // OM's synthetic continuation is not part of the parent's conversation.
+            const delegationMessages = omContinuationPrompt
+              ? inputMessages.filter(
+                  message =>
+                    message !== omContinuationPrompt &&
+                    message.providerOptions?.mastra?.messageId !== 'om-continuation',
+                )
+              : inputMessages;
+            if (registryEntry) {
+              registryEntry.runScope ??= createRunScope();
+              registryEntry.runScope.set(STEP_MODEL_MESSAGES_KEY, delegationMessages);
             }
 
             // Enable defer mode - step-finish won't auto-close the step span

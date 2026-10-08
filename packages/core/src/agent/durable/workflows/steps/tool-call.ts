@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
@@ -46,6 +47,7 @@ import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableToolCallOutput,
+  DurableLLMStepOutput,
   SerializableDurableOptions,
   AgentSuspendedEventData,
   RunRegistryEntry,
@@ -56,7 +58,9 @@ import {
   restoreRequestContext,
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
+import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { readMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable tool call step.
@@ -329,6 +333,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
+        getStepResult,
       } = params;
 
       // Access pubsub via symbol
@@ -619,15 +624,19 @@ export function createDurableToolCallStep() {
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       let threadExists = state?.threadExists ?? false;
 
-      // Reconstruct MessageList from workflow state if available
-      // Note: In foreach mode, the message list from the registry may be available
-      // but for durability, we access what's available through the registry
-      let messageList: MessageList | undefined;
-      // For local execution, the globalRunRegistry might have an ExtendedRunRegistry entry
-      // that stores the messageList. We cast and check safely.
-      const extendedEntry = globalRunRegistry.get(runId) as any;
-      if (extendedEntry?.messageList) {
-        messageList = extendedEntry.messageList;
+      const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      // Recovered transcripts supply context only; persistence belongs to the live registry list.
+      let contextMessageList = messageList;
+      if (!contextMessageList) {
+        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const messageListState = readMessageListState(params.state, llmOutput ?? {});
+        if (messageListState) {
+          contextMessageList = createRunMessageList({
+            mastra,
+            threadId: state?.threadId,
+            resourceId: state?.resourceId,
+          }).deserialize(messageListState);
+        }
       }
 
       const doFlush = async () => {
@@ -1102,9 +1111,20 @@ export function createDurableToolCallStep() {
           }
         : undefined;
 
+      let delegationMessages = registryEntry?.runScope?.get(STEP_MODEL_MESSAGES_KEY);
+      if (isAgentTool && !delegationMessages && contextMessageList) {
+        // Cold workers must exclude synthetic context by ID before model conversion drops IDs.
+        const delegationList = createRunMessageList({ mastra });
+        delegationList.add(
+          contextMessageList.get.all.db().filter(message => message.id !== 'om-continuation'),
+          'input',
+        );
+        delegationMessages = delegationList.get.all.aiV5.prompt();
+      }
+
       const toolOptions = {
         toolCallId,
-        messages: [],
+        messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
