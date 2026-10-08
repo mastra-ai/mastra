@@ -1,49 +1,24 @@
 import path from 'node:path';
 import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 
-import type { MastraSandbox, SandboxStartHook, WorkspaceSandbox } from '@mastra/core/workspace';
-import type { RepositoryAccess } from '../capabilities/version-control.js';
+import type {
+  FactorySandbox,
+  FactorySandboxContext as CoreFactorySandboxContext,
+  MastraSandbox,
+  SandboxStartHook,
+  WorkspaceSandbox,
+} from '@mastra/core/workspace';
 import { timedPhase } from '../timing.js';
 import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir.js';
 
 /**
- * Everything factory knows about a session's sandbox needs — the whole
- * contract between factory and the deployer's sandbox callback. Factory owns
- * intent; the provider owns resolving `sessionId` to a runnable VM.
+ * Everything factory knows about a session's sandbox needs: the whole contract
+ * between factory and the host's FactorySandbox. Factory owns intent; the
+ * provider owns resolving `sessionId` to a runnable VM. Defined in
+ * `@mastra/core/workspace` so provider packages can implement it without
+ * depending on factory.
  */
-export interface FactorySandboxContext {
-  /** Stable session id — the sandbox identity. */
-  sessionId: string;
-  /**
-   * The provider's physical sandbox id persisted from a prior start, when the
-   * session has been started before. Providers that reattach by physical id
-   * (e.g. Railway) MUST forward it to the sandbox constructor so resume
-   * reattaches the original VM instead of provisioning a replacement. E2B and
-   * Platform accept it as a deterministic-reattach optimization. Undefined on
-   * a session's first ever start.
-   */
-  sandboxId?: string;
-  /** owner/name of the repository, when the session is repo-backed. */
-  repoFullName?: string;
-  /**
-   * Configured repo setup command, when present. Part of a repo template's
-   * identity: a different setup command produces a different template.
-   */
-  setupCommand?: string;
-  /**
-   * Resolves the session repository's clone URL and a fresh short-lived
-   * credential for it. Providers use it for authenticated work that runs
-   * outside the VM — resolving a private repo's head, or cloning it during
-   * a template build. The credential is minted per call (installation
-   * tokens expire in ~1h); never an org PAT.
-   *
-   * `undefined` when the session has no repository, which is how a provider
-   * knows to build no repo template. The key is always present so that
-   * passing the whole context to a provider helper keeps working when this
-   * field changes, instead of silently resolving to "no repository".
-   */
-  getRepositoryAccess: (() => Promise<RepositoryAccess>) | undefined;
-}
+export type FactorySandboxContext = CoreFactorySandboxContext;
 
 /**
  * The deploy's sandbox configuration: construct a session's sandbox from
@@ -69,8 +44,18 @@ export interface FactorySandboxContext {
  * ```typescript
  * sandbox: ({ sessionId, sandboxId }) => new E2BSandbox({ id: sessionId, sandboxId })
  * ```
+ *
+ * @deprecated Pass a FactorySandbox instance (for example `new E2BFactorySandbox({ apiKey })`) instead.
  */
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;
+
+/**
+ * The `sandbox` option of `MastraFactoryConfig`: a FactorySandbox instance
+ * (preferred; it owns the session sandbox constructor, the repo template and
+ * the environment settings schema) or the deprecated bare callback, which the
+ * factory wraps as a `provider: 'custom'` sandbox with no settings.
+ */
+export type MastraFactorySandboxOption = FactorySandbox | MastraFactorySandboxConfig;
 
 /**
  * What the start hook learned about the setup command before running the

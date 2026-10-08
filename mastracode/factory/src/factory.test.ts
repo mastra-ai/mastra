@@ -9,7 +9,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import { LocalSandbox } from '@mastra/core/workspace';
+import { BaseFactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
@@ -398,10 +398,66 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('passes the sandbox callback through to integrations', async () => {
-    const create = () => ({ id: 'sb-cb' }) as never;
+  it('passes the normalized sandbox through to integrations', async () => {
+    const created = { id: 'sb-cb' } as never;
+    const create = vi.fn(() => created);
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
-    expect(ctx.sandbox).toBe(create);
+    expect(isFactorySandbox(ctx.sandbox)).toBe(true);
+    const fakeCtx = { sessionId: 's', getRepositoryAccess: undefined };
+    expect(ctx.sandbox!.create(fakeCtx, {})).toBe(created);
+    expect(create).toHaveBeenCalledWith(fakeCtx);
+  });
+
+  it('accepts a FactorySandbox instance and describes it', async () => {
+    class StubFactorySandbox extends BaseFactorySandbox<{ size?: string }> {
+      readonly provider = 'stub';
+      readonly settings = {
+        type: 'object',
+        properties: { size: { type: 'string', enum: ['s', 'm'] } },
+        additionalProperties: false,
+      } as const;
+      readonly templateFields = ['size'] as const;
+      create = vi.fn(() => ({ id: 'sb' }) as never);
+    }
+    const sandbox = new StubFactorySandbox();
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
+    expect(factory.sandboxDescription).toBeUndefined();
+    await factory.prepare();
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(factory.sandboxDescription).toMatchObject({
+      provider: 'stub',
+      templateFields: ['size'],
+      capabilities: { template: false, builds: { available: false, history: false } },
+    });
+    expect(factory.sandboxDescription!.settingsSchema.properties).toHaveProperty('size');
+  });
+
+  it('accepts a branded plain object as a FactorySandbox', async () => {
+    const sandbox = {
+      [FACTORY_SANDBOX_BRAND]: true,
+      provider: 'plain',
+      settings: { type: 'object', properties: {}, additionalProperties: false },
+      templateFields: [],
+      create: () => ({ id: 'sb' }) as never,
+    } as const;
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
+    await factory.prepare();
+    expect(factory.sandboxDescription?.provider).toBe('plain');
+  });
+
+  it('wraps a callback as a custom sandbox with no settings', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: () => ({ id: 'sb' }) as never,
+    });
+    await factory.prepare();
+    expect(factory.sandboxDescription).toMatchObject({
+      provider: 'custom',
+      templateFields: [],
+      capabilities: { template: false, builds: { available: false, history: false } },
+    });
+    expect(factory.sandboxDescription!.settingsSchema.properties).toEqual({});
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {

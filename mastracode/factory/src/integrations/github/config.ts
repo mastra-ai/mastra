@@ -15,8 +15,8 @@
  * registry lookup.
  */
 
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { RouteAuth } from '../../routes/route.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { GithubIntegration } from './integration.js';
 
@@ -46,7 +46,7 @@ export interface GithubFeatureGateOptions {
   /** Shared OAuth/install `state` signer, when configured. */
   stateSigner?: StateSigner;
   /** The deploy's sandbox callback, when sandboxes are configured. */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
 }
 
 /**

@@ -1,8 +1,8 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -29,7 +29,7 @@ export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
   auth?: RouteAuth;
   intake?: IntakeStorage;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   emitAudit?: AuditEmitter['emit'];
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;

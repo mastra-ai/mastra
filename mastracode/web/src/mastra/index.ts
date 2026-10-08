@@ -22,14 +22,13 @@ import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { LocalSandbox } from '@mastra/core/workspace';
-import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
-import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
+import { E2BFactorySandbox } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
-import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
@@ -362,6 +361,21 @@ export const factoryConfigVersion = 'mastracode-web-v1';
 const hasPlatformSandboxEnv =
   ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
   ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
+
+/**
+ * The host sandbox, chosen once at boot: local when forced, else the platform
+ * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local.
+ */
+function factorySandbox() {
+  const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+  if (!useLocalSandbox && hasPlatformSandboxEnv) return new PlatformFactorySandbox({});
+  const e2bApiKey = process.env.E2B_API_KEY?.trim();
+  if (!useLocalSandbox && e2bApiKey) return new E2BFactorySandbox({ apiKey: e2bApiKey });
+  return new LocalFactorySandbox({
+    root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+    env: localSandboxEnv(),
+  });
+}
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -370,34 +384,7 @@ export const factory = new MastraFactory({
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
-  sandbox: ctx => {
-    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
-    if (!useLocalSandbox && hasPlatformSandboxEnv) {
-      return new PlatformSandbox({
-        id: ctx.sessionId,
-        // Physical VM id from a prior start (undefined on first start) so
-        // resume reattaches the original VM instead of provisioning a replacement.
-        sandboxId: ctx.sandboxId,
-        template: createPlatformRepoTemplate(ctx),
-      });
-    }
-
-    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
-      return new E2BSandbox({
-        id: ctx.sessionId,
-        sandboxId: ctx.sandboxId,
-        template: createE2BRepoTemplate(ctx),
-      });
-    }
-
-    return new LocalSandbox({
-      workingDirectory: join(
-        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-        ctx.sessionId,
-      ),
-      env: localSandboxEnv(),
-    });
-  },
+  sandbox: factorySandbox(),
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {

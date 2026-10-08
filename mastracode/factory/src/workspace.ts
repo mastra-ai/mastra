@@ -9,6 +9,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type {
+  FactorySandbox,
   SandboxStartHook,
   SkillSource,
   SkillSourceEntry,
@@ -17,7 +18,6 @@ import type {
 } from '@mastra/core/workspace';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { VersionControl } from './capabilities/version-control.js';
-import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -305,7 +305,7 @@ export interface WorkspaceSourceControlProvider {
 
 export interface CreateWorkspaceFactoryOptions {
   /** Factory sandbox runtime config (session sandbox callback). */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /** Defaults to `'lazy'`. */
   sandboxStart?: FactorySandboxStart;
   /** Source-control providers whose repositories may back Factory sessions. */
@@ -450,9 +450,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig) {
-      throw new Error('A sandbox callback is required to create a Factory session workspace');
+      throw new Error('A sandbox is required to create a Factory session workspace');
     }
-    const createSessionSandboxInstance = sandboxConfig;
+    const factorySandbox = sandboxConfig;
     const githubProvider = sourceControl.github;
 
     const storage = sourceControl.storage;
@@ -603,23 +603,29 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
-        const sandbox = createSessionSandboxInstance({
-          sessionId: session.id,
-          // Physical VM id persisted from a prior start (undefined on first
-          // start). Providers that reattach by physical id use it to resume the
-          // original VM instead of provisioning a replacement.
-          sandboxId: session.sandboxId ?? undefined,
-          repoFullName,
-          // Stored nullable; the context speaks `undefined` for absent.
-          setupCommand: projectRepository.setupCommand ?? undefined,
-          // Deferred call — only dereferenced when a provider needs the repo
-          // outside the VM (template build time).
-          getRepositoryAccess: () =>
-            sourceControl.versionControl.getRepositoryAccess({
-              orgId: session.orgId,
-              repositoryId: repository.id,
-            }),
-        });
+        // Settings are the environment's stored document; none exist yet on
+        // this surface, so the provider sees an empty document and applies
+        // its own defaults.
+        const sandbox = factorySandbox.create(
+          {
+            sessionId: session.id,
+            // Physical VM id persisted from a prior start (undefined on first
+            // start). Providers that reattach by physical id use it to resume the
+            // original VM instead of provisioning a replacement.
+            sandboxId: session.sandboxId ?? undefined,
+            repoFullName,
+            // Stored nullable; the context speaks `undefined` for absent.
+            setupCommand: projectRepository.setupCommand ?? undefined,
+            // Deferred call — only dereferenced when a provider needs the repo
+            // outside the VM (template build time).
+            getRepositoryAccess: () =>
+              sourceControl.versionControl.getRepositoryAccess({
+                orgId: session.orgId,
+                repositoryId: repository.id,
+              }),
+          },
+          {},
+        );
         // Attached inside the construction closure, so exactly once per
         // instance — `constructSessionEntry` runs on every open and would
         // stack a wrapper per call. Factory's setup runs first: a hook the
