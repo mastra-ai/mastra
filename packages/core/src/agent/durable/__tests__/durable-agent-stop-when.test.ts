@@ -14,9 +14,13 @@
  * reference-vs-candidate (main vs PR) and marks its engine comparison NOT COMPARABLE, because
  * plain fails "worker completion" while durable and evented pass. The port therefore asserts the
  * harness's actual per-engine check (`finish >= 1 || errors || threw`) and does not compare the
- * contracts across engines. The observed cross-engine divergence — plain rejects the stream,
- * durable/evented stream an `error` chunk, evented consults the predicate more than once — is
- * recorded as the F-5 finding rather than pinned.
+ * contracts across engines — the cross-engine divergence is COR-1430, declared below.
+ *
+ * COR-1430 (declared below, for durable and evented): a throwing `stopWhen` rejects plain's stream
+ * — its turn simply ends after the tool result — where durable and evented append `step-finish`
+ * and `error` chunks to that same turn and resolve. The declaration's `expect` adds exactly those
+ * two chunks, so the helper's leaf-by-leaf comparison still covers everything else, and its own
+ * staleness check fails the moment either side stops behaving this way.
  *
  * COR-1412 (declared below, for durable and evented): the durable loop emits `step-finish` before
  * the continuation decision is made, so on durable and evented the step a run stops on reports
@@ -28,26 +32,13 @@
  * fixed (and the helper refuses a declaration that stops reproducing at all).
  *
  * plain's own values are pinned literally, read from the observation the helper returns, so the
- * reference stays visible next to the declaration. The `throws` leg stays directly driven: the
- * helper does record the rejected run now (`COR-1417` made a failed run an observation, and all
- * three engines report `Error: T23 stopWhen failure`), but the recorded divergence is not one any
- * ticket owns — durable and evented stream `step-finish` plus an `error` chunk where plain's
- * stream simply rejects, and evented consults the predicate three times — so driving it through
- * the helper would mean declaring a difference against no ticket — the obstacle is the missing
- * ticket, not the helper: a scenario-level `expect` can add the wrapped engines' extra chunks to
- * plain's observation, which is how other ports declare presence differences. It is reported as the
- * F-5 finding instead.
+ * reference stays visible next to the declaration.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
 import type {
   EngineDifference,
   EngineObservation,
@@ -56,7 +47,7 @@ import type {
   ParitySnapshot,
   ParityStreamOptions,
 } from './parity-harness';
-import { chunksOfType, createRecordingModel, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 
@@ -72,17 +63,6 @@ type StopWhen = NonNullable<ParityStreamOptions['stopWhen']>;
 
 /** Tool turns each variant is expected to complete; `throws` promises nothing. */
 const EXPECTED_TURNS: Partial<Record<Variant, number>> = { predicate: 1, 'has-tool-call': 1, array: 2 };
-
-/** The contract the harness compares across cells for the `throws` variant. */
-type ThrowsContract = {
-  modelCalls: number;
-  commits: number;
-  finish: number;
-  finishReason: unknown;
-  predicateCalls: Array<{ name: string; steps: number }>;
-  errors: string[];
-  threw: string | null;
-};
 
 /**
  * COR-1412: the durable loop emits `step-finish` before the continuation decision, so on durable
@@ -111,6 +91,36 @@ const COR_1412: EngineDifference = {
   expect: terminatingStepStaysContinued,
 };
 
+/**
+ * COR-1430: the same run settles differently. plain rejects the stream on the throwing predicate,
+ * so its turn ends after the tool result; durable and evented append `step-finish` and `error`
+ * chunks to that turn and resolve. The expectation adds exactly those two chunks — and only those,
+ * so the helper still compares everything else leaf by leaf.
+ *
+ * `chunkPayloads` is ignored because the two extra payloads are not derivable from plain's
+ * observation: the wrapped `step-finish` payload is itself reshaped by the helper's own
+ * `KNOWN_CHUNK_DIFFERENCES`, so pinning it here would pin helper internals rather than the engine
+ * contract. The test body pins the parts that matter instead — the extra chunks' types, and the
+ * error they carry.
+ */
+function settledAfterThrowingStopWhen(plain: EngineObservation): EngineObservation {
+  return {
+    ...plain,
+    turns: plain.turns.map(turn => ({
+      ...turn,
+      chunks: [...turn.chunks, 'AGENT:step-finish', 'undefined:error'],
+      chunkTypes: [...turn.chunkTypes, 'step-finish', 'error'],
+    })),
+  };
+}
+
+const COR_1430: EngineDifference = {
+  reason:
+    "COR-1430: a throwing stopWhen rejects plain's stream, where durable and evented stream a `step-finish` and an `error` chunk instead and resolve.",
+  ignore: ['chunkPayloads'],
+  expect: settledAfterThrowingStopWhen,
+};
+
 /** The `stepResult` of every `step-finish` chunk in a turn, in order. */
 function stepFinishStepResults(turn: ParitySnapshot): Array<{ isContinued?: unknown; reason?: unknown }> {
   return turn.chunkTypes
@@ -119,6 +129,14 @@ function stepFinishStepResults(turn: ParitySnapshot): Array<{ isContinued?: unkn
     )
     .filter(payload => payload !== undefined)
     .map(payload => (payload?.stepResult ?? {}) as { isContinued?: unknown; reason?: unknown });
+}
+
+/** The messages of a turn's `error` chunks, read the way the harness reads them. */
+function errorMessages(turn: ParitySnapshot): string[] {
+  return turn.chunkTypes
+    .map((type, index) => (type === 'error' ? (turn.chunkPayloads[index] as { error?: { message?: unknown } }) : null))
+    .filter(payload => payload !== null)
+    .map(payload => String(payload?.error?.message ?? ''));
 }
 
 /** The script: keep calling `step` until four results are in the prompt. */
@@ -193,7 +211,10 @@ async function runT23(variant: Variant) {
 
   const results = await expectEngineParity({
     model: script,
-    differences: { durable: COR_1412, evented: COR_1412 },
+    // `throws` settles differently on the wrapped engines (COR-1430); the other variants only ever
+    // hit the terminating-step flag (COR-1412).
+    differences:
+      variant === 'throws' ? { durable: COR_1430, evented: COR_1430 } : { durable: COR_1412, evented: COR_1412 },
     buildAgent: ({ engine, model }) => {
       commits.set(engine, 0);
       calls.set(engine, []);
@@ -254,89 +275,61 @@ describe('T23 stopWhen (plain, durable, evented)', () => {
   );
 
   it('a throwing stopWhen settles the run one way or another', async () => {
-    const contracts = new Map<ParityEngine, ThrowsContract>();
+    const { results, commits, calls } = await runT23('throws');
 
+    // The harness records this contract per engine, reference-vs-candidate; each field is asserted
+    // below from the observation the helper returned.
     for (const engine of ENGINES) {
-      const recorded = createRecordingModel(script);
-      const calls: Array<{ name: string; steps: number }> = [];
-      let commits = 0;
-      const pubsub = new EventEmitterPubSub();
-      const base = new Agent({
-        id: `t23-agent-${engine}`,
-        name: 't23',
-        instructions: 'Follow the script.',
-        model: recorded.model,
-        tools: { step: createStepTool(() => (commits += 1)) },
-        memory: new MockMemory(),
-      });
-      const wrapper =
-        engine === 'durable'
-          ? createDurableAgent({ agent: base, pubsub })
-          : engine === 'evented'
-            ? createEventedAgent({ agent: base, pubsub })
-            : undefined;
-      const host = new Mastra({
-        agents: { [base.id]: (wrapper ?? base) as Agent },
-        storage: new InMemoryStore(),
-        logger: false,
-      });
+      const { turns, requests } = results[engine]!;
+      const turn = turns.at(-1)!;
 
-      const errors: string[] = [];
-      const finishPayloads: Array<Record<string, unknown>> = [];
-      let threw: string | null = null;
-      try {
-        const streamed = await (wrapper ?? base).stream('Go.', {
-          maxSteps: MAX_STEPS,
-          memory: { thread: `t23-thread-throws-${engine}`, resource: 't23-resource' },
-          stopWhen: stopWhenFor('throws', calls),
-        } as never);
-        const output =
-          (streamed as { output?: { fullStream: AsyncIterable<{ type?: string; payload?: any }> } }).output ?? streamed;
-        for await (const chunk of output.fullStream as AsyncIterable<{ type?: string; payload?: any }>) {
-          if (chunk.type === 'finish') finishPayloads.push(chunk.payload ?? {});
-          if (chunk.type === 'error') errors.push(String(chunk.payload?.error?.message ?? ''));
-        }
-      } catch (error) {
-        // The harness slices a thrown message to 200 characters.
-        threw = String((error as Error)?.message ?? error).slice(0, 200);
-      } finally {
-        await host.shutdown();
-        await pubsub.close();
-      }
-
-      const lastFinish = finishPayloads.at(-1);
-      contracts.set(engine, {
-        modelCalls: recorded.requests.length,
-        commits,
-        finish: finishPayloads.length,
-        finishReason:
-          (lastFinish?.stepResult as { reason?: unknown } | undefined)?.reason ?? lastFinish?.finishReason ?? null,
-        predicateCalls: calls,
-        errors,
-        threw,
-      });
+      // The throwing predicate has to be what settled the run, otherwise this leg is vacuous.
+      expect(calls.get(engine)!.length, `${engine}: the throwing predicate was consulted`).toBeGreaterThanOrEqual(1);
+      expect(requests, `${engine}: modelCalls`).toHaveLength(1);
+      expect(commits.get(engine), `${engine}: commits`).toBe(1);
+      expect(chunksOfType(turn, 'finish'), `${engine}: finish`).toBe(0);
+      expect(
+        chunksOfType(turn, 'finish') >= 1 || errorMessages(turn).length > 0 || turn.error !== undefined,
+        `${engine}: throwing stopWhen settles the run one way or another`,
+      ).toBe(true);
+      expect(turn.error, `${engine}: threw`).toEqual({ name: 'Error', message: 'T23 stopWhen failure' });
+      // The shared chunks `chunkPayloads` is ignored for this behaviour (see COR_1430), so pin the
+      // payload the harness's `commits` stands for.
+      expect((turn.chunkPayloads[3] as { result?: unknown }).result, `${engine}: tool result`).toEqual({ done: 1 });
     }
 
-    // The harness records this contract reference-vs-candidate build (a regression check), NOT
-    // across engines: its `throws` cells are NOT COMPARABLE, because plain fails "worker
-    // completion" while durable and evented pass. So the port asserts the harness's actual
-    // per-engine check — the run settled, one way or another — and deliberately does not compare
-    // the contracts across engines.
-    //
-    // Observed divergence (harness-acknowledged by the NOT COMPARABLE verdict, not asserted here):
-    // plain rejects the stream (`threw`); durable and evented stream an `error` chunk instead,
-    // and evented consults the predicate more than once. These are the F-5 finding reported for
-    // the T23 leg — see the file header.
-    for (const engine of ENGINES) {
-      const contract = contracts.get(engine)!;
-      // The throwing predicate has to be what settled the run, otherwise this leg is vacuous.
-      expect(contract.predicateCalls.length, `${engine}: the throwing predicate was consulted`).toBeGreaterThanOrEqual(
-        1,
-      );
+    // plain's reference, read off the observation the helper returned: the rejection ends the turn
+    // after the tool result, so nothing else reaches the stream. durable and evented settle the same
+    // run by appending the two chunks the COR-1430 declaration adds — its `expect` is what makes the
+    // comparison above possible, and its `reason` records why they are allowed to differ.
+    const plainTypes = results.plain!.turns.at(-1)!.chunkTypes;
+    expect(plainTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
+    expect(errorMessages(results.plain!.turns.at(-1)!), 'plain: no error chunk on the wire').toEqual([]);
+
+    for (const engine of ['durable', 'evented'] as const) {
+      const turn = results[engine]!.turns.at(-1)!;
+      expect(turn.chunkTypes, `${engine}: chunks`).toEqual([
+        'start',
+        'step-start',
+        'tool-call',
+        'tool-result',
+        'step-finish',
+        'error',
+      ]);
+      expect(errorMessages(turn), `${engine}: error chunk`).toEqual(['T23 stopWhen failure']);
       expect(
-        contract.finish >= 1 || contract.errors.length > 0 || contract.threw !== null,
-        `${engine}: throwing stopWhen settles the run one way or another (${JSON.stringify(contract)})`,
-      ).toBe(true);
+        (turn.chunkPayloads[4] as { stepResult?: { reason?: unknown } }).stepResult?.reason,
+        `${engine}: the step-finish the error closed`,
+      ).toBe('tool-calls');
+    }
+
+    // The predicate consults differ across engines too (evented asks more than once, because its
+    // worker retries the step); that divergence is recorded with COR-1412 rather than pinned.
+    for (const engine of ENGINES) {
+      expect(
+        calls.get(engine)!.map(call => call.name),
+        `${engine}: predicate names`,
+      ).toEqual(Array<string>(calls.get(engine)!.length).fill('throws'));
     }
   });
 });
