@@ -4,7 +4,8 @@ import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Memory } from '../..';
+import { Memory, Subconscious } from '../..';
+import type { SubconsciousConfig } from '../..';
 import {
   createKnowledgeWriteTools,
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
@@ -354,28 +355,31 @@ describe('Subconscious knowledge write tools', () => {
     // Mastra Code used to configure Subconscious with maxScope: 'resource', which blocked
     // every org-level write. The option no longer exists and must not restrict the curator.
     const legacy = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' } as SubconsciousConfig);
-    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', ...legacy.resolved });
+    expect(legacy.resolved).not.toHaveProperty('maxScope');
+    const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
 
     const created = (await tools.knowledge_create!.execute?.(
       { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', nodeScope: 'org', scope: 'org' },
       {} as any,
     )) as any;
-    expect(created.node.scope).toEqual(['org:acme']);
-    expect(created.record.scope).toEqual(['org:acme']);
+    expect(await store.getNodeScopeIds(created.node.id)).toEqual([scopeIds[0]]);
+    expect(await store.getRecordScopeIds(created.record.id)).toEqual([scopeIds[0]]);
 
     const appended = (await tools.knowledge_append!.execute?.(
       { node: source.id, text: 'Shared with the whole org', scope: 'org' },
       {} as any,
     )) as any;
-    expect(appended.scope).toEqual(['org:acme']);
+    expect(await store.getRecordScopeIds(appended.id)).toEqual([scopeIds[0]]);
 
     const narrow = (await tools.knowledge_append!.execute?.(
       { node: source.id, text: 'Started in this thread', scope: 'thread' },
       {} as any,
     )) as any;
-    const widened = (await tools.knowledge_rescope!.execute?.({ recordId: narrow.id, scope: 'org' }, {} as any)) as any;
-    expect(widened.scope).toEqual(['org:acme']);
-    expect(await store.getKnowledge({ id: narrow.id })).toMatchObject({ scope: ['org:acme'] });
+    await tools.knowledge_rescope!.execute?.(
+      { recordId: narrow.id, expectedVersion: narrow.version, scope: 'org' },
+      {} as any,
+    );
+    expect(await store.getRecordScopeIds(narrow.id)).toEqual([scopeIds[0]]);
   });
 
   it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {
