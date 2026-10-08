@@ -3,6 +3,7 @@ title: "Reference: Configuration | Observability"
 description: "Configure Mastra observability instances, tracing exporters, sampling, propagation, span filters, and the global observability registry."
 packages:
   - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -200,7 +201,16 @@ type SamplingStrategy =
   | { type: 'always' }
   | { type: 'never' }
   | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
+  | { type: 'custom'; sampler: (options?: CustomSamplerOptions) => boolean }
+```
+
+## `CustomSamplerOptions`
+
+```typescript
+interface CustomSamplerOptions {
+  requestContext?: RequestContext
+  metadata?: Record<string, any>
+}
 ```
 
 ## `ConfigSelector`
