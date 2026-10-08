@@ -59,11 +59,10 @@ A setting the environment leaves unset is absent from the stored document, so th
 
 The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` keeps working. Factory wraps it as a `provider: 'custom'` sandbox with no settings, no template and no builds, so there is nothing to tune.
 
-## Interface
+## Class
 
 ```typescript
-interface FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
-  readonly [FACTORY_SANDBOX_BRAND]: true
+abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
   readonly provider: string
   readonly settings: PublicSchema<TSettings>
   readonly templateFields: readonly (keyof TSettings & string)[]
@@ -115,16 +114,16 @@ interface FactorySandbox<TSettings extends Record<string, unknown> = Record<stri
 ]}
 />
 
-Implement the interface by extending `BaseFactorySandbox` from `@mastra/core/workspace`, which sets the brand. Factory detects the object by the `Symbol.for('mastra.factory.sandbox')` brand, never by shape.
+Extend `FactorySandbox` from `@mastra/core/workspace`; the base class sets the `Symbol.for('mastra.factory.sandbox')` brand factory detects, never by shape.
 
 ```typescript
-import { BaseFactorySandbox } from '@mastra/core/workspace'
+import { FactorySandbox } from '@mastra/core/workspace'
 import type { FactorySandboxContext } from '@mastra/core/workspace'
 import { z } from 'zod'
 
 const settings = z.object({ region: z.enum(['us', 'eu']).optional() })
 
-class MyFactorySandbox extends BaseFactorySandbox<z.infer<typeof settings>> {
+class MyFactorySandbox extends FactorySandbox<z.infer<typeof settings>> {
   readonly provider = 'my-cloud'
   readonly settings = settings
   readonly templateFields = ['region'] as const

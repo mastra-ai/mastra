@@ -4,11 +4,10 @@ export * from './workspace';
 // Factory host contract
 export {
   FACTORY_SANDBOX_BRAND,
-  BaseFactorySandbox,
+  FactorySandbox,
   isFactorySandbox,
   describeFactorySandbox,
   normalizeFactorySandboxSettings,
-  type FactorySandbox,
   type FactorySandboxContext,
   type FactoryRepositoryAccess,
   type FactorySandboxBuilds,

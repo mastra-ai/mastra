@@ -1,5 +1,5 @@
 import type { PublicSchema } from '@mastra/core/schema';
-import { BaseFactorySandbox } from '@mastra/core/workspace';
+import { FactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 
 import { DockerSandbox } from './sandbox';
@@ -47,7 +47,7 @@ export interface DockerFactorySandboxOptions extends Omit<DockerSandboxOptions, 
  * over the session's repositories, built from the factory's environment
  * settings.
  */
-export class DockerFactorySandbox extends BaseFactorySandbox<DockerFactorySandboxSettings> {
+export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSettings> {
   readonly provider = 'docker';
   readonly settings: PublicSchema<DockerFactorySandboxSettings> = SETTINGS_SCHEMA;
   readonly templateFields = ['baseImage', 'owner'] as const;

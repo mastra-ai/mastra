@@ -9,7 +9,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import { BaseFactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox } from '@mastra/core/workspace';
+import { FactorySandbox, FACTORY_SANDBOX_BRAND, isFactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
@@ -409,7 +409,7 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('accepts a FactorySandbox instance and describes it', async () => {
-    class StubFactorySandbox extends BaseFactorySandbox<{ size?: string }> {
+    class StubFactorySandbox extends FactorySandbox<{ size?: string }> {
       readonly provider = 'stub';
       readonly settings = {
         type: 'object',

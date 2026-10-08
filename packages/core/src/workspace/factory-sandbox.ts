@@ -115,8 +115,8 @@ export interface FactorySandboxBuilds<TSettings> {
 }
 
 /**
- * The one object a host hands factory for its sandboxes. It owns the session
- * sandbox constructor, the repo template factory, the schema of user-tunable
+ * The one object a host hands factory for its sandboxes. Extend it to get the
+ * brand. It owns the session sandbox constructor, the repo template factory, the schema of user-tunable
  * settings, and optionally the builds capability.
  *
  * `create` is synchronous and returns a `MastraSandbox`: factory constructs
@@ -132,31 +132,19 @@ export interface FactorySandboxBuilds<TSettings> {
  * ignore `ctx.resolveHead` and resolve heads themselves. `templateFields` names the settings whose change
  * produces a different template.
  */
-export interface FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
-  readonly [FACTORY_SANDBOX_BRAND]: true;
+export abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
+  /** Brand factory detects the class by; never test by shape. */
+  readonly [FACTORY_SANDBOX_BRAND] = true as const;
   /** Provider id, e.g. `platform`, `e2b`, `docker`, `local`, `custom`. */
-  readonly provider: string;
-  readonly settings: PublicSchema<TSettings>;
-  readonly templateFields: ReadonlyArray<keyof TSettings & string>;
-  create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox;
+  abstract readonly provider: string;
+  abstract readonly settings: PublicSchema<TSettings>;
+  abstract readonly templateFields: ReadonlyArray<keyof TSettings & string>;
+  abstract create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox;
   /**
    * The environment's repo template for the given context and settings, in
    * the provider's own resolver shape. Absent when the provider builds no
    * template ahead of a session.
    */
-  template?(ctx: FactorySandboxContext, settings: TSettings): unknown;
-  readonly builds?: FactorySandboxBuilds<TSettings>;
-}
-
-/** Base class for `FactorySandbox` implementations; sets the brand. */
-export abstract class BaseFactorySandbox<
-  TSettings extends Record<string, unknown> = Record<string, unknown>,
-> implements FactorySandbox<TSettings> {
-  readonly [FACTORY_SANDBOX_BRAND] = true as const;
-  abstract readonly provider: string;
-  abstract readonly settings: PublicSchema<TSettings>;
-  abstract readonly templateFields: ReadonlyArray<keyof TSettings & string>;
-  abstract create(ctx: FactorySandboxContext, settings: TSettings): MastraSandbox;
   template?(ctx: FactorySandboxContext, settings: TSettings): unknown;
   readonly builds?: FactorySandboxBuilds<TSettings>;
 }

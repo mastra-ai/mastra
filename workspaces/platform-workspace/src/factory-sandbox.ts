@@ -1,4 +1,4 @@
-import { BaseFactorySandbox } from '@mastra/core/workspace';
+import { FactorySandbox } from '@mastra/core/workspace';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 
@@ -63,7 +63,7 @@ export interface PlatformFactorySandboxOptions extends Omit<
  * {@link PlatformSandbox} whose template is {@link createRepoTemplate} over
  * the session's repositories, sized by the factory's environment settings.
  */
-export class PlatformFactorySandbox extends BaseFactorySandbox<PlatformFactorySandboxSettings> {
+export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandboxSettings> {
   readonly provider = 'platform';
   readonly settings: PublicSchema<PlatformFactorySandboxSettings> = SETTINGS_SCHEMA;
   readonly templateFields = ['cpuCount', 'memoryMb'] as const;

@@ -2,13 +2,13 @@ import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  BaseFactorySandbox,
+  FactorySandbox,
   FACTORY_SANDBOX_BRAND,
   describeFactorySandbox,
   isFactorySandbox,
   normalizeFactorySandboxSettings,
 } from './factory-sandbox';
-import type { FactorySandbox, FactorySandboxBuilds, FactorySandboxContext } from './factory-sandbox';
+import type { FactorySandboxBuilds, FactorySandboxContext } from './factory-sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import type { MastraSandbox } from './sandbox/mastra-sandbox';
 
@@ -18,7 +18,7 @@ const settingsSchema = z.object({
 });
 type Settings = z.infer<typeof settingsSchema>;
 
-class TestSandbox extends BaseFactorySandbox<Settings> {
+class TestSandbox extends FactorySandbox<Settings> {
   readonly provider = 'test';
   readonly settings = settingsSchema;
   readonly templateFields = ['cpuCount'] as const;
@@ -36,7 +36,7 @@ describe('isFactorySandbox', () => {
     expect(isFactorySandbox(() => undefined)).toBe(false);
   });
 
-  it('accepts a BaseFactorySandbox subclass', () => {
+  it('accepts a FactorySandbox subclass', () => {
     expect(isFactorySandbox(new TestSandbox())).toBe(true);
   });
 
@@ -60,7 +60,7 @@ describe('describeFactorySandbox', () => {
   });
 
   it('emits the input side of the schema, so a defaulted field stays optional', () => {
-    class Defaulted extends BaseFactorySandbox<{ region?: string }> {
+    class Defaulted extends FactorySandbox<{ region?: string }> {
       readonly provider = 'defaulted';
       readonly settings = z.object({ region: z.enum(['us', 'eu']).default('us') });
       readonly templateFields = [] as const;

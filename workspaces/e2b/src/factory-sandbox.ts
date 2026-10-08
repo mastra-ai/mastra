@@ -1,5 +1,5 @@
 import type { PublicSchema } from '@mastra/core/schema';
-import { BaseFactorySandbox } from '@mastra/core/workspace';
+import { FactorySandbox } from '@mastra/core/workspace';
 import type {
   FactorySandboxBuild,
   FactorySandboxBuildStart,
@@ -60,7 +60,7 @@ const EXISTING_BUILD = 'existing';
  * `builds` capability starts the same sha-tagged template ahead of any
  * session and reads its status, logs and history back from E2B.
  */
-export class E2BFactorySandbox extends BaseFactorySandbox<E2BFactorySandboxSettings> {
+export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings> {
   readonly provider = 'e2b';
   readonly settings: PublicSchema<E2BFactorySandboxSettings> = SETTINGS_SCHEMA;
   readonly templateFields = ['cpuCount', 'memoryMb'] as const;
