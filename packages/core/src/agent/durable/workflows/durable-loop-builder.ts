@@ -413,7 +413,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
-          pruneSnapshot: this.pruneSnapshotHook({ [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id] }),
+          //
+          // durable-llm-mapping reads the model call result back directly when
+          // the run is recovered mid-iteration (it deserializes
+          // llm-execution's messageListState), so its output must survive
+          // pruning until mapping has actually run. Without this declaration,
+          // a crash after the tool loop finishes but before mapping runs loses
+          // llm-execution's messageListState and recovery crashes (#25248).
+          pruneSnapshot: this.pruneSnapshotHook({
+            [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id],
+            [llmMappingStep.id]: [llmExecutionStep.id],
+          }),
           validateInputs: false,
           // Deliberate divergence from the main loop (#21529): the workflow
           // engine's own step events repeatedly serialized cumulative
