@@ -4,7 +4,12 @@ import { parseKnowledgeImporterBindingKey } from '../../storage/domains/knowledg
 import { createTool } from '../../tools';
 import type { Knowledge } from '../index';
 import type { StaticKnowledgeImporterOperations } from './static-importer';
-import type { KnowledgeAgentImportInput, KnowledgeAgentImportResult, KnowledgeImporterAgentConfig } from './types';
+import type {
+  KnowledgeAgentImportInput,
+  KnowledgeAgentImportResult,
+  KnowledgeAgentImportWrites,
+  KnowledgeImporterAgentConfig,
+} from './types';
 
 const MAX_AGENTIC_IMPORT_PAYLOAD_BYTES = 64_000;
 
@@ -33,7 +38,11 @@ function nodeResult(handle: Awaited<ReturnType<StaticKnowledgeImporterOperations
   return { id: handle.id, name: handle.node.name, kind: handle.node.kind, metadata: handle.node.metadata };
 }
 
-function createImporterTools(operations: StaticKnowledgeImporterOperations, runId: string) {
+function createImporterTools(
+  operations: StaticKnowledgeImporterOperations,
+  runId: string,
+  writes: { -readonly [K in keyof KnowledgeAgentImportWrites]: number },
+) {
   const address = z.string().trim().min(1);
   const metadata = z.record(z.string(), z.unknown()).optional();
   const prefix = `knowledgeImport_${runId.replace(/[^A-Za-z0-9_]/g, '_')}`;
@@ -54,14 +63,21 @@ function createImporterTools(operations: StaticKnowledgeImporterOperations, runI
       id: 'knowledge-import-upsert-node',
       description: 'Create or update a node owned by this importer binding using a stable external address.',
       inputSchema: z.object({ address, name: z.string().trim().min(1), metadata }),
-      execute: async ({ address, name, metadata }) =>
-        nodeResult(await operations.upsertNode(address, { name, ...(metadata ? { metadata } : {}) })),
+      execute: async ({ address, name, metadata }) => {
+        const handle = await operations.upsertNode(address, { name, ...(metadata ? { metadata } : {}) });
+        writes.nodesUpserted += 1;
+        return nodeResult(handle);
+      },
     }),
     [`${prefix}_removeNode`]: createTool({
       id: 'knowledge-import-remove-node',
       description: 'Permanently remove content still owned exclusively by this importer binding.',
       inputSchema: z.object({ address }),
-      execute: async ({ address }) => operations.removeNode(address),
+      execute: async ({ address }) => {
+        const removed = await operations.removeNode(address);
+        writes.nodesRemoved += 1;
+        return removed;
+      },
     }),
     [`${prefix}_appendKnowledge`]: createTool({
       id: 'knowledge-import-append-record',
@@ -75,7 +91,9 @@ function createImporterTools(operations: StaticKnowledgeImporterOperations, runI
       execute: async ({ address, id, text, metadata }) => {
         const node = await operations.getNode(address);
         if (!node) throw new Error(`Knowledge importer node address does not exist: ${address}`);
-        return node.appendKnowledge({ ...(id ? { id } : {}), text, ...(metadata ? { metadata } : {}) });
+        const record = await node.appendKnowledge({ ...(id ? { id } : {}), text, ...(metadata ? { metadata } : {}) });
+        writes.recordsAppended += 1;
+        return record;
       },
     }),
     [`${prefix}_listKnowledge`]: createTool({
@@ -94,7 +112,9 @@ function createImporterTools(operations: StaticKnowledgeImporterOperations, runI
       execute: async ({ address, id }) => {
         const node = await operations.getNode(address);
         if (!node) return null;
-        return node.removeKnowledge(id);
+        const removed = await node.removeKnowledge(id);
+        writes.recordsRemoved += 1;
+        return removed;
       },
     }),
   };
@@ -157,7 +177,8 @@ export async function runAgenticKnowledgeImport(input: {
     `When all durable tool calls are complete, finish with exactly <import-complete checkpoint="${encodedCheckpoint}" />. Do not emit this marker before the work is complete.`,
   ].join('\n\n');
 
-  const tools = createImporterTools(input.operations, input.runId);
+  const writes = { nodesUpserted: 0, nodesRemoved: 0, recordsAppended: 0, recordsRemoved: 0 };
+  const tools = createImporterTools(input.operations, input.runId, writes);
   const activeTools = Object.keys(tools);
   const result = await input.config.agent.generate(prompt, {
     memory: { resource: resourceId, thread: threadId },
@@ -170,5 +191,5 @@ export async function runAgenticKnowledgeImport(input: {
   if (!result.text.trimEnd().endsWith(marker)) {
     throw new Error(`Knowledge agentic import did not acknowledge checkpoint ${checkpoint}`);
   }
-  return { checkpoint, resourceId, transcriptThreadId: threadId, text: result.text };
+  return { checkpoint, resourceId, transcriptThreadId: threadId, text: result.text, writes: { ...writes } };
 }
