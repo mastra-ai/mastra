@@ -609,3 +609,20 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 });
+
+describe('KnowledgeLibSQL indexes', () => {
+  it('resolves node names through an index instead of scanning every node', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      const plan = await client.execute(
+        `EXPLAIN QUERY PLAN SELECT id FROM mastra_knowledge_nodes WHERE type='node' AND canonicalName='jane'`,
+      );
+      expect(plan.rows.map(row => String(row.detail)).join('\n')).toContain(
+        'USING INDEX idx_knowledge_nodes_name (type=? AND canonicalName=?)',
+      );
+    } finally {
+      client.close();
+    }
+  });
+});

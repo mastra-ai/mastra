@@ -208,6 +208,7 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 const KNOWLEDGE_INDEX_DDL = [
   `CREATE UNIQUE INDEX idx_knowledge_nodes_identity ON "${TABLE_KNOWLEDGE_NODES}" (type(32), scopeKey(255), canonicalName(255))`,
   `CREATE INDEX idx_knowledge_nodes_scope ON "${TABLE_KNOWLEDGE_NODES}" (scopeKey(255), type(32))`,
+  `CREATE INDEX idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (type(32), canonicalName(255))`,
   `CREATE INDEX idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (node(191), id(26) DESC)`,
   `CREATE INDEX idx_knowledge_records_thread_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (sourceThreadId(191), id(26) DESC)`,
   `CREATE INDEX idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId(191), sourceType(32), sourceId(191))`,
