@@ -73,7 +73,7 @@ export const { createWorkflow, createStep } = init({
 
 The policy applies to all generated activities, including steps, mappings, and conditions. Set `maximumAttempts: 1` to disable retries. Omitting `retry` preserves Temporal's default policy, which allows unlimited attempts. Mastra's workflow `retryConfig` doesn't configure Temporal activity retries.
 
-Keep retry options in the statically analyzable `init()` configuration so the worker build can include them. Inline object literal spreads are supported, but spreading a variable or function result into `init()` fails the worker build. Provide `retry` and `startToCloseTimeout` directly instead. Rebuild and restart the worker after changing the policy.
+Keep retry options in the statically analyzable `init()` configuration so the worker build can include them. Inline object literal spreads are supported. Spreads of variables or function results are skipped during activity option extraction, so `retry` and `startToCloseTimeout` inside those spreads aren't forwarded to the generated workflow. Provide these options directly in `init()` or in an inline object literal spread instead. Rebuild and restart the worker after changing the policy.
 
 ### Creating steps
 

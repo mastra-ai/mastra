@@ -113,9 +113,7 @@ function getTemporalWorkflowRuntimeOptions(program: t.Program): t.ObjectExpressi
         for (const property of params.properties) {
           if (t.isSpreadElement(property)) {
             if (!t.isObjectExpression(property.argument)) {
-              throw new Error(
-                'Temporal init() option spreads must be inline object literals. Provide retry and startToCloseTimeout directly in init() instead.',
-              );
+              continue;
             }
             collectRuntimeProperties(property.argument);
             continue;

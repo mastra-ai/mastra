@@ -35,15 +35,33 @@ describe('workflow transform', () => {
     expect(result).not.toContain('maximumAttempts: 0');
   });
 
-  it('rejects unresolved init option spreads rather than dropping activity retries', async () => {
-    await expect(
-      transform(`
-        import { init } from '@mastra/temporal';
-        const options = { retry: { maximumAttempts: 5 } };
-        const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ...options });
-        export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
-      `),
-    ).rejects.toThrow('Provide retry and startToCloseTimeout directly in init() instead.');
+  it('preserves builds with unresolved init option spreads and no activity options', async () => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const config = { taskQueue: 'mastra' };
+      const { createWorkflow } = init({ client: undefined, ...config });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toContain("createWorkflow('weather-workflow')");
+  });
+
+  it.each([
+    "...config, retry: { maximumAttempts: 5 }, startToCloseTimeout: '5 minutes'",
+    "retry: { maximumAttempts: 5 }, startToCloseTimeout: '5 minutes', ...config",
+  ])('forwards explicit activity options while skipping unresolved spreads: %s', async options => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const config = { retry: { maximumAttempts: 99 }, startToCloseTimeout: '99 minutes' };
+      const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ${options} });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(
+      /createWorkflow\('weather-workflow',\s*\{\s*retry: \{\s*maximumAttempts: 5\s*\},\s*startToCloseTimeout: '5 minutes'\s*\}\)/,
+    );
+    expect(result).not.toContain('maximumAttempts: 99');
+    expect(result).not.toContain("'99 minutes'");
   });
 
   it.each([true, false])('injects activity retries with configured timeout: %s', async withTimeout => {
