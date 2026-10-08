@@ -26,10 +26,10 @@ function createGateway(thinkingLevel: ThinkingLevelSetting | undefined) {
 
 let bodies: Array<Record<string, any>>;
 
-async function requestBody(model: any): Promise<Record<string, any>> {
+async function requestBody(model: any, providerOptions?: Record<string, Record<string, unknown>>) {
   bodies = [];
   await model
-    .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
+    .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }], providerOptions })
     .catch(() => undefined);
   expect(bodies).toHaveLength(1);
   return bodies[0]!;
@@ -93,6 +93,14 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     const body = await requestBody(resolve(undefined, 'deepseek', 'deepseek-v4-pro'));
     expect(body).not.toHaveProperty('thinking');
     expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
+  it("keeps the caller's own DeepSeek thinking setting whole instead of mixing it with the level", async () => {
+    const body = await requestBody(resolve('off', 'deepseek', 'deepseek-v4-pro'), {
+      deepseek: { reasoningEffort: 'max' },
+    });
+    expect(body.reasoning_effort).toBe('max');
+    expect(body).not.toHaveProperty('thinking');
   });
 
   it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {

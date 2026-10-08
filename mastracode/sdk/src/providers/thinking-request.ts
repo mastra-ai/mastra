@@ -36,7 +36,7 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
   deepseek: {
     optionsKey: 'deepseek',
     effort: {
-      acceptedLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+      acceptedLevels: ['low', 'high', 'max'],
       toOptions: reasoningEffort => ({ reasoningEffort }),
     },
     toggle: enabled => ({ thinking: { type: enabled ? 'enabled' : 'disabled' } }),

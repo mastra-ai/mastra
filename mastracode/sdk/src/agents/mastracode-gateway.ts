@@ -46,10 +46,7 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
-import {
-  ModelRouterLanguageModelWithProviderOptions,
-  providerThinkingOptions,
-} from '../providers/provider-thinking.js';
+import { ModelRouterLanguageModelWithThinking, providerThinkingOptions } from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
@@ -562,7 +559,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     const routedModelId: `${string}/${string}` = `${args.providerId}/${args.modelId}`;
-    return new ModelRouterLanguageModelWithProviderOptions(
+    return new ModelRouterLanguageModelWithThinking(
       { id: routedModelId, apiKey: args.apiKey, headers: args.headers },
       providerThinkingOptions(routedModelId, this.#thinkingLevel),
     ) as unknown as GatewayLanguageModel;
