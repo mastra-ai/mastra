@@ -122,6 +122,7 @@ describe('E2BFactorySandbox', () => {
     expect(tuned.timeout).toBe(30 * 60_000);
     const defaulted = new E2BFactorySandbox({ defaults: { idleTimeoutMinutes: 10 } }).create(context(), {});
     expect(defaulted.timeout).toBe(10 * 60_000);
+    expect(new E2BFactorySandbox({}).create(context(), {}).timeout).toBe(5 * 60_000);
   });
 
   describe('builds', () => {

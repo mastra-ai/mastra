@@ -17,6 +17,9 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   idleTimeoutMinutes?: number;
 }
 
+/** Applied when neither the environment setting nor a host default is set. */
+const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -24,6 +27,7 @@ const SETTINGS_SCHEMA = {
       type: 'integer',
       title: 'CPU',
       description: 'vCPUs for the sandbox template',
+      default: DEFAULT_SETTINGS.cpuCount,
       minimum: 1,
       maximum: 64,
     },
@@ -31,6 +35,7 @@ const SETTINGS_SCHEMA = {
       type: 'integer',
       title: 'Memory (MB)',
       description: 'Memory in MB for the sandbox template',
+      default: DEFAULT_SETTINGS.memoryMb,
       minimum: 512,
       maximum: 65536,
     },
@@ -38,6 +43,7 @@ const SETTINGS_SCHEMA = {
       type: 'integer',
       title: 'Idle timeout (minutes)',
       description: 'Minutes idle before the sandbox pauses',
+      default: DEFAULT_SETTINGS.idleTimeoutMinutes,
       minimum: 1,
       maximum: 1440,
     },
@@ -79,26 +85,24 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     settings: PlatformFactorySandboxSettings,
   ): PlatformRepoTemplateResolver | undefined {
     const { defaults, template } = this.#options;
-    const cpuCount = settings.cpuCount ?? defaults?.cpuCount;
-    const memoryMB = settings.memoryMb ?? defaults?.memoryMb;
     return createRepoTemplate({
       ...ctx,
       ...(template?.buildEnv ? { buildEnv: template.buildEnv } : {}),
-      ...(cpuCount !== undefined ? { cpuCount } : {}),
-      ...(memoryMB !== undefined ? { memoryMB } : {}),
+      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     });
   }
 
   create(ctx: FactorySandboxContext, settings: PlatformFactorySandboxSettings): PlatformSandbox {
     const { defaults, template: _template, ...options } = this.#options;
-    const idleTimeoutMinutes = settings.idleTimeoutMinutes ?? defaults?.idleTimeoutMinutes;
     return new PlatformSandbox({
       ...options,
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
-      ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
+      idleTimeoutMinutes:
+        settings.idleTimeoutMinutes ?? defaults?.idleTimeoutMinutes ?? DEFAULT_SETTINGS.idleTimeoutMinutes,
     });
   }
 }

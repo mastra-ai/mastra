@@ -53,7 +53,7 @@ new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH!
 
 `LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
 
-A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it, and factory only stores values the user typed.
+A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it (2 CPUs, 1024 MB and a 5 minute idle timeout on platform and E2B, overridable through `defaults`), and factory only stores values the user typed.
 
 ### Deprecated callback
 

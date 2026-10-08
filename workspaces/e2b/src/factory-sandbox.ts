@@ -26,27 +26,33 @@ export interface E2BFactorySandboxSettings extends Record<string, unknown> {
   idleTimeoutMinutes?: number;
 }
 
+/** Applied when neither the environment setting nor a host default is set. */
+const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
     cpuCount: {
       type: 'integer',
       title: 'CPU',
-      description: 'vCPUs for the sandbox template (E2B default 2)',
+      description: 'vCPUs for the sandbox template',
+      default: DEFAULT_SETTINGS.cpuCount,
       minimum: 1,
       maximum: 8,
     },
     memoryMb: {
       type: 'integer',
       title: 'Memory (MB)',
-      description: 'Memory in MB for the sandbox template (E2B default 1024)',
+      description: 'Memory in MB for the sandbox template',
+      default: DEFAULT_SETTINGS.memoryMb,
       minimum: 512,
       maximum: 8192,
     },
     idleTimeoutMinutes: {
       type: 'integer',
       title: 'Idle timeout (minutes)',
-      description: 'Minutes a sandbox stays alive before E2B stops it (E2B default 5)',
+      description: 'Minutes a sandbox stays alive before E2B stops it',
+      default: DEFAULT_SETTINGS.idleTimeoutMinutes,
       minimum: 1,
       maximum: 1440,
     },
@@ -99,25 +105,29 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
 
   create(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): E2BSandbox {
     const { defaults, ...options } = this.#options;
-    const idleTimeoutMinutes = settings.idleTimeoutMinutes ?? defaults?.idleTimeoutMinutes;
     return new E2BSandbox({
       ...options,
       id: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
-      ...(idleTimeoutMinutes !== undefined ? { timeout: idleTimeoutMinutes * 60_000 } : {}),
+      timeout: this.#timeout(settings),
     });
+  }
+
+  /** The setting, then the host default, then the host's own `timeout` option, then 5 minutes. */
+  #timeout(settings: E2BFactorySandboxSettings): number {
+    const minutes = settings.idleTimeoutMinutes ?? this.#options.defaults?.idleTimeoutMinutes;
+    if (minutes !== undefined) return minutes * 60_000;
+    return this.#options.timeout ?? DEFAULT_SETTINGS.idleTimeoutMinutes * 60_000;
   }
 
   #templateOptions(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): RepoTemplateOptions {
     const { defaults } = this.#options;
-    const cpuCount = settings.cpuCount ?? defaults?.cpuCount;
-    const memoryMB = settings.memoryMb ?? defaults?.memoryMb;
     const { resolveHead: _resolveHead, ...rest } = ctx;
     return {
       ...rest,
-      ...(cpuCount !== undefined ? { cpuCount } : {}),
-      ...(memoryMB !== undefined ? { memoryMB } : {}),
+      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     };
   }
 

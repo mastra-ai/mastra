@@ -67,9 +67,9 @@ describe('PlatformFactorySandbox', () => {
     expect(description.capabilities).toEqual({ template: true, builds: { available: false, history: false } });
   });
 
-  it('builds the same template as the web host callback (createRepoTemplate(ctx))', async () => {
+  it('builds the web host callback template sized by the 2 CPU / 1024 MB defaults', async () => {
     for (const ctx of [listContext(), singleContext()]) {
-      const callback = await identity(createRepoTemplate(ctx));
+      const callback = await identity(createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 1024 }));
       const viaClass = await identity(new PlatformFactorySandbox({}).template(ctx, {}));
       expect(viaClass.definition).toEqual(callback.definition);
       expect(viaClass.buildEnvs).toEqual(callback.buildEnvs);
@@ -101,9 +101,12 @@ describe('PlatformFactorySandbox', () => {
     expect(withSetting.definition).not.toEqual(withDefaults.definition);
   });
 
-  it('returns no template for a session without repositories', () => {
+  it('returns a resources-only template for a session without repositories', async () => {
     const sandbox = new PlatformFactorySandbox({});
-    expect(sandbox.template({ sessionId: 's', getRepositoryAccess: undefined }, {})).toBeUndefined();
+    const ctx = { sessionId: 's', getRepositoryAccess: undefined };
+    const viaClass = await identity(sandbox.template(ctx, {}));
+    const direct = await identity(createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 1024 }));
+    expect(viaClass.definition).toEqual(direct.definition);
   });
 
   it('creates a PlatformSandbox keyed by the session with the client options and idle timeout', () => {
@@ -126,6 +129,6 @@ describe('PlatformFactorySandbox', () => {
     expect((tuned as any)._idleTimeoutMinutes).toBe(5);
 
     const bare = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1' }).create(ctx, {});
-    expect((bare as any)._idleTimeoutMinutes).toBeUndefined();
+    expect((bare as any)._idleTimeoutMinutes).toBe(5);
   });
 });
