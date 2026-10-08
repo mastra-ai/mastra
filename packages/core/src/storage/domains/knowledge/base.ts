@@ -509,10 +509,11 @@ export function assertKnowledgeDescriptionWithinBound(description: string | unde
 }
 
 /**
- * Knowledge v2 has no record scope ceilings: write access comes from scope grants. Kept only so
- * published `@mastra/memory` versions that import it still load; it never throws.
+ * Knowledge v2 has no record scope ceilings: a write may target any scope level present in the
+ * conversation. Grant-based write enforcement is not implemented yet. Kept only so published
+ * `@mastra/memory` versions that import it still load; it never throws.
  *
- * @deprecated No longer enforced. Remove calls; scope grants decide where a record can be written.
+ * @deprecated No longer enforced. Remove calls.
  */
 export function assertKnowledgeScopeWithinCeiling(_scope: KnowledgeScope, _maxScope?: KnowledgeScopeLevel): void {}
 
