@@ -239,9 +239,10 @@ export async function fetchKnowledgeScopes(
   scopeId?: string,
   threadId?: string,
   signal?: AbortSignal,
+  cursor?: string,
 ): Promise<KnowledgeScopeTreePayload> {
   return requestJson<KnowledgeScopeTreePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery({ threadId, scopeId })}`,
+    `${knowledgeBase(baseUrl, factoryProjectId)}/scopes${knowledgeQuery({ threadId, scopeId, cursor })}`,
     { signal },
   );
 }
