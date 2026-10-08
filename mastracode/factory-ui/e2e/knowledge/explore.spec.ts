@@ -457,10 +457,6 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   if (output) {
     fs.mkdirSync(output, { recursive: true });
     await page.screenshot({ path: path.join(output, 'explore.png'), fullPage: true });
-    fs.writeFileSync(
-      path.join(output, 'results.json'),
-      JSON.stringify({ tests: [{ title: 'explores scoped knowledge and activity', status: 'passed' }] }, null, 2),
-    );
   }
 
   const scopeFlyout = page.getByTestId('knowledge-scope-flyout');
