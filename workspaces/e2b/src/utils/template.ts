@@ -185,7 +185,7 @@ export interface MountableTemplateResult {
  * v3 installed a pinned current Node LTS over the base image's stale
  * runtime and enabled corepack.
  */
-export const MOUNTABLE_TEMPLATE_VERSION = 'v3';
+export const MOUNTABLE_TEMPLATE_VERSION = 'v4';
 
 /**
  * Create a base template with FUSE mounting dependencies pre-installed.
@@ -246,9 +246,12 @@ export function createDefaultMountableTemplate(options?: MountableTemplateOption
     // The base image ships a stale Node under /usr/local (v20.9.0 at last
     // check), old enough that corepack-fetched pnpm/yarn crash on it
     // (ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING). Overwrite it in place with
-    // a pinned current release so the fresh binaries win the PATH.
+    // a pinned current release so the fresh binaries win the PATH. tar only
+    // overlays files, so the old npm/corepack trees are removed first —
+    // leftover nested deps (e.g. an old minipass) otherwise shadow the new
+    // npm's and break it with "Class extends value undefined".
     .runCmd(
-      `curl -fsSL https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-linux-x64.tar.gz | sudo tar -xz -C /usr/local --strip-components=1`,
+      `sudo rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack && curl -fsSL https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-linux-x64.tar.gz | sudo tar -xz -C /usr/local --strip-components=1`,
     )
     // Corepack shims make `pnpm`/`yarn` resolve to whatever the repo's
     // `packageManager` field pins. It refuses to download a package manager
