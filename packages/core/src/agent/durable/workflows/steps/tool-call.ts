@@ -444,7 +444,7 @@ export function createDurableToolCallStep() {
       // provider tool advertises the snake-case name), then by id, then fall
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
-      const registryEntry = globalRunRegistry.get(runId);
+      let registryEntry = globalRunRegistry.get(runId);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
@@ -514,9 +514,11 @@ export function createDurableToolCallStep() {
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
           requestContext,
+          rehydrateProcessors: true,
           logger,
         });
         if (rebuilt) {
+          registryEntry = globalRunRegistry.get(runId);
           rebuiltTools = rebuilt.tools;
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
@@ -1693,9 +1695,9 @@ export function createDurableToolCallStep() {
         // stream. Processors mutate via messageList.updateToolInvocation, but
         // llm-mapping re-derives the transcript from the llm-execution snapshot
         // plus the serialized step outputs, so the processed value must travel
-        // through the returned `result` field. Requires the live in-process
-        // registry (processor states are unserializable) — a cross-process
-        // resume skips, same as the chunk pipeline below.
+        // through the returned `result` field. Requires a live messageList,
+        // so a cross-process resume skips this hook; the chunk pipeline below
+        // still runs with the rebuilt output processors.
         if (!wasSuspended && registryEntry?.outputProcessors?.length && registryEntry.processorStates && messageList) {
           const resultProcessorRunner = new ProcessorRunner({
             inputProcessors: [],

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
+import { globalRunRegistry } from '../run-registry';
 import { rebuildRunToolsFromMastra } from './resolve-runtime';
 
 /**
@@ -22,6 +23,34 @@ function makeAgent() {
 }
 
 describe('rebuildRunToolsFromMastra request context', () => {
+  it('rebuilds the save queue without resolving processors for persistence-only callers', async () => {
+    const runId = 'persistence-only-rebuild';
+    const memory = {};
+    const listOutputProcessors = vi.fn().mockRejectedValue(new Error('must not resolve processors'));
+    const agent = {
+      ...makeAgent(),
+      getMemory: vi.fn().mockResolvedValue(memory),
+      listOutputProcessors,
+    };
+
+    try {
+      const rebuilt = await rebuildRunToolsFromMastra({
+        mastra: makeMastra(agent),
+        runId,
+        agentId: 'agent-1',
+        state: {} as any,
+      });
+
+      expect(rebuilt?.saveQueueManager).toBeDefined();
+      expect(rebuilt?.memory).toBe(memory);
+      expect(listOutputProcessors).not.toHaveBeenCalled();
+      expect(globalRunRegistry.get(runId)?.outputProcessors).toBeUndefined();
+      expect(globalRunRegistry.get(runId)?.errorProcessors).toBeUndefined();
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('falls back to the run-level context when the step input has no snapshot', async () => {
     const agent = makeAgent();
     const requestContext: RequestContext = new RequestContext([['tenantId', 'acme'] as const]);
