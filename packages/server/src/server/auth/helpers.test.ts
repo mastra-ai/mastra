@@ -600,6 +600,53 @@ describe('auth helpers', () => {
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
     });
 
+    describe('provider pending response headers', () => {
+      // Mirrors how providers key per-request state: by the underlying web Request.
+      const unwrap = (req: any): Request => (req instanceof Request ? req : req.raw);
+
+      function stashingProvider(extra: Record<string, unknown> = {}) {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        return {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v2; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          ...extra,
+        };
+      }
+
+      it('emits headers the provider stashed against the raw Request', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider() as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+      });
+
+      it('still authenticates when consumePendingResponseHeaders throws', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider({
+            consumePendingResponseHeaders: () => {
+              throw new Error('boom');
+            },
+          }) as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+      });
+    });
+
     it('should support composite resource IDs', async () => {
       const user = { id: 'user-123', orgId: 'org-456' };
       const requestContext = createRequestContext();

@@ -47,7 +47,16 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
    * Can also be set via MASTRA_COOKIE_DOMAIN environment variable.
    */
   cookieDomain?: string;
+  /**
+   * Lifetime of the session cookie (and Session.expiresAt) in seconds.
+   * Should match the identity provider's maximum session length.
+   * Can also be set via MASTRA_SESSION_MAX_AGE environment variable.
+   * Defaults to 14 days.
+   */
+  sessionMaxAgeSeconds?: number;
 }
+
+const DEFAULT_SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 
 const COOKIE_NAME = 'wos-session';
 
@@ -113,6 +122,7 @@ export class MastraAuthStudio
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
   private cookieDomain: string | undefined;
+  private sessionMaxAgeSeconds: number;
   /**
    * `userId → sealed session cookie` cache. The `IOrganizationsProvider`
    * interface only hands us a `userId`, but the shared API's org endpoints are
@@ -173,6 +183,11 @@ export class MastraAuthStudio
 
     // Cookie domain can be explicitly configured, read from env, or auto-detected from sharedApiUrl
     this.cookieDomain = options?.cookieDomain || process.env.MASTRA_COOKIE_DOMAIN;
+
+    const envMaxAge = Number(process.env.MASTRA_SESSION_MAX_AGE);
+    const maxAge = options?.sessionMaxAgeSeconds ?? (envMaxAge > 0 ? envMaxAge : undefined);
+    this.sessionMaxAgeSeconds =
+      maxAge && Number.isFinite(maxAge) && maxAge > 0 ? Math.floor(maxAge) : DEFAULT_SESSION_MAX_AGE_SECONDS;
 
     // Use production cookie settings (Secure + Domain) when:
     // 1. An explicit cookieDomain is configured, OR
@@ -352,7 +367,7 @@ export class MastraAuthStudio
     return {
       id: (metadata?.accessToken as string) || crypto.randomUUID(),
       userId,
-      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // 24 hours
+      expiresAt: new Date(now.getTime() + this.sessionMaxAgeSeconds * 1000),
       createdAt: now,
       metadata,
     };
@@ -366,7 +381,7 @@ export class MastraAuthStudio
     return {
       id: sessionId,
       userId: user.id,
-      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      expiresAt: new Date(now.getTime() + this.sessionMaxAgeSeconds * 1000),
       createdAt: now,
     };
   }
@@ -421,7 +436,7 @@ export class MastraAuthStudio
       return {
         id: newSessionId,
         userId: user.id,
-        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        expiresAt: new Date(now.getTime() + this.sessionMaxAgeSeconds * 1000),
         createdAt: now,
       };
     } catch (error) {
@@ -440,7 +455,13 @@ export class MastraAuthStudio
   }
 
   getSessionHeaders(session: Session): Record<string, string> {
-    const parts = [`${COOKIE_NAME}=${session.id}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=86400'];
+    const parts = [
+      `${COOKIE_NAME}=${session.id}`,
+      'HttpOnly',
+      'SameSite=Lax',
+      'Path=/',
+      `Max-Age=${this.sessionMaxAgeSeconds}`,
+    ];
     if (this.useProductionCookies && this.cookieDomain) {
       parts.push('Secure');
       parts.push(`Domain=${this.cookieDomain}`);
@@ -692,6 +713,16 @@ export class MastraAuthStudio
     const rotatedValue = parseCookieFromHeader(rotatedCookieHeader, COOKIE_NAME);
     if (!rotatedValue || rotatedValue === oldSessionCookie) return false;
 
+    // Re-issue under this deployment's cookie attributes: the shared API
+    // scopes its cookie to its own domain, which browsers on other parent
+    // domains (e.g. *.mastra.cloud) would reject.
+    const reissued = this.getSessionHeaders({
+      id: rotatedValue,
+      userId: '',
+      expiresAt: new Date(),
+      createdAt: new Date(),
+    });
+
     // The old sealed cookie's refresh token is now invalidated at WorkOS,
     // so caching the StudioUser against it would hand back a user that the
     // next refresh will reject.
@@ -700,7 +731,7 @@ export class MastraAuthStudio
     if (!request) return true;
     const rawRequest = getWebRequest(request);
     if (!rawRequest) return true;
-    this.pendingResponseHeaders.set(rawRequest, { 'Set-Cookie': rotatedCookieHeader });
+    this.pendingResponseHeaders.set(rawRequest, reissued);
     return true;
   }
 
@@ -750,10 +781,7 @@ export class MastraAuthStudio
    * Forward a sealed session cookie to the shared API's /auth/me endpoint
    * to validate it and get user info.
    */
-  private async verifySessionCookie(
-    sessionCookie: string,
-    request?: MastraAuthRequest,
-  ): Promise<StudioUser | null> {
+  private async verifySessionCookie(sessionCookie: string, request?: MastraAuthRequest): Promise<StudioUser | null> {
     const cacheKey = await this.verificationKey('cookie', sessionCookie);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) {

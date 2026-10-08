@@ -1,18 +1,12 @@
 ---
 '@mastra/auth-studio': patch
 '@mastra/server': patch
+'@mastra/core': patch
+'@mastra/factory': patch
 ---
 
-Forward the rotated `wos-session` `Set-Cookie` from the shared API's
-`/auth/me` response back to the browser. The platform `sessionAuth`
-middleware transparently refreshes an expired access token and re-seals the
-session cookie, but `MastraAuthStudio` previously discarded the `Set-Cookie`
-header after reading the JSON body. The browser's sealed cookie would stay
-frozen at its original value, so the next refresh would hit WorkOS
-`invalid_grant` once the previous refresh token was rotated — kicking
-authenticated users on the first access-token expiry (~5 minutes).
+Keep Studio and Factory sessions alive for the identity provider's full session length.
 
-The server middleware now gives providers a hook
-(`consumePendingResponseHeaders`) to attach response headers after a
-successful authentication, and `MastraAuthStudio` uses it to propagate the
-rotated cookie and invalidate the stale verification-cache entry.
+- `MastraAuthStudio` session cookies now last 14 days by default (was a hardcoded 24 hours), configurable via the new `sessionMaxAgeSeconds` option or the `MASTRA_SESSION_MAX_AGE` environment variable.
+- When the shared API renews the session during verification, `MastraAuthStudio` re-issues the renewed cookie under the deployment's own cookie domain and exposes it through a new optional `consumePendingResponseHeaders` provider hook.
+- `@mastra/server`'s auth middleware, `CompositeAuth`, and the Factory auth gate forward those headers to the browser. Forwarding is best-effort and never fails a request.

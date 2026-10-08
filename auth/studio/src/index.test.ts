@@ -371,7 +371,9 @@ describe('MastraAuthStudio', () => {
         const user = await auth.authenticateToken('', req);
 
         expect(user?.id).toBe('user-1');
-        expect(auth.consumePendingResponseHeaders(req)).toEqual({ 'Set-Cookie': rotated });
+        expect(auth.consumePendingResponseHeaders(req)).toEqual({
+          'Set-Cookie': 'wos-session=sealed-v2; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600',
+        });
         // Second consume clears state so middleware doesn't double-emit.
         expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
       });
@@ -418,6 +420,26 @@ describe('MastraAuthStudio', () => {
         await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-v1' }));
 
         expect(fetchSpy).toHaveBeenCalledTimes(2);
+      });
+
+      it("re-issues the rotated cookie under this deployment's domain, not the shared API's", async () => {
+        const factoryAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD, cookieDomain: '.mastra.cloud' });
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: {
+              'Set-Cookie': 'wos-session=sealed-v2; Max-Age=2592000; Domain=mastra.ai; Path=/; HttpOnly; Secure',
+            },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await factoryAuth.authenticateToken('', req);
+
+        const header = factoryAuth.consumePendingResponseHeaders(req)?.['Set-Cookie'];
+        expect(header).toBe(
+          'wos-session=sealed-v2; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600; Secure; Domain=.mastra.cloud',
+        );
       });
 
       it('ignores non-wos-session Set-Cookie headers', async () => {
@@ -768,7 +790,7 @@ describe('MastraAuthStudio', () => {
       expect(session.id).toBeDefined();
       expect(session.createdAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(session.createdAt.getTime()).toBeLessThanOrEqual(after);
-      expect(session.expiresAt.getTime() - session.createdAt.getTime()).toBe(24 * 60 * 60 * 1000);
+      expect(session.expiresAt.getTime() - session.createdAt.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
     });
 
     it('should use accessToken from metadata as session id', async () => {
@@ -797,7 +819,7 @@ describe('MastraAuthStudio', () => {
       expect(session).not.toBeNull();
       expect(session!.id).toBe('sealed-token');
       expect(session!.userId).toBe('user-1');
-      expect(session!.expiresAt.getTime() - session!.createdAt.getTime()).toBe(24 * 60 * 60 * 1000);
+      expect(session!.expiresAt.getTime() - session!.createdAt.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
     });
 
     it('should return null when session is invalid', async () => {
@@ -904,6 +926,32 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('getSessionHeaders', () => {
+    describe('session max age', () => {
+      afterEach(() => {
+        delete process.env.MASTRA_SESSION_MAX_AGE;
+      });
+
+      const maxAgeOf = (p: MastraAuthStudio) =>
+        p.getSessionHeaders({ id: 't', userId: 'u', expiresAt: new Date(), createdAt: new Date() })['Set-Cookie'];
+
+      it('uses sessionMaxAgeSeconds option for Max-Age and expiresAt', async () => {
+        const p = new MastraAuthStudio({ sharedApiUrl: SHARED_API, sessionMaxAgeSeconds: 3600 });
+        expect(maxAgeOf(p)).toContain('Max-Age=3600');
+        const session = await p.createSession('user-1');
+        expect(session.expiresAt.getTime() - session.createdAt.getTime()).toBe(3600 * 1000);
+      });
+
+      it('falls back to MASTRA_SESSION_MAX_AGE env var', () => {
+        process.env.MASTRA_SESSION_MAX_AGE = '7200';
+        expect(maxAgeOf(new MastraAuthStudio({ sharedApiUrl: SHARED_API }))).toContain('Max-Age=7200');
+      });
+
+      it('ignores an invalid env value and uses the 14-day default', () => {
+        process.env.MASTRA_SESSION_MAX_AGE = 'nope';
+        expect(maxAgeOf(new MastraAuthStudio({ sharedApiUrl: SHARED_API }))).toContain('Max-Age=1209600');
+      });
+    });
+
     it('should return Set-Cookie header without Secure/Domain for localhost', () => {
       const headers = auth.getSessionHeaders({
         id: 'token-123',
@@ -912,7 +960,7 @@ describe('MastraAuthStudio', () => {
         createdAt: new Date(),
       });
 
-      expect(headers['Set-Cookie']).toBe('wos-session=token-123; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400');
+      expect(headers['Set-Cookie']).toBe('wos-session=token-123; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600');
       expect(headers['Set-Cookie']).not.toContain('Secure');
       expect(headers['Set-Cookie']).not.toContain('Domain');
     });

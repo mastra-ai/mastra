@@ -387,14 +387,18 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   let refreshHeaders: Record<string, string> | undefined;
   const authRequest = adaptToMastraAuthRequest(rawRequest);
 
-  type ConsumePendingResponseHeadersFn = (
-    request: typeof authRequest,
-  ) => Record<string, string> | undefined;
+  type ConsumePendingResponseHeadersFn = (request: typeof authRequest) => Record<string, string> | undefined;
   const mergePendingProviderHeaders = () => {
     const consume = (authConfig as { consumePendingResponseHeaders?: ConsumePendingResponseHeadersFn })
       .consumePendingResponseHeaders;
     if (typeof consume !== 'function') return;
-    const pending = consume.call(authConfig, authRequest);
+    let pending: Record<string, string> | undefined;
+    try {
+      pending = consume.call(authConfig, authRequest);
+    } catch {
+      // Forwarding a rotated cookie is best-effort; never fail auth over it.
+      return;
+    }
     if (!pending) return;
     refreshHeaders = { ...(refreshHeaders ?? {}), ...pending };
   };
@@ -521,8 +525,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const studioConfig = mastra.getStudio?.();
       // Use studio RBAC if this is a studio request, otherwise use server RBAC
       const rbacProvider = (authMode === 'studio' ? (studioConfig?.rbac ?? serverConfig?.rbac) : serverConfig?.rbac) as
-        | IRBACProvider<EEUser>
-        | undefined;
+        IRBACProvider<EEUser> | undefined;
 
       if (rbacProvider) {
         if (!user || typeof user !== 'object' || !('id' in user)) {

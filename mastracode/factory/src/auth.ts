@@ -862,6 +862,16 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
       authenticateRequest(provider, token, c.req.raw),
     );
+    // Forward a renewed session cookie (e.g. rotated by the shared API during
+    // verification) so the browser's cookie stays current. Best-effort.
+    try {
+      const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
+      for (const [name, value] of Object.entries(pending ?? {})) {
+        c.header(name, value, { append: true });
+      }
+    } catch {
+      // never fail a request over header forwarding
+    }
 
     if (user) {
       const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;

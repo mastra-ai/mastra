@@ -23,6 +23,7 @@ const mockGetClearSessionHeaders = vi.fn(() => ({ 'Set-Cookie': 'wos_session=; P
 // the mock models "no org → org_new".
 const mockEnsureOrganization = vi.fn(async (_userId: string) => 'org_new');
 const mockIsOrganizationAdmin = vi.fn(async () => false);
+const mockConsumePendingResponseHeaders = vi.fn((_req: Request): Record<string, string> | undefined => undefined);
 
 vi.mock('@mastra/auth-workos', () => ({
   MastraAuthWorkos: class {
@@ -35,6 +36,7 @@ vi.mock('@mastra/auth-workos', () => ({
     getClearSessionHeaders = mockGetClearSessionHeaders;
     ensureOrganization = mockEnsureOrganization;
     isOrganizationAdmin = mockIsOrganizationAdmin;
+    consumePendingResponseHeaders = mockConsumePendingResponseHeaders;
   },
 }));
 
@@ -104,6 +106,28 @@ describe('mountFactoryAuth (disabled)', () => {
 
 describe('mountFactoryAuth gate (enabled)', () => {
   beforeEach(enableEnv);
+
+  it('forwards a renewed session cookie from the provider on authenticated requests', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockReturnValue({ 'Set-Cookie': 'wos-session=v2; Path=/; Max-Age=1209600' });
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agents', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toBe('wos-session=v2; Path=/; Max-Age=1209600');
+    expect(mockConsumePendingResponseHeaders).toHaveBeenCalledWith(expect.any(Request));
+  });
+
+  it('still serves authenticated requests when forwarding headers throws', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
+    mockConsumePendingResponseHeaders.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agents', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+  });
 
   it('redirects unauthenticated HTML navigation to /signin with returnTo', async () => {
     mockAuthenticate.mockResolvedValue(null);

@@ -326,6 +326,19 @@ export class CompositeAuth
     return null;
   }
 
+  consumePendingResponseHeaders(request: MastraAuthRequest): Record<string, string> | undefined {
+    let merged: Record<string, string> | undefined;
+    for (const provider of this.providers) {
+      try {
+        const pending = provider.consumePendingResponseHeaders?.(request);
+        if (pending) merged = { ...(merged ?? {}), ...pending };
+      } catch {
+        // best-effort: never let header forwarding break auth
+      }
+    }
+    return merged;
+  }
+
   async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {
     for (const provider of this.providers) {
       const authorized = await provider.authorizeUser(user, request);
