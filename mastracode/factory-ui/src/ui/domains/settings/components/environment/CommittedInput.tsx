@@ -8,18 +8,6 @@ import type { FactoryEnvironmentPatch } from '../../../workspaces/services/envir
 export type SaveEnvironment = (input: FactoryEnvironmentPatch) => Promise<boolean>;
 
 /**
- * A whole number within [min, max], or undefined after telling the user why
- * the value was not saved. `Number()` rejects "1.5" and "12abc" where parseInt
- * would have silently truncated them.
- */
-export function wholeNumber(raw: string, min: number, max: number): number | undefined {
-  const value = Number(raw);
-  if (Number.isInteger(value) && value >= min && value <= max) return value;
-  toast.error(`Enter a whole number between ${min} and ${max}`);
-  return undefined;
-}
-
-/**
  * A text or number input that keeps a local draft and commits it on blur or
  * Enter, only when the trimmed value differs from the stored one. The draft is
  * dropped once the commit resolves, so the stored value shows again.
@@ -33,6 +21,7 @@ export function CommittedInput({
   mono = type === 'text',
   min,
   max,
+  step,
   className,
   onCommit,
 }: {
@@ -44,13 +33,20 @@ export function CommittedInput({
   mono?: boolean;
   min?: number;
   max?: number;
+  step?: number | 'any';
   className?: string;
   onCommit: (value: string) => Promise<unknown>;
 }) {
   const [draft, setDraft] = useState<string>();
   const current = draft ?? value;
 
-  const commit = () => {
+  const commit = (input: HTMLInputElement) => {
+    // A number input reports '' while its text is not a number ("-", "1e");
+    // treating that as "clear the setting" would silently drop a stored value.
+    if (input.validity?.badInput) {
+      toast.error('Enter a number');
+      return;
+    }
     if (current.trim() === value) {
       setDraft(undefined);
       return;
@@ -68,12 +64,13 @@ export function CommittedInput({
       type={type}
       min={min}
       max={max}
+      step={step}
       aria-label={label}
       placeholder={placeholder}
       value={current}
       disabled={disabled}
       onChange={event => setDraft(event.target.value)}
-      onBlur={commit}
+      onBlur={event => commit(event.currentTarget)}
       onKeyDown={event => {
         if (event.key === 'Enter') event.currentTarget.blur();
       }}

@@ -4,7 +4,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
-import { CommittedInput, type SaveEnvironment, wholeNumber } from './CommittedInput';
+import { toast } from '@mastra/playground-ui/components/Toaster';
+
+import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
 /** The JSON Schema subset the settings renderer reads; anything else renders as unsupported. */
 interface SettingSchema {
@@ -136,8 +138,6 @@ function SettingRow({
       />
     );
   } else if (type === 'integer' || type === 'number') {
-    const min = schema.minimum ?? (type === 'integer' ? Number.MIN_SAFE_INTEGER : -Infinity);
-    const max = schema.maximum ?? (type === 'integer' ? Number.MAX_SAFE_INTEGER : Infinity);
     control = (
       <div className="w-full lg:max-w-40">
         <CommittedInput
@@ -145,12 +145,13 @@ function SettingRow({
           type="number"
           min={schema.minimum}
           max={schema.maximum}
+          step={type === 'integer' ? 1 : 'any'}
           placeholder={placeholder}
           value={value === undefined ? '' : String(value)}
           disabled={disabled}
           onCommit={raw => {
             if (raw === '') return onCommit(null);
-            const parsed = type === 'integer' ? wholeNumber(raw, min, max) : finiteNumber(raw, min, max);
+            const parsed = numberInRange(raw, schema, type === 'integer');
             return parsed === undefined ? Promise.reject(new Error('invalid')) : onCommit(parsed);
           }}
         />
@@ -184,11 +185,28 @@ function SettingRow({
 
 const UNSET = '__default__';
 
-/** A number within [min, max], or undefined after telling the user why. */
-function finiteNumber(raw: string, min: number, max: number): number | undefined {
+/**
+ * The parsed number when it satisfies the schema's type and bounds, otherwise
+ * undefined after telling the user why the value was not saved. `Number()`
+ * rejects "12abc" where parseInt would have silently truncated it.
+ */
+function numberInRange(raw: string, schema: SettingSchema, integer: boolean): number | undefined {
   const value = Number(raw);
-  if (Number.isFinite(value) && value >= min && value <= max) return value;
-  return wholeNumber(raw, min, max);
+  const typed = integer ? Number.isInteger(value) : Number.isFinite(value);
+  const min = schema.minimum ?? -Infinity;
+  const max = schema.maximum ?? Infinity;
+  if (typed && value >= min && value <= max) return value;
+  const kind = integer ? 'a whole number' : 'a number';
+  const range =
+    schema.minimum !== undefined && schema.maximum !== undefined
+      ? ` between ${schema.minimum} and ${schema.maximum}`
+      : schema.minimum !== undefined
+        ? ` of at least ${schema.minimum}`
+        : schema.maximum !== undefined
+          ? ` of at most ${schema.maximum}`
+          : '';
+  toast.error(`Enter ${kind}${range}`);
+  return undefined;
 }
 
 /** The enum member whose string form the select handed back, keeping its original type. */

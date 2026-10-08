@@ -316,6 +316,50 @@ describe('Environment settings', () => {
     expect(patches[0]).toEqual({ settings: { privileged: true } });
   });
 
+  it('saves decimals for number settings, strings as typed, and clears both with null', async () => {
+    useFactory();
+    const environment = environmentPayload({
+      sandbox: {
+        provider: 'e2b',
+        settingsSchema: {
+          type: 'object',
+          properties: {
+            ratio: { type: 'number', title: 'Ratio', minimum: 0 },
+            region: { type: 'string', title: 'Region', enum: ['us', 'eu'] },
+            image: { type: 'string', title: 'Image' },
+          },
+        },
+        capabilities: { template: true, builds: { available: true, history: true } },
+      },
+      settings: { region: 'eu', image: 'node:22' },
+    });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    const ratio = await screen.findByRole('spinbutton', { name: 'Ratio' });
+    await user.type(ratio, '-1{Enter}');
+    expect(await screen.findByText('Enter a number of at least 0')).toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+    await user.clear(ratio);
+    await user.type(ratio, '0.5{Enter}');
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ settings: { ratio: 0.5 } });
+
+    const image = screen.getByRole('textbox', { name: 'Image' });
+    await user.clear(image);
+    await user.tab();
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches[1]).toEqual({ settings: { image: null } });
+
+    await user.click(screen.getByRole('combobox', { name: 'Region' }));
+    await user.click(await screen.findByRole('option', { name: 'Default' }));
+    await waitFor(() => expect(patches).toHaveLength(3));
+    expect(patches[2]).toEqual({ settings: { region: null } });
+  });
+
   it('saves the workspace setup command', async () => {
     useFactory();
     const environment = environmentPayload();
