@@ -14,6 +14,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 function createTwoStepToolThenTextModel(toolName: string, finalText: string) {
   let callCount = 0;
@@ -146,5 +147,92 @@ describe('DurableAgent prepareStep', () => {
 
     expect((workflowInput.options as any).prepareStep).toBeUndefined();
     expect(registryEntry.prepareStep).toBe(prepareStep);
+  });
+
+  it('rejects a tool call removed by prepareStep for the current step on every engine', async () => {
+    const executeStep = vi.fn(async () => 'step complete');
+    const step = createTool({
+      id: 'step',
+      description: 'Run one step',
+      inputSchema: z.object({}),
+      execute: executeStep,
+    });
+    const kept = createTool({
+      id: 'kept',
+      description: 'A tool kept for the second step',
+      inputSchema: z.object({}),
+      execute: async () => 'kept',
+    });
+
+    const results = await expectEngineParity({
+      model: { tapes: [toolCallTape('step', {}, 'call-1'), toolCallTape('step', {}, 'call-2')] },
+      buildAgent: ({ model }) =>
+        new Agent({
+          id: 'prepare-step-tools-agent',
+          name: 'Prepare Step Tools Agent',
+          instructions: 'Run the requested step',
+          model,
+          tools: { step, kept },
+        }),
+      input: 'go',
+      options: {
+        maxSteps: 2,
+        prepareStep: async ({ stepNumber }) => (stepNumber === 1 ? { tools: { kept } } : undefined),
+      },
+      differences: {
+        durable: {
+          reason: 'Durable tool errors include the available-tool message and workflow continuation metadata.',
+          ignore: ['chunkPayloads'],
+        },
+        evented: {
+          reason: 'Evented tool errors include the available-tool message and workflow continuation metadata.',
+          ignore: ['chunkPayloads'],
+        },
+      },
+    });
+
+    expect(executeStep).toHaveBeenCalledTimes(3);
+    for (const result of Object.values(results)) {
+      const turn = result!.turns[0]!;
+      expect(turn.toolResults).toEqual([{ toolCallId: 'call-1', toolName: 'step', result: 'step complete' }]);
+      expect(turn.chunkTypes).toContain('tool-error');
+    }
+  });
+
+  it('executes a tool retained by prepareStep for the current step on every engine', async () => {
+    const executeStep = vi.fn(async () => 'step complete');
+    const step = createTool({
+      id: 'step',
+      description: 'Run one step',
+      inputSchema: z.object({}),
+      execute: executeStep,
+    });
+
+    const results = await expectEngineParity({
+      model: {
+        tapes: [toolCallTape('step', {}, 'call-1'), toolCallTape('step', {}, 'call-2'), textOnlyTape('done')],
+      },
+      buildAgent: ({ model }) =>
+        new Agent({
+          id: 'prepare-step-retained-tool-agent',
+          name: 'Prepare Step Retained Tool Agent',
+          instructions: 'Run the requested step',
+          model,
+          tools: { step },
+        }),
+      input: 'go',
+      options: {
+        maxSteps: 3,
+        prepareStep: async () => ({ tools: { step } }),
+      },
+    });
+
+    expect(executeStep).toHaveBeenCalledTimes(6);
+    for (const result of Object.values(results)) {
+      expect(result!.turns[0]!.toolResults).toEqual([
+        { toolCallId: 'call-1', toolName: 'step', result: 'step complete' },
+        { toolCallId: 'call-2', toolName: 'step', result: 'step complete' },
+      ]);
+    }
   });
 });
