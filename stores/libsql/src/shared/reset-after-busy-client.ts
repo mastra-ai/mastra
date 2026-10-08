@@ -60,7 +60,8 @@ export function resetConnectionsAfterBusy(client: Client, { afterReset }: { afte
     if (!pendingReset || inFlight > 0) return;
     // Reopens the pool synchronously for local clients.
     client.reconnect();
-    // afterReset's statements skip the wait, so they run ahead of the calls that waited.
+    // afterReset isn't awaited: its first statement runs ahead of the calls that
+    // waited, but later ones can run after them.
     finishReset(afterReset);
   };
 
