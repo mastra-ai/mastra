@@ -31,15 +31,15 @@
  * that stops on a tool step. `iter-feedback` asks for one more iteration, and
  * durable and evented report `false` for the iteration that was continuing,
  * i.e. they claim a run still in progress had stopped (finding F-2.1, the same
- * mechanism as F-1). COR-1416 covers the second `iter-feedback` divergence: the
- * resolved full output carries the previous iteration's text again on plain
- * (`firstfirstMORE` where the stream sent `firstMORE`, finding F-2.2), so the
- * declaration derives the resolved text from plain's own streamed text.
+ * mechanism as F-1). Durable and evented also resolve only the last iteration's
+ * text, so that parity declaration derives their expected resolved text from
+ * plain's stream. Plain's stream and resolved full output both contain the full
+ * `firstMORE` response.
  *
- * Each declaration derives the wrong value from plain's own observation rather
- * than ignoring the field, so these legs fail again the moment either side is
- * fixed (and the helper refuses a declaration that stops reproducing at all).
- * plain's values are pinned literally, read from the observation the helper
+ * Each declaration derives engine differences from plain's own observation
+ * rather than ignoring the field, so these legs fail again the moment either
+ * side is fixed (and the helper refuses a declaration that stops reproducing at
+ * all). Plain's values are pinned literally, read from the observation the helper
  * returns. The two throwing legs are the only ones driven directly: a rejected
  * run leaves the helper nothing to record.
  */
@@ -203,10 +203,9 @@ function terminatingStepStaysContinued(plain: EngineObservation): EngineObservat
 }
 
 /**
- * COR-1412 + COR-1416, `iter-feedback`: durable and evented report the iteration that was continuing
- * as stopped, and their resolved full output is only the last iteration's text while plain's carries
- * the previous iteration again. The expected resolved text is derived from plain's own stream, which
- * is what a consumer received.
+ * COR-1412, `iter-feedback`: durable and evented report the iteration that was continuing as stopped.
+ * Their resolved full output is only the last iteration's text, so the expected resolved text is
+ * derived from plain's stream, which matches plain's full output.
  */
 function continuingIterationAndResolvedText(plain: EngineObservation): EngineObservation {
   return {
@@ -227,9 +226,9 @@ const COR_1412_ITER_STOP: EngineDifference = {
   expect: terminatingStepStaysContinued,
 };
 
-const COR_1412_1416_ITER_FEEDBACK: EngineDifference = {
+const COR_1412_ITER_FEEDBACK: EngineDifference = {
   reason:
-    'COR-1412: durable and evented emit step-finish before the continuation decision, so the iteration that asked for feedback reports stepResult.isContinued: false where plain reports true. COR-1416: plain resolves the previous iteration’s text again (fullOutput.text "firstfirstMORE" where the stream sent "firstMORE"); the expectation derives the resolved text from plain’s own stream.',
+    'COR-1412: durable and evented emit step-finish before the continuation decision, so the iteration that asked for feedback reports stepResult.isContinued: false where plain reports true. Durable and evented resolve only the last iteration’s text, so the expectation derives their resolved text from plain’s stream.',
   expect: continuingIterationAndResolvedText,
 };
 
@@ -246,7 +245,7 @@ async function runOrdinaryVariant(variant: OrdinaryVariant) {
     model: variant === 'iter-feedback' ? feedbackScript() : stepScript(3),
     differences:
       variant === 'iter-feedback'
-        ? { durable: COR_1412_1416_ITER_FEEDBACK, evented: COR_1412_1416_ITER_FEEDBACK }
+        ? { durable: COR_1412_ITER_FEEDBACK, evented: COR_1412_ITER_FEEDBACK }
         : { durable: COR_1412_ITER_STOP, evented: COR_1412_ITER_STOP },
     buildAgent: ({ engine, model }) => {
       const onCommit = () => commits.set(engine, commits.get(engine)! + 1);
@@ -402,19 +401,16 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
       expect(hookCalls.get(engine)?.[1]?.text, `${engine}: the hook saw the second iteration's text`).toBe('MORE');
     }
 
-    // plain's reference values again, plus the two declared divergences. Iteration 1 continued (the
+    // Plain's reference values, plus the declared COR-1412 divergence. Iteration 1 continued (the
     // hook asked for feedback) and iteration 2 did not; durable and evented report `false` for the
-    // continuing iteration (COR-1412). The resolved full output carries the previous iteration's
-    // text a second time while the stream only ever sent `firstMORE` — plain's own defect (COR-1416)
-    // — so this literal is the observed wrong value and is expected to be updated to `firstMORE`
-    // when that ticket is fixed. It is pinned rather than papered over.
+    // continuing iteration. Plain's resolved full output now matches the text its stream emitted.
     const plainTurn = results.plain!.turns.at(-1)!;
     expect(hookCalls.get('plain')).toEqual([
       { iteration: 1, isFinal: true, text: 'first' },
       { iteration: 2, isFinal: true, text: 'MORE' },
     ]);
     expect(plainTurn.streamedText).toBe('firstMORE');
-    expect(plainTurn.fullOutput.text).toBe('firstfirstMORE');
+    expect(plainTurn.fullOutput.text).toBe('firstMORE');
     expect(stepFinishStepResults(plainTurn)).toEqual([
       { isContinued: true, reason: 'stop' },
       { isContinued: false, reason: 'stop' },

@@ -1238,10 +1238,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         : outputText
                       : undefined;
 
-                  // Only reconcile the final step when result processing changed the response text and
-                  // the same response message still exists. Preserve the iteration slice when its part
-                  // structure is stable; otherwise use the processor's replacement text so redaction is
-                  // not lost. Compare against undefined, not truthiness, so clearing to '' still applies.
+                  // Only reconcile the final step when result processing changed the run-level response
+                  // and the same response message still exists. Earlier steps retain their model text.
+                  // Preserve the final iteration slice when its part structure is stable; otherwise use the
+                  // processor's replacement text so redaction is not lost. Compare against undefined, not
+                  // truthiness, so clearing to '' still applies.
                   if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }
