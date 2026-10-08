@@ -22,6 +22,7 @@ import { KnowledgeGraph } from '../domains/factory/components/knowledge/Knowledg
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import { KnowledgeApprovals } from '../domains/factory/components/knowledge/KnowledgeApprovals';
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
+import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/KnowledgeScopeFlyout';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
@@ -418,6 +419,8 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
         if ((params.get('node') ?? undefined) === selected?.nodeId) return params;
         const copy = new URLSearchParams(params);
         if (selected) {
+          // Opening a node replaces the scope's detail surface.
+          copy.delete('details');
           copy.set('node', selected.nodeId);
           copy.set('nodeName', selected.name);
         } else {
@@ -467,6 +470,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       const copy = new URLSearchParams(params);
       copy.delete('thread');
       copy.delete('scope');
+      copy.delete('details');
       return copy;
     });
   };
@@ -475,9 +479,21 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       copy.set('scope', scopeId);
+      // Selecting a scope changes the lens and opens that scope's detail
+      // surface; the URL carries both so the result is linkable.
+      copy.set('details', 'scope');
       return copy;
     });
   };
+  const closeScopeDetails = () =>
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.delete('details');
+      return copy;
+    });
+  const lensScope =
+    selection.scopeNodeId && scopeQuery.data?.scope.id === selection.scopeNodeId ? scopeQuery.data.scope : undefined;
+  const scopeDetailsOpen = searchParams.get('details') === 'scope';
   const selectSearchResult = (result: KnowledgeSearchResult) => {
     if (result.type === 'scope') {
       selectScope(result.id);
@@ -579,6 +595,14 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               if (target && target.id !== selected.nodeId)
                 setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
             }}
+          />
+        ) : scopeDetailsOpen && lensScope && factoryProjectId ? (
+          <KnowledgeScopeFlyout
+            factoryProjectId={factoryProjectId}
+            scope={lensScope}
+            threadId={threadId}
+            onOpenActivity={() => setView('activity')}
+            onClose={closeScopeDetails}
           />
         ) : null}
       </div>
