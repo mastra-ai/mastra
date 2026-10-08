@@ -16,6 +16,7 @@ import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
@@ -731,6 +732,8 @@ export interface RunRegistryEntry {
   mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
+  /** Per-run state shared by durable steps, released with the registry entry. */
+  runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
   /** Resolved input processors (non-serializable, combined into workflow) */

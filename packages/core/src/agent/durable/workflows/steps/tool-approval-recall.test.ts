@@ -17,7 +17,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
+import { SaveQueueManager } from '../../../save-queue';
 import { globalRunRegistry } from '../../run-registry';
+import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { createDurableLLMMappingStep } from './llm-mapping';
 import { createDurableToolCallStep } from './tool-call';
 
@@ -153,6 +155,70 @@ afterEach(() => {
 });
 
 describe('issue #17218 (durable engine): tool-call step records the approval decision', () => {
+  it.each([TOOL_NAME, 'agent-worker'])(
+    'restores cold-worker context for %s without persisting the copied transcript',
+    async toolName => {
+      const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+      messageList.add('Original parent request', 'input');
+      messageList.add(
+        {
+          id: 'parent-assistant',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: ['call-1', 'call-2'].map(toolCallId => ({
+              type: 'tool-invocation' as const,
+              toolInvocation: { state: 'call' as const, toolCallId, toolName, args: TOOL_ARGS },
+            })),
+          },
+        },
+        'response',
+      );
+      const messageListState = messageList.serialize();
+      const memory = {
+        recall: vi.fn().mockResolvedValue({ messages: [] }),
+        saveMessages: vi.fn().mockResolvedValue([]),
+      };
+      const saveQueueManager = new SaveQueueManager({ memory: memory as any });
+      const flush = vi.spyOn(saveQueueManager, 'flushMessages');
+      const execute = vi.fn(async (_args, context) => {
+        expect(JSON.stringify(context.messages)).toContain('Original parent request');
+        await context.suspend({}, { requireToolApproval: true });
+      });
+      expect(globalRunRegistry.has(RUN_ID)).toBe(false);
+      for (const toolCallId of ['call-1', 'call-2']) {
+        vi.mocked(rebuildRunToolsFromMastra).mockResolvedValueOnce({
+          tools: { [toolName]: { execute } },
+          memory,
+          saveQueueManager,
+        } as any);
+        const suspend = vi.fn().mockResolvedValue('suspended');
+        await (createDurableToolCallStep() as any).execute({
+          inputData: { toolCallId, toolName, args: TOOL_ARGS },
+          mastra: { getLogger: () => undefined },
+          suspend,
+          resumeData: { approved: true },
+          requestContext: new Map(),
+          getInitData: () => makeInitData(),
+          state: { messageListState },
+          getStepResult: () => undefined,
+          [PUBSUB_SYMBOL]: mockPubsub(),
+        });
+        expect(suspend).toHaveBeenCalledTimes(1);
+      }
+
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(memory.saveMessages).not.toHaveBeenCalled();
+      expect(flush).not.toHaveBeenCalled();
+      for (const [, context] of execute.mock.calls) {
+        expect(context.getMessages).toBeUndefined();
+      }
+      expect(globalRunRegistry.has(RUN_ID)).toBe(false);
+      expect(messageList.serialize()).toEqual(messageListState);
+    },
+  );
+
   it.each([{}, { approved: 'true' }])('re-suspends malformed workflow approval data: %j', async resumeData => {
     const execute = vi.fn().mockResolvedValue(TOOL_RESULT);
     const suspend = vi.fn().mockResolvedValue('suspended');
