@@ -342,10 +342,6 @@ function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: strin
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON ${table(TABLE_KNOWLEDGE_NODES)} (lower("name"));`,
     },
     {
-      name: 'idx_knowledge_nodes_name',
-      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON ${table(TABLE_KNOWLEDGE_NODES)} ("type", "canonicalName");`,
-    },
-    {
       name: 'idx_knowledge_records_node_latest',
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("nodeId", "id" DESC);`,
     },

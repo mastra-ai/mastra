@@ -404,7 +404,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     await this.#client.batch(
       [
         {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (name)`,
+          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (lower(name))`,
           args: [],
         },
         {
