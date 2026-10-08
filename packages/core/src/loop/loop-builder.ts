@@ -535,6 +535,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
+      if (typedInputData.stepResult?.reason === 'abort') {
+        typedInputData.stepResult.isContinued = false;
+        return false;
+      }
+
       state.accumulatedSteps.push(currentStep);
 
       // Shared continuation decision: two-phase feedback stop, stopWhen,

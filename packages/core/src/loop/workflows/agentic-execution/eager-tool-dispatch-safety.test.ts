@@ -1623,6 +1623,31 @@ describe('EagerToolExecutionCoordinator', () => {
     released();
   });
 
+  it('does not reclaim a result after the foreach adopts its execution', async () => {
+    const coordinator = new EagerToolExecutionCoordinator(() => 1);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => {
+      release = resolve;
+    });
+
+    coordinator.start(
+      'call-1',
+      async () => {
+        await held;
+        return { result: 'adopted' } as never;
+      },
+      { toolName: 'tool-a', args: {} },
+    );
+    const adopted = coordinator.take('call-1')!;
+
+    release();
+    await expect(adopted).resolves.toEqual({ result: 'adopted' });
+    await vi.waitFor(() => expect(coordinator.running).toBe(0));
+
+    // The foreach owns the adopted result. A later abort must not carry and emit it again.
+    expect(coordinator.stop({ cancelRunning: true })).toEqual([]);
+  });
+
   it('never starts queued work after stop(), and marks it as not executed', async () => {
     const coordinator = new EagerToolExecutionCoordinator(() => 1);
     const executed: string[] = [];

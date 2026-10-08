@@ -1474,6 +1474,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const {
         outputStream,
         callBail,
+        bailReason,
         runState,
         stepTools,
         stepWorkspace,
@@ -1483,6 +1484,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
+        bailReason?: 'abort';
         stepTools?: TOOLS;
         stepWorkspace?: Workspace;
         processAPIErrorRetry?: { retry: boolean };
@@ -2447,7 +2449,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
-            return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            return {
+              callBail: true,
+              bailReason: 'abort' as const,
+              outputStream,
+              runState,
+              stepTools: currentStep.tools,
+            };
           }
 
           // Settled before deciding, so a call that suspends while still running is seen
@@ -2462,7 +2470,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             await settleEagerWorkOnAbort(controller);
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-            return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+            return {
+              callBail: true,
+              bailReason: 'abort' as const,
+              outputStream,
+              runState,
+              stepTools: currentStep.tools,
+            };
           }
 
           const isUpstreamError = APICallError.isInstance(error);
@@ -2560,7 +2574,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               });
               await settleEagerWorkOnAbort(controller);
               safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-              return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+              return {
+                callBail: true,
+                bailReason: 'abort' as const,
+                outputStream,
+                runState,
+                stepTools: currentStep.tools,
+              };
             }
 
             if (errorResult.retry && canRetryError) {
@@ -2602,7 +2622,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
-          return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+          return { callBail: true, bailReason: 'abort' as const, outputStream, runState, stepTools: currentStep.tools };
         }
 
         return {
@@ -2627,7 +2647,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }
 
-      const bailFromExecution = () => {
+      const bailFromExecution = (reason: 'tripwire' | 'abort' = 'tripwire') => {
         const usage = outputStream._getImmediateUsage();
         const responseMetadata = runState.state.responseMetadata;
         const text = outputStream._getImmediateText();
@@ -2635,7 +2655,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return bail({
           messageId: outputStream.messageId,
           stepResult: {
-            reason: 'tripwire',
+            reason,
             warnings,
             isContinued: false,
           },
@@ -2661,7 +2681,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       };
 
       if (callBail) {
-        return bailFromExecution();
+        return bailFromExecution(bailReason);
       }
 
       // The failed attempt's materialization id, captured before processAPIError
@@ -2687,7 +2707,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           });
           await settleEagerWorkOnAbort(controller);
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-          return bailFromExecution();
+          return bailFromExecution('abort');
         }
         const currentRetryCount = inputData.processorRetryCount || 0;
         // Never retry an attempt holding a call that already ran up to a runtime suspend().
@@ -2774,7 +2794,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
         await settleEagerWorkOnAbort(controller);
         safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-        return bailFromExecution();
+        return bailFromExecution('abort');
       }
 
       // If processAPIError signaled retry, return early with retry metadata
@@ -2790,7 +2810,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           });
           await settleEagerWorkOnAbort(controller);
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-          return bailFromExecution();
+          return bailFromExecution('abort');
         }
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
@@ -3132,7 +3152,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           });
           await settleEagerWorkOnAbort(controller);
           safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-          return bailFromExecution();
+          return bailFromExecution('abort');
         }
       }
 
