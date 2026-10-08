@@ -571,7 +571,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+        throw new MastraError(
+          {
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `[Agent:${publicAgentName}] - Input processor error`,
+          },
+          error,
+        );
       }
     }
   }
