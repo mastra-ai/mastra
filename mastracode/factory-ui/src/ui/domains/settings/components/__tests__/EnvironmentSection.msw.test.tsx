@@ -339,35 +339,6 @@ describe('Environment settings', () => {
     await user.type(debounce, '0{Enter}');
     await waitFor(() => expect(patches).toHaveLength(3));
     expect(patches[2]).toEqual({ buildTriggers: { onPush: { debounceMinutes: 0 } } });
-
-    const cap = screen.getByRole('spinbutton', { name: 'Max push builds per hour' });
-    expect(cap).toHaveValue(4);
-    await user.clear(cap);
-    await user.tab();
-    await waitFor(() => expect(patches).toHaveLength(4));
-    expect(patches[3]).toEqual({ buildTriggers: { onPush: { maxPerHour: null } } });
-  });
-
-  it('renders an unlimited cap as an empty field and sends a number back', async () => {
-    useFactory();
-    const environment = environmentPayload({
-      buildTriggers: {
-        schedule: { enabled: true, hours: 24 },
-        onPush: { enabled: true, debounceMinutes: 10, maxPerHour: null },
-      },
-    });
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    const cap = await screen.findByRole('spinbutton', { name: 'Max push builds per hour' });
-    expect(cap).toHaveValue(null);
-    expect(cap).toHaveAttribute('placeholder', 'unlimited');
-    await user.type(cap, '6{Enter}');
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ buildTriggers: { onPush: { maxPerHour: 6 } } });
   });
 
   it('warns that push triggers cannot fire when the host delivers no pushes', async () => {

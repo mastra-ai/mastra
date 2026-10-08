@@ -40,7 +40,7 @@ export function environmentPayload(overrides: Partial<FactoryEnvironmentPayload>
     ],
     buildTriggers: {
       schedule: { enabled: true, hours: 24 },
-      onPush: { enabled: true, debounceMinutes: 10, maxPerHour: 4 },
+      onPush: { enabled: true, debounceMinutes: 10 },
     },
     build: {
       status: null,

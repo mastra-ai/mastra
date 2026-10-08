@@ -31,8 +31,6 @@ export interface FactoryEnvironmentBuildTriggers {
   onPush: {
     enabled: boolean;
     debounceMinutes: number;
-    /** Null = unlimited. */
-    maxPerHour: number | null;
   };
 }
 
@@ -89,7 +87,7 @@ export interface FactoryEnvironmentPatch {
   repositories?: FactoryEnvironmentRepositoryPatch[];
   buildTriggers?: {
     schedule?: { enabled?: boolean; hours?: number };
-    onPush?: { enabled?: boolean; debounceMinutes?: number; maxPerHour?: number | null };
+    onPush?: { enabled?: boolean; debounceMinutes?: number };
   };
 }
 

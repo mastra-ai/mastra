@@ -84,42 +84,22 @@ export function BuildTriggersBlock({
                 </span>
               )}
               {onPush.enabled && (
-                <>
-                  <Knob label="Debounce" hint="Minutes to hold further pushes after a build (0 to 1440).">
-                    <CommittedInput
-                      label="Push debounce in minutes"
-                      type="number"
-                      min={0}
-                      max={1440}
-                      value={String(onPush.debounceMinutes)}
-                      disabled={disabled}
-                      onCommit={raw => {
-                        const debounceMinutes = wholeNumber(raw, 0, 1440);
-                        return debounceMinutes === undefined
-                          ? Promise.resolve(false)
-                          : onSave({ buildTriggers: { onPush: { debounceMinutes } } });
-                      }}
-                    />
-                  </Knob>
-                  <Knob label="Max push builds per hour" hint="1 to 60. Empty means unlimited.">
-                    <CommittedInput
-                      label="Max push builds per hour"
-                      type="number"
-                      min={1}
-                      max={60}
-                      placeholder="unlimited"
-                      value={onPush.maxPerHour === null ? '' : String(onPush.maxPerHour)}
-                      disabled={disabled}
-                      onCommit={raw => {
-                        if (raw === '') return onSave({ buildTriggers: { onPush: { maxPerHour: null } } });
-                        const maxPerHour = wholeNumber(raw, 1, 60);
-                        return maxPerHour === undefined
-                          ? Promise.resolve(false)
-                          : onSave({ buildTriggers: { onPush: { maxPerHour } } });
-                      }}
-                    />
-                  </Knob>
-                </>
+                <Knob label="Debounce" hint="Minutes to hold further pushes after a build (0 to 1440).">
+                  <CommittedInput
+                    label="Push debounce in minutes"
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={String(onPush.debounceMinutes)}
+                    disabled={disabled}
+                    onCommit={raw => {
+                      const debounceMinutes = wholeNumber(raw, 0, 1440);
+                      return debounceMinutes === undefined
+                        ? Promise.resolve(false)
+                        : onSave({ buildTriggers: { onPush: { debounceMinutes } } });
+                    }}
+                  />
+                </Knob>
               )}
             </span>
           }
