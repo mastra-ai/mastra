@@ -3,7 +3,7 @@ name: Knowledge split E2E (branch-only)
 # The vitest-all stores/workflows/pubsub E2E jobs run every package in one
 # 30-minute job and time out on main too. This runs each E2E project on its own,
 # at the Knowledge final-proof tip and at the W1 base, with the same secrets.
-# DynamoDB reruns on GitHub-hosted runners: the shared self-hosted host had a
+# DynamoDB runs on GitHub-hosted runners: the shared self-hosted host had a
 # stale storage-dynamodb-local-1 container that blocked docker compose on both sides.
 # Lives only on ci/knowledge-v21-e2e-split; never merged.
 on:
@@ -15,7 +15,7 @@ permissions: {}
 jobs:
   e2e:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.project == 'stores/dynamodb' && 'ubuntu-latest' || 'starsling-ubuntu-24.04' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -26,7 +26,39 @@ jobs:
       matrix:
         side: [stack, w1]
         project:
+          - pubsub/google-cloud-pubsub
+          - pubsub/redis-streams
+          - pubsub/valkey-streams
+          - stores/_test-utils
+          - stores/astra
+          - stores/azure-ai-search
+          - stores/chroma
+          - stores/clickhouse
+          - stores/cloudflare
+          - stores/cloudflare-d1
+          - stores/convex
+          - stores/couchbase
+          - stores/duckdb
           - stores/dynamodb
+          - stores/elasticsearch
+          - stores/lance
+          - stores/libsql
+          - stores/mongodb
+          - stores/mssql
+          - stores/mysql
+          - stores/opensearch
+          - stores/oracledb
+          - stores/pg
+          - stores/pinecone
+          - stores/qdrant
+          - stores/s3vectors
+          - stores/spanner
+          - stores/turbopuffer
+          - stores/turso
+          - stores/upstash
+          - stores/vectorize
+          - stores/weaviate
+          - workflows/inngest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -36,7 +68,7 @@ jobs:
         timeout-minutes: 10
         with:
           persist-credentials: false
-          ref: ${{ matrix.side == 'stack' && 'aa0f70bd6d934fc6a704b3391da2c75bce915215' || 'fa21353a6bcf42e880f07a29aa03a8dac3a8b99f' }}
+          ref: ${{ matrix.side == 'stack' && 'e235aee8e5ea8e176e368ef549c02e74f4355a8a' || '272c460e198e5cee1d0015e9f7d62cfc30335bee' }}
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
       - name: Build ${{ matrix.project }}
@@ -44,12 +76,14 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
       - name: Provide docker-compose (tests spawn the v1 binary name)
+        if: ${{ matrix.project == 'stores/dynamodb' }}
         run: |
           mkdir -p "$HOME/bin"
           printf '#!/bin/sh\nexec docker compose "$@"\n' > "$HOME/bin/docker-compose"
           chmod +x "$HOME/bin/docker-compose"
           echo "$HOME/bin" >> "$GITHUB_PATH"
       - name: Start DynamoDB Local ahead of the suite
+        if: ${{ matrix.project == 'stores/dynamodb' }}
         run: |
           docker compose -f stores/dynamodb/src/storage/docker-compose.yml up -d
           for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:8000 && break; sleep 2; done
@@ -85,4 +119,5 @@ jobs:
           name: junit-${{ steps.normalize.outputs.id }}
           path: .e2e-reports/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
