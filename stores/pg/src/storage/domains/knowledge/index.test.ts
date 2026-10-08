@@ -11,6 +11,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { PostgresStore } from '../..';
 import { PoolAdapter, RoutingDbClient } from '../../client';
+import type { DbClient } from '../../db';
 import { loadSchemaSnapshot } from '../../db/schema-snapshot';
 import { connectionString } from '../../test-utils';
 
@@ -490,6 +491,51 @@ describe('KnowledgePG storage isolation', () => {
     );
   });
 
+  it('canonicalizes equivalent connection forms', () => {
+    expect(
+      getPgKnowledgeIsolationKey({
+        connectionString: 'postgresql://first:secret@EXAMPLE.com/knowledge?sslmode=require',
+        schemaName: 'shared',
+      }),
+    ).toBe(
+      getPgKnowledgeIsolationKey({ host: 'example.com', port: 5432, database: 'knowledge', schemaName: 'shared' }),
+    );
+  });
+
+  it('identifies pools that reach the same database through PG environment defaults', () => {
+    const saved = { PGHOST: process.env.PGHOST, PGPORT: process.env.PGPORT, PGDATABASE: process.env.PGDATABASE };
+    Object.assign(process.env, { PGHOST: 'db.internal', PGPORT: '6543', PGDATABASE: 'knowledge' });
+    const first = new Pool();
+    const second = new Pool();
+    try {
+      const key = getPgKnowledgeIsolationKey({ pool: first, schemaName: 'shared' });
+      expect(key).toBe('pg:db.internal:6543/knowledge:schema:shared');
+      expect(getPgKnowledgeIsolationKey({ pool: second, schemaName: 'shared' })).toBe(key);
+      expect(
+        getPgKnowledgeIsolationKey({ host: 'DB.internal', port: 6543, database: 'knowledge', schemaName: 'shared' }),
+      ).toBe(key);
+      expect(getPgKnowledgeIsolationKey({ pool: second, schemaName: 'other' })).not.toBe(key);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      void first.end();
+      void second.end();
+    }
+  });
+
+  it('treats stores whose database cannot be determined as possibly shared', () => {
+    const first = { query: async () => ({ rows: [] }) } as unknown as DbClient;
+    const second = { query: async () => ({ rows: [] }) } as unknown as DbClient;
+    expect(getPgKnowledgeIsolationKey({ client: first, schemaName: 'shared' })).toBe(
+      getPgKnowledgeIsolationKey({ client: second, schemaName: 'shared' }),
+    );
+    expect(getPgKnowledgeIsolationKey({ client: first, schemaName: 'first' })).not.toBe(
+      getPgKnowledgeIsolationKey({ client: second, schemaName: 'second' }),
+    );
+  });
+
   it('resolves separate client wrappers around the same pool', () => {
     expect(new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey()).toBe(
       new KnowledgePG({ client: new PoolAdapter(pool), schemaName: 'shared' }).getStorageIsolationKey(),
@@ -511,5 +557,32 @@ describe('KnowledgePG storage isolation', () => {
     ]);
 
     expect([...firstClaim, ...secondClaim]).toHaveLength(1);
+  });
+});
+
+describe('KnowledgePG timestamps', () => {
+  it('round-trips node and record timestamps as UTC when the process timezone is not UTC', async () => {
+    const schemaName = `knowledge_tz_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const tz = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    try {
+      const store = new KnowledgePG({ pool, schemaName });
+      await store.init();
+      const before = Date.now();
+      const scope = await store.createNode({ name: 'TZ scope', isScope: true, scopeIds: [] });
+      const node = await store.createNode({ name: 'TZ probe', scopeIds: [scope.id] });
+      const record = await store.createRecord({ node, text: 'utc round-trip probe', scopeIds: [scope.id] });
+
+      const readNode = await store.getNode(node.id);
+      const readRecord = await store.getRecord({ id: record.id });
+      expect(readNode?.createdAt.toISOString()).toBe(node.createdAt.toISOString());
+      expect(readRecord?.createdAt.toISOString()).toBe(record.createdAt.toISOString());
+      expect(Math.abs((readRecord?.createdAt.getTime() ?? 0) - before)).toBeLessThan(60_000);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
   });
 });
