@@ -154,6 +154,10 @@ describe('buildMultiRepoTemplate', () => {
     const copies = dockerfile.split('\n').filter(line => line.startsWith('COPY '));
     expect(copies).toHaveLength(2);
     for (const line of copies) expect(line).toMatch(/^COPY --chown=node --from=/);
+    // WORKDIR creates the workspace as the image's USER; a RUN mkdir would run
+    // as that user too and fail under a root-owned parent.
+    expect(dockerfile).toContain('WORKDIR /workspace');
+    expect(dockerfile).not.toMatch(/RUN mkdir -p '\/workspace'/);
   });
 
   it('lays every repository out under the workspace, public first, each after its own pin', () => {
@@ -167,18 +171,17 @@ describe('buildMultiRepoTemplate', () => {
       [
         'FROM node:22-slim AS mastra-main-0',
         'RUN apt-get update && apt-get install -y git ca-certificates && rm -rf /var/lib/apt/lists/*',
-        "RUN mkdir -p '/workspace'",
         'WORKDIR /workspace',
-        'FROM mastra-main-0 AS mastra-secret-3',
+        'FROM mastra-main-0 AS mastra-secret-2',
         `RUN git clone 'https://example.com/acme/app.git' '/workspace/app' && git -C '/workspace/app' checkout --detach '${otherSha}'`,
         'FROM mastra-main-0 AS mastra-main-1',
-        'COPY --from=mastra-secret-3 /workspace/app /workspace/app',
+        'COPY --from=mastra-secret-2 /workspace/app /workspace/app',
         guarded('app', "echo it'\\''s # note"),
         markerLine(repoSetupMarkerPath('app'), "echo it's # note"),
-        'FROM mastra-main-1 AS mastra-secret-6',
+        'FROM mastra-main-1 AS mastra-secret-5',
         `RUN --mount=type=secret,id=GH_TOKEN_0,mode=0444 export GH_TOKEN_0="$(cat /run/secrets/GH_TOKEN_0)" && git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN_0" | base64 -w0)" clone 'https://example.com/acme/private.git' '/workspace/private' && git -C '/workspace/private' checkout --detach '${sha}'`,
         'FROM mastra-main-1 AS mastra-main-2',
-        'COPY --from=mastra-secret-6 /workspace/private /workspace/private',
+        'COPY --from=mastra-secret-5 /workspace/private /workspace/private',
         guarded('private', 'npm ci'),
         markerLine(repoSetupMarkerPath('private'), 'npm ci'),
         'RUN touch .ready',

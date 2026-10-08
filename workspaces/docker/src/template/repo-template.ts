@@ -390,7 +390,9 @@ export function buildMultiRepoTemplate(inputs: MultiRepoTemplateInputs): DockerT
   if (buildEnv && Object.keys(buildEnv).length > 0) {
     template = template.setEnvs(buildEnv);
   }
-  template = template.runCmd(`mkdir -p ${shellQuote(workingDirectory)}`).setWorkdir(workingDirectory);
+  // WORKDIR creates the directory owned by the image's USER, where a RUN
+  // mkdir under a root-owned parent would fail on a non-root base image.
+  template = template.setWorkdir(workingDirectory);
 
   // Public repositories first, caller order within each group: the same
   // layout as the other templates (no cache effect here, credentials are

@@ -2,7 +2,12 @@
 '@mastra/platform-workspace': minor
 ---
 
-Add a multi-repository form to `createRepoTemplate`: pass `repos: [{ getRepositoryAccess, setupCommand? }]` to clone several repositories into one sandbox template, each with its own credential and setup commands, plus `workspaceSetupCommand` (run once at the working directory) and `continueOnSetupFailure` (record a failing per-repository setup in `.mastra-sandbox/setup-failed` instead of failing the build). Per-repository setup markers land at `.mastra-sandbox/repos/<repo>` and a workspace marker at `.mastra-sandbox/workspace-setup`.
+Added a `repos` option to `createRepoTemplate` to build one template from several repositories.
+
+- Each entry has its own `getRepositoryAccess` and `setupCommand`, and is cloned to `<workingDirectory>/<repo>`.
+- `workspaceSetupCommand` runs once at the working directory after every repository.
+- `continueOnSetupFailure` records a failing repository setup in `.mastra-sandbox/setup-failed` instead of failing the build.
+- Markers: `.mastra-sandbox/repos/<repo>` per repository and `.mastra-sandbox/workspace-setup` for the workspace step.
 
 ```ts
 const template = createRepoTemplate({

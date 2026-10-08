@@ -2,7 +2,12 @@
 '@mastra/e2b': minor
 ---
 
-Add a `repos` form to `createRepoTemplate` that clones several repositories into one E2B template. Each entry has its own `getRepositoryAccess` and `setupCommand`; `workspaceSetupCommand` runs at the working directory after every repository and `continueOnSetupFailure` records failing per-repository setups in `.mastra-sandbox/setup-failed` instead of failing the build. Each repository writes `.mastra-sandbox/repos/<repo>`, public repositories build before private ones, and the tag hashes every pinned sha.
+Added a `repos` option to `createRepoTemplate` to build one template from several repositories.
+
+- Each entry has its own `getRepositoryAccess` and `setupCommand`, and is cloned to `<workingDirectory>/<repo>`.
+- `workspaceSetupCommand` runs once at the working directory after every repository.
+- `continueOnSetupFailure` records a failing repository setup in `.mastra-sandbox/setup-failed` instead of failing the build.
+- Markers: `.mastra-sandbox/repos/<repo>` per repository and `.mastra-sandbox/workspace-setup` for the workspace step.
 
 ```ts
 const template = createRepoTemplate({
