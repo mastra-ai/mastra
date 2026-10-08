@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -519,10 +520,26 @@ describe('BUILTIN_SERVERS command()', () => {
     });
 
     it('returns undefined when binary not found', () => {
-      vi.stubEnv('PATH', tempDir);
+      // PATH holds only the lookup utility, so the PATH probe really runs but cannot
+      // see a host-installed server; cwd is isolated so the repo's node_modules is skipped.
+      const lookup = process.platform === 'win32' ? 'where' : 'which';
+      const pathDir = join(tempDir, 'path-bin');
+      mkdirSync(pathDir);
+      symlinkSync(
+        execFileSync(lookup, [lookup], { encoding: 'utf8' }).split(/\r?\n/)[0]!.trim(),
+        join(pathDir, lookup),
+      );
+      vi.stubEnv('PATH', pathDir);
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
       try {
         expect(eslintCommand(tempDir)).toBeUndefined();
+
+        // Control: the same PATH probe finds the server once it exists, so the
+        // undefined above comes from the lookup, not from a lookup that could not run.
+        writeFileSync(join(pathDir, 'vscode-eslint-language-server'), '#!/bin/sh\n', { mode: 0o755 });
+        expect(eslintCommand(tempDir)).toBe('vscode-eslint-language-server --stdio');
       } finally {
+        cwd.mockRestore();
         vi.unstubAllEnvs();
       }
     });
