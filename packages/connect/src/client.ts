@@ -209,6 +209,8 @@ const connectionListSchema = z.object({
 
 export const integrationCatalogEntrySchema = z.object({
   id: z.string(),
+  displayName: z.string().nullish(),
+  logoUrl: z.string().nullish(),
   capabilities: z.object({
     mcp: z.boolean().optional(),
   }),
@@ -288,6 +290,47 @@ export async function listIntegrations(client: ResolvedClient): Promise<Integrat
     throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
   }
   return parsed.data.integrations;
+}
+
+const connectSessionSchema = z.object({
+  connectionId: z.string(),
+  connectUrl: z.string(),
+  expiresAt: z.string(),
+});
+
+export type ConnectSession = z.infer<typeof connectSessionSchema>;
+
+export interface ConnectSessionCallback {
+  url: string;
+  context: Record<string, unknown>;
+}
+
+export async function createConnectSession(
+  client: ResolvedClient,
+  input: {
+    projectId: string;
+    integrationId: string;
+    reconnectConnectionId?: string;
+    callback?: ConnectSessionCallback;
+  },
+): Promise<ConnectSession> {
+  const path = input.reconnectConnectionId
+    ? `/v2/connections/${encodeURIComponent(input.reconnectConnectionId)}/reconnect-session`
+    : `/v2/projects/${encodeURIComponent(input.projectId)}/integrations/${encodeURIComponent(input.integrationId)}/connect-sessions`;
+  const context = `creating a connect session for ${input.integrationId}`;
+  const response = await platformFetch(client, path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input.callback ? { callback: input.callback } : {}),
+  });
+  if (!response.ok) {
+    await throwPlatformError(response, context);
+  }
+  const parsed = connectSessionSchema.safeParse(await parsePlatformJson(response, context));
+  if (!parsed.success) {
+    throw new MastraConnectError('platform_error', `Platform returned an unexpected session shape while ${context}.`);
+  }
+  return parsed.data;
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {

@@ -117,6 +117,29 @@ tools({
 
 Pass `requireApproval: true` to require approval for every tool from a provider. Approval works with both generated toolsets and MCP providers. Follow the [human-in-the-loop guide](/docs/agents/human-in-the-loop) to handle approval requests and resume execution.
 
+## Ask users to connect from the chat
+
+Set `requestConnections` to let the agent ask the user to connect an allowlisted provider that has no connection yet, or one that needs reconnecting. The agent gets a `connect_integration` tool, Studio shows a Connect card, and the agent continues the same thread once the connection finishes:
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+const connectTools = tools({
+  providers: ['linear', 'github'],
+  requestConnections: {
+    allow: ({ requestContext }) => requestContext.get('role') === 'member',
+  },
+})
+
+const agent = new Agent({ tools: connectTools, signals: [connectTools.signalProvider()] })
+
+new Mastra({ agents: { agent }, server: { apiRoutes: [connectTools.webhookRoute()] } })
+```
+
+The agent needs memory and a storage with a `notifications` domain. Connections belong to the project, so every agent in it can use them; return `false` from `allow` for users who shouldn't add them. Under `mastra dev` the server polls for the result. Elsewhere, Platform sends it to `MASTRA_CONNECT_WEBHOOK_URL`, signed with `MASTRA_CONNECT_WEBHOOK_SECRET`.
+
 ## Choose between connections
 
 If a project links two Slack workspaces, the agent chooses a workspace on each call. The same applies to any provider with more than one connection: the toolset gains a `<provider>__list_connections` tool, and every other tool takes a `connection_name` input. Give connections [names you can tell apart](/reference/cli/mastra#mastra-connect-add).

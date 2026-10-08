@@ -1,8 +1,18 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import type { ApiRoute } from '@mastra/core/server';
 import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { listIntegrations, listProjectConnections, platformMcpTransport, resolveClient } from './client.js';
+import {
+  buildConnectIntegrationTool,
+  CONNECT_INTEGRATION_TOOL,
+  CONNECT_REFRESH_KEY,
+  connectWebhookRoute,
+  ConnectSignalProvider,
+} from './connect-requests.js';
+import type { ConnectRequestHost, RequestConnectionsOptions } from './connect-requests.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
   buildMcpMultiConnectionTools,
@@ -109,6 +119,7 @@ export interface ToolsOptions {
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
+  requestConnections?: RequestConnectionsOptions;
 }
 
 // Keep the public resolver type structural so linked/local package builds do not
@@ -152,6 +163,8 @@ export interface ToolsResolver {
    * `disconnect`) delegate to the base resolver, and `.with()` calls chain.
    */
   with(extra: ToolsWithInput): ToolsResolver;
+  signalProvider(): ConnectSignalProvider;
+  webhookRoute(): ApiRoute;
 }
 
 interface NormalizedRequest {
@@ -223,7 +236,14 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     );
   }
 
-  let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
+  let cache:
+    | {
+        snapshot: ResolvedToolsRecord;
+        fetchedAt: number;
+        connections: ProjectConnection[];
+        catalog: IntegrationCatalogEntry[];
+      }
+    | undefined;
   let inflight: Promise<ResolvedToolsRecord> | undefined;
   let closing: Promise<void> | undefined;
   let lastFailureAt: number | undefined;
@@ -276,7 +296,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
           const { connections, catalog, catalogAvailable } = await loadSnapshotInputs();
           const requests = buildRequests(normalizedProviders, catalog, catalogAvailable);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
-          cache = { snapshot, fetchedAt: Date.now() };
+          cache = { snapshot, fetchedAt: Date.now(), connections, catalog };
           lastFailureAt = undefined;
           return snapshot;
         } catch (error) {
@@ -316,7 +336,33 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     return refresh();
   };
 
-  const resolver: ToolsResolver = Object.assign(resolve, {
+  const requestHost = createRequestHost(options, client, projectId, {
+    refresh,
+    catalog: () => cache?.catalog ?? [],
+  });
+
+  const resolveForRun = async (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord> => {
+    if (!requestHost) return resolve();
+    const given = ctx?.requestContext as RequestContext | undefined;
+    const requestContext = typeof given?.get === 'function' ? given : new RequestContext();
+    const snapshot = requestContext.get(CONNECT_REFRESH_KEY) ? await refresh() : await resolve();
+    const allowed = await requestHost.allow({
+      requestContext,
+      threadId: requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined,
+      resourceId: requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined,
+    });
+    const metaTool = allowed && cache ? buildConnectIntegrationTool(requestHost, cache.connections) : undefined;
+    return metaTool ? { ...snapshot, [CONNECT_INTEGRATION_TOOL]: metaTool } : snapshot;
+  };
+
+  const requireRequestHost = (method: string): ConnectRequestHost => {
+    if (!requestHost) {
+      throw new MastraConnectError('invalid_options', `${method}() needs the requestConnections option.`);
+    }
+    return requestHost;
+  };
+
+  const resolver: ToolsResolver = Object.assign(resolveForRun, {
     refresh,
     disconnect: (): Promise<void> => {
       // Let the refresh in progress settle first so it cannot repopulate the
@@ -336,8 +382,61 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       return closing;
     },
     with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+    signalProvider: (): ConnectSignalProvider => new ConnectSignalProvider(requireRequestHost('signalProvider')),
+    webhookRoute: (): ApiRoute => connectWebhookRoute(requireRequestHost('webhookRoute').providers),
   });
   return resolver;
+}
+
+function createRequestHost(
+  options: ToolsOptions,
+  client: ResolvedClient,
+  projectId: string,
+  snapshot: Pick<ConnectRequestHost, 'refresh' | 'catalog'>,
+): ConnectRequestHost | undefined {
+  const requestConnections = options.requestConnections;
+  if (!requestConnections) return undefined;
+  if (typeof requestConnections.allow !== 'function') {
+    throw new MastraConnectError('invalid_options', 'requestConnections.allow must be a function.');
+  }
+  const offerable = Array.isArray(options.providers)
+    ? options.providers
+    : Object.entries(options.providers ?? {}).flatMap(([id, value]) => (value === true ? [id] : []));
+  if (offerable.length === 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'requestConnections needs a providers allowlist: an array of ids, or `true` entries in the record form.',
+    );
+  }
+  if (offerable.length > 25) {
+    console.warn(
+      `[@mastra/connect] requestConnections offers ${offerable.length} providers; connect_integration lists each one, so narrow the allowlist to keep its description short.`,
+    );
+  }
+  const webhookUrl = process.env.MASTRA_CONNECT_WEBHOOK_URL?.trim() || undefined;
+  const webhookSecret = process.env.MASTRA_CONNECT_WEBHOOK_SECRET?.trim() || undefined;
+  if (!webhookUrl && process.env.MASTRA_DEV !== 'true') {
+    throw new MastraConnectError(
+      'invalid_options',
+      'requestConnections needs MASTRA_CONNECT_WEBHOOK_URL outside `mastra dev`, so Platform can report finished connections.',
+    );
+  }
+  if (webhookUrl && !webhookSecret) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'MASTRA_CONNECT_WEBHOOK_URL is set without MASTRA_CONNECT_WEBHOOK_SECRET, so Platform webhooks could not be verified.',
+    );
+  }
+  return {
+    client,
+    projectId,
+    allow: requestConnections.allow,
+    webhookUrl,
+    webhookSecret,
+    offerable,
+    providers: new Map(),
+    ...snapshot,
+  };
 }
 
 /**
@@ -358,6 +457,8 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
     },
     disconnect: (): Promise<void> => base.disconnect(),
     with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
+    signalProvider: (): ConnectSignalProvider => base.signalProvider(),
+    webhookRoute: (): ApiRoute => base.webhookRoute(),
   });
   return resolver;
 }
