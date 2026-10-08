@@ -573,6 +573,14 @@ describe('AgentController: ask_user native suspension', () => {
           1,
         );
         await expect(session.thread.getSettingOn({ threadId: threadB.id, key: 'thinkingLevel' })).resolves.toBe('low');
+        await expect(
+          session.thread.getSettingOn({ threadId: address.threadId, key: 'tokenUsage' }),
+        ).resolves.toMatchObject({
+          promptTokens: 30,
+          completionTokens: 60,
+          totalTokens: 90,
+        });
+        expect(session.getTokenUsage()).toMatchObject({ promptTokens: 30, completionTokens: 60, totalTokens: 90 });
         return;
       }
       await resumed;
@@ -611,6 +619,20 @@ describe('AgentController: ask_user native suspension', () => {
         'high',
       );
       expect(sourceCalls).toBe(3);
+      if (recovery === 'warm' || recovery === 'cold' || recovery === 'cold-durable') {
+        await expect(
+          session.thread.getSettingOn({ threadId: address.threadId, key: 'tokenUsage' }),
+        ).resolves.toMatchObject({
+          promptTokens: 30,
+          completionTokens: 60,
+          totalTokens: 90,
+        });
+        expect(session.getTokenUsage()).toEqual(display.tokenUsage);
+        expect(events.filter(event => event.type === 'usage_update')).toHaveLength(0);
+        await session.thread.switch({ threadId: address.threadId });
+        navigated = true;
+        expect(session.getTokenUsage()).toMatchObject({ promptTokens: 30, completionTokens: 60, totalTokens: 90 });
+      }
     } finally {
       releaseWrite.resolve();
       if (!navigated) {

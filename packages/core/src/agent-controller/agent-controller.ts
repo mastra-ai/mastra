@@ -48,7 +48,13 @@ import type {
   AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
+  TokenUsage,
 } from './types';
+import { createEmptyTokenUsage } from './types';
+
+type UsageAccounting = {
+  steps: Map<string, { pending: Promise<void>; projected: WeakSet<Session> }>;
+};
 
 /**
  * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
@@ -187,6 +193,9 @@ export class AgentController<TState = {}> {
   private config: AgentControllerConfig<TState>;
   private initPromise: Promise<void> | undefined = undefined;
   readonly #metadataWriteQueues = new Map<string, Promise<void>>();
+  readonly #usageAccountingKey = createRunScopeKey<UsageAccounting>('controller.usageAccounting');
+  readonly #usageAccounting = new WeakMap<RequestContext, UsageAccounting>();
+  readonly #sourceUsage = new Map<string, WeakRef<{ total?: TokenUsage }>>();
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private intervalTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
@@ -457,6 +466,8 @@ export class AgentController<TState = {}> {
           sessionId: session.identity.getId(),
         }),
       persistTokenUsage: () => this.persistTokenUsage(session),
+      recordTokenUsage: (usage, requestContext, runId, stepKey) =>
+        this.recordTokenUsage(session, usage, requestContext, runId, stepKey),
       generateId: () => this.generateId(),
       resolveTransitionModeId: modeId => this.resolveTransitionModeId(session, modeId),
       saveSystemReminder: input => this.saveSystemReminder(input),
@@ -2517,6 +2528,15 @@ export class AgentController<TState = {}> {
       }
     }
     if (scope?.runId && scope.modeId) view.setSelection({ ...view.selection(), modeId: scope.modeId });
+    if (threadId) {
+      for (const [key, reference] of this.#sourceUsage) {
+        if (!reference.deref()) this.#sourceUsage.delete(key);
+      }
+      const key = JSON.stringify([resourceId, threadId]);
+      const shared = this.#sourceUsage.get(key)?.deref();
+      if (shared) view.usage = shared;
+      else this.#sourceUsage.set(key, new WeakRef(view.usage));
+    }
     const executionView = { session, view, retained };
     runScope?.set(this.#executionViewKey, executionView);
     const controllerContext: AgentControllerRequestContext<TState> = {
@@ -2586,6 +2606,58 @@ export class AgentController<TState = {}> {
   // ===========================================================================
   // Token Usage
   // ===========================================================================
+
+  private async recordTokenUsage(
+    session: Session<TState>,
+    usage: TokenUsage,
+    requestContext: RequestContext,
+    runId?: string,
+    stepKey?: string,
+  ): Promise<void> {
+    const context = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
+    const threadId = context?.threadId ?? session.thread.getId();
+    const resourceId = context?.resourceId ?? session.identity.getResourceId();
+    const isActive = () => session.thread.getId() === threadId && session.identity.getResourceId() === resourceId;
+    const view = context && this.#executionViews.get(context)?.view;
+    const scope = runId ? session.machinery.getRunScope(runId) : undefined;
+    const accounting: UsageAccounting = scope?.get(this.#usageAccountingKey) ??
+      this.#usageAccounting.get(requestContext) ?? { steps: new Map() };
+    const sourceUsage = view?.usage ?? { total: session.getTokenUsage() };
+    scope?.set(this.#usageAccountingKey, accounting);
+    this.#usageAccounting.set(requestContext, accounting);
+    const key = stepKey ?? this.generateId();
+    let entry = accounting.steps.get(key);
+    if (!entry) {
+      const total = { ...(sourceUsage.total ?? createEmptyTokenUsage()) };
+      for (const field of [
+        'promptTokens',
+        'completionTokens',
+        'totalTokens',
+        'reasoningTokens',
+        'cachedInputTokens',
+        'cacheCreationInputTokens',
+        'cacheCreationInputTokens5m',
+        'cacheCreationInputTokens1h',
+      ] as const) {
+        if (usage[field] !== undefined) total[field] = (total[field] ?? 0) + usage[field];
+      }
+      if (usage.raw !== undefined) total.raw = usage.raw;
+      sourceUsage.total = total;
+      const pending = threadId
+        ? this.writeThreadMetadataValues(threadId, { tokenUsage: total }).catch(() => {})
+        : Promise.resolve();
+      entry = { pending, projected: new WeakSet<Session>() };
+      accounting.steps.set(key, entry);
+    }
+    await entry.pending;
+    if (isActive() && sourceUsage.total) {
+      session.setTokenUsage(sourceUsage.total);
+      if (!entry.projected.has(session)) {
+        entry.projected.add(session);
+        session.emit({ type: 'usage_update', usage });
+      }
+    }
+  }
 
   private async persistTokenUsage(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
