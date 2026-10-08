@@ -87,7 +87,7 @@ describe('the /think command', () => {
     await user.keyboard('{Enter}');
 
     expect(await screen.findByRole('region', { name: '/think options' })).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: 'Medium Current' })).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByRole('option', { name: /^Medium/ })).toHaveAttribute('aria-current', 'true');
     await user.click(screen.getByRole('option', { name: 'High' }));
 
     await waitForMutationsIdle(client);

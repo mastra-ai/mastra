@@ -6,7 +6,7 @@ import {
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { ThinkingConfigInfo } from '../../../../api/types';
 
@@ -29,6 +29,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { THINKING_LEVEL_LABELS, thinkingSourceLabel } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModes } from './useChatModes';
 import { useChatPermissions } from './useChatPermissions';
@@ -37,17 +38,6 @@ import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
-const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
-  off: 'Off',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-};
-function thinkingSourceLabel(source: ThinkingLevelSource, modeId: string | null): string {
-  return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
-}
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -220,9 +210,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
             try {
               const defaults = await ensureThinkingConfig();
-              const modeId = activeModeId ?? null;
-              const fallback = resolveDefaultThinkingLevel(defaults, modeId);
-              const source = thinkingSourceLabel(fallback.source, modeId);
+              const fallback = resolveDefaultThinkingLevel(defaults, activeModeId);
+              const source = thinkingSourceLabel(fallback.source, activeModeId);
               pushNotice(`Thinking level set to default: ${fallback.level} (${source}).`);
             } catch {
               pushNotice('Thinking level set to default. Current default is unavailable.');
@@ -230,9 +219,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             return;
           }
           const [settings, defaults] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
-          const modeId = activeModeId ?? null;
-          const fallback = resolveDefaultThinkingLevel(defaults, modeId);
-          const source = thinkingSourceLabel(fallback.source, modeId);
+          const fallback = resolveDefaultThinkingLevel(defaults, activeModeId);
+          const source = thinkingSourceLabel(fallback.source, activeModeId);
           pushNotice(
             settings.thinkingLevel
               ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${fallback.level} (${source}).`
