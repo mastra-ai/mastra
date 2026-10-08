@@ -13,8 +13,8 @@ The `rerank()` function provides advanced reranking capabilities for vector sear
 function rerank(
   results: QueryResult[],
   query: string,
-  modelConfig: ModelConfig,
-  options?: RerankerFunctionOptions,
+  model: MastraLanguageModel,
+  options: RerankerFunctionOptions,
 ): Promise<RerankResult[]>
 ```
 
@@ -61,7 +61,7 @@ const rerankedResults = await rerank(vectorSearchResults, 'How do I deploy to pr
     name: 'options',
     type: 'RerankerFunctionOptions',
     description: 'Options for the reranking model',
-    isOptional: true,
+    isOptional: false,
     properties: [
       {
         type: 'RerankerFunctionOptions',
@@ -149,7 +149,8 @@ The function returns an array of `RerankResult` objects:
   {
     name: 'score',
     type: 'number',
-    description: 'Combined reranking score (0-1)',
+    description:
+      'Combined reranking score. Usually between 0 and 1, but query-based adjustments can raise it slightly above 1.',
   },
   {
     name: 'details',

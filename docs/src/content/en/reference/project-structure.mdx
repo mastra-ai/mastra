@@ -19,20 +19,17 @@ A project created with the `create mastra` command looks like this:
 src/
 ├── mastra/
 │   ├── agents/
-│   │   └── weather-agent.ts
+│   │   └── agent.ts
 │   ├── tools/
-│   │   └── weather-tool.ts
-│   ├── workflows/
-│   │   └── weather-workflow.ts
-│   ├── scorers/
-│   │   └── weather-scorer.ts
+│   │   └── schedule-tools.ts
 │   └── index.ts
 ├── .env.example
+├── AGENTS.md
 ├── package.json
 └── tsconfig.json
 ```
 
-Use the predefined files as templates. Duplicate and adapt them to quickly create your own agents, tools, workflows, etc.
+The default project is based on the [Agent Harness template](https://github.com/mastra-ai/template-agent-harness). Use the predefined files as templates. Duplicate and adapt them to quickly create your own agents, tools, workflows, etc.
 
 ### Folders
 
@@ -50,7 +47,7 @@ Mastra recommends organizing your code into the following folders:
 Mastra has two special folder conventions:
 
 - `src/mastra/agents/<name>`: You can define an agent by file convention instead of constructing it in code. Learn more in the [File-based Agents](/docs/develop#file-based-agents) docs.
-- `src/mastra/public`: Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime.
+- `src/mastra/public`: Contents are copied into the `.mastra/output` directory during the build process, making them available for serving at runtime.
 
 ### Top-level files
 
@@ -60,5 +57,6 @@ Top-level files define how your Mastra project is configured, built, and connect
 | - | - |
 | `src/mastra/index.ts` | Central entry point where you configure and initialize Mastra. |
 | `.env.example` | Template for environment variables - copy and rename to `.env` to add your secret [model provider](/models) keys. |
+| `AGENTS.md` | Instructions for coding agents working in the project. |
 | `package.json` | Defines project metadata, dependencies, and available npm scripts. |
 | `tsconfig.json` | Configures TypeScript options such as path aliases, compiler settings, and build output. |
