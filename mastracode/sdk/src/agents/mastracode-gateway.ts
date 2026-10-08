@@ -547,7 +547,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (this.#routeThroughMastraGateway) {
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+      return this.#withProviderThinking(this.#mastraGateway.resolveLanguageModel(args), 'openrouter', args);
     }
 
     if (args.providerId === 'kimi-for-coding') {
@@ -562,11 +562,23 @@ export class MastraCodeGateway extends MastraModelGateway {
       id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
       apiKey: args.apiKey,
       headers: args.headers,
+    }) as unknown as GatewayLanguageModel;
+    return this.#withProviderThinking(routerModel, args.providerId, args);
+  }
+
+  #withProviderThinking(
+    model: GatewayLanguageModel,
+    optionsProvider: string,
+    args: { providerId: string; modelId: string },
+  ): GatewayLanguageModel {
+    const thinkingMiddleware = createProviderThinkingMiddleware({
+      optionsProvider,
+      catalogModelId: `${args.providerId}/${args.modelId}`,
+      level: this.#thinkingLevel,
     });
-    const thinkingMiddleware = createProviderThinkingMiddleware(args.providerId, args.modelId, this.#thinkingLevel);
-    if (!thinkingMiddleware) return routerModel as unknown as GatewayLanguageModel;
+    if (!thinkingMiddleware) return model;
     return wrapLanguageModel({
-      model: routerModel as any,
+      model: model as any,
       middleware: [thinkingMiddleware],
     }) as unknown as GatewayLanguageModel;
   }

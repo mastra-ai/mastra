@@ -14,10 +14,11 @@ import { MastraCodeGateway, reloadAuthStorage } from './mastracode-gateway.js';
 
 mkdirSync(appDataDir, { recursive: true });
 
-function createGateway(thinkingLevel: ThinkingLevelSetting | undefined) {
+function createGateway(thinkingLevel: ThinkingLevelSetting | undefined, { routeThroughMastraGateway = false } = {}) {
   return new MastraCodeGateway({
     mastraGatewayBaseUrl: 'https://gateway.example.com',
-    routeThroughMastraGateway: false,
+    mastraGatewayApiKey: 'gateway-key',
+    routeThroughMastraGateway,
     thinkingLevel,
     customProviders: [{ name: 'My Local', url: 'https://custom.example.com/v1', models: ['local-model'] }] as any,
     settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
@@ -93,6 +94,53 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     const body = await requestBody(resolve(undefined, 'deepseek', 'deepseek-v4-pro'));
     expect(body).not.toHaveProperty('thinking');
     expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('caps the effort at what the provider package accepts, so the request is not rejected', async () => {
+    expect((await requestBody(resolve('max', 'mistral', 'zai-glm-5-2'))).reasoning_effort).toBe('high');
+    expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.7'))).reasoning).toEqual({ effort: 'high' });
+  });
+
+  it('turns thinking off only on models that list a way to', async () => {
+    expect((await requestBody(resolve('off', 'groq', 'qwen/qwen3.8-27b'))).reasoning_effort).toBe('none');
+    expect(await requestBody(resolve('off', 'groq', 'openai/gpt-oss-20b'))).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('passes the listed effort to OpenAI-compatible providers and Perplexity', async () => {
+    expect((await requestBody(resolve('max', 'togetherai', 'deepseek-ai/DeepSeek-V4-Pro-0813'))).reasoning_effort).toBe(
+      'max',
+    );
+    expect((await requestBody(resolve('max', 'perplexity', 'sonar-reasoning-pro'))).reasoning_effort).toBe('high');
+  });
+
+  it('sends no effort to a model that only switches thinking on or off through an OpenAI-compatible provider', async () => {
+    expect(await requestBody(resolve('high', 'togetherai', 'Qwen/Qwen3.5-9B'))).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('switches Alibaba thinking on and off', async () => {
+    expect((await requestBody(resolve('off', 'alibaba', 'qwen-flash'))).enable_thinking).toBe(false);
+    expect((await requestBody(resolve('high', 'alibaba', 'qwen-flash'))).enable_thinking).toBe(true);
+  });
+
+  it("sends OpenRouter's reasoning setting", async () => {
+    expect((await requestBody(resolve('max', 'openrouter', 'deepseek/deepseek-v4-pro'))).reasoning).toEqual({
+      effort: 'xhigh',
+    });
+    expect((await requestBody(resolve('off', 'openrouter', 'deepseek/deepseek-v4-pro'))).reasoning).toEqual({
+      enabled: false,
+    });
+    expect((await requestBody(resolve('high', 'openrouter', 'bytedance-seed/seed-1.6-flash'))).reasoning).toEqual({
+      enabled: true,
+    });
+  });
+
+  it("sends OpenRouter's reasoning setting for models routed through the Mastra gateway", async () => {
+    const model = createGateway('max', { routeThroughMastraGateway: true }).resolveLanguageModel({
+      providerId: 'deepseek',
+      modelId: 'deepseek-v4-pro',
+      apiKey: 'gateway-key',
+    });
+    expect((await requestBody(model)).reasoning).toEqual({ effort: 'max' });
   });
 
   it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {
