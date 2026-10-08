@@ -16,6 +16,7 @@ import { useEffect, useRef } from 'react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { knowledgeScopes } from './knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from './knowledgeStyles';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
@@ -120,19 +121,13 @@ function RecordCard({
       ref={cardRef}
       data-testid="knowledge-record"
       data-pinned={record.pinned || undefined}
-      className={[
+      className={cn(
         'rounded-lg border transition-colors duration-fast motion-reduce:transition-none',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
         record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
-        expanded
-          ? record.pinned
-            ? 'border-badge-amber-indicator'
-            : 'border-badge-blue-edge'
-          : record.pinned
-            ? 'border-badge-amber-edge'
-            : 'border-border',
-      ].join(' ')}
+        getRecordBorderClass(record.pinned, expanded),
+      )}
     >
       <div
         role="button"
@@ -347,12 +342,7 @@ export function KnowledgeFlyout({
                       <div
                         key={record.id}
                         className={
-                          record.id === focusRecordId
-                            ? cn(
-                                'rounded-lg ring-2',
-                                record.pinned ? 'ring-badge-amber-indicator' : 'ring-badge-blue-indicator',
-                              )
-                            : undefined
+                          record.id === focusRecordId ? cn('rounded-lg', getRecordRingClass(record.pinned)) : undefined
                         }
                       >
                         <RecordCard

@@ -44,6 +44,15 @@ import {
 import type { Arrivals } from './graphDiff';
 import { runLayout } from './layout';
 import { knowledgeScopes } from './knowledgeScope';
+import {
+  getKnowledgeEdgeStyle,
+  getKnowledgeNodeStyle,
+  getMiniMapNodeColor,
+  getRecordRingClass,
+  isKnowledgeNode,
+  isRecordNode,
+} from './knowledgeStyles';
+import type { KnowledgeFlowNode } from './knowledgeStyles';
 import './knowledge.css';
 
 const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Project', thread: 'Session' };
@@ -61,7 +70,7 @@ function NodeNodeComponent({ data, selected }: NodeProps<NodeFlowNode>) {
       <div
         className="knowledge-circle flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-full border-2 text-center"
         data-selected={selected || undefined}
-        style={{ '--knowledge-color': knowledgeScopes[node.rung].color } as React.CSSProperties}
+        style={getKnowledgeNodeStyle(node.rung)}
       >
         {labeled ? (
           <Txt
@@ -90,11 +99,11 @@ const NodeNode = memo(NodeNodeComponent);
 function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<KnowledgeFlowEdge>) {
   // Floating edge: anchor both ends on the circle rims along the angle between
   // the node centers, rather than at fixed handles.
-  const sourceNode = useInternalNode(source);
-  const targetNode = useInternalNode(target);
+  const sourceNode = useInternalNode<KnowledgeFlowNode>(source);
+  const targetNode = useInternalNode<KnowledgeFlowNode>(target);
   if (!sourceNode || !targetNode) return null;
-  const sourceSize = (sourceNode.data as NodeFlowNode['data']).size;
-  const targetSize = (targetNode.data as NodeFlowNode['data']).size;
+  const sourceSize = sourceNode.data.size;
+  const targetSize = targetNode.data.size;
   const sx = sourceNode.internals.positionAbsolute.x + sourceSize / 2;
   const sy = sourceNode.internals.positionAbsolute.y + sourceSize / 2;
   const tx = targetNode.internals.positionAbsolute.x + targetSize / 2;
@@ -116,28 +125,10 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   const controlY = (startY + endY) / 2 + ux * bow;
   const path = `M ${startX},${startY} Q ${controlX},${controlY} ${endX},${endY}`;
   const pinned = data?.pinned ?? false;
+  const edgeStyle = getKnowledgeEdgeStyle({ source, target, data });
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={path}
-        style={
-          // A9: a pinned record marks the RELATIONSHIP — the amber accent
-          // rides the edge, with a pin chip at the arc's midpoint. Edges
-          // touching a record marker use a quiet neutral color.
-          // A selected record (open in the flyout) lights its edge up.
-          data?.focused
-            ? {
-                stroke: pinned ? 'var(--chart-amber)' : 'var(--chart-blue)',
-                strokeWidth: 2.5,
-              }
-            : pinned
-              ? { stroke: 'var(--chart-amber)', strokeWidth: 2 }
-              : source.startsWith('record:') || target.startsWith('record:')
-                ? { stroke: 'var(--muted-foreground)', strokeWidth: 1.2, opacity: 0.45 }
-                : { stroke: 'var(--border-strong)', strokeWidth: 1.4 }
-        }
-      />
+      <BaseEdge id={id} path={path} style={edgeStyle} />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
         <EdgeLabelRenderer>
           <span
@@ -171,15 +162,15 @@ function RecordNodeComponent({ data }: NodeProps<RecordFlowNode>) {
       data-testid="knowledge-record-node"
       data-record-id={record.id}
       data-focused={focused || undefined}
-      className={[
+      className={cn(
         'flex items-center justify-center rounded-full border transition-shadow duration-fast motion-reduce:transition-none',
         // Neutral records stay distinct from scope-colored nodes and amber pins.
         record.pinned
           ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground shadow-raised'
           : 'border-muted-foreground bg-muted-foreground',
         // The selected record (open in the flyout) glows hard.
-        focused ? (record.pinned ? 'ring-badge-amber-indicator ring-2' : 'ring-badge-blue-indicator ring-2') : '',
-      ].join(' ')}
+        focused && getRecordRingClass(record.pinned),
+      )}
       style={{ width: size, height: size }}
     >
       <Handle type="target" position={Position.Top} className="!invisible" />
@@ -193,14 +184,17 @@ const RecordNode = memo(RecordNodeComponent);
 const nodeTypes = { knowledgeNode: NodeNode, knowledgeRecord: RecordNode };
 const edgeTypes = { knowledgeLink: KnowledgeLink };
 
-interface HoverCard {
-  kind: 'node' | 'edge' | 'record';
-  x: number;
-  y: number;
-  node?: NodeFlowNode;
-  edge?: KnowledgeFlowEdge;
-  record?: RecordFlowNode;
+function getKnowledgeNodeEndpoint({ source, target }: KnowledgeFlowEdge): string | undefined {
+  if (!source.startsWith('record:')) return source;
+  if (!target.startsWith('record:')) return target;
+  return undefined;
 }
+
+type HoverCard = { x: number; y: number } & (
+  | { kind: 'node'; node: NodeFlowNode }
+  | { kind: 'edge'; edge: KnowledgeFlowEdge }
+  | { kind: 'record'; record: RecordFlowNode }
+);
 
 export interface KnowledgeGraphProps {
   payload: KnowledgeGraphPayload;
@@ -241,15 +235,13 @@ function FilterChip({
   label,
   active,
   onClick,
-  accent,
-  scopeClass,
+  activeClassName,
   icon,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
-  accent?: boolean;
-  scopeClass?: string;
+  activeClassName: string;
   icon: React.ReactNode;
 }) {
   return (
@@ -259,11 +251,7 @@ function FilterChip({
       onClick={onClick}
       className={cn(
         'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
-        active
-          ? accent
-            ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
-            : scopeClass
-          : 'border-border bg-card text-muted-foreground hover:text-foreground',
+        active ? activeClassName : 'border-border bg-card text-muted-foreground hover:text-foreground',
       )}
     >
       {icon}
@@ -446,11 +434,12 @@ function KnowledgeGraphInner({
     if (arrivals && arrivals.nodes.size > 0)
       mapped = mapped.map(node => (arrivals.nodes.has(node.id) ? { ...node, className: 'knowledge-arrive' } : node));
     if (focusedRecordId)
-      mapped = mapped.map(node =>
-        node.type === 'knowledgeRecord' && (node as RecordFlowNode).data.record.id === focusedRecordId
-          ? ({ ...node, data: { ...node.data, focused: true } } as RecordFlowNode)
-          : node,
-      );
+      mapped = mapped.map(node => {
+        if (isRecordNode(node) && node.data.record.id === focusedRecordId) {
+          return { ...node, data: { ...node.data, focused: true } };
+        }
+        return node;
+      });
     return mapped;
   }, [nodes, arrivals, focusedRecordId]);
   const displayEdges = useMemo(() => {
@@ -490,7 +479,7 @@ function KnowledgeGraphInner({
           <FilterChip
             key={rung}
             label={RUNG_LABELS[rung]}
-            scopeClass={knowledgeScopes[rung].filterClass}
+            activeClassName={knowledgeScopes[rung].filterClass}
             icon={rung === 'org' ? <Globe size={13} /> : <Boxes size={13} />}
             active={filters.rungs.size === 0 || filters.rungs.has(rung)}
             onClick={() => toggleRung(rung)}
@@ -498,14 +487,14 @@ function KnowledgeGraphInner({
         ))}
         <FilterChip
           label="Pinned"
-          accent
+          activeClassName="border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground"
           icon={<Pin size={13} />}
           active={filters.pinnedOnly}
           onClick={() => setFilters(current => ({ ...current, pinnedOnly: !current.pinnedOnly }))}
         />
       </div>
 
-      <ReactFlow
+      <ReactFlow<KnowledgeFlowNode, KnowledgeFlowEdge>
         nodes={displayNodes}
         edges={displayEdges}
         nodeTypes={nodeTypes}
@@ -517,58 +506,48 @@ function KnowledgeGraphInner({
         onNodeClick={(_, node) => {
           // A11: a knowledge record marker click IS a knowledge record click — same behavior as
           // clicking its edge (dot and stub are one unit).
-          if (node.type === 'knowledgeRecord') {
-            const record = (node as RecordFlowNode).data.record;
+          if (isRecordNode(node)) {
+            const record = node.data.record;
             const [first = '', second] = record.nodeIds;
             onEdgeClick?.({ source: first, target: second ?? first, recordId: record.id });
             return;
           }
+          if (!isKnowledgeNode(node)) return;
           setFocusedId(node.id);
-          onNodeClick?.((node as NodeFlowNode).data.node);
+          onNodeClick?.(node.data.node);
         }}
         onPaneClick={() => setFocusedId(null)}
         onEdgeClick={(_, edge) => {
-          const flowEdge = edge as KnowledgeFlowEdge;
           // Stub/spoke edges have a `record:` marker on one end — the flyout
           // needs the knowledge-node end, never the synthetic record node id.
-          const nodeEnd = !flowEdge.source.startsWith('record:')
-            ? flowEdge.source
-            : !flowEdge.target.startsWith('record:')
-              ? flowEdge.target
-              : null;
+          const nodeEnd = getKnowledgeNodeEndpoint(edge);
           if (!nodeEnd) return;
-          onEdgeClick?.({ source: nodeEnd, target: flowEdge.target, recordId: flowEdge.data?.recordId ?? '' });
+          onEdgeClick?.({ source: nodeEnd, target: edge.target, recordId: edge.data?.recordId ?? '' });
         }}
-        onNodeMouseEnter={(event, node) =>
-          node.type === 'knowledgeRecord'
-            ? setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node as RecordFlowNode })
-            : setHover({ kind: 'node', x: event.clientX, y: event.clientY, node: node as NodeFlowNode })
-        }
+        onNodeMouseEnter={(event, node) => {
+          if (isRecordNode(node)) {
+            setHover({ kind: 'record', x: event.clientX, y: event.clientY, record: node });
+            return;
+          }
+          if (isKnowledgeNode(node)) setHover({ kind: 'node', x: event.clientX, y: event.clientY, node });
+        }}
         onNodeMouseLeave={() => setHover(null)}
-        onEdgeMouseEnter={(event, edge) =>
-          setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge: edge as KnowledgeFlowEdge })
-        }
+        onEdgeMouseEnter={(event, edge) => setHover({ kind: 'edge', x: event.clientX, y: event.clientY, edge })}
         onEdgeMouseLeave={() => setHover(null)}
         onNodeDragStop={(_, node) => {
           // The layout pins CENTERS; node.position is the top-left corner.
-          const size = (node as NodeFlowNode).data.size;
+          const size = node.data.size;
           pinnedPositions.current.set(node.id, { x: node.position.x + size / 2, y: node.position.y + size / 2 });
           setDragVersion(version => version + 1);
         }}
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
-        <MiniMap
+        <MiniMap<KnowledgeFlowNode>
           position="bottom-left"
           pannable
           zoomable
           style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8 }}
-          nodeColor={node =>
-            node.type === 'knowledgeRecord'
-              ? (node.data as RecordFlowNode['data']).record.pinned
-                ? 'var(--chart-amber)'
-                : 'var(--muted-foreground)'
-              : knowledgeScopes[(node.data as NodeFlowNode['data']).node.rung].color
-          }
+          nodeColor={getMiniMapNodeColor}
           nodeStrokeColor="transparent"
           nodeStrokeWidth={3}
           nodeBorderRadius={999}
@@ -578,12 +557,7 @@ function KnowledgeGraphInner({
       </ReactFlow>
 
       {hover ? (
-        <GraphHoverCard
-          hover={hover}
-          nodesById={
-            new Map(nodes.flatMap(node => (node.type === 'knowledgeNode' ? [[node.id, node as NodeFlowNode]] : [])))
-          }
-        />
+        <GraphHoverCard hover={hover} nodesById={new Map(nodes.filter(isKnowledgeNode).map(node => [node.id, node]))} />
       ) : null}
     </div>
   );
@@ -591,7 +565,7 @@ function KnowledgeGraphInner({
 
 function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map<string, NodeFlowNode> }) {
   const style = { left: hover.x + 14, top: hover.y + 14 } as const;
-  if (hover.kind === 'node' && hover.node) {
+  if (hover.kind === 'node') {
     const { node, degree } = hover.node.data;
     return (
       <div
@@ -634,7 +608,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       </div>
     );
   }
-  if (hover.kind === 'record' && hover.record) {
+  if (hover.kind === 'record') {
     const { record } = hover.record.data;
     return (
       <div
@@ -654,7 +628,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
       </div>
     );
   }
-  if (hover.kind === 'edge' && hover.edge) {
+  if (hover.kind === 'edge') {
     const resolve = (id: string) => nodesById.get(id)?.data.node.name;
     const source = resolve(hover.edge.source);
     const target = resolve(hover.edge.target);
