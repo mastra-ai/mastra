@@ -257,17 +257,18 @@ function assertImportRunTransition(
   if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
 }
 
-function visibleNodeSql(scopeIds: KnowledgeScopeIds): string {
-  return `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=n.id AND v.scopeNodeId IN (${scopeIds.map(() => '?').join(',')}))`;
+/** Mirrors `isKnowledgeNodeVisible`: a member of a visible scope, or a visible scope itself. Binds `scopeIds` twice. */
+function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n'): string {
+  const ids = scopeIds.map(() => '?').join(',');
+  return `((${alias}.isScope=TRUE AND ${alias}.id IN (${ids})) OR EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${ids})))`;
 }
 
 /** A record is visible when one of its scopes is, its parent is live and visible, and so is every mention target. */
 function visibleRecordSql(scopeIds: KnowledgeScopeIds): { sql: string; args: string[] } {
-  const visibleNode = (alias: string) =>
-    `${alias}.deletedAt IS NULL AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${scopeIds.map(() => '?').join(',')}))`;
+  const visibleNode = (alias: string) => `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias)}`;
   return {
     sql: `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId IN (${scopeIds.map(() => '?').join(',')})) AND ${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
-    args: [...scopeIds, ...scopeIds, ...scopeIds],
+    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
   };
 }
 
@@ -928,7 +929,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     if (scopeIds.length === 0) return [];
     const clauses = ['n.deletedAt IS NULL', visibleNodeSql(scopeIds)];
-    const args: QueryValues = [...scopeIds];
+    const args: QueryValues = [...scopeIds, ...scopeIds];
     if (input.namePrefix) {
       clauses.push("lower(n.name) LIKE ? ESCAPE '='");
       args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
@@ -1292,7 +1293,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const pattern = `%${escapeLikePattern(query)}%`;
     const nodes = await this.#readExecutor.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} AND (lower(n.name) LIKE ? ESCAPE '=' OR lower(coalesce(n.kind,'')) LIKE ? ESCAPE '=' OR lower(coalesce(n.metadata::text,'')) LIKE ? ESCAPE '=') ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
-      args: [...scopeIds, pattern, pattern, pattern, limit],
+      args: [...scopeIds, ...scopeIds, pattern, pattern, pattern, limit],
     });
     const results: SearchKnowledgeResult[] = [];
     for (const row of nodes.rows) {
@@ -1931,7 +1932,7 @@ export class KnowledgePG extends KnowledgeStorage {
     // Only same-named nodes in a visible scope are candidates; the widest membership wins.
     const result = await executor.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE lower(n.name)=? AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} ORDER BY (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" c WHERE c.nodeId=n.id) DESC, n.id ASC LIMIT 1`,
-      args: [canonicalName(name), ...scopeIds],
+      args: [canonicalName(name), ...scopeIds, ...scopeIds],
     });
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
