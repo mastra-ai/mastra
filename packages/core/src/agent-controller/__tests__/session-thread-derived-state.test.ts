@@ -157,6 +157,42 @@ async function createDurableFixture() {
 }
 
 describe('AgentController thread-derived session state', () => {
+  it.each(['approveToolCall', 'declineToolCall'] as const)(
+    'binds explicit %s coordinates without an inherited context',
+    async method => {
+      const controller = await createSettingsController(new InMemoryStore(), `approval-${method}`);
+      const session = await controller.createSession({ id: method, ownerId: 'owner' });
+      const a = await session.thread.create({ id: `approval-a-${method}` });
+      await session.mode.switch({ modeId: 'plan' });
+      await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+      const owner = session.machinery.getAgent();
+      const b = await session.thread.create({ id: `approval-b-${method}` });
+      const signal = session.run.ensureAbortController().signal;
+      const dispatch = vi.spyOn(owner, 'sendToolApproval').mockImplementation(async options => {
+        const context = options.requestContext!.get('controller') as AgentControllerRequestContext;
+        expect(context.threadId).toBe(a.id);
+        expect(context.session.modeId).toBe('plan');
+        expect(context.session.modelId).toBe('kimi-for-coding/kimi-for-coding');
+        expect(context.getState()).toMatchObject({ thinkingLevel: 'high' });
+        expect(options.abortSignal).not.toBe(signal);
+        await context.setState({ thinkingLevel: 'medium' });
+        return { accepted: true, runId: 'source-run', toolCallId: 'source-call' };
+      });
+      await session[method]({
+        threadId: a.id,
+        resourceId: session.identity.getResourceId(),
+        runId: 'source-run',
+        toolCallId: 'source-call',
+        agent: owner,
+      });
+      expect(dispatch).toHaveBeenCalledOnce();
+      expect(session.thread.getId()).toBe(b.id);
+      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(signal.aborted).toBe(false);
+      await session.thread.clearAndReleaseLock();
+    },
+  );
+
   it('keeps normal execution callbacks bound after navigation and sees later source edits', async () => {
     const controller = await createSettingsController(new InMemoryStore(), 'run-callbacks');
     const session = await controller.createSession({ id: 'callbacks', ownerId: 'owner' });
