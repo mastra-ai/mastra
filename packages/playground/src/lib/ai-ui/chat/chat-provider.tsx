@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import { nestUnderRun } from '@mastra/core/observability';
 import {
   ChatAgentContext,
   ChatMessagesContext,
@@ -14,6 +15,8 @@ import type {
   SendContextValue,
   TasksContextValue,
 } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ConnectRequestActionsContext } from '@mastra/playground-ui/domains/chat/context/connect-request-context';
+import type { ConnectRequestActions } from '@mastra/playground-ui/domains/chat/context/connect-request-context';
 import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import {
   buildGlobalOmPartsByCycleId,
@@ -26,6 +29,7 @@ import {
 import type { OmTerminalExtractionCache } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useEntityTracingOptions } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useChat } from '@mastra/react/chat';
 import {
@@ -313,6 +317,30 @@ export function ChatProvider({
     signalTimelineRefresh: signalObservationsUpdated,
   });
 
+  const connectRequestActions = useMemo<ConnectRequestActions>(
+    () => ({
+      onConnect: request => {
+        window.open(request.connectUrl, 'mastra-connect', 'popup,noopener,width=600,height=720');
+      },
+      onDecline: request => {
+        baseClient
+          .getAgent(request.agentId)
+          .sendSignal({
+            resourceId: request.resourceId,
+            threadId: request.threadId,
+            signal: {
+              type: 'user',
+              contents: `Skip ${request.displayName} for now.`,
+              attributes: { connectRequestId: request.requestId, outcome: 'declined' },
+            },
+            ifIdle: { behavior: 'wake', streamOptions: { tracingOptions: nestUnderRun(request.trace ?? {}) } },
+          })
+          .catch(() => toast.error(`Couldn't tell the agent to skip ${request.displayName}.`));
+      },
+    }),
+    [baseClient],
+  );
+
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   // Build a global OM cycle index then convert OM parts to dynamic-tool form so
@@ -370,7 +398,9 @@ export function ChatProvider({
                 toolCallApprovals={toolCallApprovals}
                 networkToolCallApprovals={networkToolCallApprovals}
               >
-                {children}
+                <ConnectRequestActionsContext.Provider value={connectRequestActions}>
+                  {children}
+                </ConnectRequestActionsContext.Provider>
               </ToolCallProvider>
             </ChatSendContext.Provider>
           </ChatTasksContext.Provider>
