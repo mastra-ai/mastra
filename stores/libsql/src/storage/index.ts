@@ -232,7 +232,7 @@ export class LibSQLStore extends MastraCompositeStore {
       this.client = isSingleConnectionDatabase(config)
         ? gateSingleConnectionClient(client)
         : this.isLocalDb
-          ? resetConnectionsAfterBusy(client, { afterReset: () => void this.applyLocalPragmas() })
+          ? resetConnectionsAfterBusy(client, { afterReset: () => this.applyLocalPragmas(client) })
           : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
@@ -300,7 +300,7 @@ export class LibSQLStore extends MastraCompositeStore {
     };
   }
 
-  private async applyLocalPragmas(): Promise<void> {
+  private async applyLocalPragmas(client: Client = this.client): Promise<void> {
     const pragmas = [
       ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
       // Keep in sync with the connection-level `timeout` passed to createClient
@@ -314,7 +314,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     for (const [label, sql] of pragmas) {
       try {
-        await this.client.execute(sql);
+        await client.execute(sql);
         this.logger.debug(`LibSQLStore: PRAGMA ${label} set.`);
       } catch (err) {
         this.logger.warn(`LibSQLStore: Failed to set PRAGMA ${label}.`, err);

@@ -203,7 +203,7 @@ describe('LibSQLStore single-connection gating', () => {
     expect(rawClientOf(store)).toBe(client);
   });
 
-  it('wraps a pooled local file client so a busy refusal resets its connections and restores their PRAGMAs', async () => {
+  it('wraps a pooled local file client so a busy refusal resets its connections and restores their PRAGMAs before later calls', async () => {
     const { client, statements } = createMockClient();
     const reconnect = vi.fn();
     const busy = Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
@@ -219,7 +219,8 @@ describe('LibSQLStore single-connection gating', () => {
     const executedBefore = statements.length;
     await expect(wrapped.execute('SELECT busy')).rejects.toBe(busy);
     expect(reconnect).toHaveBeenCalledOnce();
-    await vi.waitFor(() => expect(sqls(statements.slice(executedBefore))).toEqual(storeLevelPragmas));
+    await wrapped.execute('SELECT after');
+    expect(sqls(statements.slice(executedBefore))).toEqual([...storeLevelPragmas, 'SELECT after']);
   });
 
   it('gates :memory: and embedded-replica clients', () => {

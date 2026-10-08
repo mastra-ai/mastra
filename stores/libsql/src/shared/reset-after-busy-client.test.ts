@@ -176,6 +176,38 @@ describe('resetConnectionsAfterBusy', () => {
     expect(afterReset).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['finishes', false],
+    ['fails', true],
+  ])('holds calls that waited for the reset until afterReset %s', async (_, fails) => {
+    const { holdWriteLock, visible } = await setup();
+    let endAfterReset!: () => void;
+    const afterReset = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          endAfterReset = () => (fails ? reject(new Error('restore failed')) : resolve());
+        }),
+    );
+    const raw = createClient({ url: `file:${path.join(dir, 'db.sqlite')}`, timeout: 1 });
+    opened.push(raw);
+    const client = resetConnectionsAfterBusy(raw, { afterReset });
+    const reading = await elsewhere(() => client.transaction('read'));
+    const release = await holdWriteLock();
+    await expect(elsewhere(() => insert(client, 'refused'))).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+
+    let inserted = false;
+    const waiting = insert(client, 'after').then(() => (inserted = true));
+    reading.close();
+    await vi.waitFor(() => expect(afterReset).toHaveBeenCalledOnce());
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(inserted).toBe(false);
+
+    endAfterReset();
+    await waiting;
+    expect(await visible()).toEqual(['after']);
+  });
+
   it('lets a caller replace a method with one that delegates to the previous one', async () => {
     const { client, visible } = await setup();
     const seen: string[] = [];
