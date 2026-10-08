@@ -46,7 +46,9 @@
  * `finish.stepResult` (`{ reason: 'error', warnings: [], isContinued: false }`), which makes the
  * helper's global staleness guard fire on COR-1390's `finish` entry — "payload 'stepResult' no
  * longer differs from plain; remove it from KNOWN_CHUNK_DIFFERENCES" — before any per-scenario
- * comparison runs. That guard is not overridable, so the run is driven directly instead.
+ * comparison runs. That guard is deliberately not overridable, because every other scenario depends
+ * on it staying global; COR-1429 tracks making the staleness check scenario-aware so this leg can
+ * use the helper too. Until then the run is driven directly.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { describe, expect, it } from 'vitest';
@@ -402,6 +404,8 @@ function expectHarnessSuccess(turn: ParitySnapshot): void {
 }
 
 describe('T27 model retry and fallback (plain, durable, evented)', () => {
+  // Driven directly: the helper's global staleness guard fires on this scenario before any
+  // comparison runs — see the COR-1429 note in the file header.
   it('retry-zero: an explicit agent maxRetries of 0 beats call-time maxRetries: 3, and the run fails', async () => {
     const plain = await runRetryZeroOnEngine('plain');
     expect(plain.attempts).toBe(1);
