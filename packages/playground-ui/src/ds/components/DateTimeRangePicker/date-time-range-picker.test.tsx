@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DateTimeRangePicker } from './date-time-range-picker';
+import type { DateRangePreset } from './date-time-range-picker';
 
 afterEach(cleanup);
 
@@ -24,12 +26,17 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(presets.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
   });
 
-  it('returns to the fallback preset when Presets is clicked', () => {
-    const { onPresetChange } = renderCustom({ presets: ['last-7d', 'custom'] });
+  it('keeps an applied custom range when going back to Presets, with Custom range checked', () => {
+    const { onPresetChange } = renderCustom({
+      dateFrom: new Date(2026, 0, 5),
+      dateTo: new Date(2026, 0, 10),
+      presets: TRACE_PRESETS,
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /presets/i }));
 
-    expect(onPresetChange).toHaveBeenCalledWith('last-7d');
+    expect(onPresetChange).not.toHaveBeenCalled();
+    expect(checkedPreset()).toBe('Custom range...');
   });
 
   it('renders the range error with the shared field message', () => {
@@ -56,5 +63,42 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     });
 
     expect(new Set(selects.map(select => select.id)).size).toBe(6);
+  });
+});
+
+const TRACE_PRESETS: readonly DateRangePreset[] = ['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom'];
+
+/** Owns the preset like a real consumer (e.g. the Traces URL state) so preset switches re-render. */
+function ControlledPicker({ initialPreset }: { initialPreset: DateRangePreset }) {
+  const [preset, setPreset] = useState(initialPreset);
+  return <DateTimeRangePicker preset={preset} onPresetChange={setPreset} presets={TRACE_PRESETS} />;
+}
+
+function checkedPreset() {
+  return screen
+    .getAllByRole('menuitemradio')
+    .filter(item => item.getAttribute('aria-checked') === 'true')
+    .map(item => item.textContent)
+    .join(', ');
+}
+
+describe('DateTimeRangePicker (presets)', () => {
+  it('checks the current preset in the preset list', () => {
+    render(<ControlledPicker initialPreset="last-3d" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
+
+    expect(checkedPreset()).toBe('Last 3 days');
+  });
+
+  it('returns to the preset you came from when leaving the custom range', () => {
+    render(<ControlledPicker initialPreset="last-3d" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
+    fireEvent.click(screen.getByRole('button', { name: /presets/i }));
+
+    expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();
+    expect(checkedPreset()).toBe('Last 3 days');
   });
 });

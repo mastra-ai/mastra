@@ -65,8 +65,11 @@ export function DateTimeRangePicker({
   renderTrigger,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
-  const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
+  const [presetMenuOpen, setPresetMenuOpen] = useState(false);
+  // The preset active before "Custom range..." was picked, until a range is applied.
+  // "← Presets" restores it instead of jumping to the first preset in the list.
+  const [presetBeforeCustom, setPresetBeforeCustom] = useState<DateRangePreset | undefined>();
   const [draftDateFrom, setDraftDateFrom] = useState<Date | undefined>(dateFrom);
   const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(dateTo);
   const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
@@ -77,8 +80,10 @@ export function DateTimeRangePicker({
   const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
 
   const handlePresetSelect = (value: DateRangePreset) => {
-    onPresetChange?.(value);
+    setPresetMenuOpen(false);
     if (value === 'custom') {
+      if (preset !== 'custom') setPresetBeforeCustom(preset);
+      onPresetChange?.(value);
       setDraftDateFrom(dateFrom);
       setDraftDateTo(dateTo);
       setDraftTimeFrom('12:00 AM');
@@ -86,6 +91,8 @@ export function DateTimeRangePicker({
       setCustomRangeOpen(true);
       return;
     }
+    setPresetBeforeCustom(undefined);
+    onPresetChange?.(value);
     const entry = DATE_PRESETS.find(p => p.value === value);
     if (entry?.ms) {
       onDateChange?.(new Date(Date.now() - entry.ms), 'from');
@@ -110,11 +117,22 @@ export function DateTimeRangePicker({
       onDateChange?.(fromDate, 'from');
       onDateChange?.(toDate, 'to');
     }
+    setPresetBeforeCustom(undefined);
     setCustomRangeOpen(false);
   };
 
-  if (preset === 'custom') {
-    const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
+  // Back to the preset list. Restores the preset the user came from; an applied custom
+  // range matches no preset, so it stays and the list shows "Custom range..." as current.
+  const showPresets = () => {
+    setCustomRangeError(undefined);
+    setCustomRangeOpen(false);
+    if (presetBeforeCustom) handlePresetSelect(presetBeforeCustom);
+    setPresetMenuOpen(true);
+  };
+
+  const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
+
+  if (preset === 'custom' && !presetMenuOpen) {
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
         {renderTrigger ? (
@@ -183,15 +201,7 @@ export function DateTimeRangePicker({
             </FieldError>
           </Field>
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => {
-                setCustomRangeError(undefined);
-                handlePresetSelect(fallbackPreset);
-              }}
-            >
+            <Button variant="ghost" size="sm" disabled={disabled} onClick={showPresets}>
               &larr; Presets
             </Button>
             <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
@@ -203,23 +213,34 @@ export function DateTimeRangePicker({
     );
   }
 
+  const triggerLabel = preset === 'custom' ? customLabel : datePresetLabel;
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
       {renderTrigger ? (
-        <DropdownMenu.Trigger render={renderTrigger({ label: datePresetLabel, disabled })} />
+        <DropdownMenu.Trigger render={renderTrigger({ label: triggerLabel, disabled })} />
       ) : (
         <DropdownMenu.Trigger asChild>
           <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
-            {datePresetLabel}
+            {triggerLabel}
           </Button>
         </DropdownMenu.Trigger>
       )}
       <DropdownMenu.Content align="start">
-        {visiblePresets.map(p => (
-          <DropdownMenu.Item key={p.value} onSelect={() => handlePresetSelect(p.value)}>
-            {p.label}
-          </DropdownMenu.Item>
-        ))}
+        {/* Items select on click (not onValueChange) so re-picking the checked
+            "Custom range..." still reopens the range editor. */}
+        <DropdownMenu.RadioGroup value={preset}>
+          {visiblePresets.map(p => (
+            <DropdownMenu.RadioItem
+              key={p.value}
+              value={p.value}
+              closeOnClick
+              onClick={() => handlePresetSelect(p.value)}
+            >
+              {p.label}
+            </DropdownMenu.RadioItem>
+          ))}
+        </DropdownMenu.RadioGroup>
       </DropdownMenu.Content>
     </DropdownMenu>
   );
