@@ -11,6 +11,7 @@ import { resolveProjectEnvironment } from '../workspace.js';
 import { capWindow, pendingTrigger, type BuildTriggerReason } from './build-triggers.js';
 import { runEnvironmentBuild } from './build.js';
 import { headsChanged, resolveCurrentHeads, type EnvironmentHeads } from './heads.js';
+import { redactCredentials } from './redact.js';
 import type { SandboxTemplateFactory } from './types.js';
 
 export const DEFAULT_BUILD_WORKER_INTERVAL_MS = 60_000;
@@ -177,6 +178,7 @@ export class FactoryEnvironmentBuildWorker extends MastraWorker {
     // be minutes old), and the head lookups below run under the lease so no
     // replica calls GitHub for a project another one is building.
     let reason: BuildTriggerReason | null = null;
+    let statusBeforeClaim: FactoryProject['lastBuildStatus'] = null;
     const claimed = await this.#options.projects.claimBuild({
       orgId: project.orgId,
       id: project.id,
@@ -184,6 +186,7 @@ export class FactoryEnvironmentBuildWorker extends MastraWorker {
       staleAfterMs: STALE_BUILD_CLAIM_MS,
       when: current => {
         reason = pendingTrigger(current, now);
+        statusBeforeClaim = current.lastBuildStatus;
         return reason !== null;
       },
     });
@@ -211,12 +214,19 @@ export class FactoryEnvironmentBuildWorker extends MastraWorker {
         })),
       });
     } catch (error) {
-      await record({ status: 'failed', error: error instanceof Error ? error.message : String(error) });
+      await record({
+        status: 'failed',
+        error: redactCredentials(error instanceof Error ? error.message : String(error)),
+      });
       return;
     }
-    if (reason === 'schedule' && !headsChanged(claimed.activeTemplateHeads, heads)) {
+    // Unchanged heads only excuse a schedule tick from rebuilding a template
+    // that is good; a failed or partial last build is retried once its backoff
+    // has passed, since its heads already equal the ones it failed on.
+    const lastBuildGood = statusBeforeClaim === 'ready' || statusBeforeClaim === null;
+    if (reason === 'schedule' && lastBuildGood && !headsChanged(claimed.activeTemplateHeads, heads)) {
       this.deps?.logger.info('environment build skipped: heads unchanged', { factoryProjectId: project.id });
-      await record({ status: 'skipped' });
+      await record({ status: 'skipped', lastBuildStatus: statusBeforeClaim });
       return;
     }
 

@@ -204,6 +204,31 @@ describe('runEnvironmentBuild', () => {
     expect(JSON.stringify(recorded)).not.toContain('secret');
   });
 
+  it('releases the claim as a failure when the host template hook itself throws', async () => {
+    const { seed, project, github, versionControl } = await seedEnvironment();
+    const claimedAt = new Date();
+    await seed.projects.claimBuild({ orgId: 'org-1', id: project.id, now: claimedAt, staleAfterMs: 1 });
+
+    const outcome = await runEnvironmentBuild(
+      {
+        projects: seed.projects,
+        sourceControl: { storage: github, versionControl },
+        sandboxTemplate: () => {
+          throw new Error('MASTRA_PLATFORM_ACCESS_TOKEN=ghp_abcdef is not a project token');
+        },
+      },
+      { project, claimedAt, heads: { 'acme/api': SHA_A, 'acme/web': SHA_B } },
+    );
+
+    expect(outcome).toEqual({ status: 'failed', error: 'MASTRA_PLATFORM_ACCESS_TOKEN=*** is not a project token' });
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
+      buildClaimedAt: null,
+      lastBuildStatus: 'failed',
+      lastBuildError: 'MASTRA_PLATFORM_ACCESS_TOKEN=*** is not a project token',
+      buildFailureCount: 1,
+    });
+  });
+
   it('skips a project whose host returns no template, recording nothing', async () => {
     const { seed, project, github, versionControl } = await seedEnvironment();
 

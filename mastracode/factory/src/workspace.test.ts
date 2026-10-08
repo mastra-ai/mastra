@@ -3140,13 +3140,18 @@ describe('factory environment sandbox context', () => {
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
     };
-    const projects = { get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)) };
+    const projects = {
+      get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)),
+      update: vi.fn(async () => project),
+    };
+    const setBuildStatus = vi.fn(async () => null);
+    (github.sourceControlStorage.projectRepositories as any).setBuildStatus = setBuildStatus;
     const resolver = createWorkspaceFactory({
       sandbox: mocks.createSandbox as any,
       github: github as any,
       projects: projects as any,
     });
-    return { resolver, projects, github };
+    return { resolver, projects, github, setBuildStatus };
   }
 
   const twoLinks = [
@@ -3467,23 +3472,40 @@ describe('factory environment sandbox context', () => {
     });
 
     it('continues the boot when a secondary repository cannot be synced, and reports it in the state', async () => {
-      const { resolver } = environmentFixture({ links: twoLinks });
+      const { resolver, projects, setBuildStatus } = environmentFixture({ links: twoLinks });
       addProject({ setupCommand: 'pnpm i' });
       addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
-      mocks.syncEnvironmentRepository.mockRejectedValueOnce(new Error('fetch failed'));
+      mocks.syncEnvironmentRepository.mockRejectedValueOnce(
+        new Error('fetch of https://x-access-token:ghs_secret@github.com/octocat/docs failed'),
+      );
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       await boot(resolver);
 
       expect(warn).toHaveBeenCalledWith(
         '[Mastra Factory] Environment repository could not be synced; continuing the boot',
-        expect.objectContaining({ projectRepositoryId: 'link-2', error: 'fetch failed' }),
+        expect.objectContaining({ projectRepositoryId: 'link-2' }),
       );
       expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).toEqual(['pnpm i', 'touch .workspace-ready']);
       expect(peekSessionEnvironment('session-a')?.repositories[1]).toMatchObject({
         slug: 'octocat/docs',
         branch: null,
         setupStatus: 'failed',
+      });
+      // The build could not see this failure; the boot writes it, redacted, and marks the build partial.
+      expect(setBuildStatus).toHaveBeenCalledTimes(1);
+      expect(setBuildStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'link-2',
+          status: 'failed',
+          error: 'fetch of https://***@github.com/octocat/docs failed',
+        }),
+      );
+      expect(JSON.stringify(setBuildStatus.mock.calls)).not.toContain('ghs_secret');
+      expect(projects.update).toHaveBeenCalledWith({
+        orgId: 'org-1',
+        id: 'factory-1',
+        input: { lastBuildStatus: 'partial' },
       });
       warn.mockRestore();
     });

@@ -740,12 +740,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             ...(buildRequested ? { buildRequestedAt: new Date() } : {}),
           };
 
-          let updated = project;
-          if (Object.keys(projectUpdate).length > 0) {
-            updated =
-              (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input: projectUpdate })) ??
-              project;
-          }
+          // Repositories first: the build request on the project row is the
+          // last write, so a worker tick cannot claim it on a half-applied change.
           for (const { projectRepositoryId, ...input } of repositoryPatches ?? []) {
             if (Object.keys(input).length === 0) continue;
             await links.get(projectRepositoryId)!.handle.projectRepositories.update({
@@ -753,6 +749,12 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               id: projectRepositoryId,
               input,
             });
+          }
+          let updated = project;
+          if (Object.keys(projectUpdate).length > 0) {
+            updated =
+              (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input: projectUpdate })) ??
+              project;
           }
           return context.json({
             ...(await this.#environmentPayload(tenant.orgId, updated)),

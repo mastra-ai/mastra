@@ -10,6 +10,7 @@ import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { environmentSandboxContext, resolveProjectEnvironment } from '../workspace.js';
 import { recordedHeadResolver, resolveCurrentHeads, type EnvironmentHeads } from './heads.js';
+import { redactCredentials } from './redact.js';
 import type { EnvironmentTemplateBuildResult, SandboxTemplateFactory } from './types.js';
 
 export const DEFAULT_BUILD_POLL_MS = 15_000;
@@ -35,14 +36,6 @@ export type EnvironmentBuildOutcome =
   | { status: 'skipped'; reason: 'no_environment' | 'no_template' };
 
 /** The synthetic sandbox id a project's build runs under; never a session. */
-/**
- * A build error may echo a clone URL or a token; strip URL userinfo and
- * GitHub token shapes before the message is stored or logged.
- */
-export function redactCredentials(message: string): string {
-  return message.replace(/\/\/[^/\s@]+@/g, '//***@').replace(/\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+/g, '***');
-}
-
 export function environmentBuildSessionId(projectId: string): string {
   return `environment-build:${projectId}`;
 }
@@ -54,6 +47,31 @@ export function environmentBuildSessionId(projectId: string): string {
  * caller releases the claim by recording a failure of its own.
  */
 export async function runEnvironmentBuild(
+  deps: EnvironmentBuildDeps,
+  input: { project: FactoryProject; claimedAt: Date; heads?: EnvironmentHeads },
+): Promise<EnvironmentBuildOutcome> {
+  try {
+    return await buildEnvironment(deps, input);
+  } catch (error) {
+    // Anything that threw before the template was polled (environment, head
+    // lookup, the host's template hook) still releases the claim as a failure,
+    // so the project backs off instead of sitting on a stale lease.
+    const message = redactCredentials(error instanceof Error ? error.message : String(error));
+    await deps.projects.recordBuild({
+      orgId: input.project.orgId,
+      id: input.project.id,
+      input: {
+        now: (deps.now ?? (() => new Date()))(),
+        claimedAt: input.claimedAt,
+        result: { status: 'failed', error: message },
+      },
+    });
+    deps.logger?.info('environment build failed', { factoryProjectId: input.project.id, error: message });
+    return { status: 'failed', error: message };
+  }
+}
+
+async function buildEnvironment(
   deps: EnvironmentBuildDeps,
   input: { project: FactoryProject; claimedAt: Date; heads?: EnvironmentHeads },
 ): Promise<EnvironmentBuildOutcome> {

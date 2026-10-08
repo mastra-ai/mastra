@@ -107,12 +107,13 @@ export interface RecordFactoryProjectBuildInput {
   /**
    * `skipped`: the attempt found nothing to build (every head still matches
    * the recorded template); the lease is released and the attempt stamped,
-   * the template, status and failure count stay as they were.
+   * the template, error and failure count stay as they were and the status
+   * the claim replaced with `building` is restored.
    */
   result:
     | { status: 'ready'; templateId: string; heads: Record<string, string> }
     | { status: 'failed'; error: string }
-    | { status: 'skipped' };
+    | { status: 'skipped'; lastBuildStatus: FactoryProjectBuildStatus | null };
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -418,7 +419,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         build_claimed_at: null,
         build_requested_at: stillRequested ? requested : null,
         ...(result.status === 'skipped'
-          ? { last_build_status: current.active_template_id ? 'ready' : null }
+          ? { last_build_status: result.lastBuildStatus }
           : result.status === 'ready'
             ? {
                 last_build_status: 'ready',

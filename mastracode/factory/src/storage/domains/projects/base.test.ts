@@ -218,7 +218,7 @@ describe('FactoryProjectsStorage', () => {
       const skipped = await seed.projects.recordBuild({
         orgId: 'org-1',
         id: project.id,
-        input: { now: second, claimedAt: second, result: { status: 'skipped' } },
+        input: { now: second, claimedAt: second, result: { status: 'skipped', lastBuildStatus: null } },
       });
       expect(skipped).toMatchObject({
         buildClaimedAt: null,

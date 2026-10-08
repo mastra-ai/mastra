@@ -100,6 +100,7 @@ describe('FactoryEnvironmentBuildWorker', () => {
         activeTemplateId: 'tpl-0',
         activeTemplateHeads: { 'acme/api': SHA_A },
         lastBuildAttemptedAt: hours(-30),
+        lastBuildStatus: 'ready',
       },
     });
     const { instance, build, logger } = worker(seed, { now: () => T0, heads: () => SHA_A });
@@ -117,6 +118,42 @@ describe('FactoryEnvironmentBuildWorker', () => {
       lastBuildAttemptedAt: T0,
       buildClaimedAt: null,
       lastBuildStatus: 'ready',
+      buildFailureCount: 0,
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('retries a failed build on a scheduled tick even when the heads are unchanged', async () => {
+    const { seed, project } = await seedEnvironment();
+    // A config-change build that failed keeps the heads it failed on; those
+    // equal the current heads, which must not excuse the schedule from retrying.
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: {
+        activeTemplateId: 'tpl-0',
+        activeTemplateHeads: { 'acme/api': SHA_A },
+        lastBuildAttemptedAt: hours(-30),
+        lastBuildStatus: 'failed',
+        lastBuildError: 'pnpm install exited with 1',
+        buildFailureCount: 1,
+      },
+    });
+    const { instance, build, logger } = worker(seed, {
+      now: () => T0,
+      heads: () => SHA_A,
+      results: [{ status: 'ready', templateId: 'tpl-1' }],
+    });
+
+    await instance.tick();
+    await instance.stop();
+
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(logger.info).not.toHaveBeenCalledWith('environment build skipped: heads unchanged', expect.anything());
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
+      activeTemplateId: 'tpl-1',
+      lastBuildStatus: 'ready',
+      lastBuildError: null,
       buildFailureCount: 0,
     });
     vi.unstubAllGlobals();

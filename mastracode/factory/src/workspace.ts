@@ -18,6 +18,7 @@ import type {
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { recordedHeadResolver } from './environment/heads.js';
+import { redactCredentials } from './environment/redact.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -326,8 +327,12 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
-  /** Projects storage used to authorize workspace-free supervisor sessions. */
-  projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /**
+   * Projects storage used to authorize workspace-free supervisor sessions;
+   * with `update`, a boot that finds a repository's setup failed also marks
+   * the environment's last build partial.
+   */
+  projects?: Pick<FactoryProjectsStorage, 'get'> & Partial<Pick<FactoryProjectsStorage, 'update'>>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
 }
@@ -1219,6 +1224,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const repos = environment!.repos;
       const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
       const states: SessionEnvironmentRepositoryState[] = [];
+      // Setup failures by slug: a build cannot observe them, so the boot that
+      // finds one writes the repository's status and marks the build partial.
+      const failures = new Map<string, string>();
       let primaryError: unknown;
       // Recorded whatever happens: once a repository is materialized and set
       // up, retirement must tear it down even when this boot fails later.
@@ -1249,12 +1257,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             try {
               await runSessionSetup(target, primaryDir, entry.gate);
               state.branch = session.branch;
-              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand))
+              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
                 state.setupStatus = 'failed';
+                failures.set(repo.slug, 'The setup command failed earlier in this session.');
+              }
             } catch (error) {
               if (!(error instanceof SetupCommandError)) throw error;
               state.branch = session.branch;
               state.setupStatus = 'failed';
+              failures.set(repo.slug, error.message);
               primaryError = error;
             }
             continue;
@@ -1299,11 +1310,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
+            failures.set(repo.slug, error instanceof Error ? error.message : String(error));
             continue;
           }
           if (!repo.setupCommand || entry.gate.setupDone) continue;
           if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
+            failures.set(repo.slug, 'The setup command failed earlier in this session.');
             continue;
           }
           try {
@@ -1315,6 +1328,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             if (!(error instanceof SetupCommandError)) throw error;
             recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
             state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
             console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
               orgId: session.orgId,
               sessionId: session.sessionId,
@@ -1352,7 +1366,38 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       } finally {
         record();
       }
+      if (failures.size > 0) await recordSetupFailures(repos, failures);
       if (primaryError) throw primaryError;
+    };
+    // Best effort: the status is informational and must never fail a boot.
+    const recordSetupFailures = async (repos: SessionEnvironmentRepo[], failures: Map<string, string>) => {
+      const builtAt = new Date();
+      try {
+        for (const repo of repos) {
+          const error = failures.get(repo.slug);
+          if (error === undefined) continue;
+          await storage.projectRepositories.setBuildStatus({
+            orgId: session.orgId,
+            id: repo.projectRepositoryId,
+            status: 'failed',
+            error: redactCredentials(error).slice(-2000),
+            builtAt,
+          });
+        }
+        if (session.factoryProjectId && projects?.update) {
+          await projects.update({
+            orgId: session.orgId,
+            id: session.factoryProjectId,
+            input: { lastBuildStatus: 'partial' },
+          });
+        }
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not record environment setup failures', {
+          orgId: session.orgId,
+          sessionId: session.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     };
     // The session's real sandbox goes straight onto the Workspace. Providers
     // own lazy start (`ensureRunning()` inside the first command/process op)
