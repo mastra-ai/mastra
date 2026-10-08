@@ -377,7 +377,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   // When a route explicitly requires auth (requiresAuth: true), skip the
   // public-path bypass so the user is still authenticated and permissions
   // are injected into the request context.
-  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
+  if (
+    !requiresAuth &&
+    (canAccessPublicly(path, method, authConfig) || isCustomRoutePublic(path, method, customRouteAuthConfig))
+  ) {
     return pass;
   }
 

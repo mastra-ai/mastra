@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createAuthMiddleware, MastraServer } from '../index';
 
-function createMastraWithAuth() {
+function createMastraWithAuth(protectedPaths?: string[]) {
   const mastra = new Mastra({ logger: false });
   const originalGetServer = mastra.getServer.bind(mastra);
 
@@ -13,6 +13,7 @@ function createMastraWithAuth() {
     ({
       ...originalGetServer(),
       auth: {
+        protected: protectedPaths,
         authenticateToken: async (token: string) =>
           token === 'valid-token' ? { id: 'user-1', email: 'user@example.com' } : null,
         authorize: async () => true,
@@ -154,25 +155,28 @@ describe('Hono auth middleware helper', () => {
 });
 
 describe('Hono auth middleware helper with declared custom routes', () => {
-  it('does not reclassify custom routes declared public (static and pattern)', async () => {
-    const mastra = createMastraWithAuth();
-    const app = new Hono();
-    const customRouteAuthConfig = new Map<string, boolean>([
-      ['GET:/custom/health', false],
-      ['POST:/webhooks/:id', false],
-      ['GET:/custom/private', true],
-    ]);
-    const adapter = new MastraServer({ app, mastra, customRouteAuthConfig });
+  it.each([{ protectedPaths: undefined }, { protectedPaths: ['/*'] }])(
+    'does not reclassify public custom routes with protected paths $protectedPaths',
+    async ({ protectedPaths }) => {
+      const mastra = createMastraWithAuth(protectedPaths);
+      const app = new Hono();
+      const customRouteAuthConfig = new Map<string, boolean>([
+        ['GET:/custom/health', false],
+        ['POST:/webhooks/:id', false],
+        ['GET:/custom/private', true],
+      ]);
+      const adapter = new MastraServer({ app, mastra, customRouteAuthConfig });
 
-    adapter.registerContextMiddleware();
-    app.use('*', createAuthMiddleware({ mastra }));
-    app.get('/custom/health', c => c.json({ ok: true }));
-    app.post('/webhooks/:id', c => c.json({ ok: true }));
-    app.get('/custom/private', c => c.json({ ok: true }));
+      adapter.registerContextMiddleware();
+      app.use('*', createAuthMiddleware({ mastra }));
+      app.get('/custom/health', c => c.json({ ok: true }));
+      app.post('/webhooks/:id', c => c.json({ ok: true }));
+      app.get('/custom/private', c => c.json({ ok: true }));
 
-    expect((await app.request('http://localhost/custom/health')).status).toBe(200);
-    expect((await app.request('http://localhost/webhooks/abc', { method: 'POST' })).status).toBe(200);
-    expect((await app.request('http://localhost/custom/private')).status).toBe(401);
-    expect((await app.request('http://localhost/custom/other')).status).toBe(401);
-  });
+      expect((await app.request('http://localhost/custom/health')).status).toBe(200);
+      expect((await app.request('http://localhost/webhooks/abc', { method: 'POST' })).status).toBe(200);
+      expect((await app.request('http://localhost/custom/private')).status).toBe(401);
+      expect((await app.request('http://localhost/custom/other')).status).toBe(401);
+    },
+  );
 });
