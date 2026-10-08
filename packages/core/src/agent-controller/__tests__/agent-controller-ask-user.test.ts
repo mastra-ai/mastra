@@ -121,6 +121,8 @@ describe('AgentController: ask_user native suspension', () => {
     'warm-approval',
     'warm-approval-reattach',
     'warm-approval-setup-failure',
+    'warm-approval-toolsets-failure',
+    'warm-approval-dispatch-failure',
     'warm-approval-abort',
     'warm-approval-abort-setup-failure',
     'warm-approval-siblings',
@@ -454,9 +456,45 @@ describe('AgentController: ask_user native suspension', () => {
           { threadId: address.threadId, toolCallId: second.toolCallId },
         ]);
         expect(session.displayState.get()).toEqual(display);
-        if (recovery === 'warm-approval-setup-failure') {
+        if (recovery === 'warm-approval-dispatch-failure') {
+          const detached = Promise.withResolvers<void>();
+          const subscribe = session.machinery.subscribeToThread;
+          vi.spyOn(session.machinery, 'subscribeToThread').mockImplementationOnce(async (...args) => {
+            const subscription = await subscribe(...args);
+            const unsubscribe = subscription.unsubscribe.bind(subscription);
+            vi.spyOn(subscription, 'unsubscribe').mockImplementation(() => {
+              unsubscribe();
+              detached.resolve();
+            });
+            return subscription;
+          });
+          const dispatch = vi
+            .spyOn(fixture.source, 'sendToolApproval')
+            .mockRejectedValueOnce(new Error('unknown dispatch outcome'));
+          expect(await session.respondToToolApproval({ decision: 'approve', toolCallId: second.toolCallId })).toEqual({
+            accepted: true,
+          });
+          await detached.promise;
+          expect(dispatch).toHaveBeenCalledOnce();
+          expect(session.approval.isArmed(second)).toBe(false);
+          expect(events.filter(event => event.type === 'tool_approval_required')).toHaveLength(1);
+          expect(
+            await session.respondToToolApproval({ decision: 'approve', toolCallId: second.toolCallId }),
+          ).toMatchObject({ accepted: false });
+          expect(dispatch).toHaveBeenCalledOnce();
+          expect(observations).toHaveLength(1);
+          expect(session.getCurrentRunId()).toBe(activeRunId);
+          expect(session.displayState.get()).toEqual(display);
+          expect(cleanup).not.toHaveBeenCalled();
+          expect(abortSignal?.aborted).toBe(false);
+          return;
+        }
+        if (recovery === 'warm-approval-setup-failure' || recovery === 'warm-approval-toolsets-failure') {
           const subscribe = vi
-            .spyOn(session.machinery, 'subscribeToThread')
+            .spyOn(
+              session.machinery,
+              recovery === 'warm-approval-setup-failure' ? 'subscribeToThread' : 'buildToolsets',
+            )
             .mockRejectedValueOnce(new Error('source approval setup unavailable'));
           expect(await session.respondToToolApproval({ decision: 'approve', toolCallId: second.toolCallId })).toEqual({
             accepted: true,

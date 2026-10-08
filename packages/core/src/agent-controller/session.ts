@@ -5460,15 +5460,7 @@ export class Session<TState = unknown> {
    * agent. `abortSignal` pins the run's own signal, because a successor run
    * replaces the session's abort controller.
    */
-  async approveToolCall({
-    toolCallId,
-    requestContext: requestContextInput,
-    runId: inputRunId,
-    threadId: inputThreadId,
-    resourceId = this.identity.getResourceId(),
-    agent: inputAgent,
-    abortSignal: inputAbortSignal,
-  }: {
+  async approveToolCall(input: {
     toolCallId?: string;
     requestContext?: RequestContext;
     runId?: string;
@@ -5477,6 +5469,21 @@ export class Session<TState = unknown> {
     agent?: Agent;
     abortSignal?: AbortSignal;
   }): Promise<void> {
+    await this.#approveToolCall(input);
+  }
+
+  async #approveToolCall(
+    {
+      toolCallId,
+      requestContext: requestContextInput,
+      runId: inputRunId,
+      threadId: inputThreadId,
+      resourceId = this.identity.getResourceId(),
+      agent: inputAgent,
+      abortSignal: inputAbortSignal,
+    }: Parameters<Session<TState>['approveToolCall']>[0],
+    onDispatch?: () => void,
+  ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
@@ -5501,6 +5508,8 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const toolsets = await this.machinery.buildToolsets(requestContext);
+    onDispatch?.();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -5511,10 +5520,10 @@ export class Session<TState = unknown> {
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
-      toolsets: await this.machinery.buildToolsets(requestContext),
+      toolsets,
       // Without the shared budget the resumed run falls back to the agent's
       // default maxSteps (~5) and ends mid-task as "complete".
-      streamOptions: this.machinery.buildSharedRunOptions(),
+      streamOptions: this.machinery.buildSharedRunOptions(requestContext),
     });
   }
 
@@ -5527,16 +5536,7 @@ export class Session<TState = unknown> {
    * run that parked them, so a thread switch mid-run cannot redirect the
    * decline to another thread.
    */
-  async declineToolCall({
-    toolCallId,
-    requestContext: requestContextInput,
-    declineContext,
-    runId: inputRunId,
-    threadId: inputThreadId,
-    resourceId = this.identity.getResourceId(),
-    agent: inputAgent,
-    abortSignal: inputAbortSignal,
-  }: {
+  async declineToolCall(input: {
     toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
@@ -5546,6 +5546,22 @@ export class Session<TState = unknown> {
     agent?: Agent;
     abortSignal?: AbortSignal;
   }): Promise<void> {
+    await this.#declineToolCall(input);
+  }
+
+  async #declineToolCall(
+    {
+      toolCallId,
+      requestContext: requestContextInput,
+      declineContext,
+      runId: inputRunId,
+      threadId: inputThreadId,
+      resourceId = this.identity.getResourceId(),
+      agent: inputAgent,
+      abortSignal: inputAbortSignal,
+    }: Parameters<Session<TState>['declineToolCall']>[0],
+    onDispatch?: () => void,
+  ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
     if (!runId) {
@@ -5570,6 +5586,8 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const toolsets = await this.machinery.buildToolsets(requestContext);
+    onDispatch?.();
     await agent.sendToolApproval({
       threadId,
       resourceId,
@@ -5581,10 +5599,10 @@ export class Session<TState = unknown> {
       memory: { thread: threadId, resource: resourceId },
       abortSignal,
       requestContext,
-      toolsets: await this.machinery.buildToolsets(requestContext),
+      toolsets,
       // Without the shared budget the resumed run falls back to the agent's
       // default maxSteps (~5) and ends mid-task as "complete".
-      streamOptions: this.machinery.buildSharedRunOptions(),
+      streamOptions: this.machinery.buildSharedRunOptions(requestContext),
     });
   }
 
@@ -5675,7 +5693,7 @@ export class Session<TState = unknown> {
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
                 : Promise.resolve({ decision: policy === 'allow' ? ('approve' as const) : ('decline' as const) });
             let approvalDisposed = false;
-            let abortedApproval = false;
+            let retainApprovalOwnership = false;
             const removeApprovalDeletionListener = this.machinery.onSessionDeleted?.(() => {
               approvalDisposed = true;
               this.approval.cancel(next);
@@ -5700,7 +5718,7 @@ export class Session<TState = unknown> {
                   approval.decision === 'decline' && context.isThreadActive?.()
                     ? this.takeDeferredAbortOrigin()
                     : undefined;
-                abortedApproval ||= deferredAbortOrigin !== undefined;
+                retainApprovalOwnership ||= deferredAbortOrigin !== undefined;
                 let abortCompleted = false;
                 try {
                   const continuation = await this.machinery.buildRequestContext(
@@ -5711,9 +5729,11 @@ export class Session<TState = unknown> {
                   observer = await this.observeSourceResume(agent, next, continuation);
                   if (approvalDisposed) return;
                   const binding = { ...next, agent, requestContext: continuation, abortSignal: context.abortSignal };
-                  dispatchAttempted = true;
-                  if (approval.decision === 'approve') await this.approveToolCall(binding);
-                  else await this.declineToolCall({ ...binding, declineContext: approval.declineContext });
+                  const onDispatch = () => {
+                    dispatchAttempted = true;
+                  };
+                  if (approval.decision === 'approve') await this.#approveToolCall(binding, onDispatch);
+                  else await this.#declineToolCall({ ...binding, declineContext: approval.declineContext }, onDispatch);
                   accepted = true;
                   if (deferredAbortOrigin) {
                     this.completeDeferredAbort(deferredAbortOrigin);
@@ -5732,7 +5752,14 @@ export class Session<TState = unknown> {
                       declineContext: { reason: ABORTED_BY_USER_REASON, message: ABORTED_BY_USER_REASON },
                     });
                   }
-                  if (deferredAbortOrigin || context.abortSignal?.aborted || accepted || observer?.dispatched())
+                  retainApprovalOwnership ||= dispatchAttempted;
+                  if (
+                    deferredAbortOrigin ||
+                    context.abortSignal?.aborted ||
+                    dispatchAttempted ||
+                    accepted ||
+                    observer?.dispatched()
+                  )
                     throw error;
                   pendingDecision = this.approval.arm({ ...next, toolName: chunk.payload.toolName });
                   context.emitEvent?.({
@@ -5750,9 +5777,9 @@ export class Session<TState = unknown> {
             })()
               .catch(error => context.emitEvent?.({ type: 'error', error: getErrorFromUnknown(error) }))
               .finally(() => {
-                // An abort can leave older approval chunks in the visible subscription.
-                // Keep them suppressed until the aborted run's scope is disposed.
-                if (!abortedApproval) ownedCalls.delete(next.toolCallId);
+                // Aborted or unconfirmed dispatches can leave older approval chunks.
+                // Keep them suppressed until the source run's scope is disposed.
+                if (!retainApprovalOwnership) ownedCalls.delete(next.toolCallId);
                 if (!ownedCalls.size) runScope?.delete(SOURCE_APPROVAL_CALLS_KEY);
                 removeApprovalDeletionListener?.();
               });
