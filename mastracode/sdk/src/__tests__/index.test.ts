@@ -176,8 +176,13 @@ function createMockSettings() {
 }
 
 /** Stand-in for the Mastra the controller builds on init(). */
+let registeredKnowledge: Record<string, unknown> = {};
 const mastraStub = {
   getStorage: vi.fn(() => undefined),
+  listKnowledge: vi.fn(() => ({ ...registeredKnowledge })),
+  addKnowledge: vi.fn((knowledge: unknown, key: string) => {
+    registeredKnowledge[key] = knowledge;
+  }),
   startWorkers: vi.fn(async () => {}),
   stopWorkers: vi.fn(async () => {}),
   addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {
@@ -495,6 +500,7 @@ vi.mock('../utils/thread-lock.js', () => ({
 describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
+    registeredKnowledge = {};
     createMastraCodeGatewayMock.mockClear();
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
@@ -834,6 +840,27 @@ describe('createMastraCode', () => {
       instance,
     );
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
+  });
+
+  it('registers the selected Knowledge on the Mastra a local boot builds', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    const instance = new Knowledge({ id: 'mastra' });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ knowledge: { key: 'mastra', instance } });
+
+    expect(mastraStub.addKnowledge).toHaveBeenCalledWith(instance, 'mastra');
+    expect(registeredKnowledge.mastra).toBe(instance);
+  });
+
+  it('rejects a local boot whose Mastra registers a different Knowledge under the selected key', async () => {
+    const { Knowledge } = await import('@mastra/core/knowledge');
+    registeredKnowledge = { mastra: new Knowledge({ id: 'other' }) };
+    const { createMastraCode } = await import('../index.js');
+
+    await expect(
+      createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } }),
+    ).rejects.toThrow('This Mastra already registers a different Knowledge instance under "mastra".');
   });
 
   it('rejects an empty host-owned Knowledge registration key', async () => {
