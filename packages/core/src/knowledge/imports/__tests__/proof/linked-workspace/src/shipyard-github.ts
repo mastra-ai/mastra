@@ -22,7 +22,7 @@ const outputDirectory = resolve(outArg >= 0 ? process.argv[outArg + 1]! : './pro
 const dbPath = resolve(outputDirectory, 'shipyard-github.db');
 
 if (!githubToken) throw new Error('GITHUB_TOKEN is required for the Shipyard GitHub proof');
-if (!process.env.OPENAI_API_KEY && !process.env.MASTRA_API_KEY) {
+if (model.startsWith('openai/') && !process.env.OPENAI_API_KEY && !process.env.MASTRA_API_KEY) {
   throw new Error('OPENAI_API_KEY or MASTRA_API_KEY is required for the real-provider Shipyard GitHub proof');
 }
 
