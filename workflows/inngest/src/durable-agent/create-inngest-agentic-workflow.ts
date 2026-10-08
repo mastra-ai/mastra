@@ -16,6 +16,7 @@ import {
   executeDurableAgentScorers,
   globalRunRegistry,
   pruneAgentLoopSnapshot,
+  buildDeferredStepFinishChunk,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -331,13 +332,27 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         { id: 'init-iteration-state' },
       )
       // Run the agentic loop with dowhile
-      .dowhile(singleIterationWorkflow, async ({ inputData, engine }) => {
+      .dowhile(singleIterationWorkflow, async params => {
+        const { inputData, engine } = params;
         const state = inputData as IterationState;
+        const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+
+        const emitStepFinish = async (isContinued: boolean) => {
+          if (state.lastStepResult) {
+            state.lastStepResult.isContinued = isContinued;
+          }
+          const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+          state.deferredStepFinishChunk = undefined;
+          if (deferredChunk && pubsub) {
+            await emitChunkEvent(pubsub, state.runId, deferredChunk);
+          }
+        };
 
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          await emitStepFinish(false);
           return false;
         }
 
@@ -348,6 +363,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
+          await emitStepFinish(false);
           return false;
         }
 
@@ -357,18 +373,25 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // recorded decision (even on a worker without the registry entry) instead
         // of re-invoking (possibly stateful) user predicates.
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
-        const stopped: boolean = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
-          const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
-          if (!stopWhen || state.accumulatedSteps.length === 0) {
-            return false;
-          }
-          const steps = state.accumulatedSteps as any;
-          const conditions = await Promise.all(
-            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
-          );
-          return conditions.some(Boolean);
-        });
+        let stopped: boolean;
+        try {
+          stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+            const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
+            if (!stopWhen || state.accumulatedSteps.length === 0) {
+              return false;
+            }
+            const steps = state.accumulatedSteps as any;
+            const conditions = await Promise.all(
+              (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
+            );
+            return conditions.some(Boolean);
+          });
+        } catch (error) {
+          await emitStepFinish(shouldContinue);
+          throw error;
+        }
 
+        await emitStepFinish(!stopped);
         return !stopped;
       })
       // Map final state to output format, close agent span, and emit finish event
