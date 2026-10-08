@@ -25,8 +25,10 @@ export function useFactoryEnvironmentQuery(factoryId: string | undefined) {
 
 /**
  * Persist environment changes. The response carries the whole environment, so
- * the cache is replaced from it; the factory query is invalidated because its
- * repository list mirrors part of the environment.
+ * the cache is replaced from it and then refetched: the PATCH is not
+ * transactional, so a half-applied save shows up as what the server really
+ * holds. The factory query is invalidated because its repository list mirrors
+ * part of the environment.
  */
 export function useSaveFactoryEnvironmentMutation() {
   const { baseUrl } = useApiConfig();
@@ -36,6 +38,7 @@ export function useSaveFactoryEnvironmentMutation() {
       patchFactoryEnvironment(baseUrl, factoryId, input),
     onSuccess: (saved, { factoryId }) => {
       queryClient.setQueryData(queryKeys.factoryEnvironment(factoryId), saved.environment);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryProject(factoryId) });
     },
   });

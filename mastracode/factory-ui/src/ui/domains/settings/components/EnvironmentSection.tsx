@@ -1,12 +1,16 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/components/Toaster';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useFactoryEnvironmentQuery } from '../../../../hooks/useFactoryEnvironment';
-import type { FactoryEnvironmentPayload } from '../../workspaces/services/environment';
+import { useFactoryEnvironmentQuery, useSaveFactoryEnvironmentMutation } from '../../../../hooks/useFactoryEnvironment';
+import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { settingsSectionPath } from '../settingsSections';
+import { RepositoriesBlock } from './environment/RepositoriesBlock';
+import { ResourcesBlock } from './environment/ResourcesBlock';
+import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
@@ -50,6 +54,9 @@ export function EnvironmentSection() {
 }
 
 function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
+  const saveMutation = useSaveFactoryEnvironmentMutation();
+  const [buildRequested, setBuildRequested] = useState(false);
+
   if (environment.repositories.length === 0) {
     return (
       <Notice variant="info">
@@ -61,10 +68,24 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
     );
   }
 
+  const save = (input: FactoryEnvironmentPatch) =>
+    saveMutation.mutateAsync(
+      { factoryId, input },
+      {
+        onSuccess: saved => {
+          if (saved.buildRequested) setBuildRequested(true);
+          toast.success('Environment saved');
+        },
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
+      },
+    );
+
   return (
-    <Txt as="p" variant="meta" tone="muted">
-      {environment.repositories.filter(repository => repository.inEnvironment).length} of{' '}
-      {environment.repositories.length} linked repositories in the environment.
-    </Txt>
+    <div className="flex flex-col gap-8">
+      {buildRequested && <Notice variant="info">Changes to the environment start a new build.</Notice>}
+      <ResourcesBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
+      <RepositoriesBlock repositories={environment.repositories} disabled={saveMutation.isPending} onSave={save} />
+      <WorkspaceSetupBlock value={environment.workspaceSetupCommand} disabled={saveMutation.isPending} onSave={save} />
+    </div>
   );
 }

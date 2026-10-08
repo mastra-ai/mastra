@@ -6,7 +6,6 @@ export { WorkspacesSection } from './components/WorkspacesSection';
 export * from '../../../hooks/useGithubGitOps';
 export * from '../../../hooks/useGithubRepos';
 export * from '../../../hooks/useGithubStatus';
-export * from '../../../hooks/useRepositorySettings';
 export * from '../../../hooks/useFactories';
 export * from '../../../hooks/useWorkspaces';
 export * from './services/github';

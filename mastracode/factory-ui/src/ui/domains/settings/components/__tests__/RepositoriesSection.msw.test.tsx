@@ -120,9 +120,6 @@ describe('Repositories settings', () => {
           ],
         });
       }),
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-1/settings`, () =>
-        HttpResponse.json({ setupCommand: null, teardownCommand: null }),
-      ),
     );
 
     renderRepositoriesSettings();
@@ -133,6 +130,12 @@ describe('Repositories settings', () => {
     expect(await screen.findByText(/factory-gitlab-control/)).toBeInTheDocument();
     expect(screen.queryByText('GitHub is disabled on the server.')).not.toBeInTheDocument();
     expect(screen.queryByText('GitHub CLI tokens')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sandbox' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Setup command for/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Environment' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/environment`,
+    );
     const connectAnother = screen.getByRole('button', { name: 'Connect another GitLab account' });
     expect(connectAnother).toBeInTheDocument();
     expect(connectAnother.tagName).toBe('BUTTON');
