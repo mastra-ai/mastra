@@ -2047,10 +2047,12 @@ export class MemoryPG extends MemoryStorage {
     merge: (existing: string | undefined) => string;
   }): Promise<StorageResourceType> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
+    const fence = resolveRunFence(this, undefined);
 
     const callbackError: { error?: unknown } = {};
     try {
       return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'mergeResourceWorkingMemory');
         const now = new Date().toISOString();
         // Ensure the row exists so concurrent first writes both lock the same row.
         await t.none(
