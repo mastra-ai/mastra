@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LibSQLStore } from '../..';
 import { withClientWriteLock } from '../../db/write-lock';
@@ -67,6 +67,44 @@ describe('KnowledgeLibSQL atomic node and record creation', () => {
     } finally {
       client.close();
       await rm(path, { force: true });
+    }
+  });
+});
+
+describe('KnowledgeLibSQL bounded node reads', () => {
+  it('reads visible nodes in one query instead of loading every same-named node', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const visibleScope = await store.createNode({ name: 'Visible scope', isScope: true, scopeIds: [] });
+      for (let index = 0; index < 20; index++) {
+        const foreign = await store.createNode({ name: `Foreign ${index}`, isScope: true, scopeIds: [] });
+        await store.createNode({ name: 'Jane', kind: 'person', scopeIds: [foreign.id] });
+      }
+      const jane = await store.createNode({ name: 'Jane', kind: 'person', scopeIds: [visibleScope.id] });
+      const node = await store.createNode({ name: 'Cobalt runbook', scopeIds: [visibleScope.id] });
+      await store.createRecord({ node, text: 'Cobalt rollout steps.', scopeIds: [visibleScope.id] });
+
+      const execute = vi.spyOn(client, 'execute');
+      await expect(store.resolveNode({ name: 'Jane', scopeIds: [visibleScope.id] })).resolves.toMatchObject({
+        id: jane.id,
+      });
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      execute.mockClear();
+      expect((await store.listNodes({ scopeIds: [visibleScope.id], namePrefix: 'jane' })).map(n => n.id)).toEqual([
+        jane.id,
+      ]);
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      execute.mockClear();
+      const results = await store.search({ query: 'cobalt', scopeIds: [visibleScope.id] });
+      expect(results.map(result => result.type)).toEqual(['node', 'record']);
+      // One query per result kind plus one membership read per returned result, never per stored row.
+      expect(execute.mock.calls.length).toBeLessThanOrEqual(4);
+    } finally {
+      client.close();
     }
   });
 });

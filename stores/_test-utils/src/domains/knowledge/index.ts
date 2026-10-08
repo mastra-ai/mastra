@@ -1,4 +1,5 @@
 import {
+  createKnowledgeNodeCursor,
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
@@ -589,6 +590,57 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const results = await store.search({ query: 'refund', scopeIds: [PROJECT_SCOPE_ID] });
       expect(results.map(result => result.type)).toEqual(expect.arrayContaining(['node', 'record']));
       expect(await store.search({ query: 'refund', scopeIds: [OTHER_SCOPE_ID] })).toEqual([]);
+    });
+
+    it('pages, filters and resolves visible nodes without surfacing hidden same-named nodes', async () => {
+      for (let index = 0; index < 5; index++) {
+        const hiddenScope = await store.createNode({ name: `Tenant ${index}`, isScope: true, scopeIds: [] });
+        await store.createNode({ name: 'Shared name', kind: 'person', scopeIds: [hiddenScope.id] });
+      }
+      const visible = await store.createNode({ name: 'Shared name', kind: 'person', scopeIds: [PROJECT_SCOPE_ID] });
+      for (let index = 0; index < 7; index++) {
+        await store.createNode({ name: `Paged item ${index}`, kind: 'topic', scopeIds: [PROJECT_SCOPE_ID] });
+      }
+      await store.createNode({ name: 'Literal 100%_done', kind: 'topic', scopeIds: [PROJECT_SCOPE_ID] });
+      await store.createNode({ name: 'Literal 100xxdone', kind: 'topic', scopeIds: [PROJECT_SCOPE_ID] });
+
+      await expect(store.resolveNode({ name: 'shared NAME', scopeIds: [PROJECT_SCOPE_ID] })).resolves.toMatchObject({
+        id: visible.id,
+      });
+      await expect(store.resolveNode({ name: 'Shared name', scopeIds: [OTHER_SCOPE_ID] })).resolves.toBeNull();
+      await expect(store.resolveNode({ name: 'Shared name', scopeIds: [] })).resolves.toBeNull();
+      expect(await store.listNodes({ scopeIds: [] })).toEqual([]);
+
+      const shared = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], namePrefix: 'shared' });
+      expect(shared.map(node => node.id)).toEqual([visible.id]);
+      expect(
+        (await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], namePrefix: 'literal 100%_' })).map(node => node.name),
+      ).toEqual(['Literal 100%_done']);
+      expect((await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], kind: 'person' })).map(node => node.id)).toEqual([
+        visible.id,
+      ]);
+      expect(
+        (await store.listNodes({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID], isScope: true })).map(node => node.id),
+      ).toEqual(expect.arrayContaining([PROJECT_SCOPE_ID]));
+      expect((await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], isScope: true })).some(node => !node.isScope)).toBe(
+        false,
+      );
+
+      const filters = { namePrefix: 'paged item', kind: 'topic' };
+      const paged: string[] = [];
+      let page = await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID], ...filters, limit: 3 });
+      while (page.length > 0) {
+        paged.push(...page.map(node => node.name));
+        if (page.length < 3) break;
+        page = await store.listNodes({
+          scopeIds: [PROJECT_SCOPE_ID],
+          ...filters,
+          limit: 3,
+          cursor: createKnowledgeNodeCursor(page[page.length - 1]!, filters),
+        });
+      }
+      expect(paged).toHaveLength(7);
+      expect(new Set(paged).size).toBe(7);
     });
 
     it('reconciles addressable scope nodes and parent memberships idempotently', async () => {
