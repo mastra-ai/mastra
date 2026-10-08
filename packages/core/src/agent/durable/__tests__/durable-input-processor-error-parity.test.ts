@@ -94,4 +94,63 @@ describe('T44 input processors (plain, durable, evented)', () => {
       }
     }
   });
+
+  it('fails closed when input processor resolution throws', async () => {
+    for (const engine of ENGINES) {
+      const { model, requests } = createRecordingModel({ tapes: [textOnlyTape('model reached')] });
+      const agent = new Agent({
+        id: `t44-resolver-throws-${engine}`,
+        name: 'script',
+        instructions: 'Respond.',
+        model,
+        inputProcessors: () => {
+          throw new Error('resolver exploded');
+        },
+      });
+
+      let wrapper: DurableAgent<string, any, any> | undefined;
+      if (engine === 'durable') {
+        wrapper = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+      } else if (engine === 'evented') {
+        wrapper = createEventedAgent({ agent });
+      }
+
+      const host = new Mastra({
+        agents: { [agent.id]: wrapper ?? agent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+
+      let cleanup: (() => void | Promise<void>) | undefined;
+      let thrown: unknown;
+      let text: string | null = null;
+      try {
+        const output = wrapper
+          ? await wrapper.stream('hello', { runId: `t44-resolver-throws-${engine}-run` }).then(result => {
+              cleanup = result.cleanup;
+              return result.output;
+            })
+          : await agent.stream('hello', { runId: `t44-resolver-throws-${engine}-run` });
+        text = (await snapshotFromOutput(output)).text;
+      } catch (error) {
+        thrown = error;
+      } finally {
+        await cleanup?.();
+        await host.shutdown();
+      }
+
+      expect(
+        {
+          thrown: thrown instanceof Error ? thrown.message : null,
+          modelCalls: requests.length,
+          text,
+        },
+        engine,
+      ).toEqual({
+        thrown: 'resolver exploded',
+        modelCalls: 0,
+        text: null,
+      });
+    }
+  });
 });
