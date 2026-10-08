@@ -11,6 +11,7 @@ import type {
   ProcessorPipelineAttributes,
   UsageStats,
 } from '@mastra/core/observability';
+import { generateSignalId } from '../ids';
 import { resolveModelId } from '../model-id';
 import { estimateCosts } from './estimator';
 import { TokenMetrics } from './types';
@@ -112,14 +113,13 @@ function emitUsageMetrics(
   }
 
   const labels = attrs.usageIncomplete ? { usageIncomplete: 'true' } : undefined;
+  // One id per usage observation, shared by all of its token/cost rows, so storage can
+  // collapse them to one row per model call. Rolled-up hidden calls each get their own id
+  // even though they share the ancestor's spanId.
+  const usageId = generateSignalId();
   const emit = (name: TokenMetrics, value: number) => {
     const costContext = metricCosts.get(name);
-    if (!costContext) {
-      metrics.emit(name, value, labels);
-      return;
-    }
-
-    metrics.emit(name, value, labels, { costContext });
+    metrics.emit(name, value, labels, costContext ? { costContext, usageId } : { usageId });
   };
 
   for (const sample of getTokenMetricSamples(usage)) {
