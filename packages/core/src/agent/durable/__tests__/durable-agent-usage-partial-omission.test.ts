@@ -121,7 +121,7 @@ describe('durable agent usage with selectively omitted counters', () => {
         const terminalUsage = (turn.finishChunk.usage ?? null) as Usage | null;
         expect(turn.text, `${engine}: the scripted answer is in the run`).toBe('done');
 
-        const unknown = (key: string) => typeof usage?.[key] !== 'number' && usage?.[key] !== 0;
+        const unknown = (key: string) => typeof usage?.[key] !== 'number';
         if (variant === 'known-then-omitted') {
           for (const key of ['inputTokens', 'outputTokens', 'totalTokens'] as const) {
             expect(
