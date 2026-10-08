@@ -728,6 +728,16 @@ export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 export function assertKnowledgeScopeWithinCeiling(_scope: string[], _maxScope?: LegacyKnowledgeScopeLevel): void {}
 
 /**
+ * Knowledge has no record scope ceilings to raise. Never throws.
+ *
+ * @deprecated No longer enforced. Kept only so published store adapters that import it still load.
+ */
+export function assertKnowledgeCeilingRaised(
+  _currentMaxScope: LegacyKnowledgeScopeLevel | undefined,
+  _maxScope: LegacyKnowledgeScopeLevel | undefined,
+): void {}
+
+/**
  * @deprecated Knowledge scopes are scope-node IDs; use {@link canonicalizeKnowledgeScopeIds}. Kept only
  * so published `@mastra/memory` versions that import it still load.
  */
