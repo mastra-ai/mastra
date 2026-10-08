@@ -11,8 +11,6 @@ import { createFactoryStorageForTests, LibSQLStore } from '../../../factory/src/
 
 const orgId = 'governance-proof-org';
 const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNOWLEDGE_PROOF_OUTPUT) : undefined;
-const proofResults = new Map<string, string>();
-const expectedProofTests = 3;
 
 type Perspective = 'reader' | 'suggester' | 'reviewer';
 
@@ -260,27 +258,5 @@ test.describe('Knowledge governance perspectives', () => {
       await expect(page.getByText('Refresh the incident guide')).toBeVisible();
       await capture(page, 'reviewer');
     });
-  });
-
-  test.afterEach(({}, testInfo) => {
-    proofResults.set(testInfo.titlePath.join(' > '), testInfo.status ?? 'interrupted');
-  });
-
-  test.afterAll(() => {
-    if (!output) return;
-    fs.mkdirSync(output, { recursive: true });
-    fs.writeFileSync(
-      path.join(output, 'results.json'),
-      JSON.stringify(
-        {
-          expectedTests: expectedProofTests,
-          observedTests: proofResults.size,
-          complete: proofResults.size === expectedProofTests,
-          tests: Array.from(proofResults, ([title, status]) => ({ title, status })),
-        },
-        null,
-        2,
-      ),
-    );
   });
 });
