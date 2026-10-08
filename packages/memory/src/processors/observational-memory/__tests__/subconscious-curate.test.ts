@@ -42,7 +42,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('Subconscious observation curator', () => {
   it('settles curation on the Subconscious, including runs dispatched while waiting, without holding Memory.settled()', async () => {
     const { memory, context } = fixture();
-    const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
+    const subconscious = new Subconscious({ defaultScope: 'resource' });
     const curate = subconscious
       .createObservationExtractors('openai/test', () => memory)
       .find(extractor => extractor.name === 'Curate')!;

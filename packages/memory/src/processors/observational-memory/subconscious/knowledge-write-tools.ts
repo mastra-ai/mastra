@@ -72,20 +72,18 @@ function resolveNodePlacement(
   placement: string | undefined,
 ): { nodeScope: KnowledgeScope; scopeAddresses?: string[] } {
   if (placement === undefined || (SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    const nodeScope = expandKnowledgeScope(
-      options.scope,
-      (placement as KnowledgeScopeLevel | undefined) ?? options.defaultScope,
-    );
-    assertKnowledgeScopeWithinCeiling(nodeScope, options.maxScope);
-    return { nodeScope };
+    return {
+      nodeScope: expandKnowledgeScope(
+        options.scope,
+        (placement as KnowledgeScopeLevel | undefined) ?? options.defaultScope,
+      ),
+    };
   }
   const visible = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scope) ?? [];
   if (!visible.some(visibleScope => visibleScope.address === placement)) {
     throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
   }
-  const nodeScope = expandKnowledgeScope(options.scope, options.defaultScope);
-  assertKnowledgeScopeWithinCeiling(nodeScope, options.maxScope);
-  return { nodeScope, scopeAddresses: [placement] };
+  return { nodeScope: expandKnowledgeScope(options.scope, options.defaultScope), scopeAddresses: [placement] };
 }
 
 export function createKnowledgeWriteTools(
