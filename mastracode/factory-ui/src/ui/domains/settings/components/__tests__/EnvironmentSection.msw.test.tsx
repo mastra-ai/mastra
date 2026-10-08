@@ -105,8 +105,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText('platform')).toBeInTheDocument();
-    expect(screen.getByRole('spinbutton', { name: 'CPU cores' })).toHaveValue(2);
+    expect(await screen.findByRole('spinbutton', { name: 'CPU cores' })).toHaveValue(2);
     expect(screen.getByRole('spinbutton', { name: 'Memory in megabytes' })).toHaveValue(4096);
     expect(screen.getByRole('spinbutton', { name: 'Idle timeout in minutes' })).toHaveValue(null);
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');

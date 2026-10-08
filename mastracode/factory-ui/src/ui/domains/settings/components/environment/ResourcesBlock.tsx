@@ -20,11 +20,6 @@ export function ResourcesBlock({
         Resources
       </Txt>
       <SettingsContainer>
-        <SettingsRow label="Provider" description="Where sandboxes run. Set by the host.">
-          <Txt as="span" font="mono" variant="body-sm">
-            {environment.sandboxProvider ?? 'not configured'}
-          </Txt>
-        </SettingsRow>
         <SettingsRow
           label="CPU"
           description="Cores reserved for each sandbox (1 to 64). Empty uses the provider default."
