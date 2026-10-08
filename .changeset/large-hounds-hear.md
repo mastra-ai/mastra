@@ -4,6 +4,8 @@
 
 Added AvatarRail with keyboard navigation, CompositeAvatar with an overlay badge, and an identity trigger and account layout for DropdownMenu.
 
+`CompositeAvatar` shows a person's avatar with their current organization's logo as a small badge, for the account menu trigger. `AvatarRail` lists organizations to switch between.
+
 ```tsx
 import { Avatar, CompositeAvatar } from '@mastra/playground-ui/components/Avatar';
 import { AvatarRail } from '@mastra/playground-ui/components/AvatarRail';
