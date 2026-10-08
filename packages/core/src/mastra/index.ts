@@ -5079,7 +5079,8 @@ export class Mastra<
 
   /** Returns all registered Knowledge instances keyed by application key. */
   public listKnowledge(): TKnowledge {
-    return this.#knowledge;
+    // A copy, so callers cannot swap an entry past addKnowledge()'s shared-backend check.
+    return { ...this.#knowledge };
   }
 
   /** Registers a Knowledge instance without initializing its storage. */

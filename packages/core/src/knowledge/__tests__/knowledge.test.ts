@@ -30,6 +30,18 @@ describe('Knowledge', () => {
     expect(analyticsInit).not.toHaveBeenCalled();
   });
 
+  it('does not let callers replace registered instances through listKnowledge()', () => {
+    const registered = new Knowledge({ id: 'registered', storage: new InMemoryStore({ id: 'registered' }) });
+    const mastra = new Mastra({ knowledge: { default: registered }, logger: false });
+
+    const listed = mastra.listKnowledge() as Record<string, Knowledge>;
+    listed.default = new Knowledge({ id: 'replacement' });
+    listed.extra = new Knowledge({ id: 'extra' });
+
+    expect(mastra.getKnowledge('default')).toBe(registered);
+    expect(Object.keys(mastra.listKnowledge())).toEqual(['default']);
+  });
+
   it('keeps instances with separate storage backends isolated', async () => {
     const first = new Knowledge({ storage: new InMemoryStore({ id: 'first' }) });
     const second = new Knowledge({ storage: new InMemoryStore({ id: 'second' }) });
