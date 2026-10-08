@@ -68,8 +68,9 @@ Each strategy will only utilize a subset of these parameters relevant to its spe
     name: 'overlap',
     type: 'number',
     isOptional: true,
-    defaultValue: '50',
-    description: 'Number of characters/tokens that overlap between chunks.',
+    defaultValue: '200',
+    description:
+      "Number of characters/tokens that overlap between chunks. Defaults to 200 for most strategies; the 'sentence' strategy defaults to 0.",
   },
   {
     name: 'lengthFunction',
@@ -181,11 +182,11 @@ The options documented below are passed directly at the top level of the configu
 <PropertiesTable
   content={[
   {
-    name: 'separators',
-    type: 'string[]',
+    name: 'separator',
+    type: 'string',
     isOptional: true,
-    description:
-      'Array of separators to try in order of preference. The strategy will attempt to split on the first separator, then fall back to subsequent ones.',
+    defaultValue: "'\\n\\n'",
+    description: 'Character or string to split text on.',
   },
   {
     name: 'isSeparatorRegex',
