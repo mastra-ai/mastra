@@ -378,6 +378,22 @@ describe('MastraAuthStudio', () => {
         expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
       });
 
+      it('warns when a rotated cookie cannot be keyed to a web Request', async () => {
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        );
+        const warn = vi.spyOn((auth as any).logger, 'warn');
+        // Hono-like shape without a `raw` web Request
+        const req = { header: (n: string) => (n.toLowerCase() === 'cookie' ? 'wos-session=sealed-v1' : undefined) };
+
+        await auth.authenticateToken('', req as any);
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('cannot be forwarded'));
+      });
+
       it('does not expose a Set-Cookie when platform did not rotate the cookie', async () => {
         fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
 

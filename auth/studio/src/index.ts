@@ -731,7 +731,13 @@ export class MastraAuthStudio
 
     if (request) {
       const rawRequest = getWebRequest(request);
-      if (rawRequest) this.pendingResponseHeaders.set(rawRequest, reissued);
+      if (rawRequest) {
+        this.pendingResponseHeaders.set(rawRequest, reissued);
+      } else {
+        // The browser keeps the old cookie, whose refresh token this rotation
+        // used up, so the user will be signed out on a later request.
+        this.logger.warn('captureRotatedCookie: renewed session cookie cannot be forwarded (no web Request)');
+      }
     }
     return rotatedValue;
   }
