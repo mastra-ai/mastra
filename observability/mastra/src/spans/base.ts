@@ -17,6 +17,7 @@ import type {
   EntityType,
   TracingPolicy,
   CorrelationContext,
+  SpanLink,
 } from '@mastra/core/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
@@ -102,6 +103,10 @@ function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
  * getExternalParentId(options); // 'span-456'
  * ```
  */
+function isValidLink(link: SpanLink | undefined): link is SpanLink {
+  return /^[0-9a-f]{1,32}$/i.test(link?.traceId ?? '') && /^[0-9a-f]{1,16}$/i.test(link?.spanId ?? '');
+}
+
 export function getExternalParentId(options: CreateSpanOptions<any>): string | undefined {
   if (!options.parent) {
     return undefined;
@@ -143,6 +148,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public metadata?: Record<string, any>;
   public requestContext?: Record<string, any>;
   public tags?: string[];
+  public links?: SpanLink[];
   public traceState?: TraceState;
   /** Entity type that created the span (e.g., agent, workflow) */
   public entityType?: EntityType;
@@ -235,6 +241,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
+    this.addLinks(options.links);
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
@@ -528,6 +535,15 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return this.correlationContext;
   }
 
+  /** Adds links with valid IDs that the span doesn't have yet. */
+  protected addLinks(links: SpanLink[] | undefined): void {
+    for (const link of links ?? []) {
+      if (!isValidLink(link)) continue;
+      if (this.links?.some(existing => existing.traceId === link.traceId && existing.spanId === link.spanId)) continue;
+      (this.links ??= []).push({ traceId: link.traceId, spanId: link.spanId });
+    }
+  }
+
   /** Returns a lightweight span ready for export */
   public exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> {
     // Check if input/output should be hidden based on traceState
@@ -557,6 +573,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
+      ...(this.links ? { links: [...this.links] } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace
       ...(this.isRootSpan && !nestedUnderParent && this.tags?.length ? { tags: this.tags } : {}),
     };

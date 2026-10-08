@@ -353,6 +353,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
       externalParentSpanId: cached.externalParentSpanId,
+      links: cached.links,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
       attributes: cached.attributes,

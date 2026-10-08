@@ -233,6 +233,9 @@ interface Span<TType extends SpanType> {
   /** Tags for categorizing traces (only present on root spans) */
   tags?: string[]
 
+  /** Spans in other traces this span is related to */
+  links?: SpanLink[]
+
   /** End the span */
   end(options?: EndSpanOptions<TType>): void
 
@@ -1145,6 +1148,23 @@ interface StartSpanOptions<TType extends SpanType> {
 
   /** Options passed when using a custom sampler strategy */
   customSamplerOptions?: CustomSamplerOptions
+
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[]
+}
+```
+
+### `SpanLink`
+
+A reference to a span in another trace, such as the caller's span when an `MCPServer` serves a request. Unlike a parent, a link doesn't put the two spans in the same trace.
+
+```typescript
+interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string
+
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string
 }
 ```
 
@@ -1165,6 +1185,9 @@ interface UpdateSpanOptions<TType extends SpanType> {
 
   /** Output data */
   output?: SpanOutput<TType>
+
+  /** Links to spans in other traces, added to the links the span already has */
+  links?: SpanLink[]
 }
 ```
 

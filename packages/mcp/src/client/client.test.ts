@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import type { AnySpan } from '@mastra/core/observability';
 import { toStandardSchema } from '@mastra/schema-compat';
 import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -16,6 +17,7 @@ import { z } from 'zod';
 
 import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
+import type { MastraMCPServerDefinition } from './types.js';
 
 // exit-hook keeps its callbacks in a module-level Set and installs its own process
 // listeners exactly once behind an internal flag, so process.listenerCount('exit') is
@@ -2131,6 +2133,122 @@ describe('MastraMCPClient - Custom _meta', () => {
       traceparent: '00-22222222222222222222222222222222-2222222222222222-01',
       tracestate: 'vendor=second',
       baggage: 'tenant=two',
+    });
+  });
+
+  describe('trace context from the calling span', () => {
+    const TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
+    const SPAN_ID = 'b7ad6b7169203331';
+    const callingSpan = (overrides: Record<string, unknown> = {}) =>
+      ({ isValid: true, traceId: TRACE_ID, id: SPAN_ID, ...overrides }) as unknown as AnySpan;
+
+    const sentCallMeta = async (
+      server: Partial<MastraMCPServerDefinition>,
+      context: { tracingContext?: { currentSpan?: AnySpan }; _meta?: Record<string, unknown> },
+    ) => {
+      client = new InternalMastraMCPClient({
+        name: 'span-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false, ...server } as MastraMCPServerDefinition,
+      });
+      await client.connect();
+      const tools = await client.tools();
+      const sendSpy = vi.spyOn(((client as any).client as any).transport, 'send');
+      await tools['echo']?.execute?.({ msg: 'hi' }, context);
+      const call = sendSpy.mock.calls
+        .map(args => args[0] as { method?: string; params?: { _meta?: Record<string, unknown> } })
+        .find(message => message.method === 'tools/call');
+      return call?.params?._meta ?? {};
+    };
+
+    it('names the calling span as the parent of the request', async () => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan: callingSpan() } });
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`);
+      expect(meta).not.toHaveProperty('tracestate');
+    });
+
+    it('names the closest exported ancestor when the calling span is hidden from exporters', async () => {
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan({ getExportedSpanId: () => '1111111111111111' }) } },
+      );
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-1111111111111111-01`);
+    });
+
+    it('keeps a `traceparent` the caller set in `_meta`', async () => {
+      const explicit = '00-33333333333333333333333333333333-3333333333333333-01';
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan() }, _meta: { traceparent: explicit } },
+      );
+
+      expect(meta.traceparent).toBe(explicit);
+    });
+
+    it('leaves the trace fields to a configured `traceContext` provider', async () => {
+      const meta = await sentCallMeta(
+        { traceContext: () => undefined },
+        { tracingContext: { currentSpan: callingSpan() } },
+      );
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+
+    it('links the calling span to the server span named in the reply and drops that key', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: {
+          mastra: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01', other: 1 },
+          vendor: true,
+        },
+      });
+      const update = vi.fn();
+      const tools = await client.tools();
+
+      const output = await tools['echo']?.execute?.(
+        { msg: 'hi' },
+        { tracingContext: { currentSpan: callingSpan({ update }) } },
+      );
+
+      expect(update).toHaveBeenCalledWith({
+        links: [{ traceId: '11111111111111111111111111111111', spanId: '2222222222222222' }],
+      });
+      expect((output as any)._meta).toEqual({ mastra: { other: 1 }, vendor: true });
+    });
+
+    it('adds no link when the reply names no server span', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-no-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: { mastra: { traceparent: 'garbage' } },
+      });
+      const update = vi.fn();
+      const tools = await client.tools();
+
+      await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: callingSpan({ update }) } });
+
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['there is no calling span', undefined],
+      ['the calling span is not recorded', callingSpan({ isValid: false, traceId: 'no-op-trace', id: 'no-op' })],
+      ['the trace id is not W3C-sized', callingSpan({ traceId: 'abc123' })],
+      ['no ancestor of the calling span is exported', callingSpan({ getExportedSpanId: () => undefined })],
+    ])('sends no `traceparent` when %s', async (_label, currentSpan) => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan } });
+
+      expect(meta).not.toHaveProperty('traceparent');
     });
   });
 

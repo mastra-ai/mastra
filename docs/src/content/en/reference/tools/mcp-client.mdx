@@ -188,7 +188,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     type: '() => MCPTraceContext | undefined',
     isOptional: true,
     description:
-      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
+      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Without this option, a tool call made by a traced agent or workflow sends the `traceparent` of its tool call span. When the reply names the server span that handled the call, as `MCPServer` does, the tool call span links to it. Set this option to send your own trace context, or return `undefined` to send none. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` link their request span to the span the `traceparent` names and expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
   },
   {
     name: 'forwardInstructions',

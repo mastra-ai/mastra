@@ -57,9 +57,11 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
   INPUT_KEY,
+  callerSpan,
   hashArguments,
   principalOf,
   readContinuation,
@@ -554,7 +556,7 @@ export class MCPServer extends MCPServerBase {
       }
       const requestSpan = this.startRequestSpan(method, params, { server, ctx, requestContext });
       let reportedError: Error | undefined;
-      return this.traceRequest(
+      const result = await this.traceRequest(
         requestSpan,
         () =>
           handler(request, ctx, {
@@ -566,6 +568,8 @@ export class MCPServer extends MCPServerBase {
           }),
         () => reportedError,
       );
+      // Added after the span recorded the result, so the span output stays the handler's own.
+      return withServerTraceContext(result, requestSpan, callerSpan(ctx) !== undefined);
     });
   }
 
@@ -587,6 +591,7 @@ export class MCPServer extends MCPServerBase {
       | undefined;
     const target = params?.name ?? params?.uri;
     const targetName = typeof target === 'string' ? target : undefined;
+    const caller = connection?.ctx ? callerSpan(connection.ctx) : undefined;
 
     return getOrCreateSpan({
       type: SpanType.MCP_SERVER_REQUEST,
@@ -594,7 +599,7 @@ export class MCPServer extends MCPServerBase {
       entityType: EntityType.MCP_SERVER,
       entityId: this.id,
       entityName: this.name,
-      input: params,
+      input: withoutTraceContext(params),
       attributes: {
         mcpMethod: method,
         targetName,
@@ -605,6 +610,9 @@ export class MCPServer extends MCPServerBase {
         clientVersion: client?.version,
       },
       tracingContext: {},
+      // The request keeps its own trace and links to the caller's span, so each
+      // side keeps its own root and trace summary in every exporter.
+      links: caller && [caller],
       requestContext: connection?.requestContext,
       mastra: this.mastra,
     });

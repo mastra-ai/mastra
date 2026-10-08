@@ -1020,6 +1020,21 @@ The span is named after the method and target (for example `tools/call lookupOrd
 
 A standalone `MCPServer` with no `mastra` instance produces no spans.
 
+### Linking to the caller's trace
+
+A request that carries a W3C `traceparent` keeps its own trace and links to the caller's span. The request span records the caller's trace ID and span ID in its `links`, so you can follow a tool call from the caller's trace to the request it started. The two traces aren't merged: each keeps its own root span and trace summary.
+
+The server reads `traceparent` from two places, in this order:
+
+1. The request `_meta`. `MCPClient` sends it there for every tool call an agent or workflow makes, over HTTP and stdio.
+1. The `traceparent` HTTP header. OpenTelemetry HTTP instrumentation in a non-Mastra caller sends it there.
+
+A request without a valid `traceparent` gets no link. The trace fields are left out of the span input.
+
+The link also works in the other direction. When the request carried a `traceparent`, the reply's `_meta.mastra.traceparent` names the request span, and `MCPClient` adds a link from its tool call span to it. Callers that sent no trace context get nothing back.
+
+Mastra storage saves the links with the spans.
+
 ## Notification delivery
 
 Request-scoped notifications (`context.mcp.log()`, `context.mcp.progress()`) stream inside the request that triggered them, so they reach exactly the caller. Notifications that outlive a request (`resources.notifyListChanged()`, `prompts.notifyListChanged()`, `toolActions.notifyListChanged()`, `resources.notifyUpdated()`) are delivered on the `subscriptions/listen` stream each interested client keeps open. `resources.notifyUpdated()` only reaches clients whose stream includes that resource URI. List-changed notifications reach every client listening for that list. Over stdio the connection itself carries the stream.
