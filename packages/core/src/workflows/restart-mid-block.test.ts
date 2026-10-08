@@ -353,3 +353,159 @@ describe('restart after a crash inside a foreach block', () => {
     expect(ran).toEqual([0, 1, 0, 1]);
   });
 });
+
+/**
+ * Starts `build()` with a store that serializes every snapshot when the write is called (like a
+ * real store) and lets `intercept` delay or fail a write. Returns what the store ended up holding.
+ */
+async function runWithInterceptedStore(
+  build: () => any,
+  intercept: (snapshot: WorkflowRunState, index: number) => Promise<void> | void,
+) {
+  const first = build();
+  const storage = new MockStore();
+  new Mastra({ logger: false, storage, workflows: { wf: first.workflow } });
+  const store = (await storage.getStore('workflows'))!;
+  const persist = store.persistWorkflowSnapshot.bind(store);
+  const writes: WorkflowRunState[] = [];
+  let stored: WorkflowRunState | undefined;
+  let index = 0;
+  vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+    const snapshot = JSON.parse(JSON.stringify(args.snapshot)) as WorkflowRunState;
+    writes.push(snapshot);
+    await intercept(snapshot, index++);
+    await persist({ ...args, snapshot });
+    stored = snapshot;
+  });
+  const run = await first.workflow.createRun();
+  const result = run.start({ inputData: {} }).catch(() => undefined);
+  return { runId: run.runId, result, writes, stored: () => stored };
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+describe('checkpoint writes are ordered with the step start writes', () => {
+  it('parallel: a slow start write of one arm cannot revert a finished sibling to running', async () => {
+    let releaseA!: () => void;
+    const gateA = new Promise<void>(resolve => (releaseA = resolve));
+    const calls: string[] = [];
+    const build = () => {
+      const a = step('a', async () => {
+        calls.push('a');
+        await gateA;
+        return { a: true };
+      });
+      const b = step('b', async () => {
+        calls.push('b');
+        return never();
+      });
+      const workflow = createWorkflow({ id: 'order-parallel', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([a.step, b.step])
+        .commit();
+      return { workflow, fns: {} };
+    };
+    // writes: 0 pending, 1 start of a, 2 start of b (delayed), then a's checkpoint
+    const { stored } = await runWithInterceptedStore(build, async (_snapshot, index) => {
+      if (index === 2) {
+        releaseA();
+        await sleep(150);
+      }
+    });
+    await vi.waitFor(() => expect(calls).toEqual(['a', 'b']));
+    await sleep(400);
+
+    expect(stored()!.context.a?.status).toBe('success');
+    expect(stored()!.context.b?.status).toBe('running');
+  });
+
+  it('foreach: a slow start write of one item cannot drop a finished sibling', async () => {
+    let releaseFirst!: () => void;
+    const gate = new Promise<void>(resolve => (releaseFirst = resolve));
+    const started: number[] = [];
+    const build = () => {
+      const list = step('list', async () => [0, 1]);
+      const charge = step('charge', async ({ inputData }) => {
+        started.push(inputData);
+        if (inputData === 0) {
+          await gate;
+          return { charged: 0 };
+        }
+        return never();
+      });
+      const workflow = createWorkflow({ id: 'order-foreach', inputSchema: anySchema, outputSchema: anySchema })
+        .then(list.step)
+        .foreach(charge.step, { concurrency: 2 })
+        .commit();
+      return { workflow, fns: {} };
+    };
+    // writes: 0 pending, 1 start of list, 2 end of list, 3 start of item 0, 4 start of item 1 (delayed)
+    const { stored, writes } = await runWithInterceptedStore(build, async (snapshot, index) => {
+      if (index === 4) {
+        expect(snapshot.context.charge?.status).toBe('running');
+        releaseFirst();
+        await sleep(150);
+      }
+    });
+    await vi.waitFor(() => expect(started).toEqual([0, 1]));
+    await sleep(400);
+
+    expect(writes.length).toBeGreaterThan(5);
+    const foreachOutput = (stored()!.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput;
+    expect(foreachOutput?.[0]?.status).toBe('success');
+  });
+
+  it('parallel: an arm that finishes after the block failed to persist does not write another checkpoint', async () => {
+    let releaseA!: () => void;
+    const gateA = new Promise<void>(resolve => (releaseA = resolve));
+    const build = () => {
+      const a = step('a', async () => {
+        await gateA;
+        return { a: true };
+      });
+      const b = step('b', async () => ({ b: true }));
+      const workflow = createWorkflow({ id: 'order-failed', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([a.step, b.step])
+        .commit();
+      return { workflow, fns: {} };
+    };
+    // the start write of b fails, which ends the block while a is still running
+    const { writes, result } = await runWithInterceptedStore(build, async (_snapshot, index) => {
+      if (index === 2) throw new Error('storage unavailable');
+    });
+    await result;
+    const writesAtFailure = writes.length;
+    releaseA();
+    await sleep(300);
+
+    expect(writes).toHaveLength(writesAtFailure);
+  });
+});
+
+describe('restart when a foreach item with an undefined output finished before the crash', () => {
+  it('keeps the undefined result and continues after it', async () => {
+    const state = { restarted: false, ran: [] as number[] };
+    const build = () => {
+      const list = step('list', async () => [0, 1, 2]);
+      const charge = step('charge', async ({ inputData }) => {
+        state.ran.push(inputData);
+        if (!state.restarted && inputData === 2) return never();
+        return inputData === 1 ? undefined : { charged: inputData };
+      });
+      const workflow = createWorkflow({ id: 'foreach-undefined', inputSchema: anySchema, outputSchema: anySchema })
+        .then(list.step)
+        .foreach(charge.step, { concurrency: 1 })
+        .commit();
+      return { workflow, fns: { charge: charge.fn } };
+    };
+    const { runId, snapshot } = await crashedCheckpoint(build, {}, () => state.ran.includes(2));
+    const saved = (snapshot.context.charge as any).suspendPayload.__workflow_meta.foreachOutput;
+    expect(saved[1].status).toBe('success');
+
+    state.restarted = true;
+    const { restarted: result, fns } = await restartFrom(build, runId, snapshot);
+
+    expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([2]);
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual([{ charged: 0 }, undefined, { charged: 2 }]);
+  });
+});

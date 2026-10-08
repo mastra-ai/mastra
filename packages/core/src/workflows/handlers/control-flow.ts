@@ -220,78 +220,79 @@ export async function executeParallel(
   }
 
   let execResults: any;
-  // Arms finish in any order. Each finished arm is checkpointed so a crash while
-  // siblings are still running does not re-run it on restart (#26214). The
-  // snapshot is built when the write runs, so serializing the writes keeps a
-  // slower earlier write from landing after a newer one.
-  let checkpointChain: Promise<void> = Promise.resolve();
-  const checkpointArm = (armIndex: number) => {
-    const write = checkpointChain.then(() =>
-      engine.persistStepUpdate({
-        workflowId,
-        runId,
-        resourceId,
-        serializedStepGraph,
-        stepResults,
-        executionContext,
-        workflowStatus: 'running',
-        requestContext,
-        phase: `arm-end.${armIndex}`,
-      }),
-    );
-    checkpointChain = write.catch(() => {});
-    return write;
+  // Arms finish in any order. Each finished arm is checkpointed so a crash while siblings are
+  // still running does not re-run it on restart (#26214). Writes of one run are ordered by the
+  // engine. Once the block has settled (for example a sibling threw) late arms must not write.
+  let blockSettled = false;
+  const checkpointArm = async (armIndex: number) => {
+    if (blockSettled) return;
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: `arm-end.${armIndex}`,
+    });
   };
-  const results: StepResult<any, any, any, any>[] = await Promise.all(
-    steps.map(async (step, i) => {
-      const stepId = getSingleStepEntryId(step);
-      const currStepResult = stepResults[stepId];
-      if (currStepResult && currStepResult.status !== 'running') {
-        return currStepResult;
-      }
-      if (!currStepResult && (perStep || timeTravel)) {
-        return {} as StepResult<any, any, any, any>;
-      }
-      const stepExecResult = await executeChildEntry(engine, step, {
-        workflowId,
-        runId,
-        resourceId,
-        prevOutput,
-        stepResults,
-        serializedStepGraph,
-        restart,
-        timeTravel,
-        resume,
-        executionContext: {
-          activeStepsPath: executionContext.activeStepsPath,
+  let results: StepResult<any, any, any, any>[];
+  try {
+    results = await Promise.all(
+      steps.map(async (step, i) => {
+        const stepId = getSingleStepEntryId(step);
+        const currStepResult = stepResults[stepId];
+        if (currStepResult && currStepResult.status !== 'running') {
+          return currStepResult;
+        }
+        if (!currStepResult && (perStep || timeTravel)) {
+          return {} as StepResult<any, any, any, any>;
+        }
+        const stepExecResult = await executeChildEntry(engine, step, {
           workflowId,
           runId,
-          executionPath: [...executionContext.executionPath, i],
-          stepExecutionPath: executionContext.stepExecutionPath,
-          suspendedPaths: executionContext.suspendedPaths,
-          resumeLabels: executionContext.resumeLabels,
-          retryConfig: executionContext.retryConfig,
-          state: executionContext.state,
-          tracingIds: executionContext.tracingIds,
-        },
-        ...createObservabilityContext({ currentSpan: parallelSpan }),
-        pubsub,
-        abortController,
-        requestContext,
-        actor,
-        outputWriter,
-        disableScorers,
-        perStep,
-      });
-      // Apply context changes from parallel step execution
-      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-      Object.assign(stepResults, stepExecResult.stepResults);
-      if (stepExecResult.result.status === 'success' && !abortController?.signal?.aborted) {
-        await checkpointArm(i);
-      }
-      return stepExecResult.result;
-    }),
-  );
+          resourceId,
+          prevOutput,
+          stepResults,
+          serializedStepGraph,
+          restart,
+          timeTravel,
+          resume,
+          executionContext: {
+            activeStepsPath: executionContext.activeStepsPath,
+            workflowId,
+            runId,
+            executionPath: [...executionContext.executionPath, i],
+            stepExecutionPath: executionContext.stepExecutionPath,
+            suspendedPaths: executionContext.suspendedPaths,
+            resumeLabels: executionContext.resumeLabels,
+            retryConfig: executionContext.retryConfig,
+            state: executionContext.state,
+            tracingIds: executionContext.tracingIds,
+          },
+          ...createObservabilityContext({ currentSpan: parallelSpan }),
+          pubsub,
+          abortController,
+          requestContext,
+          actor,
+          outputWriter,
+          disableScorers,
+          perStep,
+        });
+        // Apply context changes from parallel step execution
+        engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
+        Object.assign(stepResults, stepExecResult.stepResults);
+        if (stepExecResult.result.status === 'success' && !abortController?.signal?.aborted) {
+          await checkpointArm(i);
+        }
+        return stepExecResult.result;
+      }),
+    );
+  } finally {
+    blockSettled = true;
+  }
   const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
 
   const hasSuspended = results.find(result => result.status === 'suspended');
@@ -1182,12 +1183,10 @@ export async function executeForeach(
 
   // Items finish in any order. After each success the finished items are written to
   // `__workflow_meta.foreachOutput`, the channel suspend and restart already read, so a
-  // crash mid-block does not re-run them (#26214). The write snapshots the latest
-  // state when it runs, so serializing writes keeps an older one from landing last.
+  // crash mid-block does not re-run them (#26214). The engine orders all writes of a run.
   // Siblings of a resumed foreach read the suspended entry for their own resume data, and the
   // persistence guard drops `running` writes after a suspend anyway, so only first runs and restarts checkpoint.
   const resumingSuspended = prevPayload?.status === 'suspended';
-  let checkpointChain: Promise<void> = Promise.resolve();
   const checkpointItem = (k: number) => {
     const foreachOutput: PersistedForeachStepResult[] = [];
     prevForeachOutput.forEach((itemResult, index) => {
@@ -1203,21 +1202,17 @@ export async function executeForeach(
     } as StepResult<any, any, any, any>;
     // Iterations share `stepResults[stepId]` and overwrite it with their own result.
     stepResults[stepId] = checkpoint;
-    const write = checkpointChain.then(() =>
-      engine.persistStepUpdate({
-        workflowId,
-        runId,
-        resourceId,
-        serializedStepGraph,
-        stepResults,
-        executionContext,
-        workflowStatus: 'running',
-        requestContext,
-        phase: `item-end.${k}`,
-      }),
-    );
-    checkpointChain = write.catch(() => {});
-    return write;
+    return engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: `item-end.${k}`,
+    });
   };
 
   const worker = async (task: ForeachTask, cb: DoneCallback) => {

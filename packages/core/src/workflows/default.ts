@@ -104,6 +104,28 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     this.lastPersistedStatusByRun.set(runId, status);
   }
 
+  /** Tail of the pending snapshot writes for each run in this process. */
+  private persistTailByRun = new Map<string, Promise<void>>();
+
+  /**
+   * Runs one snapshot write after every earlier write of the same run has settled.
+   * Parallel arms and foreach items persist concurrently, and a store serializes the
+   * snapshot when it is called, so unordered writes could leave an older state last.
+   * A failed write rejects only its own caller, never the writes queued behind it.
+   */
+  runSerializedPersist<T>(runId: string, write: () => Promise<T>): Promise<T> {
+    const result = (this.persistTailByRun.get(runId) ?? Promise.resolve()).then(write);
+    const tail: Promise<void> = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.persistTailByRun.set(runId, tail);
+    void tail.then(() => {
+      if (this.persistTailByRun.get(runId) === tail) this.persistTailByRun.delete(runId);
+    });
+    return result;
+  }
+
   /** Clears the last-persisted-status entry for a run (used on run cleanup). */
   clearLastPersistedStatus(runId: string): void {
     this.lastPersistedStatusByRun.delete(runId);
