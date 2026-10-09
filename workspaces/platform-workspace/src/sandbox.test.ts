@@ -3114,7 +3114,7 @@ describe('PlatformSandbox', () => {
         accessToken: 'sk_test',
         projectId: 'proj_123',
         environmentId: 'env_123',
-        template: async () => ({ repos: [], setupCommand: 'echo hi' }) as any,
+        template: Template().runCmd('echo hi'),
         fetch: fetchMock,
       });
       const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
@@ -3125,6 +3125,7 @@ describe('PlatformSandbox', () => {
 
       const starts = loggerInfoSpy.mock.calls.filter(([message]) => message === 'platform-workspace start complete');
       expect(starts.map(([, fields]) => (fields as { mode: string }).mode)).toEqual(['provision', 'reattach']);
+      expect(starts[0]![1]).toHaveProperty('templateHash');
       expect(starts[1]![1]).not.toHaveProperty('templateHash');
     });
   });
