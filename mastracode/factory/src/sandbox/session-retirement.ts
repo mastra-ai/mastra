@@ -138,10 +138,9 @@ export class SessionRetirementCoordinator {
 
     let projectRepository: ProjectRepository | null | undefined;
     try {
-      projectRepository = await input.sourceControl.projectRepositories.get({
-        orgId: input.orgId,
-        id: session.projectRepositoryId,
-      });
+      projectRepository = session.projectRepositoryId
+        ? await input.sourceControl.projectRepositories.get({ orgId: input.orgId, id: session.projectRepositoryId })
+        : null;
     } catch (error) {
       this.#warn('Factory repository settings could not be loaded for session retirement', {
         orgId: session.orgId,

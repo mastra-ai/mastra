@@ -111,10 +111,9 @@ async function resolveSessionTarget(
   if (session.orgId !== orgId || (session.visibility === 'private' && session.userId !== userId)) {
     throw new Error('The active source-control session is not available to the authenticated user.');
   }
-  const projectRepository = await provider.storage.projectRepositories.get({
-    orgId,
-    id: session.projectRepositoryId,
-  });
+  const projectRepository = session.projectRepositoryId
+    ? await provider.storage.projectRepositories.get({ orgId, id: session.projectRepositoryId })
+    : null;
   if (!projectRepository) throw new Error('The active project repository was not found.');
   const state = context.getState();
   if (state.projectRepositoryId && state.projectRepositoryId !== projectRepository.id) {
