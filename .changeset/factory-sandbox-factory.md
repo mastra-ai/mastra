@@ -17,5 +17,3 @@ new MastraFactory({ sandbox: new E2BFactorySandbox() });
 // Or run sessions on the host machine, one directory per session
 new MastraFactory({ sandbox: new LocalFactorySandbox({ root: '/var/sandboxes' }) });
 ```
-
-`MastraFactory.sandboxDescription` reports the configured provider, its settings as JSON Schema and its capabilities once `prepare()` has run.
