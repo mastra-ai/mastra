@@ -215,13 +215,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * Engine-aware snapshot pruning. The `running`-only history strip (#20747)
    * keeps what a crash-restart reads back, including `stepResultReads`: steps
    * that read an earlier step's result via `getStepResult` (reader → sources).
-   * The evented engine additionally reads persisted step results back at every
-   * step boundary during normal execution, so it retains running history. See
-   * `pruneAgentLoopSnapshot` for the rationale.
+   * The evented engine re-loads the storage-merged context at every step
+   * boundary, so those persisted reads are live data during normal execution,
+   * not only on restart — but the only same-iteration step-result reads are the
+   * declared ones below (`collect-tool-results`/`tool-call` → `llm-execution`),
+   * so the strip already retains exactly what evented reads back. Retaining
+   * *all* terminal history (the previous blanket `retainRunningHistory`) is a
+   * needless copy of every completed step's payload/output and is what let a
+   * long evented run balloon snapshots into a heap OOM (COR-1431).
    */
   protected pruneSnapshotHook(stepResultReads: StepResultReads = {}): typeof pruneAgentLoopSnapshot {
-    const retainRunningHistory = this.#options?.engine === 'evented';
-    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory, stepResultReads });
+    return args => pruneAgentLoopSnapshot({ ...args, stepResultReads });
   }
 
   // ── Runtime hooks ──────────────────────────────────────────────────────
@@ -411,8 +415,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // claims still land and de-dup still works.
           allowUnclaimedResumes: true,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
-          // resume never reads before persisting. Engine-aware: evented
-          // retains running history (see pruneSnapshotHook).
+          // resume never reads before persisting. The declared reads below cover
+          // every same-iteration step-result read on any engine (see
+          // pruneSnapshotHook).
           pruneSnapshot: this.pruneSnapshotHook({
             [toolCallStep.id]: [llmExecutionStep.id],
             [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id],
@@ -819,8 +824,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // be de-duplicated.
           allowUnclaimedResumes: true,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
-          // resume never reads before persisting. Engine-aware: evented
-          // retains running history (see pruneSnapshotHook).
+          // resume never reads before persisting. The outer loop reads iteration
+          // state from workflow `value`, not from step results, so there are no
+          // declared step-result reads here (see pruneSnapshotHook).
           pruneSnapshot: this.pruneSnapshotHook(),
           validateInputs: false,
           // Engine step events off for the same reason as the iteration
