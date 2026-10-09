@@ -625,6 +625,58 @@ describe('GithubRules', () => {
     });
   });
 
+  it('re-evaluates against the fresh revision when a concurrent write makes the commit stale', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const original = workItems.commitRuleEvaluation.bind(workItems);
+    const commit = vi
+      .spyOn(workItems, 'commitRuleEvaluation')
+      .mockImplementationOnce(input => original({ ...input, expectedRevision: (input.expectedRevision ?? 0) - 1 }));
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-race', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+
+    expect(commit).toHaveBeenCalledTimes(2);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(d => d.decision)).toEqual([
+      expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-triage' }),
+    ]);
+  });
+
+  it('fails the delivery after repeated stale commits so a redelivery can process it', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation').mockResolvedValue({ status: 'stale' });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-hot', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+      ),
+    ).rejects.toThrow('kept losing revision races');
+    expect(commit).toHaveBeenCalledTimes(3);
+  });
+
   it('ignores a marked handoff comment authored by the configured GitHub App', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await createLinkedIssue(workItems, project.id);

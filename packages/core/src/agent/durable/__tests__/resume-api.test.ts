@@ -932,6 +932,79 @@ describe('Resume with CachingPubSub Event Replay', () => {
     expect(resumedText).not.toContain('STALE');
   });
 
+  it('closes a closeOnSuspend stream only after the suspended snapshot is persisted (issue #26454)', async () => {
+    const storage = new InMemoryStore();
+    const memory = { thread: 'persist-order-thread', resource: 'persist-order-resource' };
+    const workflows = (await storage.getStore('workflows'))!;
+    // Delay the suspended snapshot write so the SUSPENDED event (published
+    // from inside the tool-call step) reliably arrives before persistence.
+    const originalPersist = workflows.persistWorkflowSnapshot.bind(workflows);
+    vi.spyOn(workflows, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      if ((args.snapshot as WorkflowRunState | undefined)?.status === 'suspended') {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      return originalPersist(args);
+    });
+
+    const tool = createTool({
+      id: 'approvalTool',
+      description: 'Wait for approval',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async (input, context) => {
+        if (!context?.agent?.resumeData) {
+          return context?.agent?.suspend?.({ reason: `Approve ${input.action}?` });
+        }
+        return { completed: true };
+      },
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) =>
+        JSON.stringify(prompt).includes('"type":"tool-result"')
+          ? createTextModel('Resumed').doStream({ prompt } as any)
+          : createSuspendingToolModel('approvalTool', { action: 'delete' }).doStream({ prompt } as any),
+    });
+    const agent = new Agent({
+      id: 'persist-order-agent',
+      name: 'Persist Order Agent',
+      instructions: 'Use the tool, then answer.',
+      model: model as LanguageModelV2,
+      memory: new MockMemory({ storage: new InMemoryStore() }),
+      tools: { approvalTool: tool },
+    });
+    const durableAgent = createDurableAgent({
+      agent,
+      pubsub: new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache()),
+    });
+    new Mastra({ agents: { persistOrderAgent: durableAgent }, storage, logger: false });
+
+    const onSuspended = vi.fn();
+    const started = await durableAgent.stream('Delete the file', { memory, closeOnSuspend: true, onSuspended });
+    for await (const _chunk of started.fullStream) void _chunk;
+
+    const persisted = await workflows.getWorkflowRunById({
+      runId: started.runId,
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+    });
+    const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+    expect(snapshot?.status).toBe('suspended');
+    expect(onSuspended).toHaveBeenCalledOnce();
+
+    // Cold resume immediately after the stream closed.
+    started.cleanup();
+    globalRunRegistry.clear();
+    const resumed = await durableAgent.resumeStream(
+      { approved: true },
+      { runId: started.runId, toolCallId: 'call-1', memory },
+    );
+    const text: string[] = [];
+    for await (const chunk of resumed.fullStream) {
+      if (chunk.type === 'text-delta') text.push(chunk.payload.text);
+    }
+    expect(text.join('')).toContain('Resumed');
+  });
+
   it('should deduplicate events during resume replay', async () => {
     const receivedEvents: Event[] = [];
     const mockModel = createTextModel('Response');
