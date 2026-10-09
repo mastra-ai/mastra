@@ -83,6 +83,7 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
       ...options,
       id: ctx.sessionId,
       template: this.template(ctx, settings),
+      ...(ctx.workingDirectory ? { workingDirectory: ctx.workingDirectory } : {}),
     });
   }
 }

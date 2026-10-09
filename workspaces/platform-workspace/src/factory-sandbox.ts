@@ -124,6 +124,9 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
+      // The template clones under this directory; the session looks for the
+      // checkouts there instead of probing the VM's home.
+      ...(ctx.workingDirectory ? { workingDirectory: ctx.workingDirectory } : {}),
       idleTimeoutMinutes:
         settings.idleTimeoutMinutes ?? defaults?.idleTimeoutMinutes ?? DEFAULT_SETTINGS.idleTimeoutMinutes,
     });
