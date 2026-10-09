@@ -21,9 +21,8 @@ import {
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
   knowledgeScopeIdsKey,
-  isPublishedKnowledgeV1Layout,
-  PUBLISHED_KNOWLEDGE_V1_COLUMNS,
-  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  REPLACEABLE_KNOWLEDGE_TABLE_NAMES,
+  replaceableKnowledgeLayoutIndexNames,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_IMPORT_RUNS,
@@ -730,9 +729,9 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /**
-   * Knowledge v1 was experimental and its data is not migrated. When exactly the published v1 tables
-   * and indexes are the only Knowledge objects in this store's schema, drop them, discarding any rows
-   * they hold, so canonical storage can initialize. Partial or unfamiliar tables, views, triggers, and
+   * Knowledge v1 and the interim canonical-model release were experimental and their data is not
+   * migrated. When exactly the published v1 or interim tables and indexes are the only Knowledge objects
+   * in this store's schema, drop them, discarding any rows they hold, so canonical storage can initialize. Partial or unfamiliar tables, views, triggers, and
    * extra indexes all leave the database untouched. Runs inside the caller's first-boot transaction.
    * Returns `'dependents'` when other objects depend on the tables, since a reset cannot remove them either.
    */
@@ -745,7 +744,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const tables: string[] = [];
     for (const row of relations.rows) {
       const name = String(row.table_name);
-      if (row.table_type !== 'BASE TABLE' || !PUBLISHED_KNOWLEDGE_V1_COLUMNS.has(name)) return null;
+      if (row.table_type !== 'BASE TABLE' || !REPLACEABLE_KNOWLEDGE_TABLE_NAMES.has(name)) return null;
       tables.push(name);
     }
     if (tables.length === 0) return null;
@@ -755,14 +754,15 @@ export class KnowledgePG extends KnowledgeStorage {
     });
     const columnsByTable = new Map<string, string[]>(tables.map(table => [table, []]));
     for (const row of columns.rows) columnsByTable.get(String(row.table_name))?.push(String(row.column_name));
-    if (!isPublishedKnowledgeV1Layout(columnsByTable, { timestampShadows: true })) return null;
+    const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable, { timestampShadows: true });
+    if (!knownIndexes) return null;
     const indexes = await tx.execute({
       sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[])`,
       args: [schema, tables],
     });
     const indexNames = indexes.rows.map(row => String(row.indexname));
     for (const name of indexNames) {
-      if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return null;
+      if (!knownIndexes.has(name) && !name.endsWith('_pkey')) return null;
     }
     const views = await tx.execute({
       sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) LIMIT 1`,

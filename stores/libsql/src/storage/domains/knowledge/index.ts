@@ -22,9 +22,8 @@ import {
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
   knowledgeScopeIdsKey,
-  isPublishedKnowledgeV1Layout,
-  PUBLISHED_KNOWLEDGE_V1_COLUMNS,
-  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  REPLACEABLE_KNOWLEDGE_TABLE_NAMES,
+  replaceableKnowledgeLayoutIndexNames,
   RETIRED_KNOWLEDGE_TABLE_NAMES,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_IMPORT_RUNS,
@@ -505,10 +504,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   /**
-   * Knowledge v1 was experimental and its data is not migrated. When exactly the published v1 tables
-   * and indexes are the only Knowledge objects, drop them, discarding any rows they hold, so canonical
-   * storage can initialize. Partial or unfamiliar tables, views, triggers, and extra indexes all leave
-   * the database untouched.
+   * Knowledge v1 and the interim canonical-model release were experimental and their data is not
+   * migrated. When exactly the published v1 or interim tables and indexes are the only Knowledge
+   * objects, drop them, discarding any rows they hold, so canonical storage can initialize. Partial or
+   * unfamiliar tables, views, triggers, and extra indexes all leave the database untouched.
    */
   async #replacePublishedV1(): Promise<boolean> {
     return this.#transaction(async tx => {
@@ -516,15 +515,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
       );
       const tables: string[] = [];
+      const indexes: string[] = [];
       for (const row of objects.rows) {
         const type = String(row.type);
         const name = String(row.name);
-        if (type === 'table' && PUBLISHED_KNOWLEDGE_V1_COLUMNS.has(name)) {
-          tables.push(name);
-          continue;
-        }
-        const knownIndex = PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) || name.startsWith('sqlite_autoindex_');
-        if (type !== 'index' || !knownIndex) return false;
+        if (type === 'table' && REPLACEABLE_KNOWLEDGE_TABLE_NAMES.has(name)) tables.push(name);
+        else if (type === 'index') indexes.push(name);
+        else return false;
       }
       const columnsByTable = new Map<string, string[]>();
       for (const table of tables) {
@@ -534,7 +531,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           columns.rows.map(row => String(row.name)),
         );
       }
-      if (!isPublishedKnowledgeV1Layout(columnsByTable)) return false;
+      const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable);
+      if (!knownIndexes) return false;
+      if (!indexes.every(name => knownIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) return false;
+      // Children before the tables they reference.
+      const dropOrder: string[] = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
+      tables.sort((a, b) => dropOrder.indexOf(a) - dropOrder.indexOf(b));
       for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
       return true;
     });
