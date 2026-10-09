@@ -164,8 +164,11 @@ async function reportCuratorError(
   }
 }
 
-function createKnowledgeDescriptionInstructions(memory: Memory, scope: KnowledgeScope): string | undefined {
-  const context = memory.getKnowledgeInstance()?.__getDescriptionContext(scope);
+async function createKnowledgeDescriptionInstructions(
+  memory: Memory,
+  scope: KnowledgeScope,
+): Promise<string | undefined> {
+  const context = await memory.getKnowledgeInstance()?.__getDescriptionContext(scope);
   if (!context || (!context.description && context.scopes.length === 0)) return undefined;
 
   const sections = [
@@ -202,7 +205,7 @@ export async function createCuratorAgent(
     name: 'Subconscious Curate',
     instructions: [
       DEFAULT_INSTRUCTIONS,
-      createKnowledgeDescriptionInstructions(memory, scope),
+      await createKnowledgeDescriptionInstructions(memory, scope),
       subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
       config.instructions?.trim(),
     ]

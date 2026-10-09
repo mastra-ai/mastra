@@ -30,7 +30,7 @@ type KnowledgeWriteToolsMemory = {
     | {
         __getVisibleStructureScopes(
           scope: KnowledgeScope,
-        ): Array<{ address: string; name: string; description?: string; heldAncestors?: string[] }>;
+        ): Promise<Array<{ address: string; name: string; description?: string; heldAncestors?: string[] }>>;
         materializeScope?(input: {
           address: string;
           contextualScopeAddress: string;
@@ -84,12 +84,12 @@ function rungOf(address: string): KnowledgeScopeLevel | undefined {
  * scope widens to the structural scope's held identity ancestor, so the node is readable
  * wherever the structural scope is.
  */
-function resolveNodePlacement(
+async function resolveNodePlacement(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
   recordLevel: KnowledgeScopeLevel | undefined,
-): { nodeScope: KnowledgeScope; scopeAddresses?: string[] } {
+): Promise<{ nodeScope: KnowledgeScope; scopeAddresses?: string[] }> {
   const firstRecordLevel = recordLevel ?? options.defaultScope;
   if (placement !== undefined && (SCOPE_RUNGS as readonly string[]).includes(placement)) {
     return { nodeScope: expandKnowledgeScope(options.scope, placement as KnowledgeScopeLevel) };
@@ -97,7 +97,7 @@ function resolveNodePlacement(
   if (placement === undefined) {
     return { nodeScope: expandKnowledgeScope(options.scope, firstRecordLevel) };
   }
-  const visible = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scope) ?? [];
+  const visible = (await memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scope)) ?? [];
   const structural = visible.find(visibleScope => visibleScope.address === placement);
   if (!structural) {
     throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
@@ -193,7 +193,7 @@ export function createKnowledgeWriteTools(
           when?: string;
         };
         const store = await getStore(memory);
-        const { nodeScope, scopeAddresses } = resolveNodePlacement(memory, options, value.nodeScope, value.scope);
+        const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
