@@ -1,6 +1,8 @@
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
 import { MastraError } from '@mastra/core/error';
+import { EntityType, SpanType } from '@mastra/core/observability';
+import { buildInputPreview, parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_TABLE_NAMES,
@@ -17,7 +19,10 @@ import {
   TABLE_LOG_EVENTS,
   TABLE_METRIC_EVENTS,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS,
+  TRACE_BRANCHES_MV_DDL,
+  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import {
   checkLegacySpanMigrationStatus,
@@ -957,5 +962,121 @@ describe('migrateLegacySpans (mastra_ai_spans → mastra_span_events)', () => {
 
     const result = await migrateLegacySpans(client);
     expect(result.migratedRows).toBe(1);
+  });
+});
+
+describe('inputPreview column (ClickHouse v-next)', () => {
+  let client: ClickHouseClient;
+  const config = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+
+  beforeAll(() => {
+    client = createClient(config);
+  });
+
+  beforeEach(async () => {
+    await dropAll(client);
+  });
+
+  afterAll(async () => {
+    await dropAll(client);
+    await client.close();
+  });
+
+  it('adds the column to existing tables and lists rows written before it with the same preview', async () => {
+    const store = new ObservabilityStorageClickhouseVNext(config);
+    await store.init();
+    // A deployment from before the column: the tables lack it, the views were created without it,
+    // and the writer doesn't send it.
+    await client.command({ query: `DROP VIEW ${MV_TRACE_ROOTS}` });
+    await client.command({ query: `DROP VIEW ${MV_TRACE_BRANCHES}` });
+    for (const table of [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES]) {
+      await client.command({ query: `ALTER TABLE ${table} DROP COLUMN inputPreview` });
+    }
+    await client.command({ query: TRACE_ROOTS_MV_DDL });
+    await client.command({ query: TRACE_BRANCHES_MV_DDL });
+    const oldInput = JSON.stringify({
+      messages: [
+        { role: 'system', content: 'be brief' },
+        { role: 'user', content: 'written before the column existed' },
+      ],
+    });
+    await client.insert({
+      table: TABLE_SPAN_EVENTS,
+      values: [
+        {
+          dedupeKey: 'trace-old:root-old',
+          traceId: 'trace-old',
+          spanId: 'root-old',
+          parentSpanId: null,
+          name: 'old run',
+          spanType: 'agent_run',
+          startedAt: '2026-08-01 10:00:00.000',
+          endedAt: '2026-08-01 10:00:01.000',
+          input: oldInput,
+        },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    await store.init();
+    const span = {
+      parentSpanId: null,
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      startedAt: new Date('2026-08-01T11:00:00.000Z'),
+      endedAt: new Date('2026-08-01T11:00:01.000Z'),
+    };
+    const newInput = { messages: [{ role: 'user', content: 'x'.repeat(150) }] };
+    await store.createSpan({
+      span: { ...span, traceId: 'trace-new', spanId: 'root-new', name: 'new run', input: newInput },
+    });
+    await store.createSpan({ span: { ...span, traceId: 'trace-empty', spanId: 'root-empty', name: 'empty run' } });
+    await store.createSpan({
+      span: {
+        ...span,
+        traceId: 'trace-new',
+        spanId: 'child',
+        parentSpanId: 'root-new',
+        name: 'child',
+        input: newInput,
+      },
+    });
+
+    // Written on root spans only, and copied into trace_roots by the roots view.
+    const stored = await client.query({
+      query: `SELECT * FROM (
+          SELECT 'spans' AS t, spanId, inputPreview FROM ${TABLE_SPAN_EVENTS}
+          UNION ALL SELECT 'roots' AS t, spanId, inputPreview FROM ${TABLE_TRACE_ROOTS}
+        ) ORDER BY t, spanId`,
+      format: 'JSONEachRow',
+    });
+    const newPreview = buildInputPreview(JSON.stringify(newInput))!;
+    expect(newPreview).toHaveLength(101);
+    expect(await stored.json()).toEqual([
+      { t: 'roots', spanId: 'root-empty', inputPreview: '' },
+      { t: 'roots', spanId: 'root-new', inputPreview: newPreview },
+      { t: 'roots', spanId: 'root-old', inputPreview: null },
+      { t: 'spans', spanId: 'child', inputPreview: null },
+      { t: 'spans', spanId: 'root-empty', inputPreview: '' },
+      { t: 'spans', spanId: 'root-new', inputPreview: newPreview },
+      { t: 'spans', spanId: 'root-old', inputPreview: null },
+    ]);
+
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' };
+    const expected = {
+      'trace-empty': null,
+      'trace-new': newPreview,
+      'trace-old': 'written before the column existed',
+    };
+    for (const request of [{}, { pagination: { page: 0, perPage: 10 } }]) {
+      const response = await store.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, ...request })));
+      if (!('traces' in response)) throw new Error('Expected traces');
+      expect(Object.fromEntries(response.traces.map(trace => [trace.traceId, trace.inputPreview]))).toEqual(expected);
+    }
   });
 });
