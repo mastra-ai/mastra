@@ -1720,12 +1720,10 @@ describe('MastraModelOutput', () => {
 
   describe('goal evaluation run-buffer truncation', () => {
     /**
-     * The normal terminal goal-loop sequence in durable-engine chunk order:
-     * each judged turn ends with a step-finish followed by a goal evaluation,
-     * and the LAST evaluation is terminal (`shouldContinue: false`) — the
-     * final turn's chunks arrive BEFORE it, never after. (In-process engines
-     * emit the goal chunk before the judged turn's step-finish; covered
-     * separately below.)
+     * A terminal goal-loop sequence the run buffer must handle: each judged
+     * turn's step-finish is followed by a goal evaluation, and the LAST
+     * evaluation is terminal (`shouldContinue: false`). The final turn's
+     * chunks arrive before that terminal evaluation, never after it.
      */
     function createGoalLoopChunks(runId: string): ChunkType[] {
       return [

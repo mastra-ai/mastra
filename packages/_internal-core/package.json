@@ -78,6 +78,16 @@
         "default": "./dist/routes/index.cjs"
       }
     },
+    "./durable": {
+      "import": {
+        "types": "./dist/durable/index.d.ts",
+        "default": "./dist/durable/index.js"
+      },
+      "require": {
+        "types": "./dist/durable/index.d.cts",
+        "default": "./dist/durable/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,

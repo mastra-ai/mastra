@@ -1,6 +1,12 @@
-import type { BaseIterationState } from './schemas';
+export interface DurableStepFinishState {
+  accumulatedSteps: unknown[];
+  deferredStepFinishChunk?: unknown;
+  lastStepResult?: {
+    reason?: string;
+  };
+}
 
-export function buildDurableStepContent(state: BaseIterationState): unknown[] {
+export function buildDurableStepContent(state: DurableStepFinishState): unknown[] {
   const step = state.accumulatedSteps.at(-1) as any;
   if (!step) return [];
 
@@ -38,7 +44,7 @@ export function buildDurableStepContent(state: BaseIterationState): unknown[] {
   return content;
 }
 
-export function buildDeferredStepFinishChunk(state: BaseIterationState, isContinued: boolean): any | undefined {
+export function buildDeferredStepFinishChunk(state: DurableStepFinishState, isContinued: boolean): any | undefined {
   const deferredChunk = state.deferredStepFinishChunk as any;
   if (!deferredChunk) return undefined;
 

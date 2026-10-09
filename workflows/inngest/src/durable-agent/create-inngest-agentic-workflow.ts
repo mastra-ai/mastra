@@ -1,3 +1,4 @@
+import { buildDeferredStepFinishChunk } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableLLMExecutionStep,
@@ -16,7 +17,6 @@ import {
   executeDurableAgentScorers,
   globalRunRegistry,
   pruneAgentLoopSnapshot,
-  buildDeferredStepFinishChunk,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,

@@ -9540,6 +9540,9 @@ importers:
       '@hono/node-server':
         specifier: 2.1.3
         version: 2.1.3(hono@4.13.8)
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../packages/_internal-core
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config

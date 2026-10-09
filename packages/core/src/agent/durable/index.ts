@@ -210,8 +210,6 @@ export {
   calculateAccumulatedUsage,
   buildStepRecord,
   createBaseIterationStateUpdate,
-  buildDeferredStepFinishChunk,
-  buildDurableStepContent,
   resolveDurableToolCallConcurrency,
 } from './workflows/shared';
 export type {
