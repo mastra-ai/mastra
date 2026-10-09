@@ -1,4 +1,5 @@
 import type { TUI } from '@earendil-works/pi-tui';
+import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';
@@ -46,6 +47,30 @@ describe('SubagentExecutionComponent', () => {
       writable: true,
       configurable: true,
     });
+  });
+
+  it.each([2, 3] as const)('uses one background for the title, task, activity, and result at color level %i', level => {
+    const originalLevel = chalk.level;
+    chalk.level = level;
+    try {
+      const comp = new SubagentExecutionComponent('question', 'What is Mastra?', mockTui, undefined, {
+        label: 'mastra',
+      });
+      comp.addToolStart('search', { query: 'Mastra' });
+      comp.finish(false, 10, 'Question received');
+      comp.setExpanded(true);
+      const lines = comp.render(WIDTH);
+      const backgrounds = ['mastra question', 'What is Mastra?', 'search', 'Question received'].map(text => {
+        const line = lines.find(line => stripAnsi(line).includes(text));
+        expect(line).toBeDefined();
+        const background = line!.match(/\x1b\[48;[\d;]+m/)?.[0];
+        expect(background).toBeDefined();
+        return background;
+      });
+      expect(new Set(backgrounds).size).toBe(1);
+    } finally {
+      chalk.level = originalLevel;
+    }
   });
 
   it('uses elapsed time when finish has no reported duration', () => {

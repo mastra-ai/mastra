@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
@@ -42,6 +43,7 @@ import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -669,6 +671,30 @@ export function createDurableToolCallStep() {
       }
 
       const doFlush = async (messagesToFlush = messageList) => {
+        if (
+          saveQueueManager &&
+          messagesToFlush &&
+          memory &&
+          state?.threadId &&
+          state.resourceId &&
+          !state.memoryConfig?.readOnly
+        ) {
+          const authorizationRequestContext =
+            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+          const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+            authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+              mastra: mastra as Mastra | undefined,
+              user: authorizationRequestContext.get('user'),
+              threadId: state.threadId!,
+              resourceId: state.resourceId!,
+              agentId: initData.agentId,
+              requestContext: authorizationRequestContext,
+              permission,
+              actor: agentOptions.actor,
+            });
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+          if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
+        }
         await flushMessagesBeforeSuspension({
           saveQueueManager,
           messageList: messagesToFlush,

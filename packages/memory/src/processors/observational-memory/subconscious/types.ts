@@ -40,7 +40,6 @@ export interface SubconsciousConfig {
   observation?: SubconsciousObservationEntry[];
   model?: SubconsciousModel;
   defaultScope?: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
   tools?: boolean;
   activity?: false | { recentUpdates?: number };
   /**
@@ -62,7 +61,6 @@ export interface ResolvedSubconsciousAgent {
 export interface ResolvedSubconsciousConfig {
   observation: ResolvedSubconsciousAgent[];
   defaultScope: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
   tools: boolean;
   activity: false | { recentUpdates: number };
   pins: false | { maxPins: number; maxCharacters: number };

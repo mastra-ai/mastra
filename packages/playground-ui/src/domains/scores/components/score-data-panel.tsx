@@ -53,18 +53,20 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
         {score && (
           <>
             <DataPanel.Header>
-              <DataPanel.CloseButton onClick={onClose} />
               <DataPanel.Heading>
                 Score
                 <DataPanel.CopyId id={score.id} />
               </DataPanel.Heading>
               <DataPanel.HeaderActions>
-                <DataPanel.NextPrevNav
-                  onPrevious={onPrevious}
-                  onNext={onNext}
-                  previousLabel="Go to previous score"
-                  nextLabel="Go to next score"
-                />
+                {(onPrevious || onNext) && (
+                  <DataPanel.NextPrevNav
+                    onPrevious={onPrevious}
+                    onNext={onNext}
+                    previousLabel="Go to previous score"
+                    nextLabel="Go to next score"
+                  />
+                )}
+                <DataPanel.CloseButton icon="x" onClick={onClose} label="Close score" tooltip="Close score" />
               </DataPanel.HeaderActions>
             </DataPanel.Header>
 

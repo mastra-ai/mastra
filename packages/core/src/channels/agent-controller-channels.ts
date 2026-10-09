@@ -6,6 +6,7 @@ import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentController } from '../agent-controller/agent-controller';
 import type { Session } from '../agent-controller/session';
 import type { AgentControllerRequestContext } from '../agent-controller/types';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';
@@ -447,6 +448,13 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
+    if (this.resolveSession) {
+      await controller.requireAgentControllerFGA({
+        permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+        requestContext,
+        resourceId: channelResourceId,
+      });
+    }
     // `createSession` is get-or-create keyed by resourceId, so follow-up messages
     // on the same thread reuse the cached session bound to this thread. The
     // dispatch requestContext must flow in: a dynamic workspace factory is
@@ -500,7 +508,7 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<boolean> {
     const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
     if (!this.controller || !ctx?.resourceId || !ctx.session?.id) return true;
-    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope);
+    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope, requestContext);
     if (!session || session.identity.getId() !== ctx.session.id) return true;
     return session.resolveToolApproval(toolName) === 'ask';
   }
