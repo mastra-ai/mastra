@@ -2,7 +2,13 @@ import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
 import { deepEqual } from '../../utils/deep-equal';
 import type { Knowledge } from '../index';
-import type { KnowledgeImporterBindingHandle } from './types';
+import type { KnowledgeCitationHost, KnowledgeCitationTarget } from './citations';
+import {
+  KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX,
+  type KnowledgeCitationEntity,
+  type KnowledgeCitationRef,
+  type KnowledgeImporterBindingHandle,
+} from './types';
 
 export interface StaticKnowledgeNodeInput {
   readonly name: string;
@@ -30,6 +36,18 @@ export interface StaticKnowledgeImporterOperations {
   removeNode(address: string): Promise<{ node: KnowledgeNode; deleted: boolean } | null>;
 }
 
+/**
+ * Durable intent written before a node update commits. Node updates bump attached record versions,
+ * so tracked record ownership must advance with them; if the run is interrupted between the commit
+ * and that advance, replay uses this marker plus the run's committed edit activity to finish it.
+ */
+interface PendingRecordTrackingRefresh {
+  readonly importRunId: string;
+  readonly nodeId: string;
+  readonly previousNodeVersion: number;
+  readonly records: ReadonlyArray<{ readonly id: string; readonly version: number }>;
+}
+
 /** @internal */
 export async function createStaticKnowledgeImporterOperations(input: {
   knowledge: Knowledge;
@@ -37,7 +55,8 @@ export async function createStaticKnowledgeImporterOperations(input: {
   source: string;
   scopeAddress: string;
   importRunId: string;
-}): Promise<StaticKnowledgeImporterOperations> {
+  assertLeaseOwned?: () => Promise<void>;
+}): Promise<StaticKnowledgeImporterOperations & KnowledgeCitationHost> {
   const importer = input.knowledge.getImporter(input.importerId);
   if (!importer) throw new Error(`Knowledge importer ${input.importerId} is not registered`);
   const storage = await input.knowledge.getStorage();
@@ -70,7 +89,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
     !run ||
     run.importerId !== input.importerId ||
     run.binding !== binding ||
-    run.importKind !== 'static' ||
+    (run.importKind !== 'static' && run.importKind !== 'agentic') ||
     run.status !== 'running'
   ) {
     throw new Error(`Knowledge import run ${input.importRunId} is not active`);
@@ -88,6 +107,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
       role: selected.role,
     },
     importRunId: input.importRunId,
+    assertLeaseOwned: input.assertLeaseOwned,
   });
 }
 
@@ -221,6 +241,43 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     return deleted;
   }
 
+  /** Owned records whose tracked version still matches, captured before a node update. */
+  async snapshotTrackedRecords(): Promise<Array<{ id: string; version: number }>> {
+    const records = await this.listKnowledge();
+    const tracked = await Promise.all(
+      records.map(async record => {
+        const entry = await this.#getTrackedRecord(record.id);
+        return entry?.recordId === record.id && entry.version === record.version
+          ? { id: record.id, version: record.version }
+          : null;
+      }),
+    );
+    return tracked.filter((record): record is { id: string; version: number } => record !== null);
+  }
+
+  /** Advances tracking only for the exact mechanical bump of records that were owned before the update. */
+  async refreshTrackedRecordsAfterNodeUpdate(records: PendingRecordTrackingRefresh['records']): Promise<void> {
+    const storage = await this.#knowledge.getStorage();
+    await Promise.all(
+      records.map(async previous => {
+        const [record, tracked] = await Promise.all([
+          storage.getRecord({ id: previous.id }),
+          this.#getTrackedRecord(previous.id),
+        ]);
+        if (
+          record?.nodeId === this.node.id &&
+          record.source === this.#importer.source &&
+          record.version === previous.version + 1 &&
+          tracked?.recordId === record.id &&
+          tracked.version === previous.version &&
+          isExactScope(await storage.getRecordScopeIds(record.id), this.#importer.scopeId)
+        ) {
+          await this.#setTrackedRecord(record);
+        }
+      }),
+    );
+  }
+
   async #getTrackedRecord(id: string): Promise<{ recordId: string; version: number } | undefined> {
     const state = await this.#knowledge.getImportState({
       importerId: this.#importer.importerId,
@@ -263,15 +320,57 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   }
 }
 
-class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOperations {
+class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOperations, KnowledgeCitationHost {
   readonly #knowledge: Knowledge;
   readonly #importer: KnowledgeImporterBindingHandle;
   readonly #importRunId: string;
+  readonly #assertLeaseOwned?: () => Promise<void>;
 
-  constructor(input: { knowledge: Knowledge; importer: KnowledgeImporterBindingHandle; importRunId: string }) {
+  constructor(input: {
+    knowledge: Knowledge;
+    importer: KnowledgeImporterBindingHandle;
+    importRunId: string;
+    assertLeaseOwned?: () => Promise<void>;
+  }) {
     this.#knowledge = input.knowledge;
     this.#importer = input.importer;
     this.#importRunId = input.importRunId;
+    this.#assertLeaseOwned = input.assertLeaseOwned;
+  }
+
+  get source(): string {
+    return this.#importer.source;
+  }
+
+  /**
+   * Classifies a cited identity for this binding. Own-source citations are usable only when this
+   * binding still owns the node; other sources are usable only when the node is readable from this
+   * binding's resolution scopes. Hidden, deleted, and moved nodes are all `unusable`.
+   */
+  async citationTarget(ref: KnowledgeCitationRef): Promise<KnowledgeCitationTarget> {
+    await this.#assertRunActive();
+    const storage = await this.#knowledge.getStorage();
+    const binding = await storage.getNodeAddress({ source: ref.source, address: normalizeAddress(ref.address) });
+    if (!binding) return { status: 'unbound' };
+    const node = await this.#knowledge.getNode(binding.nodeId);
+    if (!node || node.deletedAt) return { status: 'unusable' };
+    const scopeIds = await storage.getNodeScopeIds(node.id);
+    const usable =
+      ref.source === this.#importer.source
+        ? isExactScope(scopeIds, this.#importer.scopeId)
+        : scopeIds.some(scopeId => this.#importer.resolutionScopeIds.includes(scopeId));
+    return usable ? { status: 'usable', nodeId: node.id } : { status: 'unusable' };
+  }
+
+  /** Writes a fetched own-source entity through ordinary binding authority; replay never duplicates records. */
+  async storeCitedEntity(address: string, entity: KnowledgeCitationEntity): Promise<string> {
+    const node = await this.upsertNode(address, { name: entity.name, metadata: entity.metadata });
+    const existing = await node.listKnowledge();
+    for (const record of entity.records ?? []) {
+      const present = existing.some(item => (record.id ? item.id === record.id : item.text === record.text));
+      if (!present) existing.push(await node.appendKnowledge(record));
+    }
+    return node.id;
   }
 
   async getNode(address: string): Promise<StaticKnowledgeNodeHandle | null> {
@@ -296,7 +395,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         return this.#handle(binding.address, node);
       }),
     );
-    return handles.filter((handle): handle is StaticKnowledgeNodeHandle => handle !== null);
+    return handles.filter((handle): handle is StaticKnowledgeNodeHandleImpl => handle !== null);
   }
 
   async upsertNode(address: string, input: StaticKnowledgeNodeInput): Promise<StaticKnowledgeNodeHandle> {
@@ -325,8 +424,10 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       existingScopeIds.length === 1 &&
       existingScopeIds[0] === this.#importer.scopeId;
     if (matchesImporterState) {
+      const handle = this.#handle(normalized, existing);
+      await this.#recoverPendingRecordTrackingRefresh(normalized, handle);
       await this.#setTrackedNode(normalized, existing);
-      return this.#handle(normalized, existing);
+      return handle;
     }
     if (this.#importer.role === 'append') {
       throw new Error(
@@ -337,6 +438,13 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     if (tracked?.nodeId !== existing.id || tracked.version !== existing.version) {
       throw new Error(`Knowledge node ${normalized} changed outside importer ${this.#importer.importerId}`);
     }
+    const pendingRefresh: PendingRecordTrackingRefresh = {
+      importRunId: this.#importRunId,
+      nodeId: existing.id,
+      previousNodeVersion: existing.version,
+      records: await this.#handle(normalized, existing).snapshotTrackedRecords(),
+    };
+    await this.#setPendingRecordTrackingRefresh(normalized, pendingRefresh);
     const updated = await this.#knowledge.updateNode({
       id: existing.id,
       version: existing.version,
@@ -347,7 +455,80 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       importRunId: this.#importRunId,
     });
     await this.#setTrackedNode(normalized, updated);
-    return this.#handle(normalized, updated);
+    const handle = this.#handle(normalized, updated);
+    await handle.refreshTrackedRecordsAfterNodeUpdate(pendingRefresh.records);
+    await this.#setPendingRecordTrackingRefresh(normalized, undefined);
+    return handle;
+  }
+
+  async #recoverPendingRecordTrackingRefresh(address: string, handle: StaticKnowledgeNodeHandleImpl): Promise<void> {
+    const pending = await this.#getPendingRecordTrackingRefresh(address);
+    if (!pending) return;
+    const wasCommitted =
+      pending.nodeId === handle.id &&
+      pending.previousNodeVersion + 1 === handle.node.version &&
+      (await this.#hasCommittedNodeUpdate(pending.importRunId, handle.id));
+    if (wasCommitted) await handle.refreshTrackedRecordsAfterNodeUpdate(pending.records);
+    await this.#setPendingRecordTrackingRefresh(address, undefined);
+  }
+
+  async #hasCommittedNodeUpdate(importRunId: string, nodeId: string): Promise<boolean> {
+    let after: string | undefined;
+    do {
+      const activity = await this.#knowledge.listActivity({
+        scopeIds: [this.#importer.scopeId],
+        importRunId,
+        after,
+        limit: 100,
+      });
+      if (activity.some(event => event.action === 'edit' && event.targetType === 'node' && event.targetId === nodeId)) {
+        return true;
+      }
+      after = activity.length === 100 ? activity.at(-1)?.id : undefined;
+    } while (after);
+    return false;
+  }
+
+  async #getPendingRecordTrackingRefresh(address: string): Promise<PendingRecordTrackingRefresh | undefined> {
+    const state = await this.#knowledge.getImportState({
+      importerId: this.#importer.importerId,
+      binding: this.#importer.binding,
+      key: pendingRecordTrackingRefreshKey(address),
+    });
+    if (!state?.value) return undefined;
+    try {
+      const pending = JSON.parse(state.value) as Partial<PendingRecordTrackingRefresh>;
+      if (
+        typeof pending.importRunId !== 'string' ||
+        typeof pending.nodeId !== 'string' ||
+        !Number.isSafeInteger(pending.previousNodeVersion) ||
+        !Array.isArray(pending.records) ||
+        !pending.records.every(
+          record =>
+            typeof record === 'object' &&
+            record !== null &&
+            typeof record.id === 'string' &&
+            Number.isSafeInteger(record.version),
+        )
+      ) {
+        return undefined;
+      }
+      return pending as PendingRecordTrackingRefresh;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #setPendingRecordTrackingRefresh(
+    address: string,
+    pending: PendingRecordTrackingRefresh | undefined,
+  ): Promise<void> {
+    await this.#knowledge.setImportState({
+      importerId: this.#importer.importerId,
+      binding: this.#importer.binding,
+      key: pendingRecordTrackingRefreshKey(address),
+      value: pending ? JSON.stringify(pending) : '',
+    });
   }
 
   async removeNode(address: string): Promise<{ node: KnowledgeNode; deleted: boolean } | null> {
@@ -415,19 +596,20 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   }
 
   async #assertRunActive(): Promise<void> {
+    await this.#assertLeaseOwned?.();
     const run = await this.#knowledge.getImportRun(this.#importRunId);
     if (
       !run ||
       run.importerId !== this.#importer.importerId ||
       run.binding !== this.#importer.binding ||
-      run.importKind !== 'static' ||
+      (run.importKind !== 'static' && run.importKind !== 'agentic') ||
       run.status !== 'running'
     ) {
       throw new Error(`Knowledge import run ${this.#importRunId} is not active`);
     }
   }
 
-  #handle(address: string, node: KnowledgeNode): StaticKnowledgeNodeHandle {
+  #handle(address: string, node: KnowledgeNode): StaticKnowledgeNodeHandleImpl {
     return new StaticKnowledgeNodeHandleImpl({
       address,
       node,
@@ -440,11 +622,15 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
 }
 
 function trackedVersionKey(address: string): string {
-  return `mastra:static-importer:node-version:${address}`;
+  return `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}static-importer/node-version/${address}`;
 }
 
 function trackedRecordVersionKey(id: string): string {
-  return `mastra:static-importer:record-version:${id}`;
+  return `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}static-importer/record-version/${id}`;
+}
+
+function pendingRecordTrackingRefreshKey(address: string): string {
+  return `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}static-importer/pending-record-refresh/${address}`;
 }
 
 function normalizeAddress(address: string): string {

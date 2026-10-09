@@ -1,7 +1,11 @@
+import type { Agent } from '../../agent';
 import type { RequestContext } from '../../request-context';
 import type { KnowledgeConcreteRole, KnowledgeImportRun, KnowledgeScopeIds } from '../../storage/domains/knowledge';
 import type { Knowledge } from '../index';
-import type { StaticKnowledgeImporterOperations } from './static-importer';
+import type { StaticKnowledgeImporterOperations, StaticKnowledgeRecordInput } from './static-importer';
+
+/** Import-state keys under this prefix belong to the runtime; handler state writes cannot use them. */
+export const KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX = '__mastra_internal/';
 
 export interface KnowledgeImporterBindingInput {
   readonly source: string;
@@ -39,6 +43,79 @@ export interface KnowledgeImporterState {
   set(key: string, value: string): Promise<void>;
 }
 
+export interface KnowledgeImporterAgentConfig {
+  readonly agent: Agent;
+  readonly maxSteps?: number;
+}
+
+export interface KnowledgeAgentImportInput {
+  readonly instructions: string;
+  readonly data: unknown;
+  readonly checkpoint: string;
+}
+
+export interface KnowledgeAgentImportResult {
+  readonly checkpoint: string;
+  readonly resourceId: string;
+  readonly transcriptThreadId: string;
+  readonly text: string;
+  /** Importer tool writes that completed during this run. All zero means the Agent acknowledged the checkpoint without writing. */
+  readonly writes: KnowledgeAgentImportWrites;
+}
+
+export interface KnowledgeAgentImportWrites {
+  readonly nodesUpserted: number;
+  readonly nodesRemoved: number;
+  readonly recordsAppended: number;
+  readonly recordsRemoved: number;
+}
+
+/** A source-qualified identity: importer addresses are unique only together with their source. */
+export interface KnowledgeCitationRef {
+  readonly source: string;
+  readonly address: string;
+}
+
+/** Finite host policy shared by every citation hop in one run. */
+export interface KnowledgeCitationBudget {
+  readonly maxDepth: number;
+  readonly maxItems: number;
+  readonly timeoutMs: number;
+}
+
+export interface KnowledgeCitationEntity {
+  readonly name: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly records?: readonly StaticKnowledgeRecordInput[];
+  /** Further citations this entity requires; expanded within the same shared budget. */
+  readonly citations?: readonly KnowledgeCitationRef[];
+}
+
+/**
+ * Registration-owned citation resolution. Only the binding's own source is fetched; citations into
+ * other sources resolve only through bindings their owning registrations already committed.
+ */
+export interface KnowledgeImporterCitationPolicy {
+  readonly budget: KnowledgeCitationBudget;
+  fetch(input: {
+    readonly address: string;
+    readonly signal: AbortSignal;
+  }): Promise<KnowledgeCitationEntity | undefined>;
+}
+
+/** Sanitized reasons; `unavailable` covers denied, hidden, deleted and absent alike. */
+export type KnowledgeCitationUnresolvedReason = 'unavailable' | 'cycle' | 'depth' | 'items' | 'deadline' | 'error';
+
+export interface KnowledgeCitationResolution {
+  readonly resolved: ReadonlyArray<{ readonly ref: KnowledgeCitationRef; readonly nodeId: string }>;
+  readonly unresolved: ReadonlyArray<{
+    readonly ref: KnowledgeCitationRef;
+    readonly reason: KnowledgeCitationUnresolvedReason;
+  }>;
+  /** False when any required citation reached in this call stayed unresolved. */
+  readonly complete: boolean;
+}
+
 export interface KnowledgeImporterHandlerContext<TPayload = unknown> {
   readonly knowledge: Knowledge;
   readonly payload: TPayload | undefined;
@@ -46,6 +123,12 @@ export interface KnowledgeImporterHandlerContext<TPayload = unknown> {
   readonly signal: AbortSignal;
   readonly state: KnowledgeImporterState;
   importer(): Promise<StaticKnowledgeImporterOperations>;
+  agentImport?(input: KnowledgeAgentImportInput): Promise<KnowledgeAgentImportResult>;
+  /**
+   * Resolves required citations under the registration's citation policy. A run that leaves any
+   * required citation unresolved fails without committing state, so its cursor never advances.
+   */
+  resolveCitations?(refs: readonly KnowledgeCitationRef[]): Promise<KnowledgeCitationResolution>;
 }
 
 export type KnowledgeImporterHandler<TPayload = unknown> = (
@@ -57,6 +140,8 @@ export interface KnowledgeImporterDefinition<TPayload = unknown> {
   readonly access?: KnowledgeImporterAccess;
   readonly canCreateRoots?: boolean;
   readonly triggers?: KnowledgeImporterTriggers;
+  readonly agentic?: KnowledgeImporterAgentConfig;
+  readonly citations?: KnowledgeImporterCitationPolicy;
   readonly handler: KnowledgeImporterHandler<TPayload>;
 }
 
@@ -65,6 +150,8 @@ export interface KnowledgeImporterRegistrationContext<TPayload = unknown> {
   readonly access?: KnowledgeImporterAccess;
   readonly canCreateRoots: boolean;
   readonly triggers: KnowledgeImporterTriggers;
+  readonly agentic?: KnowledgeImporterAgentConfig;
+  readonly citations?: KnowledgeImporterCitationPolicy;
   readonly handler: KnowledgeImporterHandler<TPayload>;
   readonly programmatic: true;
   readonly webhookPath?: (instanceKey: string) => string;
