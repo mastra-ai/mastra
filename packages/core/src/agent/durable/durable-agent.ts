@@ -3899,11 +3899,22 @@ export class DurableAgent<
         // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
         // suspended runs registered, so thread subscribers still see the
         // terminal event and a later approval can resume the run (#25891).
+        // With auto-cleanup disabled nothing else releases a finished run, and
+        // bulk callers never get the cleanup handle. Release it once the
+        // terminal event has been delivered; suspended runs never get here.
+        let releaseAfterTerminal: (() => void) | undefined;
+        const onTerminal = () => {
+          if (this.#cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+        };
         const { cleanup } = await this.recover(targetRunId, {
           onError: ({ error }) => {
             runError = error instanceof Error ? error : new Error(String(error));
+            onTerminal();
           },
+          onFinish: onTerminal,
+          onAbort: onTerminal,
         });
+        releaseAfterTerminal = cleanup;
         try {
           const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
           if (workflowExecution) {
@@ -3914,16 +3925,6 @@ export class DurableAgent<
           throw error;
         }
         if (runError) throw runError;
-        // With auto-cleanup disabled nothing else releases a finished run.
-        // Its snapshot is deleted on every terminal except suspension.
-        if (this.#cleanupTimeoutMs === 0) {
-          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-          const stillSuspended = await workflowsStore?.getWorkflowRunById({
-            runId: targetRunId,
-            workflowName: DurableStepIds.AGENTIC_LOOP,
-          });
-          if (!stillSuspended) cleanup();
-        }
         recovered.push({ runId: targetRunId, status: 'success' });
         succeeded++;
       } catch (error) {

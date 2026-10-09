@@ -202,18 +202,20 @@ describe('DurableAgent.recoverActiveRuns', () => {
       makeSnapshot('run-done', 'running', { agentId: 'agent-Z', threadId: 't', resourceId: 'r' }),
       'r',
     );
-    const workflows = (await zeroStore.getStore('workflows'))!;
-    vi.spyOn(zeroAgent, 'getWorkflow').mockReturnValue({
-      createRun: vi.fn(async () => ({
-        restart: vi.fn(async () => {
-          await workflows.deleteWorkflowRunById({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: 'run-done' });
-          return { status: 'success' };
-        }),
-      })),
-    } as any);
+    stubWorkflow(zeroAgent);
+    const recover = zeroAgent.recover.bind(zeroAgent);
+    let onFinish: (() => void) | undefined;
+    vi.spyOn(zeroAgent, 'recover').mockImplementation(async (runId, options) => {
+      onFinish = options?.onFinish as () => void;
+      return recover(runId, options);
+    });
 
     const { succeeded } = await zeroAgent.recoverActiveRuns();
     expect(succeeded).toBe(1);
+    // Stays registered until the terminal event is delivered.
+    expect(globalRunRegistry.get('run-done')).toBeDefined();
+    onFinish?.();
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(globalRunRegistry.get('run-done')).toBeUndefined();
   });
 

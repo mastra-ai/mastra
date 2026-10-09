@@ -4454,6 +4454,7 @@ export class AgentThreadStreamRuntime {
         if (supersededStreamIds.has(data.streamId)) return;
         const registrationRedelivery = handledRegistrationEventIds.has(event.id);
         handledRegistrationEventIds.add(event.id);
+        const firstRegistration = !registeredSeqsByRunId.get(data.runId)?.has(data.streamId);
         noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
         // A redelivered registration for a stream that already ended must not
         // restore the finished run as the thread's active run.
@@ -4510,9 +4511,11 @@ export class AgentThreadStreamRuntime {
           // same run that never saw a terminal event: that segment's process
           // died (e.g. recovery took the run over), and the lease now held
           // under the same runId would otherwise keep it looking alive and
-          // queue the new segment behind it forever.
-          for (const [staleStreamId, staleSeq] of registeredSeqsByRunId.get(data.runId) ?? []) {
-            if (staleSeq >= data.streamSeq || terminalEventStreamIds.has(staleStreamId)) continue;
+          // queue the new segment behind it forever. Order by arrival, not
+          // streamSeq: sequences restart at 1 in a recovering process, and
+          // redeliveries of a segment never retire others.
+          for (const staleStreamId of firstRegistration ? (registeredSeqsByRunId.get(data.runId)?.keys() ?? []) : []) {
+            if (staleStreamId === data.streamId || terminalEventStreamIds.has(staleStreamId)) continue;
             const staleRun = remoteRuns.get(staleStreamId);
             if (!staleRun || staleRun.done) continue;
             supersededStreamIds.add(staleStreamId);

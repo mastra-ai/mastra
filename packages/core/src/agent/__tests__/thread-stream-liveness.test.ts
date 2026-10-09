@@ -76,7 +76,7 @@ describe('thread stream remote-run liveness', () => {
       part: { type: 'tool-call', payload: { toolCallId: 'call-1', toolName: 'lookup' } },
     });
     // Recovery re-acquires the lease under the same runId and registers a new segment.
-    await emit({ type: 'run-registered', runId: harness.runId, streamId: recoveredStreamId, streamSeq: 2 });
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: recoveredStreamId, streamSeq: 1 });
     await emit({
       type: 'stream-part',
       runId: harness.runId,
