@@ -166,7 +166,7 @@ describe('observation.previousObserverTokens reaches the Observer', () => {
     expect(tokenCounter.countObservations(context!)).toBeLessThanOrEqual(200);
     expect(context).toContain(NEWEST);
     expect(context).not.toContain(OLDEST);
-    expect(args[10]).toBe(true);
+    expect(args.at(-1)).toBe(true);
     expect(result.record.activeObservations).toContain(OLDEST);
   });
 
