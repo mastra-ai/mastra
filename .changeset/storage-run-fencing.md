@@ -5,11 +5,27 @@
 Added run fencing to the storage API, so storage adapters can reject writes from a durable agent execution that lost its run to crash recovery.
 
 - Workflows stores have new `claimRunOwnership()`, `renewRunOwnership()`, `releaseRunOwnership()`, and `getRunOwnership()` methods.
-- Memory stores have a new `raiseRunFence()` method.
+- Memory stores have new `raiseRunFence()` and `retireRunFence()` methods.
 - Methods that write run data, such as `saveMessages()`, `saveThread()`, `persistWorkflowSnapshot()`, and `updateWorkflowState()`, accept an optional `fence`. A write whose fence is no longer the run's current claim throws `RunFenceConflictError`.
 - `supportsRunFencing()` reports whether a store implements this. It can return a promise, for stores that must probe the backend first, and should reject when the store can't tell yet. It defaults to `false`, so custom storage adapters keep working without changes, and durable agents fall back to the PubSub lease for them.
 - A run is fully fenced only when both the workflows store and the memory store it writes to support fencing. If only the workflows store does, for example because a composite store takes memory from another adapter or the agent's `Memory` has its own storage, an execution that lost the run can't write workflow state anymore, but its messages, threads, and working memory still land. If only the memory store does, nothing is fenced.
-- Stores that support fencing keep a run's ownership record after the run finishes, plus one memory fence record per run with memory, and nothing prunes them yet. Keeping them makes a later run that reuses the `runId` claim a higher generation than its earlier executions, which stream filtering and the memory fence rely on.
+- Stores that support fencing keep one ownership record per run, plus one memory fence record per run with memory. Stores with retention support prune them with the new `workflows.runOwnership` and `memory.runFences` retention keys. Ownership records age out by inactivity, and fence records once the execution holding them settles. A run's first generation is taken from the store's clock, so a run that reuses a `runId` after its records were pruned still claims a higher generation than its earlier executions.
+
+**Pruning run fencing records**
+
+```ts
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+  retention: {
+    workflows: { runOwnership: { maxAge: '1d' } },
+    memory: { runFences: { maxAge: '1d' } },
+  },
+});
+
+// From your own scheduler
+await storage.prune();
+```
 
 **Writing with a fence**
 

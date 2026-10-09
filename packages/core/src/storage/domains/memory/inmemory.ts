@@ -81,6 +81,12 @@ export class InMemoryMemory extends MemoryStorage {
     return matchesRunFence(current, fence);
   }
 
+  // This store has no retention, so there is no `retiredAt` to set; retiring
+  // only reports whether `fence` is still current.
+  async retireRunFence(fence: RunFence): Promise<boolean> {
+    return matchesRunFence(this.db.runFences.get(fence.runId), fence);
+  }
+
   async getThreadById({
     threadId,
     resourceId,

@@ -139,15 +139,23 @@ export interface PruneResult {
  * `experiments.completedAt`, so in-flight runs (NULL `completedAt`) are never
  * pruned. Hence the single `'experiments'` key.
  *
+ * Note: `workflows.runOwnership` and `memory.runFences` are the run fencing
+ * records (one row per run). `runOwnership` is anchored on the claim's
+ * `updatedAt`, which every claim, renewal and release refreshes, so a live
+ * execution's row is never older than its renewal interval; keep `maxAge` well
+ * above the lease. `runFences` is anchored on `retiredAt`, which stays NULL
+ * until the execution holding the fence settles, so a running execution's
+ * fence is never pruned.
+ *
  * Domains not listed here fall back to `never`, so no table policies can be
  * set on them until they declare their retention tables.
  */
 export interface DomainRetentionTables {
-  memory: 'threads' | 'messages' | 'resources';
+  memory: 'threads' | 'messages' | 'resources' | 'runFences';
   threadState: 'threadState';
   observability: 'spans' | 'metrics' | 'logs' | 'scores' | 'feedback';
   scores: 'scorers';
-  workflows: 'workflowSnapshot';
+  workflows: 'workflowSnapshot' | 'runOwnership';
   backgroundTasks: 'backgroundTasks';
   experiments: 'experiments';
   notifications: 'notifications';
