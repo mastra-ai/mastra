@@ -204,7 +204,7 @@ function RepositoryRow({
         />
       </div>
       {expanded && (
-        <div className="divide-border flex flex-col divide-y pl-7">
+        <div className="bg-surface3 divide-border mx-2 mb-2 flex flex-col divide-y rounded-md">
           {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
             <Txt as="p" font="mono" variant="meta" className="text-destructive px-2 py-2 whitespace-pre-wrap">
               {repository.lastBuildError}
