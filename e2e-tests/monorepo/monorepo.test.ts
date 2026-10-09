@@ -239,6 +239,13 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       });
     });
 
+    it('should resolve raw TypeScript workspace packages imported from api routes', async () => {
+      const res = await fetch(`http://localhost:${port}/raw-ts-workspace`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ value: 5 });
+    });
+
     it('should preserve dynamic subpath imports when the package has a nested module package.json', async () => {
       const res = await fetch(`http://localhost:${port}/protobuf-subpath`);
       const body = await res.json();

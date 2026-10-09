@@ -1,17 +1,22 @@
+import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
+import * as pkg from 'empathic/package';
 import { rollup } from 'rollup';
 import type { RollupOutput } from 'rollup';
+import { getWorkspaceInformation } from '../../bundler/workspaceDependencies';
 import { esbuild } from '../plugins/esbuild';
 import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 import { recursiveRemoveNonReferencedNodes } from '../plugins/remove-unused-references';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
+import { workspacePackageResolver } from '../plugins/workspace-package-resolver';
+import { slash } from '../utils';
 
-export function extractMastraOptionBundler(
+export async function extractMastraOptionBundler(
   name: keyof MastraConfig,
   entryFile: string,
   result: {
@@ -19,6 +24,10 @@ export function extractMastraOptionBundler(
   },
   logger?: IMastraLogger,
 ) {
+  const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
+  const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
+  const { workspaceMap } = await getWorkspaceInformation({ dir: projectRoot, mastraEntryFile: entryFile });
+
   return rollup({
     logLevel: 'silent',
     input: {
@@ -27,6 +36,8 @@ export function extractMastraOptionBundler(
     treeshake: 'smallest',
     plugins: [
       tsConfigPaths(),
+      // inline workspace packages (which may ship raw TypeScript) so they get transpiled below
+      workspacePackageResolver({ workspaceMap, projectRoot }),
       // transpile typescript to something we understand
       esbuild(),
       optimizeLodashImports({
