@@ -18,16 +18,6 @@ You can also retrieve message history to display past conversations in your UI.
 Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](#threads-and-resources) for more detail.
 :::
 
-:::warning
-When you use memory with a client application, send **only the new message** from the client instead of the full conversation history.
-
-Sending the full history is redundant because Mastra loads messages from storage. Mastra filters client-echoed history before loading stored messages and uses the stored copy as the base when message IDs match, preserving stored timestamps and provider metadata while retaining new tool results.
-
-If you assemble the request input yourself and need it processed exactly as sent, set `retainFullInput: true` on `memory.options` for that call, or in the memory constructor options to apply it agent-wide. This disables the filtering described above. History still loads underneath. Every input message that isn't already stored is saved to the thread, including few-shot examples.
-
-For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory).
-:::
-
 ## Threads and resources
 
 Mastra organizes conversations using two identifiers:
@@ -125,6 +115,20 @@ You can use this history in two ways:
 `lastMessages` counts every stored message, including tool calls, tool results, and [signals](/docs/harness/signals) of any kind, so a single turn can add several messages to the count. The window also slides forward on every request: once a thread grows past the limit, the oldest message leaves context on each turn, which changes the start of the prompt and invalidates the provider prompt cache. For long-running conversations, use [Observational Memory](/docs/memory/observational-memory), which keeps the prompt prefix stable.
 
 :::
+
+### Sending messages from a client
+
+When you use memory with a client application, send **only the new message** instead of the full conversation history. Mastra loads previous messages from storage.
+
+For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory).
+
+<details>
+  <summary>Passing a full input history</summary>
+
+  Mastra filters client-echoed history before loading stored messages. When message IDs match, it uses the stored copy as the base, preserving stored timestamps and provider metadata while retaining new tool results.
+
+  If you assemble the request input yourself and need it processed exactly as sent, set `retainFullInput: true` on `memory.options` for that call, or in the memory constructor options to apply it agent-wide. This disables input filtering, but stored history still loads. Every input message that isn't already stored is saved to the thread, including few-shot examples.
+</details>
 
 ### Limit history by tokens
 
