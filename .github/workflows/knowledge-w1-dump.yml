@@ -35,7 +35,8 @@ jobs:
           node .github/knowledge-w1-dump/dump-nosql.mjs "$GITHUB_WORKSPACE/out"
       - name: pg_dump
         run: docker exec pg-test-db pg_dump -U postgres -d mastra --schema-only --no-owner --no-privileges -t 'public.mastra_knowledge_*' > out/pg.sql
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: w1-layout
           path: out/

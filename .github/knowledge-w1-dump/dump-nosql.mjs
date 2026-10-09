@@ -36,7 +36,7 @@ writeFileSync(`${out}/mysql-other-objects.json`, JSON.stringify(objs, null, 2));
 await pool.end();
 await my.close();
 
-const uri = 'mongodb://localhost:27017/?replicaSet=rs0';
+const uri = 'mongodb://localhost:27017/?directConnection=true';
 const mongo = new MongoDBStore({ id: 'dump', uri, dbName: 'w1dump' });
 await (await mongo.getStore('knowledge')).init();
 const client = await MongoClient.connect(uri);
