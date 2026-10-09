@@ -101,7 +101,7 @@ function EnvironmentBlocks({
         description={`How each sandbox is set up. ${providerLine(environment.sandbox.provider)}`}
       >
         <WorkspaceSetupBlock
-          workdir={environment.sandboxWorkdir}
+          workdir={environment.sandboxWorkingDirectory}
           command={environment.workspaceSetupCommand}
           disabled={disabled}
           onSave={save}

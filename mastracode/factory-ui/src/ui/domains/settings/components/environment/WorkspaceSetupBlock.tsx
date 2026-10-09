@@ -30,7 +30,7 @@ export function WorkspaceSetupBlock({
             placeholder="/workspace"
             value={workdir ?? ''}
             disabled={disabled}
-            onCommit={raw => onSave({ sandboxWorkdir: raw || null })}
+            onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
           />
         </div>
       </SettingsRow>

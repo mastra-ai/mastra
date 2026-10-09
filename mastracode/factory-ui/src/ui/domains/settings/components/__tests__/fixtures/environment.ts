@@ -53,7 +53,7 @@ export function environmentPayload(overrides: Partial<FactoryEnvironmentPayload>
       capabilities: { template: true, builds: { available: true, history: false } },
     },
     settings: { cpuCount: 2 },
-    sandboxWorkdir: '/workspace',
+    sandboxWorkingDirectory: '/workspace',
     workspaceSetupCommand: null,
     activeTemplateId: null,
     activeTemplateHeads: null,
