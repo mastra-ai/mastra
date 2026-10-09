@@ -57,7 +57,7 @@ describe('Environment settings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Repositories' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Environment', 'Template', 'Repositories', 'Workspace setup', 'Advanced', 'Sandbox']);
+    expect(headings).toEqual(['Template', 'Repositories', 'Workspace setup', 'Advanced', 'Sandbox']);
     const setup = screen.getByRole('heading', { name: 'Workspace setup' }).parentElement!;
     expect(within(setup).getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
     expect(within(setup).getByRole('textbox', { name: 'Workspace setup command' })).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText('Sessions run on the Mastra platform.')).toBeInTheDocument();
+    expect(await screen.findByText(/Sessions run on the Mastra platform\./)).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2);
     expect(screen.getByText('vCPUs of the sandbox.')).toBeInTheDocument();
     const memory = screen.getByRole('spinbutton', { name: 'Memory (MB)' });
@@ -280,7 +280,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText('Sessions run on a custom sandbox.')).toBeInTheDocument();
+    expect(await screen.findByText(/Sessions run on a custom sandbox\./)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
     expect(screen.getByText('This sandbox has no settings to tune.')).toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
@@ -308,7 +308,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText('Sessions run on Docker.')).toBeInTheDocument();
+    expect(await screen.findByText(/Sessions run on Docker\./)).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Region' })).toHaveTextContent('eu');
     expect(screen.getByText('Mounts')).toBeInTheDocument();
     expect(screen.getByText('Unsupported setting type')).toBeInTheDocument();
