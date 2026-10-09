@@ -49,18 +49,33 @@ export async function createChildProcessMemoryStorage({
   let nextId = 0;
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
-  await new Promise<void>((resolve, reject) => {
-    const onMessage = (message: { type?: string; error?: string }) => {
-      if (message?.type === 'ready') {
-        child.off('message', onMessage);
-        resolve();
-      } else if (message?.type === 'init-error') {
-        reject(new Error(message.error));
-      }
-    };
-    child.on('message', onMessage);
-    child.once('exit', code => reject(new Error(`child exited during init with code ${code}`)));
-  });
+  const stop = async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise<void>(resolve => {
+        child.once('exit', () => resolve());
+        child.kill();
+      });
+    }
+    rmSync(dir, { recursive: true, force: true });
+  };
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onMessage = (message: { type?: string; error?: string }) => {
+        if (message?.type === 'ready') {
+          child.off('message', onMessage);
+          resolve();
+        } else if (message?.type === 'init-error') {
+          reject(new Error(message.error));
+        }
+      };
+      child.on('message', onMessage);
+      child.once('exit', code => reject(new Error(`child exited during init with code ${code}`)));
+    });
+  } catch (error) {
+    await stop();
+    throw error;
+  }
 
   child.on('message', (message: { id: number; result?: unknown; error?: string }) => {
     const call = pending.get(message.id);
@@ -91,15 +106,7 @@ export async function createChildProcessMemoryStorage({
 
   return {
     storage,
-    close: async () => {
-      if (child.exitCode === null) {
-        await new Promise<void>(resolve => {
-          child.once('exit', () => resolve());
-          child.kill();
-        });
-      }
-      rmSync(dir, { recursive: true, force: true });
-    },
+    close: stop,
   };
 }
 
