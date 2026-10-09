@@ -10,7 +10,6 @@
  * user in onboarding once a factory exists.
  */
 import { z } from 'zod';
-import { modelSetupPresetSchema } from './modelSetupPreset';
 
 export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';
 export const ONBOARDING_DRAFT_KEY = 'mastracode.factory-onboarding.draft';
@@ -29,7 +28,6 @@ export type OnboardingStep =
   | 'initial'
   | 'vcs'
   | 'project-management'
-  | 'model-preset'
   | 'model-provider'
   | 'personal-provider'
   | 'review';
@@ -45,7 +43,6 @@ const repositoryFields = {
 };
 const connectionSchema = z.object({ providerId: z.string(), method: z.enum(['api_key', 'oauth']) });
 const draftSchema = z.object({
-  preset: modelSetupPresetSchema.optional(),
   repository: z
     .union([
       z.object({ ...repositoryFields, id: z.number(), installationId: z.number(), installationStorageId: z.string() }),
@@ -97,7 +94,6 @@ export function readOnboardingStep(): OnboardingStep {
   const value = sessionStorage.getItem(ONBOARDING_STEP_KEY);
   return value === 'vcs' ||
     value === 'project-management' ||
-    value === 'model-preset' ||
     value === 'model-provider' ||
     value === 'personal-provider' ||
     value === 'review'
@@ -134,7 +130,6 @@ export function hasResumableFactoryOnboarding(factories: readonly { id: string }
   if (
     step !== 'vcs' &&
     step !== 'project-management' &&
-    step !== 'model-preset' &&
     step !== 'model-provider' &&
     step !== 'personal-provider' &&
     step !== 'review'

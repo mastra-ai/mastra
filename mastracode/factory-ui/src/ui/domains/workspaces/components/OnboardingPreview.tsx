@@ -1,6 +1,4 @@
 import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
-import type { ModelSetupPreset } from '../services/modelSetupPreset';
-import { OnboardingPresetPreview } from './OnboardingPresetPreview';
 import type { OnboardingStep } from '../services/onboardingFlow';
 import { OnboardingCodebasePreview } from './OnboardingCodebasePreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
@@ -17,7 +15,6 @@ export type OnboardingSource = 'linear' | 'jira' | 'incident-io';
 
 export interface OnboardingPreviewProps {
   step: OnboardingStep;
-  preset?: ModelSetupPreset;
   personalModel?: string;
   repository?: { name: string; fullName: string; defaultBranch: string };
   factoryName?: string;
@@ -33,21 +30,19 @@ function figureScene(step: OnboardingStep): FigureScene {
   if (step === 'initial') return 'factory';
   if (step === 'vcs') return 'codebase';
   if (step === 'project-management') return 'intake';
-  if (step === 'model-preset') return 'setup';
   return 'accounts';
 }
 
-function figureMode(step: OnboardingStep, preset?: ModelSetupPreset): FigureMode {
-  if (preset?.kind === 'individual') return 'individual';
+function figureMode(step: OnboardingStep, personalIsFactoryModel: boolean): FigureMode {
+  if (personalIsFactoryModel && (step === 'personal-provider' || step === 'review')) return 'individual';
   if (step === 'model-provider' || step === 'review') return 'shared';
-  if (step === 'personal-provider' || preset?.setupPersonal) return 'hybrid';
+  if (step === 'personal-provider') return 'hybrid';
   return 'shared';
 }
 
 /** Each scene explains the outcome of the current setting, in fixed layout slots. */
 export function OnboardingPreview({
   step,
-  preset,
   personalModel,
   repository,
   factoryName,
@@ -58,13 +53,14 @@ export function OnboardingPreview({
   connectionMethod,
   personalConnectionMethod,
 }: OnboardingPreviewProps) {
+  const personalIsFactoryModel = !model;
   return (
     <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-label="Factory preview">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
         <OnboardingFigure
           figure={journeyFigure}
           scene={figureScene(step)}
-          mode={figureMode(step, preset)}
+          mode={figureMode(step, personalIsFactoryModel)}
           label="Your Factory: ideas become reviewed code, with repository context and connected work"
         />
         <OnboardingScene active={step === 'initial'}>
@@ -73,13 +69,10 @@ export function OnboardingPreview({
         <OnboardingScene active={step === 'vcs'}>
           <OnboardingCodebasePreview repository={repository} factoryName={factoryName} />
         </OnboardingScene>
-        <OnboardingScene active={step === 'model-preset'}>
-          {preset && <OnboardingPresetPreview preset={preset} />}
-        </OnboardingScene>
         <OnboardingScene active={step === 'project-management'}>
           <OnboardingIntakePreview source={source} />
         </OnboardingScene>
-        <OnboardingScene active={step === 'model-provider' || (step === 'review' && preset?.kind !== 'individual')}>
+        <OnboardingScene active={step === 'model-provider' || (step === 'review' && !personalIsFactoryModel)}>
           <OnboardingModelPreview
             repository={repository}
             model={model}
@@ -87,14 +80,13 @@ export function OnboardingPreview({
             connectionMethod={connectionMethod}
           />
         </OnboardingScene>
-        <OnboardingScene active={step === 'personal-provider' || (step === 'review' && preset?.kind === 'individual')}>
+        <OnboardingScene active={step === 'personal-provider' || (step === 'review' && personalIsFactoryModel)}>
           <OnboardingPersonalPreview
             model={model}
             providerId={providerId}
             personalProviderId={personalProviderId}
             personalConnectionMethod={personalConnectionMethod}
             personalModel={personalModel}
-            preset={preset}
           />
         </OnboardingScene>
       </div>

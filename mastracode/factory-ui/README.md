@@ -14,6 +14,14 @@ Open `http://localhost:5173`. To restart one side without losing the other, star
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
+## Onboarding
+
+The first-Factory wizard keeps repository and model selections in a session-scoped draft. Users can edit them before the final review, including switching between GitHub and GitLab. Confirmation creates the Factory, links the selected repository, and saves its default model. If a save fails, retry resumes the pending Factory. Credentials are never included in the draft.
+
+Connecting an integration or model account authorizes that reusable connection immediately. Provider sign-in and API-key entry use the existing backend endpoints and capability metadata; organization and personal access remain separate. Members without shared credentials must choose a personal model, which becomes both the Factory default and their own default. Otherwise, personal connection setup is optional. These choices do not add spending policies or change teammates’ defaults.
+
+Linear, Jira, and incident.io appear when their backend integrations are available. The animated illustrations show example work; importing issues happens after setup. Illustrations respect reduced motion, and compact layouts keep the controls full width above the visual.
+
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.

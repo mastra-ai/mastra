@@ -7,6 +7,31 @@ import { queryKeys } from '../../../../../api/keys';
 import { OnboardingPreview } from '../OnboardingPreview';
 
 describe('contextual onboarding previews', () => {
+  it('shows the personal Factory model in review when shared access is absent', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
+        }),
+      ),
+    );
+    renderWithProviders(
+      <OnboardingPreview
+        step="review"
+        personalProviderId="anthropic"
+        personalModel="anthropic/claude-fable-5"
+        personalConnectionMethod="api_key"
+      />,
+    );
+    const personal = within(screen.getByRole('region', { name: 'Personal access preview' }));
+    expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
+    expect(await personal.findByText('Connected · your account')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Default model preview' })).not.toBeInTheDocument();
+  });
+
   it('shows the selected tracker’s issue becoming a backlog card and uses its connection state', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>

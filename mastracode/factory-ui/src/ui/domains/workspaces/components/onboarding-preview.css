@@ -60,14 +60,9 @@
 }
 /* Product cards share the Factory UI’s quiet border hierarchy. */
 .onboarding-figure[data-scene='intake'],
-.onboarding-figure[data-scene='accounts'],
-.onboarding-figure[data-scene='setup'] {
+.onboarding-figure[data-scene='accounts'] {
   --hairline-edge: var(--color-border);
   --hairline-hi: color-mix(in oklab, var(--color-muted-foreground) 35%, var(--color-background));
-}
-/* Keep the miniature building readable beside the quieter conversation surfaces. */
-.onboarding-figure[data-scene='setup'] {
-  --hairline-edge: color-mix(in oklab, var(--color-muted-foreground) 22%, var(--color-background));
 }
 @media (prefers-reduced-motion: reduce) {
   .onboarding-figure svg * {

@@ -1,18 +1,9 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { OnboardingStep } from '../services/onboardingFlow';
-import type { ModelSetupPreset } from '../services/modelSetupPreset';
 import { onboardingProgress } from '../services/onboardingSteps';
 
-export function OnboardingProgress({
-  step,
-  preset,
-  editingReview,
-}: {
-  step: OnboardingStep;
-  preset?: ModelSetupPreset;
-  editingReview: boolean;
-}) {
-  const progressSteps = onboardingProgress(preset);
+export function OnboardingProgress({ step, editingReview }: { step: OnboardingStep; editingReview: boolean }) {
+  const progressSteps = onboardingProgress();
   const progressIndex = editingReview
     ? progressSteps.length - 1
     : progressSteps.findIndex(item => item.steps.includes(step));

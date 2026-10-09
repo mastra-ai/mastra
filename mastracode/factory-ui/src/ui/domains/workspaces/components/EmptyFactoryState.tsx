@@ -1,6 +1,6 @@
 import { OnboardingProgress } from './OnboardingProgress';
 import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
-import { onboardingSteps, onboardingStepMeta, personalModelChoice } from '../services/onboardingSteps';
+import { onboardingSteps, onboardingStepMeta } from '../services/onboardingSteps';
 import { useIsMutating } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -31,22 +31,16 @@ import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './OnboardingReviewStep';
-import { ModelSetupPresetStep } from './ModelSetupPresetStep';
-import { DEFAULT_MODEL_PRESET, includesPersonalSetup } from '../services/modelSetupPreset';
-import type { SaveModelSetupPreset } from '../services/modelSetupPreset';
 
-export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: SaveModelSetupPreset } = {}) {
+export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
   const mutationInFlight = useIsMutating() > 0;
-  const complete = useCompleteFactorySetup(onSaveModelPreset);
+  const complete = useCompleteFactorySetup();
   const [draft, setDraft] = useState<OnboardingDraft>(readOnboardingDraft);
   const [step, setStep] = useState<Step>(() => {
     const saved = readOnboardingStep();
     const stored = readOnboardingDraft();
     if (saved !== 'initial' && !stored.repository) return 'vcs';
-    if (onSaveModelPreset && !stored.preset && ['model-provider', 'personal-provider', 'review'].includes(saved))
-      return 'model-preset';
-    if (!onSaveModelPreset && saved === 'model-preset') return 'model-provider';
     return saved;
   });
   const [returnToReview, setReviewReturn] = useState(
@@ -91,15 +85,14 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
     persistOnboardingDraft(draft);
     persistOnboardingStep(currentStep);
   };
-  const preset = onSaveModelPreset ? (draft.preset ?? DEFAULT_MODEL_PRESET) : undefined;
-  const steps = onboardingSteps(preset);
+  const steps = onboardingSteps();
   const stepIndex = steps.indexOf(step);
   const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
   const repository = previewRepository ?? draft.repository;
   const model = previewModel ?? (previewProvider ? undefined : draft.model?.modelId);
   const personalModel = previewPersonalModel ?? (previewPersonalProvider ? undefined : draft.personal?.modelId);
   const personalIsFactoryModel = usesPersonalFactoryModel(draft);
-  const meta = onboardingStepMeta(step, preset, personalIsFactoryModel);
+  const meta = onboardingStepMeta(step, personalIsFactoryModel);
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
@@ -176,19 +169,7 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
                     persistBeforeRedirect('project-management');
                     connectLinear(baseUrl);
                   }}
-                  onContinue={() => advance(preset ? 'model-preset' : 'model-provider')}
-                />
-              )}
-              {step === 'model-preset' && preset && (
-                <ModelSetupPresetStep
-                  value={preset}
-                  onChange={next => updateDraft({ ...draft, preset: next })}
-                  onContinue={() => {
-                    updateDraft({ ...draft, preset });
-                    // A changed preset must visit its setup, even when entered from review.
-                    setReturnToReview(false);
-                    goTo(preset.kind === 'company' ? 'model-provider' : 'personal-provider');
-                  }}
+                  onContinue={() => advance('model-provider')}
                 />
               )}
               {step === 'model-provider' && (
@@ -201,22 +182,20 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
                     setPreviewModel(undefined);
                   }}
                   onComplete={model => {
-                    if (!model && preset) {
-                      // A member without shared access can still connect their own account.
-                      updateDraft({ ...draft, model, preset: { kind: 'individual' } });
+                    updateDraft({ ...draft, model });
+                    if (!model) {
                       setReturnToReview(false);
                       goTo('personal-provider');
                       return;
                     }
-                    updateDraft({ ...draft, model });
-                    advance(!preset || includesPersonalSetup(preset) ? 'personal-provider' : 'review');
+                    advance('personal-provider');
                   }}
                 />
               )}
               {step === 'personal-provider' && (
                 <PersonalProviderFactoryStep
                   initialChoice={draft.personal}
-                  modelChoice={personalModelChoice(preset, personalIsFactoryModel)}
+                  modelChoice={personalIsFactoryModel ? 'required' : undefined}
                   onPreviewModel={setPreviewPersonalModel}
                   onContinue={personal => {
                     updateDraft({ ...draft, personal });
@@ -257,11 +236,10 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
           personalProviderId={previewPersonalProvider ?? draft.personal?.providerId}
           connectionMethod={previewMethod ?? draft.model?.method}
           personalConnectionMethod={previewPersonalMethod ?? draft.personal?.method}
-          preset={preset}
           personalModel={personalModel}
         />
       </div>
-      <OnboardingProgress step={step} preset={preset} editingReview={returnToReview} />
+      <OnboardingProgress step={step} editingReview={returnToReview} />
     </main>
   );
 }

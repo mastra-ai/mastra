@@ -12,12 +12,11 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useContext, useState } from 'react';
+import { useState } from 'react';
 
 import type { ProviderInfo } from '../../../../api/types';
 import { useOrgKeyAdminQuery, useSaveProviderKey } from '../../../../hooks/use-providers';
 import { providerDisplayName } from './provider-display-name';
-import { ProviderConnectionNoticeContext } from './provider-connection-notice';
 
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
@@ -42,7 +41,6 @@ export function AddApiKeyDialog({
   onClose,
 }: AddApiKeyDialogProps) {
   const displayName = providerDisplayName(provider.provider);
-  const connectionNotice = useContext(ProviderConnectionNoticeContext);
   const saveKeyMutation = useSaveProviderKey();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
@@ -90,11 +88,6 @@ export function AddApiKeyDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          {connectionNotice && (
-            <Txt variant="caption" tone="muted" role="note">
-              {connectionNotice}
-            </Txt>
-          )}
           <Input
             autoFocus
             type="password"

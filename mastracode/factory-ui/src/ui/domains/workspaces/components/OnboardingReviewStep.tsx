@@ -1,11 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitBranch, Sparkles, UserRound, Users } from 'lucide-react';
+import { GitBranch, Sparkles, UserRound } from 'lucide-react';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { isGitLabRepository } from '../services/github';
 import type { OnboardingDraft, OnboardingStep } from '../services/onboardingFlow';
-import { includesPersonalSetup, modelSetupLabel } from '../services/modelSetupPreset';
 import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
@@ -42,15 +41,6 @@ export function OnboardingReviewStep({
           onEdit={() => onEdit('vcs')}
         />
         <OnboardingWorkReviewRow disabled={pending} onEdit={() => onEdit('project-management')} />
-        {draft.preset && (
-          <OnboardingReviewRow
-            icon={<Users />}
-            label="Setup"
-            value={modelSetupLabel(draft.preset)}
-            disabled={pending}
-            onEdit={() => onEdit('model-preset')}
-          />
-        )}
         {personalIsFactoryModel ? (
           <OnboardingReviewRow
             icon={<Sparkles />}
@@ -70,7 +60,7 @@ export function OnboardingReviewStep({
             onEdit={() => onEdit('model-provider')}
           />
         )}
-        {!personalIsFactoryModel && (!draft.preset || includesPersonalSetup(draft.preset)) && (
+        {!personalIsFactoryModel && (
           <OnboardingReviewRow
             icon={<UserRound />}
             label="Access"

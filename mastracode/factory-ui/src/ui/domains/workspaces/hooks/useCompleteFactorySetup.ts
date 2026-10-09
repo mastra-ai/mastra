@@ -4,9 +4,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
-import { includesPersonalSetup } from '../services/modelSetupPreset';
 import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
-import type { SaveModelSetupPreset } from '../services/modelSetupPreset';
 import { readJsonOrThrow } from '../services/http';
 import {
   createFactoryProject,
@@ -23,7 +21,7 @@ import {
 import type { OnboardingDraft } from '../services/onboardingFlow';
 
 /** Commit once the user confirms. Keep the created id so failed saves can be retried. */
-export function useCompleteFactorySetup(savePreset?: SaveModelSetupPreset) {
+export function useCompleteFactorySetup() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -33,11 +31,6 @@ export function useCompleteFactorySetup(savePreset?: SaveModelSetupPreset) {
     mutationFn: async (draft: OnboardingDraft) => {
       const repo = draft.repository;
       if (!repo) throw new Error('Choose a repository before creating your factory.');
-      if (draft.preset && !savePreset) throw new Error('Model setup presets are not available on this deployment.');
-      if (draft.preset?.kind === 'company' && !draft.model)
-        throw new Error('Choose a shared model before creating your factory.');
-      if (draft.preset?.kind === 'individual' && !draft.personal?.modelId)
-        throw new Error('Choose your personal model before creating your factory.');
       const factoryModel = usesPersonalFactoryModel(draft) ? draft.personal?.modelId : draft.model?.modelId;
       if (!factoryModel) throw new Error('Choose a model before creating your factory.');
       persistOnboardingStep('review');
@@ -67,11 +60,9 @@ export function useCompleteFactorySetup(savePreset?: SaveModelSetupPreset) {
       }
       await updateFactoryDefaultModel(baseUrl, factory.id, factoryModel);
       // Observer/Reflector remain Auto. Explicit existing role choices stay untouched.
-      if (draft.personal?.modelId && (!draft.preset || includesPersonalSetup(draft.preset))) {
+      if (draft.personal?.modelId) {
         await setPersonalDefault.mutateAsync(draft.personal.modelId);
       }
-      // Only the preview supplies this checklist adapter. It never changes routing or permissions.
-      if (draft.preset && savePreset) await savePreset(factory.id, draft.preset);
       return factory.id;
     },
     onSuccess: async factoryId => {

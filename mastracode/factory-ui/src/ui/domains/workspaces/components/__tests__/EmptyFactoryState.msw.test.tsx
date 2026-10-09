@@ -15,7 +15,6 @@ import {
   readOnboardingDraft,
 } from '../../services/onboardingFlow';
 import { EmptyFactoryState } from '../EmptyFactoryState';
-import type { SaveModelSetupPreset } from '../../services/modelSetupPreset';
 
 const repo: GithubRepo = {
   id: 99,
@@ -42,23 +41,11 @@ const gitlabProject: GitLabProject = {
 };
 const model = { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' as const };
 
-const savePreset: SaveModelSetupPreset = async (factoryId, preset) => {
-  const response = await fetch(`${TEST_BASE_URL}/preview/factories/${factoryId}/model-setup`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(preset),
-  });
-  if (!response.ok) throw new Error('Unable to save preset');
-};
-
-function renderOnboarding(withPresets = false) {
+function renderOnboarding() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/onboarding']}>
       <Routes>
-        <Route
-          path="/onboarding"
-          element={<EmptyFactoryState onSaveModelPreset={withPresets ? savePreset : undefined} />}
-        />
+        <Route path="/onboarding" element={<EmptyFactoryState />} />
         <Route path="/factories/:id" element={<h1>Factory ready</h1>} />
       </Routes>
     </MemoryRouter>,
@@ -70,10 +57,6 @@ function registerSetup(failure?: 'connection' | 'model') {
   let project: FactoryProjectPayload | undefined;
   let failed = false;
   server.use(
-    http.put(`${TEST_BASE_URL}/preview/factories/:id/model-setup`, async ({ request }) => {
-      writes.push({ path: 'preset', body: await request.json() });
-      return HttpResponse.json({ ok: true });
-    }),
     http.put(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
       const body = await request.json();
       writes.push({ path: 'personal-model', body });
@@ -274,163 +257,65 @@ describe('Draft Factory onboarding', () => {
   );
 });
 
-describe('Model setup presets', () => {
-  it('asks for a company model, skips personal setup, and saves only after review', async () => {
-    const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-preset');
-    const user = userEvent.setup();
-    renderOnboarding(true);
-    expect(screen.getByRole('radio', { name: 'Company account' })).toBeChecked();
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('Company account')).toBeInTheDocument();
-    expect(review.queryByRole('button', { name: 'Edit access' })).not.toBeInTheDocument();
-    expect(writes).toEqual([]);
-    await user.click(review.getByRole('button', { name: 'Create factory' }));
-    await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'preset')?.body).toEqual({ kind: 'company', setupPersonal: false });
-    expect(writes.some(item => item.path === 'om')).toBe(false);
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: model.modelId });
-    expect(writes.some(item => item.path === 'personal-model')).toBe(false);
-  });
-
-  it('switches from company review to personal setup and applies the chosen model to Factory work and personal sessions', async () => {
+describe('Personal Factory model', () => {
+  it('requires a personal model when shared access is no longer available while editing review', async () => {
     const writes = registerSetup();
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({
-          orgKeyAdmin: true,
+          orgKeyAdmin: false,
           providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
         }),
       ),
     );
-    persistOnboardingDraft({ repository: repo, model, preset: { kind: 'company', setupPersonal: false } });
+    persistOnboardingDraft({ repository: repo, model });
     sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
     const user = userEvent.setup();
-    const view = renderOnboarding(true);
-    await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
-    await user.click(screen.getByRole('radio', { name: 'My account' }));
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Skip for now' })).not.toBeInTheDocument();
+    renderOnboarding();
+    await user.click(screen.getByRole('button', { name: 'Edit model' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
+    expect(screen.getByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
-    expect(
-      within(screen.getByLabelText('Personal sessions provider')).queryByText('Organization access'),
-    ).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    expect(await screen.findByText('Your default model')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Review setup' }));
     expect(writes).toEqual([]);
-    view.unmount();
-    renderOnboarding(true);
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('My account')).toBeInTheDocument();
-    expect(review.getByRole('button', { name: 'Edit model' })).toBeInTheDocument();
-    expect(review.getByText('API key · Factory + your default')).toBeInTheDocument();
-    expect(readOnboardingDraft().model).toEqual(model);
-    await user.click(review.getByRole('button', { name: 'Create factory' }));
-    await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'anthropic/claude-fable-5' });
-    expect(writes.find(item => item.path === 'preset')?.body).toEqual({ kind: 'individual' });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
-    expect(writes.some(item => item.path === 'om')).toBe(false);
+    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
+    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+    expect(
+      within(screen.getByRole('region', { name: 'Review factory setup' })).getByText('anthropic/claude-fable-5'),
+    ).toBeInTheDocument();
   });
 
-  it('offers optional personal setup for a company preset and preserves both defaults', async () => {
+  it('confirms a personal Factory model for members without shared access', async () => {
     const writes = registerSetup();
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({
-          orgKeyAdmin: true,
-          providers: [
-            { provider: 'openai', source: 'stored-org', orgCredential: 'api_key' },
-            { provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' },
-          ],
+          orgKeyAdmin: false,
+          providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
         }),
       ),
     );
-    persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-preset');
+    persistOnboardingDraft({
+      repository: repo,
+    });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
     const user = userEvent.setup();
-    renderOnboarding(true);
-    await user.click(screen.getByRole('switch', { name: 'Set up my account too' }));
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+    renderOnboarding();
+    await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
+    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     await user.click(await screen.findByRole('button', { name: 'Review setup' }));
     expect(writes).toEqual([]);
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText(model.modelId)).toBeInTheDocument();
+    const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
     expect(review.getByText('anthropic/claude-fable-5')).toBeInTheDocument();
-    await user.click(review.getByRole('button', { name: 'Create factory' }));
+    expect(review.getByText('API key · Factory + your default')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: model.modelId });
-    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'anthropic/claude-fable-5' });
-    expect(writes.find(item => item.path === 'preset')?.body).toEqual({ kind: 'company', setupPersonal: true });
-  });
-
-  it('resumes an old personal-setup draft without treating its flag as a permission', async () => {
-    registerSetup();
-    sessionStorage.setItem(
-      ONBOARDING_DRAFT_KEY,
-      JSON.stringify({
-        repository: repo,
-        model,
-        preset: { kind: 'company', allowPersonal: true },
-      }),
-    );
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-preset');
-    renderOnboarding(true);
-    expect(screen.getByRole('switch', { name: 'Set up my account too' })).toBeChecked();
-    expect(readOnboardingDraft()).toEqual({
-      repository: repo,
-      model,
-      preset: { kind: 'company', setupPersonal: true },
+    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
+    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
+      modelId: 'anthropic/claude-fable-5',
     });
   });
-
-  it.each([true, false])(
-    'confirms a personal Factory model for members without shared access (presets: %s)',
-    async withPresets => {
-      const writes = registerSetup();
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-          HttpResponse.json({
-            orgKeyAdmin: false,
-            providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
-          }),
-        ),
-      );
-      persistOnboardingDraft({
-        repository: repo,
-        ...(withPresets ? { preset: { kind: 'company', setupPersonal: false } as const } : {}),
-      });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
-      const user = userEvent.setup();
-      renderOnboarding(withPresets);
-      await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
-      expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
-      await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-      await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-      expect(writes).toEqual([]);
-      const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
-      expect(review.getByText('anthropic/claude-fable-5')).toBeInTheDocument();
-      expect(review.getByText('API key · Factory + your default')).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Create factory' }));
-      await screen.findByRole('heading', { name: 'Factory ready' });
-      expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
-      expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
-        modelId: 'anthropic/claude-fable-5',
-      });
-      expect(writes.find(item => item.path === 'preset')?.body).toEqual(
-        withPresets ? { kind: 'individual' } : undefined,
-      );
-    },
-  );
 
   it('does not create a Factory from an old review draft without a model', async () => {
     const writes = registerSetup();
@@ -444,18 +329,5 @@ describe('Model setup presets', () => {
     await user.click(screen.getByRole('button', { name: 'Edit model' }));
     expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
-  });
-
-  it('does not silently apply prototype presets on a deployment without the setup adapter', async () => {
-    const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo, model, preset: { kind: 'company', setupPersonal: false } });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Model setup presets are not available on this deployment.',
-    );
-    expect(writes).toEqual([]);
   });
 });

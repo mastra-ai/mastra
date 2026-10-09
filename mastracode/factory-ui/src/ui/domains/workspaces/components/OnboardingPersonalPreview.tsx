@@ -14,12 +14,11 @@ export function OnboardingPersonalPreview({
   personalProviderId,
   personalConnectionMethod,
   personalModel,
-  preset,
 }: Pick<
   OnboardingPreviewProps,
-  'model' | 'providerId' | 'personalProviderId' | 'personalConnectionMethod' | 'personalModel' | 'preset'
+  'model' | 'providerId' | 'personalProviderId' | 'personalConnectionMethod' | 'personalModel'
 >) {
-  const individual = preset?.kind === 'individual' || (!preset && !model);
+  const individual = !model;
   const providers = useProvidersQuery();
   const personal = providers.data?.find(item => item.provider === personalProviderId);
   const auth = useFactoryAuth();
@@ -67,7 +66,7 @@ export function OnboardingPersonalPreview({
           )}
         </div>
         <div aria-label="Personal sessions provider" className="min-w-0">
-          {preset && connected ? (
+          {personalModel && connected ? (
             <OnboardingModelLabel providerId={personalProviderId} model={personalModel} />
           ) : (
             <Txt variant="caption">{name ?? fallback}</Txt>

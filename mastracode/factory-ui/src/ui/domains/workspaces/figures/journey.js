@@ -19,7 +19,7 @@ const folded=panel(200,175,0,0),boardPanel=(x,y)=>panel(x,y,104,48);
 const miniature=(n,axis,anchor=[314,148])=>anchor[axis]+(n-(axis?168:222))*.46;
 const bays=[{axis:1,wall:40,back:27,lo:-52,hi:-10,end:142},{axis:0,wall:57,back:44,lo:-10,hi:28,end:145}];
 const bayPoint=(bay,u,v,z)=>bay.axis===1?[u,v,z]:[v,u,z];
-const bodyPose=scene=>scene==='factory'?[1,0,0]:[.46,miniature(0,0,scene==='setup'?[80,197]:undefined),miniature(0,1,scene==='setup'?[80,197]:undefined)];
+const bodyPose=scene=>scene==='factory'?[1,0,0]:[.46,miniature(0,0,undefined),miniature(0,1,undefined)];
 function geometry() {
   const C=Cam(45,.5,1.25);
   fit(C,[[-60,140,0],[144,-35,0],[-60,-35,96],[56,40,0]],200,157);
@@ -43,10 +43,8 @@ function geometry() {
   }
   const a=repository(P(14,100,11)),b=P(-31,40,17).map((n,i)=>miniature(n,i)),c=P(-31,14,17).map((n,i)=>miniature(n,i));
   const codeLink=[...a,a[0]+24,a[1],...b,...c];
-  return {P,front,factory,code,codeLink,workshop:factory.slice(0,3).map(q=>q.map((n,i)=>miniature(n,i%2,[80,197])))};}
-function poses(scene,mode,objects) {if(scene==='setup')return [...objects.workshop,panel(148,48,104,42),mode==='individual'?panel(28,48,104,42):folded,mode==='shared'?folded:panel(268,48,104,42),panel(148,156,104,94),panel(268,156,104,94)];
-  return corePoses(scene,mode,objects).concat([folded,folded]);}
-function corePoses(scene,mode,objects) {
+  return {P,front,factory,code,codeLink};}
+function poses(scene,mode,objects) {
   if(scene==='factory')return objects.factory;
   if(scene==='codebase')return objects.code;
   if(scene==='intake')return [panel(28,48,148,64),panel(28,186,104,48),panel(148,186,104,48),folded,folded,folded];
@@ -57,7 +55,7 @@ function routes(scene,mode,objects) {const off=[200,175,200,175,200,175,200,175]
   if(scene==='factory')return [off,off,off];
   if(scene==='codebase')return [objects.codeLink,off,off];
   if(scene==='intake')return [[104,112,104,142,80,150,80,186],off,off];
-  return [80,200,320].map((x,i)=>{const origin=mode==='individual'?x:mode==='hybrid'&&i===2?320:200;return [origin,90,origin,126,x,126,x,scene==='setup'&&i===0?184:156];});}
+  return [80,200,320].map((x,i)=>{const origin=mode==='individual'?x:mode==='hybrid'&&i===2?320:200;return [origin,90,origin,126,x,126,x,156];});}
 const curve=q=>`M${q[0]},${q[1]}C${q[2]},${q[3]} ${q[4]},${q[5]} ${q[6]},${q[7]}`;
 const at=(q,t)=>[0,1].map(k=>(1-t)**3*q[k]+3*(1-t)**2*t*q[k+2]+3*(1-t)*t*t*q[k+4]+t**3*q[k+6]);
 const ease=t=>{const x=Math.max(0,Math.min(1,t));return x*x*(3-2*x);};
@@ -95,7 +93,7 @@ function mount({stage,svg,read,onIntakeFrame},value) {
   const ticketLayers=[mk('g',{'data-depth':'inside'},assembly),mk('g',{'data-depth':'outside'},root)];
   const slices=ticketLayers.map(layer=>[3,4].map(()=>({paths:['fo','nf sil','nf lo'].map(cls=>mk('path',{class:cls},layer)),drawn:''})));
   parts[4].sil.setAttribute('data-depth','wall');
-  let bodyTween=tween(['factory','codebase','setup'].includes(scene)?1:0),baseTween=tween(scene==='factory'?0:1),bodyDrawn='';
+  let bodyTween=tween(['factory','codebase'].includes(scene)?1:0),baseTween=tween(scene==='factory'?0:1),bodyDrawn='';
   let placement=bodyPose(scene).map(n=>tween(n));
   const panels=poses(scene,mode,objects).map((q,i)=>{
     const g=mk('g',{},root),face=mk('path',{class:i===3?'sil hi':'sil'},g),marks=mk('path',{class:'nf lo'},g);
@@ -179,15 +177,15 @@ function mount({stage,svg,read,onIntakeFrame},value) {
     panels.forEach(panel=>{if(!immediate&&panel.rendered)panel.tw=panel.rendered.map(v=>tween(v));});
     poses(scene,mode,objects).forEach((q,i)=>q.forEach((v,k)=>{if(immediate)panels[i].tw[k]=tween(v);else tset(panels[i].tw[k],v,now,Math.abs(i-1)*stagger);}));
     routes(scene,mode,objects).forEach((q,i)=>q.forEach((v,k)=>{if(immediate)links[i].tw[k]=tween(v);else tset(links[i].tw[k],v,now,0);}));
-    const body=['factory','codebase','setup'].includes(scene)?1:0,base=scene==='factory'?0:1;
+    const body=['factory','codebase'].includes(scene)?1:0,base=scene==='factory'?0:1;
     bodyPose(scene).forEach((v,i)=>{if(immediate)placement[i]=tween(v);else tset(placement[i],v,now,0);});
     if(immediate){bodyTween=tween(body);baseTween=tween(base);}else{tset(bodyTween,body,now,0);tset(baseTween,base,now,0);}
     active=-1;
-    panels.forEach((panel,i)=>{panel.face.classList.toggle('hi',i===(scene==='factory'||scene==='codebase'||scene==='setup'?3:0));});read.textContent='rest';loop.wake();
+    panels.forEach((panel,i)=>{panel.face.classList.toggle('hi',i===(scene==='factory'||scene==='codebase'?3:0));});read.textContent='rest';loop.wake();
   }
   function select(next) {
     if(active===next)return;active=next;
-    const chosen=scene==='factory'?(next<1?3:next===1?1:4):scene==='codebase'?(next<1?3:1):scene==='intake'?(next<=0?0:1):scene==='setup'?(next<0?3:next===0?1:next+5):Math.max(next,0);
+    const chosen=scene==='factory'?(next<1?3:next===1?1:4):scene==='codebase'?(next<1?3:1):scene==='intake'?(next<=0?0:1):Math.max(next,0);
     panels.forEach((panel,i)=>panel.face.classList.toggle('hi',i===chosen));
     read.textContent=next<0?'rest':['source','in progress','ready'][next];loop.wake();
   }
