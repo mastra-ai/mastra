@@ -3056,18 +3056,18 @@ describe('PlatformSandbox', () => {
   });
 
   describe('stop / destroy (checkpoint lifecycle)', () => {
-    // These tests pin down the semantic split between stop() and destroy()
-    // that mirrors @mastra/railway RailwaySandbox after mastra#20739:
-    //   stop()    -> preserve checkpoint (VM DELETE only)
-    //   destroy() -> release checkpoint (checkpoint DELETE + VM DELETE)
-    // The old behavior — stop() aliasing destroy() with no checkpoint delete
-    // in either — is the invariant break the split fixes.
-    it('stop() releases the VM without touching the checkpoint (DELETE /sandbox/:id only)', async () => {
+    // These tests pin down the semantic split between stop() and destroy():
+    //   stop()    -> nothing sent; the VM and its checkpoint stay, the id is kept for reattach
+    //   destroy() -> release checkpoint (checkpoint DELETE) + release VM (sandbox DELETE)
+    // Mastra.shutdown() stops every registered workspace on SIGINT, and the
+    // proxy's sandbox DELETE kills the VM on E2B, so a stop() that sent it
+    // destroyed every live session on a host restart.
+    it('stop() sends nothing to the proxy and keeps the sandbox id for reattach', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
 
       const sandbox = new PlatformSandbox({
         // Explicit id so _hasRecoveryKey is true — the destroy() path guards
@@ -3080,13 +3080,18 @@ describe('PlatformSandbox', () => {
       });
       await sandbox._start();
 
-      await sandbox.stop();
+      await sandbox._stop();
+      expect(sandbox.status).toBe('stopped');
 
-      // Exactly two upstream calls: the create and the sandbox DELETE.
-      // Anything else (in particular a DELETE /checkpoint) is a regression
-      // — stop() must not release the recovery checkpoint.
+      // Only the create went upstream. A DELETE of the sandbox or its
+      // checkpoint here is a regression.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // The id survives, so the next start() reattaches (GET /sandbox/sbx_1)
+      // instead of provisioning (POST /sandbox).
+      await sandbox._start();
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
+      expect(fetchMock.mock.calls[1]![1].method ?? 'GET').toBe('GET');
       expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
@@ -3260,8 +3265,7 @@ describe('PlatformSandbox', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockReturnValueOnce(capturePending)
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockReturnValueOnce(capturePending);
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',
@@ -3274,31 +3278,32 @@ describe('PlatformSandbox', () => {
 
       // Kick off a capture, then a stop while it's still in flight.
       const capturePromise = sandbox.captureCheckpoint();
-      const stopPromise = sandbox.stop();
+      let stopped = false;
+      const stopPromise = sandbox.stop().then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
 
-      // stop() must not have progressed to the VM DELETE yet — only the
-      // create + the in-flight POST /checkpoint should be observable.
+      // stop() waits for the capture: only the create + the in-flight
+      // POST /checkpoint are observable and stop() has not resolved.
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(stopped).toBe(false);
 
       releaseCapture(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
-
       await Promise.all([capturePromise, stopPromise]);
 
-      // Now the VM DELETE has fired, but no checkpoint DELETE (this is
-      // stop(), not destroy()).
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
-      expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
+      // Nothing else went upstream: no sandbox DELETE, no checkpoint DELETE.
+      expect(stopped).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('stop() proceeds to teardown even if the in-flight capture fails (best-effort flush)', async () => {
+    it('stop() resolves even if the in-flight capture fails (best-effort flush)', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         // Capture blows up with a transport error.
-        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }))
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }));
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',
@@ -3314,13 +3319,10 @@ describe('PlatformSandbox', () => {
       const capturePromise = sandbox.captureCheckpoint();
       await expect(capturePromise).rejects.toMatchObject({ status: 429 });
 
-      // A failed capture must not leave the caller unable to release the
-      // sandbox. The proxy's safety-net timer is the fallback for the
-      // checkpoint state.
-      await sandbox.stop();
-
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
+      // A failed capture must not make stop() throw. The proxy's safety-net
+      // timer is the fallback for the checkpoint state.
+      await expect(sandbox.stop()).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 
