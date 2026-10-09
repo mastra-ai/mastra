@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-import type { ClientSession, Db } from 'mongodb';
+import type { ClientSession, CollectionInfo, Db, Document } from 'mongodb';
 import packageJson from '../../../package.json';
 import type { DatabaseConfig } from '../types';
 import type { ConnectorHandler } from './base';
@@ -94,6 +94,15 @@ export class MongoDBConnector {
     }
     const db = await this.getConnection();
     return db.listCollections({ name: collectionName }).hasNext();
+  }
+
+  /** Lists collection and view metadata; custom connector handlers expose none. */
+  async listCollectionInfos(filter: Document = {}): Promise<CollectionInfo[]> {
+    if (this.#handler) {
+      return [];
+    }
+    const db = await this.getConnection();
+    return (await db.listCollections(filter).toArray()) as CollectionInfo[];
   }
 
   /**

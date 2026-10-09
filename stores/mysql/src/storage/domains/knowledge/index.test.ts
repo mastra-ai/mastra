@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
@@ -10,7 +11,7 @@ import {
   TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StoreOperationsMySQL } from '../operations';
 import { KnowledgeMySQL, mysqlSql } from '.';
@@ -197,6 +198,109 @@ describe('MySQL canonical Knowledge support', () => {
     } finally {
       await pool.query(`DROP TABLE IF EXISTS \`${preserved}\``);
     }
+  });
+});
+
+const KNOWLEDGE_TABLE_PATTERN = "table_schema = DATABASE() AND table_name LIKE 'mastra\\_knowledge\\_%'";
+
+async function dropKnowledgeTables(): Promise<void> {
+  const [rows] = await pool.query(
+    `SELECT table_name AS tableName FROM information_schema.tables WHERE ${KNOWLEDGE_TABLE_PATTERN}`,
+  );
+  const tables = (rows as Array<{ tableName: string }>).map(row => `\`${row.tableName}\``);
+  if (tables.length > 0) await pool.query(`DROP TABLE ${tables.join(', ')}`);
+}
+
+async function seedV1Layout({ published = false } = {}): Promise<void> {
+  await dropKnowledgeTables();
+  const sql = await readFile(new URL('./fixtures/w1-main.sql', import.meta.url), 'utf8');
+  for (const statement of sql.split(';')) {
+    const ddl = statement
+      .split('\n')
+      .filter(line => !line.startsWith('--'))
+      .join('\n')
+      .trim();
+    if (ddl) await pool.query(ddl);
+  }
+  if (published) {
+    await pool.query('ALTER TABLE mastra_knowledge_activity DROP INDEX idx_knowledge_activity_scope');
+    await pool.query('ALTER TABLE mastra_knowledge_nodes DROP INDEX idx_knowledge_nodes_name');
+    await pool.query('ALTER TABLE mastra_knowledge_records DROP INDEX idx_knowledge_records_scope');
+    await pool.query(
+      'CREATE TABLE mastra_knowledge_cursors (sourceThreadId VARCHAR(191) NOT NULL, agent VARCHAR(191) NOT NULL, lastKnowledgeId LONGTEXT, updatedAt DATETIME(6) NOT NULL, PRIMARY KEY (sourceThreadId, agent))',
+    );
+  }
+  await pool.query(
+    "INSERT INTO mastra_knowledge_nodes (id,type,name,canonicalName,scope,scopeKey,version) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1)",
+  );
+}
+
+async function knowledgeLayout(): Promise<string[]> {
+  const [columns] = await pool.query(
+    `SELECT CONCAT(table_name, '.', column_name, ':', column_type) AS object FROM information_schema.columns WHERE ${KNOWLEDGE_TABLE_PATTERN}`,
+  );
+  const [indexes] = await pool.query(
+    `SELECT DISTINCT CONCAT(table_name, '#', index_name) AS object FROM information_schema.statistics WHERE ${KNOWLEDGE_TABLE_PATTERN}`,
+  );
+  return [...(columns as Array<{ object: string }>), ...(indexes as Array<{ object: string }>)]
+    .map(row => row.object)
+    .sort();
+}
+
+describe('KnowledgeMySQL published v1 layout', () => {
+  const preserved = `knowledge_v1_preserved_${process.pid}`;
+
+  async function expectUntouched(): Promise<void> {
+    const before = await knowledgeLayout();
+    await expect(createStore().init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    expect(await knowledgeLayout()).toEqual(before);
+  }
+
+  afterEach(async () => {
+    await pool.query(`DROP VIEW IF EXISTS knowledge_v1_host_report`);
+    await pool.query(`DROP TABLE IF EXISTS \`${preserved}\``);
+    await dropKnowledgeTables();
+    await createStore().init();
+  });
+
+  it.each([
+    ['the layout releases built from main created', false],
+    ['the published v1 layout', true],
+  ])('replaces %s, discarding its rows and keeping other storage', async (_name, published) => {
+    await seedV1Layout({ published });
+    await pool.query(`CREATE TABLE \`${preserved}\` (id VARCHAR(64) PRIMARY KEY)`);
+    await pool.query(`INSERT INTO \`${preserved}\` (id) VALUES ('kept')`);
+
+    await createStore().init();
+    await createStore().init();
+
+    const [marker] = await pool.query(`SELECT version FROM \`${TABLE_KNOWLEDGE_SCHEMA}\` WHERE id='canonical'`);
+    expect(Number((marker as Array<{ version: number }>)[0]?.version)).toBe(KNOWLEDGE_STORAGE_SCHEMA_VERSION);
+    const [legacy] = await pool.query(`SELECT id FROM \`${TABLE_KNOWLEDGE_NODES}\``);
+    expect(legacy).toEqual([]);
+    const layout = await knowledgeLayout();
+    expect(layout.some(object => object.startsWith('mastra_knowledge_cursors'))).toBe(false);
+    expect(layout).not.toContain('mastra_knowledge_nodes#idx_knowledge_nodes_identity');
+    const [rows] = await pool.query(`SELECT id FROM \`${preserved}\``);
+    expect((rows as Array<{ id: string }>).map(row => row.id)).toEqual(['kept']);
+  });
+
+  it('leaves a v1 layout with an unfamiliar index untouched', async () => {
+    await seedV1Layout();
+    await pool.query('CREATE INDEX host_lookup ON mastra_knowledge_nodes (version)');
+    await expectUntouched();
+  });
+
+  it('leaves a v1 layout with a modified column untouched', async () => {
+    await seedV1Layout();
+    await pool.query('ALTER TABLE mastra_knowledge_records ADD COLUMN hostNote LONGTEXT');
+    await expectUntouched();
+  });
+
+  it('leaves a v1 layout that a view depends on untouched', async () => {
+    await seedV1Layout();
+    await pool.query('CREATE VIEW knowledge_v1_host_report AS SELECT id FROM mastra_knowledge_nodes');
+    await expectUntouched();
   });
 });
 

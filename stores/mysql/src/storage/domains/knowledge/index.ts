@@ -8,6 +8,7 @@ import {
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
   isKnowledgeNodeVisible,
+  isPublishedKnowledgeV1Layout,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -22,6 +23,7 @@ import {
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   KNOWLEDGE_TABLE_NAMES,
   knowledgeScopeIdsKey,
+  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
   TABLE_KNOWLEDGE_ACCESS_STATE,
   TABLE_KNOWLEDGE_IMPORT_RUNS,
   TABLE_KNOWLEDGE_IMPORT_STATE,
@@ -339,8 +341,17 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 }
 
 // Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
-/** Cursor table from v1 Knowledge; only an explicit reset removes it. */
+/** Cursor table from v1 Knowledge; removed by an explicit reset or by replacing a published v1 layout. */
 const RETIRED_KNOWLEDGE_CURSOR_TABLE = 'mastra_knowledge_cursors';
+
+/** Indexes published MySQL v1 adapters created, including the three later releases built from `main` added. */
+const PUBLISHED_MYSQL_KNOWLEDGE_V1_INDEX_NAMES: ReadonlySet<string> = new Set([
+  'PRIMARY',
+  ...PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  'idx_knowledge_activity_scope',
+  'idx_knowledge_nodes_name',
+  'idx_knowledge_records_scope',
+]);
 
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
@@ -452,6 +463,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       [TABLE_KNOWLEDGE_ACTIVITY, KNOWLEDGE_ACTIVITY_SCHEMA],
       [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA],
     ] as const;
+    await this.#replacePublishedV1();
     const tableNames = tables.map(([tableName]) => tableName);
     const existingTablesResult = await this.#executor.execute({
       sql: `SELECT table_name AS tableName FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (${tableNames.map(() => '?').join(',')})`,
@@ -514,6 +526,45 @@ export class KnowledgeMySQL extends KnowledgeStorage {
       sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id, version) VALUES ('canonical', ?) ON DUPLICATE KEY UPDATE id=id`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
+  }
+
+  /**
+   * Knowledge v1, including the releases built from `main` before canonical storage, was experimental
+   * and its data is not migrated. When exactly the published v1 tables and indexes are the only
+   * Knowledge objects, drop them, discarding any rows they hold, so canonical storage can initialize.
+   * Unfamiliar tables, columns, indexes, views, triggers, and inbound foreign keys leave the database
+   * untouched. One `DROP TABLE` statement keeps the replacement atomic.
+   */
+  async #replacePublishedV1(): Promise<void> {
+    const tablesResult = await this.#executor.execute({
+      sql: "SELECT table_name AS tableName, table_type AS tableType FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name LIKE 'mastra\\_knowledge\\_%'",
+      args: [],
+    });
+    if (tablesResult.rows.length === 0) return;
+    const tables = tablesResult.rows.map(row => String(row.tableName));
+    if (tables.includes(TABLE_KNOWLEDGE_SCHEMA)) return;
+    if (tablesResult.rows.some(row => String(row.tableType) !== 'BASE TABLE')) return;
+    const placeholders = tables.map(() => '?').join(',');
+    const columnsResult = await this.#executor.execute({
+      sql: `SELECT table_name AS tableName, column_name AS columnName FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN (${placeholders})`,
+      args: tables,
+    });
+    const columnsByTable = new Map<string, string[]>(tables.map(table => [table, []]));
+    for (const row of columnsResult.rows) columnsByTable.get(String(row.tableName))?.push(String(row.columnName));
+    if (!isPublishedKnowledgeV1Layout(columnsByTable)) return;
+    const indexesResult = await this.#executor.execute({
+      sql: `SELECT DISTINCT index_name AS indexName FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name IN (${placeholders})`,
+      args: tables,
+    });
+    if (!indexesResult.rows.every(row => PUBLISHED_MYSQL_KNOWLEDGE_V1_INDEX_NAMES.has(String(row.indexName)))) return;
+    const dependents = await this.#executor.execute({
+      sql: `SELECT 1 FROM information_schema.triggers WHERE event_object_schema=DATABASE() AND event_object_table IN (${placeholders})
+        UNION ALL SELECT 1 FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND referenced_table_name IN (${placeholders}) AND table_name NOT IN (${placeholders})
+        UNION ALL SELECT 1 FROM information_schema.views WHERE table_schema=DATABASE() AND view_definition LIKE '%mastra\\_knowledge\\_%'`,
+      args: [...tables, ...tables, ...tables],
+    });
+    if (dependents.rows.length > 0) return;
+    await this.#executor.execute(`DROP TABLE ${tables.map(table => `"${table}"`).join(', ')}`);
   }
 
   override async dangerouslyReset(): Promise<void> {

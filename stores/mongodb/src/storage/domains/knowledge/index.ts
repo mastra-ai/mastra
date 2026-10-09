@@ -201,8 +201,49 @@ function assertImportRunTransition(
 }
 
 // Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
-/** Cursor collection from v1 Knowledge; only an explicit reset removes it. */
+/** Cursor collection from v1 Knowledge; removed by an explicit reset or by replacing a published v1 layout. */
 const RETIRED_KNOWLEDGE_CURSOR_COLLECTION = 'mastra_knowledge_cursors';
+
+/**
+ * Secondary indexes (key, `!unique` when unique) that published MongoDB v1 adapters created on each v1
+ * collection, including the ones later releases built from `main` added.
+ */
+const PUBLISHED_MONGODB_KNOWLEDGE_V1_INDEXES: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  (
+    [
+      [TABLE_KNOWLEDGE_ACTIVITY, [{ id: -1 }, { scopeKey: 1, id: -1 }]],
+      [RETIRED_KNOWLEDGE_CURSOR_COLLECTION, [[{ sourceThreadId: 1, agent: 1 }, true]]],
+      [
+        TABLE_KNOWLEDGE_MENTIONS,
+        [{ recordId: 1, sourceType: 1, sourceId: 1 }, [{ sourceType: 1, sourceId: 1, recordId: 1 }, true]],
+      ],
+      [
+        TABLE_KNOWLEDGE_NODES,
+        [{ scopeKey: 1, type: 1 }, [{ type: 1, scopeKey: 1, canonicalName: 1 }, true], { type: 1, canonicalName: 1 }],
+      ],
+      [
+        TABLE_KNOWLEDGE_RECORDS,
+        [
+          { node: 1, id: -1 },
+          { sourceThreadId: 1, id: -1 },
+          { scopeKey: 1, id: -1 },
+        ],
+      ],
+      [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, [[{ idempotencyKey: 1 }, true], { status: 1, availableAt: 1, createdAt: 1 }]],
+    ] as [string, (Record<string, number> | [Record<string, number>, true])[]][]
+  ).map(([collection, indexes]) => [
+    collection,
+    new Set(
+      indexes.map(index =>
+        Array.isArray(index) ? mongoIndexSignature(index[0], index[1]) : mongoIndexSignature(index, false),
+      ),
+    ),
+  ]),
+);
+
+function mongoIndexSignature(key: Document, unique: boolean): string {
+  return `${JSON.stringify(key)}${unique ? '!unique' : ''}`;
+}
 
 const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
   'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
@@ -302,6 +343,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         'MongoDB Knowledge requires a replica set or sharded cluster with multi-document transaction support.',
       );
     }
+    await this.#replacePublishedV1();
     const schema = await this.#collection(TABLE_KNOWLEDGE_SCHEMA);
     const existingCollections = await Promise.all(
       KnowledgeMongoDB.MANAGED_COLLECTIONS.map(async name => ({
@@ -391,6 +433,42 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       ).findOne({ id: 'global' }, { ...sessionOptions(session) });
       return operation(session);
     });
+  }
+
+  /**
+   * Knowledge v1, including the releases built from `main` before canonical storage, was experimental
+   * and its data is not migrated. When the only Knowledge collections are published v1 collections
+   * carrying only published v1 indexes, drop them, discarding their documents, so canonical storage can
+   * initialize. Canonical collections, unfamiliar indexes or collection options, and views over Knowledge
+   * leave the database untouched. A replacement interrupted between drops still matches on retry.
+   */
+  async #replacePublishedV1(): Promise<void> {
+    const infos = await this.#connector.listCollectionInfos({ name: { $regex: '^mastra_knowledge_' } });
+    if (infos.length === 0) return;
+    if (!infos.every(info => info.type === 'collection' && PUBLISHED_MONGODB_KNOWLEDGE_V1_INDEXES.has(info.name))) {
+      return;
+    }
+    if (infos.some(info => Object.keys(info.options ?? {}).length > 0)) return;
+    const views = await this.#connector.listCollectionInfos({ type: 'view' });
+    if (views.some(view => JSON.stringify(view.options ?? {}).includes('mastra_knowledge_'))) return;
+    let recognized = false;
+    for (const info of infos) {
+      const known = PUBLISHED_MONGODB_KNOWLEDGE_V1_INDEXES.get(info.name)!;
+      for (const index of await (await this.#collection(info.name)).indexes()) {
+        if (index.name === '_id_') continue;
+        if (Object.keys(index).some(option => !['v', 'key', 'name', 'unique', 'ns'].includes(option))) return;
+        if (!known.has(mongoIndexSignature(index.key, index.unique === true))) return;
+        recognized = true;
+      }
+    }
+    if (!recognized) return;
+    for (const info of infos) {
+      try {
+        await (await this.#collection(info.name)).drop();
+      } catch (error) {
+        if (!(error instanceof MongoServerError && error.codeName === 'NamespaceNotFound')) throw error;
+      }
+    }
   }
 
   override async dangerouslyReset(): Promise<void> {
