@@ -101,8 +101,8 @@ describe('thinking model capabilities', () => {
     [
       'xAI offers only the efforts its package accepts',
       'xai/grok-4.6',
-      effort('low', 'medium', 'high', 'xhigh'),
-      ['off', 'low', 'medium', 'high'],
+      effort('low', 'medium', 'high', 'xhigh', 'max'),
+      ['off', 'low', 'medium', 'high', 'xhigh'],
     ],
     [
       'Alibaba offers its thinking switch, not efforts its request cannot send',

@@ -33,7 +33,7 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
   alibaba: { optionsKey: 'alibaba', enableThinking: { enableThinking: true } },
   groq: { optionsKey: 'groq', sendEffort: sendReasoningEffort, acceptedEfforts: LOW_TO_HIGH },
   mistral: { optionsKey: 'mistral', sendEffort: sendReasoningEffort, acceptedEfforts: ['high'] },
-  xai: { optionsKey: 'xai', sendEffort: sendReasoningEffort, acceptedEfforts: LOW_TO_HIGH },
+  xai: { optionsKey: 'xai', sendEffort: sendReasoningEffort, acceptedEfforts: [...LOW_TO_HIGH, 'xhigh'] },
   togetherai: {
     optionsKey: 'togetherai',
     sendEffort: sendReasoningEffort,
