@@ -28,6 +28,13 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * `fence` argument, otherwise the one `resolveRunFence()` returns for the
    * run it writes.
    *
+   * This fences workflow writes only. A run is fully fenced only when the
+   * memory store it writes to supports run fencing too, which a composite
+   * store taking its domains from different adapters, or an agent whose
+   * memory has its own storage, does not guarantee. Otherwise an execution
+   * that lost the run can no longer write here, but its messages, threads and
+   * working memory still land.
+   *
    * Adapters that return true must pass the run-fencing conformance suite.
    * An adapter that has to probe its backend to know returns a promise, and
    * rejects when the probe fails: it must never answer false and later true.

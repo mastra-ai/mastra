@@ -1179,17 +1179,30 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
       const traceEntry = this.db.traces.get(traceId);
-      if (traceEntry) {
-        const scopeReference = traceEntry.rootSpan ?? Object.values(traceEntry.spans)[0];
-        if (!this.matchesDeleteScope(scopeReference, args)) {
-          continue;
-        }
-        this.db.traceCursorIds.delete(traceId);
-        for (const spanId of Object.keys(traceEntry.spans)) {
-          this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
-        }
+      if (!traceEntry) continue;
+
+      // Tenant scope applies per span, like the row-level deletes in SQL adapters,
+      // so spans from other tenants in the same trace are kept.
+      for (const [spanId, span] of Object.entries(traceEntry.spans)) {
+        if (!this.matchesDeleteScope(span, args)) continue;
+        delete traceEntry.spans[spanId];
+        this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
       }
-      this.db.traces.delete(traceId);
+
+      const remainingSpans = Object.values(traceEntry.spans);
+      if (remainingSpans.length === 0) {
+        this.db.traces.delete(traceId);
+        this.db.traceCursorIds.delete(traceId);
+        continue;
+      }
+
+      if (traceEntry.rootSpan && !traceEntry.spans[traceEntry.rootSpan.spanId]) {
+        traceEntry.rootSpan = remainingSpans.find(span => span.parentSpanId == null) ?? null;
+      }
+      if (!traceEntry.rootSpan) {
+        this.db.traceCursorIds.delete(traceId);
+      }
+      this.recomputeTraceProperties(traceEntry);
     }
 
     // Cascade: remove trace-linked signal events. Records without a traceId are untouched.
