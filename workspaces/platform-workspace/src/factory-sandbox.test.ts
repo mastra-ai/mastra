@@ -129,6 +129,8 @@ describe('PlatformFactorySandbox', () => {
     expect((created as any)._client.sessionId).toBe('sess_1');
     expect((created as any)._sandboxId).toBe('sbx_prev');
     expect(typeof (created as any)._template).toBe('function');
+    expect(created.workingDirectory).toBe('/home/user/repos');
+    expect(sandbox.create({ ...ctx, workingDirectory: undefined }, {}).workingDirectory).toBeUndefined();
 
     const tuned = sandbox.create(ctx, { idleTimeoutMinutes: 5 });
     expect((tuned as any)._idleTimeoutMinutes).toBe(5);

@@ -110,6 +110,7 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
       id: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),
+      ...(ctx.workingDirectory ? { workingDirectory: ctx.workingDirectory } : {}),
       timeout: this.#timeout(settings),
     });
   }
