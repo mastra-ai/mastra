@@ -1301,8 +1301,9 @@ describe('buffer()', () => {
     expect(status.record?.isBufferingObservation).toBe(false);
     const stored = await storage.listMessages({ threadId, perPage: false });
     const markerTypes = stored.messages.flatMap(message => message.content.parts.map(part => part.type));
-    expect(markerTypes.includes('data-om-buffering-failed')).toBe(!transient);
-    // The end marker is emitted once the chunk is stored, before indexing runs.
+    // The end marker is emitted once the chunk is stored, before indexing runs; an indexing
+    // failure after that doesn't fail the cycle, so there is no failed marker either way.
+    expect(markerTypes.includes('data-om-buffering-failed')).toBe(false);
     expect(markerTypes.includes('data-om-buffering-end')).toBe(true);
   });
 
