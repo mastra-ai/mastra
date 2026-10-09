@@ -304,7 +304,7 @@ For `submit_plan`, pass `{ action: 'approved' }` or `{ action: 'rejected', feedb
 
 Return a copy of the running token-usage tally for the active thread.
 
-The run that spends tokens saves its usage to its own thread as each step finishes, including runs resumed while another thread is selected. Sessions that only subscribe to a thread update this tally for display and don't save usage.
+The executing run saves token usage to its own thread as each step finishes, including runs resumed while another thread is selected. If a storage operation fails, the execution owner retains the measured usage and retries it with the next step. Sessions that only subscribe to a thread display its saved total without counting replayed steps again or saving usage.
 
 ```typescript
 const usage = session.getTokenUsage()
