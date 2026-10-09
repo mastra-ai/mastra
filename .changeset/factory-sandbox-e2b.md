@@ -8,7 +8,7 @@ Added `E2BFactorySandbox`, which plugs E2B into Mastra Factory as the sandbox pr
 import { E2BFactorySandbox } from '@mastra/e2b';
 
 new MastraFactory({
-  sandbox: new E2BFactorySandbox({ apiKey: process.env.E2B_API_KEY }),
+  sandbox: new E2BFactorySandbox(), // reads E2B_API_KEY
 });
 ```
 
