@@ -612,7 +612,7 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
+export function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
   // Direct transformer callers can pass any PublicSchema; normalize it before
   // selecting the format-specific handler.
   const normalizedSchema = schema ? toStandardSchema(schema) : undefined;

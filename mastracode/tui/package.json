@@ -1,10 +1,11 @@
 {
   "name": "mastracode",
-  "version": "0.46.0-alpha.1",
+  "version": "0.46.0-alpha.3",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

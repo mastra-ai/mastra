@@ -42,3 +42,28 @@ export const slackInstallations: ChannelInstallationInfo[] = [
 ];
 
 export const noSlackInstallations: ChannelInstallationInfo[] = [];
+
+export const pendingSlackInstallations: ChannelInstallationInfo[] = [
+  {
+    id: 'install-1',
+    platform: 'slack',
+    agentId: 'agent-1',
+    status: 'pending',
+  },
+];
+
+export const activeDiscordInstallations: ChannelInstallationInfo[] = [
+  {
+    id: 'install-2',
+    platform: 'discord',
+    agentId: 'agent-1',
+    status: 'active',
+    displayName: 'Server',
+  },
+];
+
+export const slackDiscordConfiguredPlatforms: ChannelPlatformInfo[] = [
+  { id: 'slack', name: 'Slack', isConfigured: true },
+  { id: 'discord', name: 'Discord', isConfigured: true },
+  { id: 'telegram', name: 'Telegram', isConfigured: false },
+];

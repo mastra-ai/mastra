@@ -30,6 +30,42 @@ export function ThinkingLevelBars<T extends string>({ options, value }: Thinking
   );
 }
 
+export interface ThinkingLevelUnavailableProps<T extends string> {
+  options: readonly ThinkingLevelOption<T>[];
+  label: string;
+  reason: string;
+}
+
+export function ThinkingLevelUnavailable<T extends string>({
+  options,
+  label,
+  reason,
+}: ThinkingLevelUnavailableProps<T>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            role="button"
+            tabIndex={0}
+            aria-disabled="true"
+            aria-label={`${label}: unavailable. ${reason}`}
+            className={cn(
+              'inline-flex h-control-sm shrink-0 cursor-not-allowed items-center rounded-full border border-transparent px-2.5 text-placeholder',
+              focusRing,
+            )}
+          />
+        }
+      >
+        <ThinkingLevelBars options={options} value={undefined} />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-64">
+        {reason}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export interface ThinkingLevelPickerProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
   value: T;
@@ -37,6 +73,8 @@ export interface ThinkingLevelPickerProps<T extends string> {
   /** Disables the trigger and explains why in its tooltip, e.g. when the model cannot think. */
   unavailableReason?: string;
   description?: ReactNode;
+  origin?: string;
+  footer?: ReactNode;
   onChange: (value: T) => void | Promise<unknown>;
 }
 
@@ -46,35 +84,16 @@ export function ThinkingLevelPicker<T extends string>({
   label,
   unavailableReason,
   description,
+  origin,
+  footer,
   onChange,
 }: ThinkingLevelPickerProps<T>) {
   if (unavailableReason) {
-    return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              role="button"
-              tabIndex={0}
-              aria-disabled="true"
-              aria-label={`${label}: unavailable. ${unavailableReason}`}
-              className={cn(
-                'inline-flex h-control-sm shrink-0 cursor-not-allowed items-center rounded-full border border-transparent px-2.5 text-placeholder',
-                focusRing,
-              )}
-            />
-          }
-        >
-          <ThinkingLevelBars options={options} value={undefined} />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-64">
-          {unavailableReason}
-        </TooltipContent>
-      </Tooltip>
-    );
+    return <ThinkingLevelUnavailable options={options} label={label} reason={unavailableReason} />;
   }
 
-  const triggerLabel = `${label}: ${options.find(option => option.value === value)?.label ?? value}`;
+  const levelLabel = options.find(option => option.value === value)?.label ?? value;
+  const triggerLabel = origin ? `${label}: ${levelLabel} · ${origin}` : `${label}: ${levelLabel}`;
 
   return (
     <Popover>
@@ -88,6 +107,7 @@ export function ThinkingLevelPicker<T extends string>({
             {description}
           </Txt>
         ) : null}
+        {footer}
       </PopoverContent>
     </Popover>
   );

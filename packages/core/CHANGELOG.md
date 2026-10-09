@@ -1,5 +1,88 @@
 # @mastra/core
 
+## 1.76.0-alpha.3
+
+### Minor Changes
+
+- Added an optional `usageId` field to exported metrics. Every token and cost metric produced from the same model usage shares one `usageId`, so storage can group a model call's metric rows without relying on the span. Other metrics leave it unset. ([#26461](https://github.com/mastra-ai/mastra/pull/26461))
+
+### Patch Changes
+
+- Keep Studio and Factory sessions alive for the identity provider's full session length. ([#26447](https://github.com/mastra-ai/mastra/pull/26447))
+
+  - `MastraAuthStudio` session cookies now last 14 days by default (was a hardcoded 24 hours), configurable via the new `sessionMaxAgeSeconds` option or the `MASTRA_SESSION_MAX_AGE` environment variable.
+  - When the shared API renews the session during verification, `MastraAuthStudio` re-issues the renewed cookie under the deployment's own cookie domain and exposes it through a new optional `consumePendingResponseHeaders` provider hook.
+  - `@mastra/server`'s auth middleware, `CompositeAuth`, the Factory auth gate, and Factory's per-route `ensureFactoryAuthUser` (used by routes declared `requiresAuth: false`, which skip the gate) forward those headers to the browser, as does the public `GET /auth/me` route. Forwarding is best-effort and never fails a request.
+
+  ```ts
+  import { MastraAuthStudio } from '@mastra/auth-studio';
+
+  // Defaults to 14 days. Override per deployment, or set MASTRA_SESSION_MAX_AGE (seconds).
+  const auth = new MastraAuthStudio({ sessionMaxAgeSeconds: 7 * 24 * 60 * 60 });
+  ```
+
+- Fixed output-stream processing for durable tool results after a restart or cleanup, including Inngest resumes. Restored processors receive the request context, and concurrent cold calls share the published processor pipeline and state. When the agent resolves but its processor pipeline is missing, processor reconstruction or cold-worker dependency-resolution failures (tools, memory, and workspace) stop the step instead of exposing unprocessed output. Unregistered agents, persistence-only callers, and complete live pipelines retain their dependency-resolution fallback. Fixes #26148. ([#26367](https://github.com/mastra-ai/mastra/pull/26367))
+
+- Fixed Inngest tool resumes after a worker restart or cleanup to emit tool-call-resumed before tool-result, preserving configured display transforms. ([#26370](https://github.com/mastra-ai/mastra/pull/26370))
+
+- Fixed plain agents emitting awaited background tool results twice. ([#26344](https://github.com/mastra-ai/mastra/pull/26344))
+
+- Fixed durable and evented agents so they no longer execute tools excluded by `prepareStep`. ([#26339](https://github.com/mastra-ai/mastra/pull/26339))
+
+- Fixed durable and evented agents not saving the structured output object to memory. The saved assistant message now includes `metadata.structuredOutput`, matching regular agents, so reconnecting clients and recovered runs can read the object. ([#26452](https://github.com/mastra-ai/mastra/pull/26452))
+
+  As with regular agents:
+
+  - Truncated responses (finish reason `length` or `content-filter`) and responses that fail validation do not save `metadata.structuredOutput`. The response message itself is still saved.
+  - With `errorStrategy: 'fallback'`, the `fallbackValue` is saved instead.
+
+  This does not yet apply when `structuredOutput.model` is set to a separate structuring model (see [#26431](https://github.com/mastra-ai/mastra/issues/26431)).
+
+  Fixes [#26432](https://github.com/mastra-ai/mastra/issues/26432).
+
+- Fixed agents being told to call `updateWorkingMemory` when `workingMemory.agentManaged` is `false`. The tool is not available in that mode, so agents now receive the read-only working memory instruction instead (#25896). ([#26198](https://github.com/mastra-ai/mastra/pull/26198))
+
+- Fixed durable agents forwarding the parent conversation to delegated agents and delegation hooks, including transient request-processor context. Ordinary tools now receive input-only messages consistently with non-durable agents. ([#26365](https://github.com/mastra-ai/mastra/pull/26365))
+
+- Token and cost metrics now carry a `usageId` shared by all rows from the same model call. Usage rolled up from hidden model calls onto a visible span gets a separate `usageId` per call, so each call stays distinguishable even though the rows share a span. ([#26461](https://github.com/mastra-ai/mastra/pull/26461))
+
+- Fixed durable, evented, and Inngest agents leaking one-step prepareStep system message overrides into later model steps. ([#26343](https://github.com/mastra-ai/mastra/pull/26343))
+
+- Preserve the original `TypeError` when plain agents reject invalid `modelSettings.timeout` stream options, matching durable and evented agents ([#26340](https://github.com/mastra-ai/mastra/pull/26340))
+
+## 1.76.0-alpha.2
+
+### Minor Changes
+
+- Added `outputOptions` to `run.restart()`, matching `run.start()` and `run.resume()`. Set `includeState: true` to get the final workflow state in the result. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+  ```typescript
+  const result = await run.restart({ outputOptions: { includeState: true } });
+  console.log(result.state);
+  ```
+
+### Patch Changes
+
+- Fixed concurrent durable agent runs saving each other's conversation. When runs of the same durable agent (or parent workflows sharing a nested workflow) started at the same time, a nested run's first saved snapshot could hold another run's input and state. Listing runs for one resource could return another run's conversation while it was in progress, and recovering a run that crashed before its first step continued as the other run: it sent that conversation to the model and saved the reply to the other run's thread. Each nested run now saves its own input and state. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Fixed evented workflows losing state changes after a restart. When a workflow run on the evented engine was restarted after a crash, steps resumed with the state from the run's start (or last suspension) instead of the state produced by the steps that already finished, so any `setState` updates made since then were lost. The workflow state is now recorded together with each step's result, and restarts resume from it. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Exported `ServerConfig` from `@mastra/core/server` and `OPENSEARCH_PROMPT` from `@mastra/opensearch` so the documented imports resolve. Fixed JSDoc import paths in `@mastra/evals` to use `@mastra/evals/scorers/prebuilt` and `@mastra/evals/scorers/utils`. ([#26440](https://github.com/mastra-ai/mastra/pull/26440))
+
+- Corrected the documented defaults for `SerializationOptions.maxStringLength` (131072) and `maxDepth` (8) to match the runtime defaults. ([#26425](https://github.com/mastra-ai/mastra/pull/26425))
+
+- Reduced storage used by agent runs waiting on tool approval or a suspended tool. Each suspended snapshot now stores the conversation one fewer time, cutting snapshot size by about 29% in a 12-approval run. Suspended runs resume exactly as before. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Fixed evented workflows dropping state changes made inside a nested workflow that runs as a `.dowhile()` or `.dountil()` loop body. Each iteration started from the state the loop had before the nested workflow ran, so `setState` updates from the loop body were lost and later steps never saw them. The nested workflow's final state now carries into the next iteration and the steps after the loop, matching the default engine. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Reduced storage used by durable agent runs. The conversation transcript is now saved once per workflow snapshot instead of being copied into every step's input and output. In a 12-iteration tool-calling run this cut persisted snapshot size by about 31% on the default engine and 63% on the evented engine. Runs started on an earlier version still resume and finish normally. Runs started on this version can't be resumed after downgrading to an earlier `@mastra/core` version. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Fixed restarted workflows losing state changes made inside a nested workflow. When a run restarted after a crash while a nested workflow was still running, the nested workflow finished but its `setState` updates never reached the parent, so later steps saw the old state. The nested workflow's final state now carries back to the parent, as it already did for `start()` and `resume()`. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Fixed nested workflows losing the parent's state when a run restarted before the nested workflow's first step finished. After a crash in that window, the nested workflow restarted with empty state instead of the state the parent passed in, so steps reading that state failed. The nested workflow now restarts with the parent's state. ([#26221](https://github.com/mastra-ai/mastra/pull/26221))
+
+- Fixed resumed durable and evented agent outputs losing tool calls made before suspension or approval, even after a restart or repeated approvals (COR-1398). ([#26364](https://github.com/mastra-ai/mastra/pull/26364))
+
 ## 1.76.0-alpha.1
 
 ### Minor Changes

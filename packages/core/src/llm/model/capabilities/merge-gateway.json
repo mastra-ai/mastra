@@ -4,6 +4,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-1-20250805",
     "anthropic/claude-opus-4-20250514",
     "anthropic/claude-opus-4-5-20251101",
@@ -275,6 +276,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-haiku-5-5",
     "anthropic/claude-opus-4-1-20250805",
     "anthropic/claude-opus-4-20250514",
     "anthropic/claude-opus-4-5-20251101",
@@ -584,6 +586,11 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
+      }
+    ],
+    "anthropic/claude-haiku-5-5": [
+      {
+        "type": "toggle"
       }
     ],
     "anthropic/claude-sonnet-4-6": [

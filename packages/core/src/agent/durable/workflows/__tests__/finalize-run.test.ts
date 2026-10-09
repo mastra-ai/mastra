@@ -4,6 +4,12 @@ import { globalRunRegistry } from '../../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../../types';
 
 const resolveRuntimeDependencies = vi.fn();
+const authorizeDurableMemory = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../../memory-fga', () => ({
+  authorizeDurableMemory: (...args: any[]) => authorizeDurableMemory(...args),
+  getDurableMemoryAuthorizationChecks: vi.fn(() => new Map()),
+}));
 
 vi.mock('../../utils/resolve-runtime', () => ({
   resolveRuntimeDependencies: (...args: any[]) => resolveRuntimeDependencies(...args),
@@ -11,11 +17,15 @@ vi.mock('../../utils/resolve-runtime', () => ({
 
 const { runDurableFinishSideEffects } = await import('../finalize-run');
 
-function makeInitData(state: Record<string, unknown>): DurableAgenticWorkflowInput {
+function makeInitData(
+  state: Record<string, unknown>,
+  options?: DurableAgenticWorkflowInput['options'],
+): DurableAgenticWorkflowInput {
   return {
     runId: 'run-1',
     agentId: 'agent-1',
     agentName: 'agent-1',
+    ...(options ? { options } : {}),
     state,
   } as unknown as DurableAgenticWorkflowInput;
 }
@@ -30,6 +40,7 @@ function makeMessageListState() {
 describe('runDurableFinishSideEffects', () => {
   beforeEach(() => {
     resolveRuntimeDependencies.mockReset();
+    authorizeDurableMemory.mockReset().mockResolvedValue(undefined);
     globalRunRegistry.delete('run-1');
   });
 
@@ -57,10 +68,100 @@ describe('runDurableFinishSideEffects', () => {
       runId: 'run-1',
       initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
       messageListState: makeMessageListState(),
-      mastra: { getLogger: () => undefined } as any,
+      mastra: { getLogger: () => undefined, getServer: () => undefined } as any,
     });
 
     expect(flushMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('denies before durable finish persistence writes', async () => {
+    const denial = new Error('memory write denied');
+    authorizeDurableMemory.mockRejectedValueOnce(denial);
+    const flushMessages = vi.fn();
+    const createThread = vi.fn();
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      saveQueueManager: { flushMessages },
+      memory: { createThread },
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData(
+          { threadId: 'thread-1', resourceId: 'resource-1', threadExists: false },
+          { actor: true },
+        ),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(denial);
+
+    expect(authorizeDurableMemory).toHaveBeenCalledWith(
+      expect.any(Map),
+      expect.objectContaining({
+        permission: 'memory:write',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        agentId: 'agent-1',
+        actor: true,
+      }),
+    );
+    expect(createThread).not.toHaveBeenCalled();
+    expect(flushMessages).not.toHaveBeenCalled();
+  });
+
+  it('denies before durable title generation when memory reads are denied', async () => {
+    const denial = new Error('memory read denied');
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      if (input.permission === 'memory:read') throw denial;
+    });
+    const generateThreadTitle = vi.fn();
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(denial);
+
+    expect(generateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('denies before durable title generation when memory writes are denied', async () => {
+    const denial = new Error('memory write denied');
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      if (input.permission === 'memory:write') throw denial;
+    });
+    const generateThreadTitle = vi.fn();
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    await expect(
+      runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+      }),
+    ).rejects.toBe(denial);
+
+    expect(authorizeDurableMemory).toHaveBeenCalledWith(
+      expect.any(Map),
+      expect.objectContaining({ permission: 'memory:read' }),
+    );
+    expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
   it('skips title generation for an observational-memory run, matching the persistence guard', async () => {
@@ -184,5 +285,132 @@ describe('runDurableFinishSideEffects', () => {
 
     expect(globalRunRegistry.get('run-1')?.messageList).toBe(existing);
     expect(existing.get.all.db().length).toBeGreaterThan(0);
+  });
+
+  // A recovered run or remote worker has no live registry config, only the JSON Schema
+  // and options persisted in the workflow input.
+  describe('structured output on a recovered run (persisted config only)', () => {
+    const jsonSchema = {
+      type: 'object',
+      properties: { name: { type: 'string' }, age: { type: 'number' } },
+      required: ['name', 'age'],
+      additionalProperties: false,
+    };
+
+    async function finishRecovered({
+      text,
+      finishReason = 'stop',
+      structuredOutput = {},
+    }: {
+      text: string;
+      finishReason?: string;
+      structuredOutput?: Record<string, unknown>;
+    }) {
+      let flushed: MessageList | undefined;
+      const flushMessages = vi.fn(async (list: MessageList) => {
+        flushed = list;
+      });
+      resolveRuntimeDependencies.mockResolvedValue({
+        saveQueueManager: { flushMessages },
+        memory: { createThread: vi.fn() },
+      });
+
+      const list = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      list.add({ role: 'user', content: 'who is it?' }, 'user');
+      list.add({ role: 'assistant', content: text }, 'response');
+
+      await runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: {
+          ...makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+          options: { structuredOutput: { schema: jsonSchema, ...structuredOutput } },
+        } as unknown as DurableAgenticWorkflowInput,
+        messageListState: list.serialize(),
+        mastra: { getLogger: () => undefined } as any,
+        outputResult: { text, finishReason } as any,
+      });
+
+      expect(globalRunRegistry.get('run-1')?.structuredOutput).toBeUndefined();
+      expect(flushMessages).toHaveBeenCalledTimes(1);
+      return flushed!.get.response.db().findLast(m => m.role === 'assistant')?.content.metadata?.structuredOutput;
+    }
+
+    it('validates with the persisted JSON Schema', async () => {
+      await expect(finishRecovered({ text: JSON.stringify({ name: 'Alice', age: 30 }) })).resolves.toEqual({
+        name: 'Alice',
+        age: 30,
+      });
+    });
+
+    it('saves nothing when validation fails without a fallback', async () => {
+      await expect(finishRecovered({ text: JSON.stringify({ name: 'Alice' }) })).resolves.toBeUndefined();
+    });
+
+    it('saves the persisted fallbackValue when errorStrategy is fallback', async () => {
+      await expect(
+        finishRecovered({
+          text: JSON.stringify({ name: 'Alice' }),
+          structuredOutput: { errorStrategy: 'fallback', fallbackValue: { name: 'Fallback', age: 1 } },
+        }),
+      ).resolves.toEqual({ name: 'Fallback', age: 1 });
+    });
+
+    it.each(['length', 'content-filter'])('does not validate truncated output (%s)', async finishReason => {
+      await expect(
+        finishRecovered({ text: JSON.stringify({ name: 'Alice', age: 30 }), finishReason }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  // Observational memory saves the turn from its output processor and the finish-step
+  // flush is skipped, so the object must already be on the message when processors run.
+  it('attaches structured output before output processors run (observational memory)', async () => {
+    let seenByProcessor: unknown;
+    const flushMessages = vi.fn();
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [
+        {
+          id: 'om-like',
+          processOutputResult: async ({ messages }: { messages: any[] }) => {
+            seenByProcessor = messages.findLast(m => m.role === 'assistant')?.content.metadata?.structuredOutput;
+            return messages;
+          },
+        },
+      ],
+      saveQueueManager: { flushMessages },
+      memory: { createThread: vi.fn() },
+    } as unknown as RunRegistryEntry);
+
+    const text = JSON.stringify({ name: 'Alice', age: 30 });
+    const list = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+    list.add({ role: 'user', content: 'who is it?' }, 'user');
+    list.add({ role: 'assistant', content: text }, 'response');
+
+    await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: {
+        ...makeInitData({
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          threadExists: true,
+          observationalMemory: true,
+        }),
+        options: {
+          structuredOutput: {
+            schema: {
+              type: 'object',
+              properties: { name: { type: 'string' }, age: { type: 'number' } },
+              required: ['name', 'age'],
+            },
+          },
+        },
+      } as unknown as DurableAgenticWorkflowInput,
+      messageListState: list.serialize(),
+      outputResult: { text, finishReason: 'stop' } as any,
+    });
+
+    expect(seenByProcessor).toEqual({ name: 'Alice', age: 30 });
+    expect(flushMessages).not.toHaveBeenCalled();
   });
 });

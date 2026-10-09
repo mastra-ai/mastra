@@ -300,6 +300,37 @@ describe('AutoExtractedMetrics', () => {
     expect(outputTokens?.metric).toMatchObject({ value: 25, labels: { usageIncomplete: 'true' } });
   });
 
+  it('stamps one usageId on every token row of a usage observation', () => {
+    setup();
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'gpt-4o-mini',
+        provider: 'openai',
+        usage: { inputTokens: 10, outputTokens: 25, inputDetails: { cacheRead: 4 }, outputDetails: { reasoning: 5 } },
+      },
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const tokenRows = emittedMetrics.filter(m => m.metric.name.endsWith('_tokens'));
+    const first = tokenRows.slice(0, tokenRows.length / 2);
+    const second = tokenRows.slice(tokenRows.length / 2);
+    expect(first.length).toBeGreaterThanOrEqual(4);
+    expect(first.some(m => m.metric.costContext?.estimatedCost != null)).toBe(true);
+    expect(new Set(first.map(m => m.metric.usageId)).size).toBe(1);
+    expect(new Set(second.map(m => m.metric.usageId)).size).toBe(1);
+    expect(first[0]!.metric.usageId).toEqual(expect.any(String));
+    expect(first[0]!.metric.usageId).not.toBe(second[0]!.metric.usageId);
+    expect(new Set(tokenRows.map(m => m.metric.metricId)).size).toBe(tokenRows.length);
+
+    const duration = emittedMetrics.find(m => !m.metric.name.endsWith('_tokens'));
+    expect(duration?.metric.usageId).toBeUndefined();
+  });
+
   it('should extract all InputTokenDetails and OutputTokenDetails', () => {
     setup();
     const span = createMockSpan({

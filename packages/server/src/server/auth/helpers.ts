@@ -387,9 +387,26 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   let refreshHeaders: Record<string, string> | undefined;
   const authRequest = adaptToMastraAuthRequest(rawRequest);
 
+  type ConsumePendingResponseHeadersFn = (request: typeof authRequest) => Record<string, string> | undefined;
+  const mergePendingProviderHeaders = (request: typeof authRequest = authRequest) => {
+    const consume = (authConfig as { consumePendingResponseHeaders?: ConsumePendingResponseHeadersFn })
+      .consumePendingResponseHeaders;
+    if (typeof consume !== 'function') return;
+    let pending: Record<string, string> | undefined;
+    try {
+      pending = consume.call(authConfig, request);
+    } catch {
+      // Forwarding a rotated cookie is best-effort; never fail auth over it.
+      return;
+    }
+    if (!pending) return;
+    refreshHeaders = { ...(refreshHeaders ?? {}), ...pending };
+  };
+
   try {
     if (typeof authConfig.authenticateToken === 'function') {
       user = await authConfig.authenticateToken(token ?? '', authRequest);
+      mergePendingProviderHeaders();
     } else {
       throw new Error('No token verification method configured');
     }
@@ -426,7 +443,9 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
               try {
-                user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
+                const retryAuthRequest = adaptToMastraAuthRequest(refreshedRequest);
+                user = await authConfig.authenticateToken(cookieValue, retryAuthRequest);
+                mergePendingProviderHeaders(retryAuthRequest);
               } catch (retryErr) {
                 retryHttpError = retryErr instanceof HTTPException ? retryErr : undefined;
                 throw retryErr;
