@@ -1180,6 +1180,8 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
+  /** Model messages the run added to the conversation (the response messages). */
+  messages?: ModelMessage[];
 };
 
 /**

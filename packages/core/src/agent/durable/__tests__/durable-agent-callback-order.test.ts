@@ -26,8 +26,8 @@
  * The engines also genuinely disagree on what the callbacks themselves see — the harness's own
  * recorded pairing for the callback contract is red, and the helper does not compare callbacks — so
  * each engine's contract is pinned literally below, with plain's as the reference. Two of those
- * divergences are ticketed under COR-1390: plain's `onFinish` payload carries keys the wrappers do not,
- * and the wrappers report `onError` after both steps where plain reports it between them.
+ * divergences are ticketed under COR-1390: the wrappers report `onError` after both steps where plain
+ * reports it between them.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -217,9 +217,8 @@ const PLAIN_PUBLIC_CHUNK_TYPES = [
 
 /**
  * `Object.keys(payload).sort()` for each `onStepFinish`, measured on all three engines (harness case
- * T36, `normal` shape; the callback contract it records is `names` + `payloadKeys`). The values are
- * identical durable vs evented, so the wrapped contract is expressed as plain's list minus the
- * `runId` key only plain sends.
+ * T36, `normal` shape; the callback contract it records is `names` + `payloadKeys`). Every engine
+ * sends the same keys.
  */
 const PLAIN_STEP_FINISH_KEYS = [
   'content',
@@ -246,17 +245,7 @@ const PLAIN_STEP_FINISH_KEYS = [
   'warnings',
 ];
 
-/** Durable and evented observe the same callback contract, without plain's `runId` payload key. */
-const WRAPPED_STEP_FINISH_KEYS = PLAIN_STEP_FINISH_KEYS.filter(key => key !== 'runId');
-
-/**
- * `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above).
- * COR-1390: plain's `onFinish` payload carries `runId`, `error`, `messages`, `model`, `object` and
- * `usedFallbackValue`, none of which reach the wrapped engines' `onFinish`, so the two key sets are
- * pinned separately rather than derived from each other. Pinning the wrapped set at its current keys
- * is what makes this go stale — and red — when COR-1390 lands. The parity helper compares streams,
- * not callbacks, so the ticket is declared here instead of in `differences`.
- */
+/** `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above). */
 const PLAIN_FINISH_KEYS = [
   'content',
   'dynamicToolCalls',
@@ -285,10 +274,6 @@ const PLAIN_FINISH_KEYS = [
   'usedFallbackValue',
   'warnings',
 ];
-
-const WRAPPED_FINISH_KEYS = PLAIN_FINISH_KEYS.filter(
-  key => !['runId', 'error', 'messages', 'model', 'object', 'usedFallbackValue'].includes(key),
-);
 
 /** `onAbort` received the same key set on every engine. */
 const ON_ABORT_KEYS = ['steps', 'text'];
@@ -334,10 +319,10 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
       'step-finish',
     ],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onFinish', keys: WRAPPED_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onFinish', keys: PLAIN_FINISH_KEYS },
     ],
     requests: 3,
   },
@@ -357,10 +342,10 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
       'step-finish',
     ],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onFinish', keys: WRAPPED_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onFinish', keys: PLAIN_FINISH_KEYS },
     ],
     requests: 3,
   },
@@ -396,7 +381,7 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
     callbacks: ['onStepFinish', 'onAbort'],
     onChunk: ['start', 'tool-call', 'tool-result', 'step-finish'],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
       { name: 'onAbort', keys: ON_ABORT_KEYS },
     ],
     requests: 1,
@@ -405,7 +390,7 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
     callbacks: ['onStepFinish', 'onAbort'],
     onChunk: ['start', 'tool-call', 'tool-result', 'step-finish'],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
       { name: 'onAbort', keys: ON_ABORT_KEYS },
     ],
     requests: 1,
@@ -699,10 +684,9 @@ describe('T36 callback order parity', () => {
 
       // harness: `each callback received the recorded payload keys`. Keyed by callback name so the
       // engines may report the same error at different points in the sequence (see the note below).
-      const stepFinishKeys = engine === 'plain' ? PLAIN_STEP_FINISH_KEYS : WRAPPED_STEP_FINISH_KEYS;
       for (const entry of state.payloadKeys) {
         expect(entry.keys, `${engine}: ${entry.name} payload keys`).toEqual(
-          entry.name === 'onError' ? ['error'] : stepFinishKeys,
+          entry.name === 'onError' ? ['error'] : PLAIN_STEP_FINISH_KEYS,
         );
       }
 
