@@ -19,6 +19,8 @@ export interface RunClaimDocument {
   generation: number;
   ownerId: string;
   leaseExpiresAt?: Date | null;
+  updatedAt?: Date;
+  retiredAt?: Date | null;
   fencedWrites?: number;
 }
 

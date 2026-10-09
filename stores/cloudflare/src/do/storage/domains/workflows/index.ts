@@ -35,6 +35,12 @@ import { isArrayOfRecords } from '../utils';
 
 const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
 
+/**
+ * A run's first generation is the database clock, so a run claimed again after
+ * its ownership record was pruned still gets a higher generation than its fence.
+ */
+const FIRST_GENERATION = `MAX(1, ${DB_NOW_MS})`;
+
 function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
   return {
@@ -122,27 +128,28 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     let statement: { sql: string; params: SqlParam[] };
     if (expectedGeneration === undefined) {
       statement = {
-        sql: `INSERT INTO ${this.#ownersTable} (runId, generation, ownerId, leaseExpiresAt)
-          VALUES (?, 1, ?, ${DB_NOW_MS} + ?)
+        sql: `INSERT INTO ${this.#ownersTable} (runId, generation, ownerId, leaseExpiresAt, updatedAt)
+          VALUES (?, ${FIRST_GENERATION}, ?, ${DB_NOW_MS} + ?, ${DB_NOW_MS})
           ON CONFLICT(runId) DO UPDATE SET
             generation = generation + 1,
             ownerId = excluded.ownerId,
-            leaseExpiresAt = excluded.leaseExpiresAt
+            leaseExpiresAt = excluded.leaseExpiresAt,
+            updatedAt = excluded.updatedAt
           ${force ? '' : `WHERE ${notLive}`}`,
         params: [runId, ownerId, leaseMs],
       };
     } else if (expectedGeneration === 0) {
       // Generation 0 means the run was never claimed: only a first claim matches.
       statement = {
-        sql: `INSERT INTO ${this.#ownersTable} (runId, generation, ownerId, leaseExpiresAt)
-          VALUES (?, 1, ?, ${DB_NOW_MS} + ?)
+        sql: `INSERT INTO ${this.#ownersTable} (runId, generation, ownerId, leaseExpiresAt, updatedAt)
+          VALUES (?, ${FIRST_GENERATION}, ?, ${DB_NOW_MS} + ?, ${DB_NOW_MS})
           ON CONFLICT(runId) DO NOTHING`,
         params: [runId, ownerId, leaseMs],
       };
     } else {
       statement = {
         sql: `UPDATE ${this.#ownersTable}
-          SET generation = generation + 1, ownerId = ?, leaseExpiresAt = ${DB_NOW_MS} + ?
+          SET generation = generation + 1, ownerId = ?, leaseExpiresAt = ${DB_NOW_MS} + ?, updatedAt = ${DB_NOW_MS}
           WHERE runId = ? AND generation = ?${force ? '' : ` AND ${notLive}`}`,
         params: [ownerId, leaseMs, runId, expectedGeneration],
       };
@@ -164,7 +171,7 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
   async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
     try {
       const rows = (await this.#db.executeQuery({
-        sql: `UPDATE ${this.#ownersTable} SET leaseExpiresAt = ${DB_NOW_MS} + ?
+        sql: `UPDATE ${this.#ownersTable} SET leaseExpiresAt = ${DB_NOW_MS} + ?, updatedAt = ${DB_NOW_MS}
           WHERE runId = ? AND generation = ? AND ownerId = ? AND leaseExpiresAt IS NOT NULL
           RETURNING ${RUN_OWNER_COLUMNS}`,
         params: [leaseMs, fence.runId, fence.generation, fence.ownerId],
@@ -180,7 +187,7 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
   async releaseRunOwnership(fence: RunFence): Promise<boolean> {
     try {
       const rows = (await this.#db.executeQuery({
-        sql: `UPDATE ${this.#ownersTable} SET leaseExpiresAt = NULL
+        sql: `UPDATE ${this.#ownersTable} SET leaseExpiresAt = NULL, updatedAt = ${DB_NOW_MS}
           WHERE runId = ? AND generation = ? AND ownerId = ?
           RETURNING runId`,
         params: [fence.runId, fence.generation, fence.ownerId],

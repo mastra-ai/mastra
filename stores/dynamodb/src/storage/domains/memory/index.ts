@@ -62,13 +62,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     const fences = this.service.entities.memory_run_fence!;
     const key = { entity: 'memory_run_fence', run_id: fence.runId };
     try {
-      // Raises an older fence or creates a missing one. Generations only grow,
-      // so a failed condition means the run already holds this generation or a newer one.
+      // Raises an older fence, reaffirms our own, or creates a missing one.
+      // Generations only grow, so a failed condition means the run already
+      // holds a newer fence, or this generation under another owner. Every
+      // write un-retires the fence.
       await retryOnTransactionConflict(() =>
         fences
-          .upsert({ ...key, generation: fence.generation, ownerId: fence.ownerId })
+          .update(key)
+          .set({ generation: fence.generation, ownerId: fence.ownerId })
+          .remove(['retiredAt'])
           .where(
-            (attr: any, op: any) => `${op.notExists(attr.generation)} OR ${op.lt(attr.generation, fence.generation)}`,
+            (attr: any, op: any) =>
+              `${op.notExists(attr.generation)} OR ${op.lt(attr.generation, fence.generation)} OR (${op.eq(attr.generation, fence.generation)} AND ${op.eq(attr.ownerId, fence.ownerId)})`,
           )
           .go(),
       );
@@ -89,6 +94,33 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           cause,
         );
       }
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      await retryOnTransactionConflict(() =>
+        this.service.entities
+          .memory_run_fence!.patch({ entity: 'memory_run_fence', run_id: fence.runId })
+          .set({ retiredAt: Date.now() })
+          .where(
+            (attr: any, op: any) =>
+              `${op.eq(attr.generation, fence.generation)} AND ${op.eq(attr.ownerId, fence.ownerId)}`,
+          )
+          .go(),
+      );
+      return true;
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) return false;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'RETIRE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
     }
   }
 
