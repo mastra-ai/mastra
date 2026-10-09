@@ -1,9 +1,18 @@
+import {
+  assertActiveObservationsApplied,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
+  type UpdateActiveObservationsResult,
+  type UpdateBufferedObservationsResult,
+  withObservationalMemoryLifecycleColumns,
+} from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  assertActiveObservationsApplied,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -19,10 +28,6 @@ import {
   resolveRunFence,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
-  isAppendOnlySince,
-  isBufferedChunkCoveredByCursor,
-  maxObservationCursor,
-  planReflectionGenerationText,
 } from '@mastra/core/storage';
 
 /**
@@ -80,7 +85,10 @@ export const OM_MIGRATION_COLUMNS: string[] = [
  * bundle to a shim that always throws, and the silent catch meant the
  * published ESM build skipped creating the OM table entirely (#18954).
  */
-const _omTableSchema: Record<string, Record<string, any>> = OBSERVATIONAL_MEMORY_TABLE_SCHEMA;
+const _omTableSchema: Record<string, Record<string, any>> = {
+  ...OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  [OM_TABLE]: withObservationalMemoryLifecycleColumns(OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE])!,
+};
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -97,9 +105,7 @@ import type {
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
-  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
-  UpdateBufferedObservationsResult,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedReflectionInput,

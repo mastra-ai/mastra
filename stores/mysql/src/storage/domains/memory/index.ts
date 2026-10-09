@@ -1,11 +1,20 @@
 import { createHash } from 'node:crypto';
+import {
+  assertActiveObservationsApplied,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
+  type UpdateActiveObservationsResult,
+  type UpdateBufferedObservationsResult,
+  withObservationalMemoryLifecycleColumns,
+} from '@internal/core/memory';
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
-  assertActiveObservationsApplied,
   MemoryStorage,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
@@ -16,10 +25,6 @@ import {
   normalizePerPage,
   validateStorageMetadataFilter,
   createStorageErrorId,
-  isAppendOnlySince,
-  isBufferedChunkCoveredByCursor,
-  maxObservationCursor,
-  planReflectionGenerationText,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -45,9 +50,7 @@ import type {
   ThreadCloneMetadata,
   ThreadSortOptions,
   UpdateActiveObservationsInput,
-  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
-  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
 } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
@@ -236,7 +239,7 @@ export class MemoryMySQL extends MemoryStorage {
     // introduced `OBSERVATIONAL_MEMORY_TABLE_SCHEMA`), so the older-core compat
     // the dynamic import was guarding against can no longer occur via npm
     // resolution.
-    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    const omSchema = withObservationalMemoryLifecycleColumns(OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE]);
 
     if (omSchema) {
       await this.operations.createTable({

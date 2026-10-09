@@ -1,12 +1,16 @@
+import {
+  maxObservationCursor,
+  planReflectionGenerationText,
+  type UpdateActiveObservationsResult,
+} from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
-import { TABLE_OBSERVATIONAL_MEMORY, maxObservationCursor, planReflectionGenerationText } from '@mastra/core/storage';
+import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
   CreateObservationalMemoryInput,
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
   UpdateActiveObservationsInput,
-  UpdateActiveObservationsResult,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { Connection } from 'oracledb';

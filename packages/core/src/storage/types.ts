@@ -1404,18 +1404,7 @@ export interface UpdateActiveObservationsInput {
   expectedActiveObservations?: string;
 }
 
-/**
- * Result of `commitActiveObservations`.
- */
-export interface UpdateActiveObservationsResult {
-  /** Whether the observations were written. */
-  applied: boolean;
-  /**
-   * Why nothing was written: `retired` — the target record was superseded by a newer
-   * generation; `conflict` — `expectedActiveObservations` no longer matches the stored text.
-   */
-  reason?: 'retired' | 'conflict';
-}
+export type { UpdateActiveObservationsResult } from '@internal/core/memory';
 
 /**
  * Input for updating buffered observations.
@@ -1430,21 +1419,7 @@ export interface UpdateBufferedObservationsInput {
   lastBufferedAtTime?: Date;
 }
 
-/**
- * Result of `appendBufferedObservations`.
- *
- * The append targets the head generation: when `input.id` was superseded, the chunk is
- * appended to the current head instead. The append is skipped (`persisted: false`) when the
- * head already holds a chunk with the same `cycleId`, or when the chunk is wholly covered by
- * the head's cursor. Chunks carry `lastObservedAt = max message time + 1ms`, so a chunk is
- * wholly covered iff `head.lastObservedAt >= chunk.lastObservedAt - 1ms`.
- */
-export interface UpdateBufferedObservationsResult {
-  /** Whether the chunk was stored. */
-  persisted: boolean;
-  /** The record the chunk was written to (or would have been written to). */
-  recordId: string;
-}
+export type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 
 /**
  * Input for swapping buffered observations to active.

@@ -1,3 +1,13 @@
+import {
+  assertActiveObservationsApplied,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
+  type UpdateActiveObservationsResult,
+  type UpdateBufferedObservationsResult,
+  withObservationalMemoryLifecycleColumns,
+} from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -19,9 +29,7 @@ import type {
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
-  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
-  UpdateBufferedObservationsResult,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedReflectionInput,
@@ -36,7 +44,6 @@ import type {
   TABLE_NAMES,
 } from '@mastra/core/storage';
 import {
-  assertActiveObservationsApplied,
   createStorageErrorId,
   isRunFenceConflictError,
   MemoryStorage,
@@ -51,10 +58,6 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
   validateStorageMetadataFilter,
-  isAppendOnlySince,
-  isBufferedChunkCoveredByCursor,
-  maxObservationCursor,
-  planReflectionGenerationText,
 } from '@mastra/core/storage';
 
 /**
@@ -206,7 +209,7 @@ export class MemoryLibSQL extends MemoryStorage {
     // version that introduced `OBSERVATIONAL_MEMORY_TABLE_SCHEMA`, so the
     // older-core compat the dynamic import was guarding against can no longer
     // occur via npm resolution.
-    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    const omSchema = withObservationalMemoryLifecycleColumns(OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE]);
 
     if (omSchema) {
       await this.#db.createTable({

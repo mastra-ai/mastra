@@ -1,8 +1,12 @@
+import {
+  assertActiveObservationsApplied,
+  type UpdateActiveObservationsResult,
+  type UpdateBufferedObservationsResult,
+} from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  assertActiveObservationsApplied,
   MemoryStorage,
   TABLE_MESSAGES,
   TABLE_OBSERVATIONAL_MEMORY,
@@ -27,9 +31,7 @@ import type {
   SwapBufferedToActiveResult,
   ThreadCloneMetadata,
   UpdateActiveObservationsInput,
-  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
-  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
