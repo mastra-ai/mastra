@@ -690,7 +690,6 @@ describe('MastraFactory.prepare', () => {
     expect(error.message).toMatch(/'machine' becomes the provider instance/);
     expect(error.message).toMatch(/'workdir' becomes the workingDirectory/);
     expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
-    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
   });
 
   it('explains only the retired options the host actually passed', async () => {

@@ -401,7 +401,6 @@ function invalidSandboxOptionMessage(option: unknown): string {
     `MastraFactory: 'sandbox' must be a FactorySandbox instance or a callback constructing a MastraSandbox from a FactorySandboxContext:`,
     `  sandbox: new PlatformFactorySandbox()`,
     `  sandbox: ctx => new PlatformSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })`,
-    `Omit 'sandbox' entirely to disable sandboxes.`,
   ];
   if (typeof option === 'object' && option !== null) {
     const retired = Object.keys(RETIRED_SANDBOX_OPTIONS).filter(key => key in option);
