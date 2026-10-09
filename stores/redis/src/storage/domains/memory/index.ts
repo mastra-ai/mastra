@@ -36,7 +36,7 @@ import type {
 import { RedisDB } from '../../db';
 import type { RedisDomainConfig } from '../../db';
 import type { RedisClient } from '../../types';
-import { assertRunFence, raiseRunFence, runClaimKey, writeBatch } from '../run-fencing';
+import { assertRunFence, raiseRunFence, retireRunFence, runClaimKey, writeBatch } from '../run-fencing';
 import type { RunFenceCheck } from '../run-fencing';
 import { getKey, processRecord } from '../utils';
 
@@ -62,6 +62,22 @@ export class StoreMemoryRedis extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('REDIS', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  public override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      return await retireRunFence(this.client, fence);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('REDIS', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },
