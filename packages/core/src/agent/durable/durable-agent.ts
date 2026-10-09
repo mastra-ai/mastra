@@ -23,6 +23,7 @@ import type {
   ToolCallChunk,
 } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { CoreTool } from '../../tools/types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -1267,6 +1268,26 @@ export class DurableAgent<
     }
     recoveryLease.assertOwned();
 
+    // The entry below carries a live model, so resolveRuntimeDependencies trusts
+    // it as fully hydrated and never rebuilds tools — they must be restored here.
+    let tools: Record<string, CoreTool> = {};
+    let workspace;
+    try {
+      tools = await wrapped.getToolsForExecution({
+        runId,
+        threadId,
+        resourceId,
+        requestContext,
+        memoryConfig: workflowInput.state?.memoryConfig,
+        autoResumeSuspendedTools: workflowInput.options?.autoResumeSuspendedTools,
+        clientTools: workflowInput.options?.clientTools as ToolsInput | undefined,
+      });
+      workspace = await wrapped.getWorkspace({ requestContext });
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) tool resolution failed: ${error}`);
+    }
+    recoveryLease.assertOwned();
+
     const saveQueueManager = memory
       ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
       : undefined;
@@ -1357,6 +1378,8 @@ export class DurableAgent<
       mastra: this.#mastra,
       model,
       modelList,
+      tools,
+      workspace,
       memory,
       saveQueueManager,
       requestContext,

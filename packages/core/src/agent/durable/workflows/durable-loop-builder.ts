@@ -41,6 +41,7 @@ import {
   executeDurableAgentScorers,
   readMessageListState,
   storeMessageListState,
+  buildDeferredStepFinishChunk,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -581,6 +582,22 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
+      const emitStepFinish = async (isContinued: boolean) => {
+        if (state.lastStepResult) {
+          state.lastStepResult.isContinued = isContinued;
+        }
+
+        const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+        state.deferredStepFinishChunk = undefined;
+        if (!deferredChunk) return;
+
+        try {
+          await this.emitChunk(rt, deferredChunk);
+        } catch (error) {
+          rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+        }
+      };
+
       // ── Abort check ────────────────────────────────────────────────
       // If the abort signal has fired, stop the loop immediately.
       // The llm-execution step may have already emitted the ABORT event
@@ -599,11 +616,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         const abortReason = getAbortReason(rt.abortSignal);
         const isTotalTimeout = isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total';
         if (isTotalTimeout && state.lastStepResult?.reason !== 'error') {
+          await emitStepFinish(true);
           return true;
         }
+        // The parked step completed before the run-level abort was observed. Emit its own outcome
+        // before recording the abort on loop state so consumers keep the completed step boundary.
+        await emitStepFinish(state.lastStepResult?.isContinued === true);
         if (state.lastStepResult) {
           state.lastStepResult.reason = isTotalTimeout ? 'error' : 'abort';
-          state.lastStepResult.isContinued = false;
         }
         return false;
       }
@@ -756,13 +776,16 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           transcript.messageListState = callbackList().serialize();
         },
         logger: rt.logger,
+      }).catch(async error => {
+        // User continuation policy can throw after the step has completed. Preserve that step's
+        // boundary on the stream before the workflow propagates the policy error.
+        await emitStepFinish(state.lastStepResult?.isContinued === true);
+        throw error;
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
-      if (decision.forceContinue && state.lastStepResult) {
-        state.lastStepResult.isContinued = true;
-      }
       const isFinal = decision.isFinal;
+      await emitStepFinish(!isFinal);
 
       // Each iteration's assistant response is a distinct message, mirroring
       // the non-durable agentic loop. The mutated state.messageId flows into
