@@ -410,6 +410,7 @@ export interface KnowledgeSchemaSnapshot {
 
 interface KnowledgeV2Core {
   assertKnowledgeDescriptionWithinBound(description: string | undefined): void;
+  assertKnowledgeRecordTextWithinBound(text: string): void;
   assertKnowledgeSchemaCompatible(inspection: KnowledgeSchemaInspection): void;
   inspectKnowledgeSchema(snapshot: KnowledgeSchemaSnapshot): KnowledgeSchemaInspection;
 }
@@ -429,11 +430,13 @@ function resolveKnowledgeV2Core(storageModule: unknown): KnowledgeV2Core {
 
   const {
     assertKnowledgeDescriptionWithinBound: assertDescription,
+    assertKnowledgeRecordTextWithinBound: assertRecordText,
     assertKnowledgeSchemaCompatible: assertCompatible,
     inspectKnowledgeSchema: inspectSchema,
   } = storageModule as Record<string, unknown>;
   if (
     typeof assertDescription !== 'function' ||
+    typeof assertRecordText !== 'function' ||
     typeof assertCompatible !== 'function' ||
     typeof inspectSchema !== 'function'
   ) {
@@ -442,6 +445,7 @@ function resolveKnowledgeV2Core(storageModule: unknown): KnowledgeV2Core {
 
   return {
     assertKnowledgeDescriptionWithinBound: description => assertDescription(description),
+    assertKnowledgeRecordTextWithinBound: text => assertRecordText(text),
     assertKnowledgeSchemaCompatible: inspection => assertCompatible(inspection),
     inspectKnowledgeSchema: snapshot => inspectSchema(snapshot),
   };

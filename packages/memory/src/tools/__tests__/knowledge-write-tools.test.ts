@@ -1,5 +1,9 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import {
+  InMemoryStore,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+} from '@mastra/core/storage';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it, vi } from 'vitest';
@@ -298,6 +302,32 @@ describe('Subconscious knowledge write tools', () => {
         {} as any,
       ),
     ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:memory");
+  });
+
+  it('rejects over-long record text on create and append before writing a node or record', async () => {
+    const { store, source, tools } = await fixture();
+    const createNode = vi.spyOn(store, 'createNode');
+    const append = vi.spyOn(store, 'appendKnowledge');
+
+    const pasted = 'x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH + 1);
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Pasted README', kind: 'doc', text: pasted },
+      {} as any,
+    )) as any;
+    expect(created?.error).toBe(true);
+    expect(created?.message).toContain('text');
+
+    // Astral characters pass the code-point schema check but exceed the UTF-16 storage bound.
+    const astral = '😀'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH / 2 + 1);
+    await expect(
+      tools.knowledge_create!.execute?.({ name: 'Astral', kind: 'doc', text: astral }, {} as any),
+    ).rejects.toThrow('Split this into separate records, one fact each, or summarize it');
+    await expect(tools.knowledge_append!.execute?.({ node: source.id, text: astral }, {} as any)).rejects.toThrow(
+      'Split this into separate records',
+    );
+    expect(createNode).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+    expect(await store.resolveNode({ name: 'Astral', scope })).toBeNull();
   });
 
   it('rejects a non-RFC 3339 `when` at schema validation for create and append, before execute', async () => {

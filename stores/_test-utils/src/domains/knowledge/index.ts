@@ -3,6 +3,7 @@ import {
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
 } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -658,6 +659,26 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const untouched = await store.getNode(node.id);
       expect(untouched?.description).toBe(atLimit);
       expect(untouched?.version).toBe(node.version);
+    });
+
+    it('rejects record text over the length bound before writing anything', async () => {
+      const node = await store.createNode({ name: 'Bounded records', kind: 'service', scope: resource });
+      const append = (text: string) =>
+        store.appendKnowledge({
+          node,
+          text,
+          scope: resource,
+          sourceThreadId: 't1',
+          resolutionScope: thread,
+          defaultScope: resource,
+        });
+
+      const atLimit = '😀'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH / 2);
+      expect((await append(atLimit)).text).toBe(atLimit);
+      await expect(append(`${atLimit}x`)).rejects.toThrow(`${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit`);
+
+      const records = (await store.listKnowledgeAbout({ node, scope: resource })).records;
+      expect(records.map(record => record.text)).toEqual([atLimit]);
     });
 
     it('counts the description bound in UTF-16 code units', async () => {

@@ -1,6 +1,7 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   assertKnowledgeDescriptionWithinBound,
+  assertKnowledgeRecordTextWithinBound,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
@@ -563,6 +564,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #appendKnowledge(input: AppendKnowledgeInput): KnowledgeRecord {
+    assertKnowledgeRecordTextWithinBound(input.text);
     const node = nodeReferenceId(input.node);
     const parent = this.#resolveTerminalNode(node);
     if (!parent) throw new KnowledgeNotFoundError('node', node);

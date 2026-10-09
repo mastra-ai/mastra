@@ -1,6 +1,7 @@
 import type { KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
   expandKnowledgeScope,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
@@ -17,6 +18,22 @@ const nodePlacementSchema: JSONSchema7 = {
   description:
     "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory'). When omitted, the node uses the first record's scope. A structural node is visible at least as widely as its structural scope.",
 };
+const recordTextSchema: JSONSchema7 = {
+  type: 'string',
+  minLength: 1,
+  maxLength: MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+  description: `One durable fact, or a few closely related facts, in your own words. Hard limit ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code units. Never paste files, command output, or logs.`,
+};
+
+/** Schema maxLength counts code points; this UTF-16 check matches the storage limit and runs before any write. */
+function requireRecordTextWithinBound(text: string): void {
+  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+    throw new Error(
+      `Knowledge records are limited to ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code units. Split this into separate records, one fact each, or summarize it, then retry.`,
+    );
+  }
+}
+
 const dateTimeSchema: JSONSchema7 = {
   type: 'string',
   format: 'date-time',
@@ -175,7 +192,7 @@ export function createKnowledgeWriteTools(
         properties: {
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
-          text: { type: 'string', minLength: 1 },
+          text: recordTextSchema,
           nodeScope: nodePlacementSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
@@ -192,6 +209,7 @@ export function createKnowledgeWriteTools(
           scope?: KnowledgeScopeLevel;
           when?: string;
         };
+        requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScope(options, value.scope);
@@ -223,7 +241,7 @@ export function createKnowledgeWriteTools(
         type: 'object',
         properties: {
           node: { type: 'string', minLength: 1 },
-          text: { type: 'string', minLength: 1 },
+          text: recordTextSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
         },
@@ -232,6 +250,7 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; text: string; scope?: KnowledgeScopeLevel; when?: string };
+        requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
         if (!parent || parent.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);

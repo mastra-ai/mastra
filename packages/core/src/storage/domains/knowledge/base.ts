@@ -776,6 +776,28 @@ export function assertKnowledgeDescriptionWithinBound(description: string | unde
 }
 
 /**
+ * Maximum record text length in UTF-16 code units. A record holds one fact or a few closely related
+ * facts; pasted files, command output, and logs belong summarized, not verbatim. Records are
+ * immutable, so every adapter enforces this in `appendKnowledge`.
+ *
+ * @experimental
+ */
+export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
+
+/**
+ * Rejects over-long record text before any write occurs.
+ *
+ * @experimental
+ */
+export function assertKnowledgeRecordTextWithinBound(text: string): void {
+  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+    throw new Error(
+      `Knowledge record text exceeds the ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit; split it into separate facts or summarize it`,
+    );
+  }
+}
+
+/**
  * Knowledge v2 has no record scope ceilings: a write may target any scope level present in the
  * conversation. Grant-based write enforcement is not implemented yet. Kept only so published
  * `@mastra/memory` versions that import it still load; it never throws.

@@ -102,6 +102,11 @@ async function assertKnowledgeDescriptionWithinBoundCompat(description: string |
   assertKnowledgeDescriptionWithinBound(description);
 }
 
+async function assertKnowledgeRecordTextWithinBoundCompat(text: string): Promise<void> {
+  const { assertKnowledgeRecordTextWithinBound } = await loadKnowledgeV2Core();
+  assertKnowledgeRecordTextWithinBound(text);
+}
+
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
 }
@@ -954,6 +959,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    await assertKnowledgeRecordTextWithinBoundCompat(input.text);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);

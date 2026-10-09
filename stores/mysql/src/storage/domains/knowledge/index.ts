@@ -67,6 +67,23 @@ async function assertKnowledgeDescriptionWithinBoundCompat(description: string |
   assertWithinBound(description);
 }
 
+let assertRecordTextWithinBound: ((text: string) => void) | undefined;
+async function assertKnowledgeRecordTextWithinBoundCompat(text: string): Promise<void> {
+  if (!assertRecordTextWithinBound) {
+    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
+    assertRecordTextWithinBound =
+      mod.assertKnowledgeRecordTextWithinBound ??
+      (value => {
+        if (value.length > 1000) {
+          throw new Error(
+            'Knowledge record text exceeds the 1000 UTF-16 code unit limit; split it into separate facts or summarize it',
+          );
+        }
+      });
+  }
+  assertRecordTextWithinBound(text);
+}
+
 interface QueryResult {
   rows: Record<string, unknown>[];
   rowsAffected: number;
@@ -531,6 +548,7 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    await assertKnowledgeRecordTextWithinBoundCompat(input.text);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);

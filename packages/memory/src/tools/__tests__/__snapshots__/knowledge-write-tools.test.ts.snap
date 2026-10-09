@@ -19,6 +19,8 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
         "type": "string",
       },
       "text": {
+        "description": "One durable fact, or a few closely related facts, in your own words. Hard limit 1000 UTF-16 code units. Never paste files, command output, or logs.",
+        "maxLength": 1000,
         "minLength": 1,
         "type": "string",
       },
@@ -60,6 +62,8 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
         "type": "string",
       },
       "text": {
+        "description": "One durable fact, or a few closely related facts, in your own words. Hard limit 1000 UTF-16 code units. Never paste files, command output, or logs.",
+        "maxLength": 1000,
         "minLength": 1,
         "type": "string",
       },

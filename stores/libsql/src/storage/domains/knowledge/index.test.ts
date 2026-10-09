@@ -67,6 +67,7 @@ describe('Knowledge v2 Core compatibility', () => {
   it('coalesces successful loads and retries a failed load', async () => {
     const storageModule = {
       assertKnowledgeDescriptionWithinBound: vi.fn(),
+      assertKnowledgeRecordTextWithinBound: vi.fn(),
       assertKnowledgeSchemaCompatible: vi.fn(),
       inspectKnowledgeSchema: vi.fn(() => ({ status: 'uninitialized', schemaVersion: null })),
     };

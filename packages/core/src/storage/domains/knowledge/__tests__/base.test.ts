@@ -11,6 +11,7 @@ import {
   KnowledgeUnsupportedCapabilityError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
 } from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
@@ -29,6 +30,26 @@ describe('InMemoryKnowledgeStorage', () => {
     const second = createKnowledgeUlid(1);
 
     expect(second > first).toBe(true);
+  });
+
+  it('rejects record text over the length bound without writing it', async () => {
+    const store = createStore();
+    const node = await store.createNode({ name: 'Bounded', kind: 'service', scope: resource });
+    const append = (text: string) =>
+      store.appendKnowledge({
+        node,
+        text,
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+
+    await append('x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH));
+    await expect(append('x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH + 1))).rejects.toThrow(
+      'split it into separate facts or summarize it',
+    );
+    expect((await store.listKnowledgeAbout({ node, scope: resource })).records).toHaveLength(1);
   });
 
   it('places an existing node when a write names it again with scope addresses', async () => {

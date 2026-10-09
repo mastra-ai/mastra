@@ -105,6 +105,11 @@ async function assertKnowledgeDescriptionWithinBoundCompat(description: string |
   assertKnowledgeDescriptionWithinBound(description);
 }
 
+async function assertKnowledgeRecordTextWithinBoundCompat(text: string): Promise<void> {
+  const { assertKnowledgeRecordTextWithinBound } = await loadKnowledgeV2Core();
+  assertKnowledgeRecordTextWithinBound(text);
+}
+
 interface QueryResult {
   rows: Record<string, unknown>[];
   rowsAffected: number;
@@ -1189,6 +1194,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    await assertKnowledgeRecordTextWithinBoundCompat(input.text);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
