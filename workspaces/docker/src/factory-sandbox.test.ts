@@ -83,7 +83,7 @@ describe('DockerFactorySandbox', () => {
   });
 
   it('returns no template for a session without repositories', () => {
-    expect(new DockerFactorySandbox().template({ sessionId: 's' }, {})).toBeUndefined();
+    expect(new DockerFactorySandbox().template({ sessionId: 's', getRepositoryAccess: undefined }, {})).toBeUndefined();
   });
 
   it('creates a DockerSandbox keyed by the session with the template and runtime options', () => {
@@ -96,5 +96,22 @@ describe('DockerFactorySandbox', () => {
     expect(created.id).toBe('sess_1');
     expect((created as any)._templateSpec).toBeTypeOf('function');
     expect((created as any)._env).toEqual({ CI: '1' });
+  });
+
+  it('runs the template under the configured working directory when the context names none', async () => {
+    const sandbox = new DockerFactorySandbox({ workingDirectory: '/srv/repos' });
+    const created = sandbox.create(context(), {});
+    expect(created.workingDirectory).toBe('/srv/repos');
+    const resolved = await sandbox.template(context(), {})!();
+    expect(resolved.dockerfile).toContain('/srv/repos');
+  });
+
+  it('uses image as the base image with a repository and as the runtime image without one', async () => {
+    const sandbox = new DockerFactorySandbox({ image: 'ubuntu:24.04' });
+    const resolved = await sandbox.template(context(), {})!();
+    expect(resolved.dockerfile).toContain('FROM ubuntu:24.04');
+    expect(() => sandbox.create(context(), {})).not.toThrow();
+    const bare = sandbox.create({ sessionId: 'bare', getRepositoryAccess: undefined }, {});
+    expect((bare as any)._image).toBe('ubuntu:24.04');
   });
 });

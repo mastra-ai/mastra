@@ -59,8 +59,12 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
   }
 
   template(ctx: FactorySandboxContext, settings: DockerFactorySandboxSettings): DockerRepoTemplateResolver | undefined {
-    const { defaults, template } = this.#options;
-    const baseImage = settings.baseImage ?? defaults?.baseImage;
+    const { defaults, template, image, workingDirectory, workingDir } = this.#options;
+    // `image` is the image sessions run on; with a repository the repository
+    // image is built on top of it, so it doubles as the base image fallback.
+    const baseImage = settings.baseImage ?? defaults?.baseImage ?? image;
+    // The template clones under the same directory the sandbox runs in.
+    const templateWorkingDirectory = ctx.workingDirectory ?? workingDirectory ?? workingDir;
     const owner = settings.owner ?? defaults?.owner;
     const {
       resolveHead: _resolveHead,
@@ -74,15 +78,20 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
       ...template,
       ...(baseImage !== undefined ? { baseImage } : {}),
       ...(owner !== undefined ? { owner } : {}),
+      ...(templateWorkingDirectory !== undefined ? { workingDirectory: templateWorkingDirectory } : {}),
     });
   }
 
   create(ctx: FactorySandboxContext, settings: DockerFactorySandboxSettings): DockerSandbox {
-    const { defaults: _defaults, template: _template, ...options } = this.#options;
+    const { defaults: _defaults, template: _template, image, ...options } = this.#options;
+    const template = this.template(ctx, settings);
+    // `DockerSandbox` rejects `image` next to `template`; with a repository
+    // the image has already become the template's base image.
     return new DockerSandbox({
       ...options,
+      ...(template === undefined && image !== undefined ? { image } : {}),
       id: ctx.sessionId,
-      template: this.template(ctx, settings),
+      template,
       ...(ctx.workingDirectory ? { workingDirectory: ctx.workingDirectory } : {}),
     });
   }
