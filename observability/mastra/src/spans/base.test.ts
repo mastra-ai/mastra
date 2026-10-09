@@ -409,6 +409,9 @@ describe('Span', () => {
           callerSpan,
           { traceId: 'not-hex', spanId: callerSpan.spanId },
           { traceId: callerSpan.traceId, spanId: '' },
+          { traceId: 'abc', spanId: '1' },
+          { traceId: '0'.repeat(32), spanId: callerSpan.spanId },
+          { traceId: callerSpan.traceId, spanId: '0'.repeat(16) },
         ],
       });
       const invalidOnly = instance.startSpan({
@@ -432,6 +435,18 @@ describe('Span', () => {
       const ended = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
       expect(ended.links).toEqual([callerSpan, serverSpan]);
       expect(started.links).toEqual([callerSpan]);
+    });
+
+    it('drops links with invalid IDs set on the span after it starts', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'tool-call', links: [callerSpan] });
+
+      span.links = [...(span.links ?? []), { traceId: 'abc', spanId: '1' }, { traceId: '0'.repeat(32), spanId: '1' }];
+      span.end();
+
+      const ended = testExporter.events.find(
+        e => e.type === TracingEventType.SPAN_ENDED && e.exportedSpan.id === span.id,
+      )!.exportedSpan;
+      expect(ended.links).toEqual([callerSpan]);
     });
 
     it('keeps links when a span is rebuilt from its exported form', () => {
