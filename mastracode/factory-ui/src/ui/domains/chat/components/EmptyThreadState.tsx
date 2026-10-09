@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useChatCommands } from '../context/ChatCommandsProvider';
@@ -77,11 +77,7 @@ export function EmptyThreadState() {
               {activeFactory.name}
             </Txt>
           </Txt>
-          <ChevronDown
-            aria-hidden="true"
-            size={14}
-            className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-          />
+          <DisclosureChevron className="size-3.5 group-open:rotate-180" />
         </summary>
         <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left">
           <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />

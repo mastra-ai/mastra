@@ -53,6 +53,13 @@ describe('DurableAgent observability tracing', () => {
     await pubsub.close();
   });
 
+  function endMockSpanTree(span: any) {
+    span.ended = true;
+    for (const child of createdSpans.filter(candidate => candidate.parent === span)) {
+      endMockSpanTree(child);
+    }
+  }
+
   function createMockSpan(type: string, parentSpan?: any): any {
     spanIdCounter += 1;
     const span: Record<string, any> = {
@@ -66,8 +73,15 @@ describe('DurableAgent observability tracing', () => {
       isValid: true,
       isRootSpan: !parentSpan,
       parent: parentSpan,
-      end: vi.fn(),
-      error: vi.fn(),
+      ended: false,
+      end: vi.fn((opts?: { endTree?: boolean }) => {
+        if (opts?.endTree) endMockSpanTree(span);
+        else span.ended = true;
+      }),
+      error: vi.fn((opts?: { endTree?: boolean }) => {
+        if (opts?.endTree) endMockSpanTree(span);
+        else span.ended = true;
+      }),
       update: vi.fn(),
       exportSpan: vi.fn(() => ({ id: span.id, type })),
       getParentSpanId: vi.fn(() => parentSpan?.id),
@@ -393,6 +407,70 @@ describe('DurableAgent observability tracing', () => {
       spy.mockRestore();
     }
   }, 30000);
+
+  it('ends the AGENT_RUN span when a run-start input processor throws', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      for (const engine of ['durable', 'evented'] as const) {
+        const baseAgent = new Agent({
+          id: `${engine}-trace-agent-input-error`,
+          name: 'Trace Agent (input error)',
+          instructions: 'You are a test assistant',
+          model: createTextStreamModel('unreachable') as LanguageModelV2,
+          inputProcessors: [
+            {
+              id: 'throwing-input-processor',
+              processInput: () => {
+                throw new Error('guardrail exploded');
+              },
+            },
+          ],
+        });
+        const wrappedAgent =
+          engine === 'durable'
+            ? createDurableAgent({ agent: baseAgent, pubsub })
+            : createEventedAgent({ agent: baseAgent, pubsub });
+
+        await expect(wrappedAgent.stream('Hi'), engine).rejects.toMatchObject({
+          id: 'AGENT_INPUT_PROCESSOR_ERROR',
+          message: '[Agent:Trace Agent (input error)] - Input processor error',
+        });
+
+        expect(agentSpans, engine).toHaveLength(1);
+        expect(agentSpans[0].error, engine).toHaveBeenCalledTimes(1);
+        expect(agentSpans[0].error, engine).toHaveBeenCalledWith({
+          error: expect.objectContaining({
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            message: '[Agent:Trace Agent (input error)] - Input processor error',
+          }),
+          endTree: true,
+        });
+
+        const agentTraceSpans = createdSpans.filter(span => {
+          let current = span;
+          while (current) {
+            if (current === agentSpans[0]) return true;
+            current = current.parent;
+          }
+          return false;
+        });
+        expect(
+          agentTraceSpans.map(span => span.type),
+          engine,
+        ).toContain('processor_run');
+        expect(
+          agentTraceSpans.every(span => span.ended),
+          engine,
+        ).toBe(true);
+
+        agentSpans.length = 0;
+        createdSpans = [];
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
   it('parents agent-level input processor spans to AGENT_RUN', async () => {
     const { spy, agentSpans } = await spyOnSpans();

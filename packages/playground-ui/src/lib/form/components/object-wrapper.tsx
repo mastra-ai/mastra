@@ -1,9 +1,10 @@
 import type { ObjectWrapperProps } from '@autoform/react';
-import { Braces, ChevronRight } from 'lucide-react';
+import { Braces } from 'lucide-react';
 import { useContext } from 'react';
 import { FieldPathContext, ROOT_FIELD_KEY } from '../field-context';
 import { useSectionDisclosure } from '../use-section-disclosure';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 
 export function ObjectWrapper({ label, children }: ObjectWrapperProps) {
@@ -23,7 +24,7 @@ function ObjectGroup({ label, children }: Pick<ObjectWrapperProps, 'label' | 'ch
       className="motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 text-left text-caption text-muted-foreground">
-        <ChevronRight aria-hidden className="size-3.5 shrink-0" />
+        <DisclosureChevron direction="right" className="size-3.5" />
         <span className="flex min-w-0 items-center gap-1.5">
           <Braces aria-hidden className="size-3.5" />
           {label}

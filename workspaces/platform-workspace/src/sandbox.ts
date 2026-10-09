@@ -413,6 +413,17 @@ export class PlatformSandbox extends MastraSandbox {
    */
   templatePending?: SandboxTemplatePending;
 
+  /**
+   * The platform's id for the provisioned sandbox, as returned by the create
+   * or reattach response. Persist this to reattach later via the `sandboxId`
+   * option. Undefined until the sandbox has been started in this process; a
+   * `sandboxId` passed to the constructor is only a hint for `start()` and is
+   * not reported here until the proxy confirms it.
+   */
+  get sandboxId(): string | undefined {
+    return this.status === 'running' ? this._sandboxId : undefined;
+  }
+
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
@@ -619,7 +630,10 @@ export class PlatformSandbox extends MastraSandbox {
         }
         this._sandboxId = undefined;
       } catch (error) {
-        if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
+        // 404: the proxy never issued this id. 410: it did, and has since
+        // marked the record destroyed (idle GC, manual delete). Neither is
+        // reattachable; both fall through to a fresh provision.
+        if (!(error instanceof PlatformApiError) || (error.status !== 404 && error.status !== 410)) throw error;
         this._sandboxId = undefined;
       }
     }
@@ -867,29 +881,34 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   /**
-   * Stop the sandbox while **preserving its recovery checkpoint**.
+   * Stop this process's use of the sandbox without touching the remote one.
    *
-   * Semantic parity with `@mastra/railway` `RailwaySandbox.stop()`: the VM
-   * is released but the on-provider checkpoint survives, so a subsequent
-   * `start()` on a sandbox constructed with the same `id` can restore from
-   * it. Any in-flight capture is awaited first so the preserved checkpoint
-   * reflects the latest disk state we asked for.
+   * Nothing is sent to workspace-proxy. The VM keeps running and idles out
+   * under the environment's own idle policy, the recovery checkpoint stays,
+   * and `_sandboxId` is kept so a later `start()` on this instance, or on a
+   * new instance constructed with the same `id` or `sandboxId`, reattaches
+   * instead of provisioning. `Mastra.shutdown()` stops every registered
+   * workspace on SIGINT; releasing the VM here would destroy every live
+   * session on a host restart. Use {@link destroy} to release the VM and
+   * its checkpoint.
    *
-   * Corresponds to `DELETE /v1/:provider/projects/:pid/sandbox/:sandboxId` on
-   * workspace-proxy, which by contract does not touch the checkpoint. Use
-   * {@link destroy} when you want the checkpoint released too.
+   * Any in-flight capture is awaited first so the checkpoint reflects the
+   * latest disk state the caller asked for.
    */
   async stop(): Promise<void> {
-    // Await any in-flight capture so the preserved checkpoint reflects the
-    // latest capture the caller triggered. Never rethrow — a failing capture
-    // must not block teardown; the proxy's safety-net refresh timer is a
-    // fallback for the checkpoint state.
+    // Never rethrow: a failing capture must not block stop; the proxy's
+    // safety-net refresh timer is a fallback for the checkpoint state.
     if (this._captureInFlight) {
       await this._captureInFlight.catch(error => {
-        this.logger.warn(`stop(): failed to flush in-flight capture before teardown:`, error);
+        this.logger.warn(`stop(): failed to flush in-flight capture before stop:`, error);
       });
     }
-    await this._teardownSandbox();
+    // Drop only what is tied to this process: the sidecar probe and the exec
+    // lease. The next start() re-populates both from the proxy's response.
+    this._probeGeneration++;
+    this._probeTarget = null;
+    this._transportReadyPromise = null;
+    this._lease = null;
   }
 
   /**
@@ -946,12 +965,9 @@ export class PlatformSandbox extends MastraSandbox {
   /**
    * Release the remote sandbox VM and clear the local state pointing at it.
    *
-   * Shared body of {@link stop} and {@link destroy} — both funnel through
-   * here after they've dealt with the checkpoint (preserve vs release).
-   * The VM DELETE is safe to issue in either mode: the proxy's DELETE
-   * route does not touch the checkpoint on its own, so `stop()` correctly
-   * leaves the checkpoint intact and `destroy()` has already removed it
-   * before this call.
+   * Body of {@link destroy}, called after the checkpoint has been released.
+   * The proxy's DELETE route releases the VM (on E2B that kills it), so
+   * only destroy() may reach here; stop() never does.
    */
   private async _teardownSandbox(): Promise<void> {
     if (!this._sandboxId) return;
@@ -1488,7 +1504,12 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async getInfo(): Promise<SandboxInfo> {
-    if (!this._sandboxId) {
+    // Before this process has started the sandbox, `_sandboxId` is at best a
+    // caller-supplied hint for `start()` to reattach by. Asking the proxy
+    // about it here would surface a 404 for a hint the proxy does not know
+    // (and the workspace tools call `getInfo()` before their first exec),
+    // where `start()` would have fallen through to a fresh provision.
+    if (!this._sandboxId || this.status !== 'running') {
       return {
         id: this.id,
         name: this.name,
