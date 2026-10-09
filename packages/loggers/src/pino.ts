@@ -5,6 +5,10 @@ import pretty from 'pino-pretty';
 
 type TransportMap = Record<string, LoggerTransport>;
 
+const discardStream: pino.DestinationStream = {
+  write() {},
+};
+
 export type { LogLevel } from '@mastra/core/logger';
 
 export interface PinoLoggerOptions<CustomLevels extends string = never> {
@@ -134,7 +138,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
         serializers: { error: pino.stdSerializers.err, ...options.serializers },
       },
       options.overrideDefaultTransports
-        ? options?.transports?.default
+        ? (options.transports?.default ?? discardStream)
         : transportsAry.length === 0
           ? prettyStream // undefined when prettyPrint:false → pino native JSON
           : pino.multistream([

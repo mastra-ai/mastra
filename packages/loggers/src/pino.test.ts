@@ -1,7 +1,14 @@
 import { LogLevel, LoggerTransport, MultiLogger } from '@mastra/core/logger';
+import { symbols, type DestinationStream } from 'pino';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { PinoLogger } from './pino';
+
+class InspectablePinoLogger extends PinoLogger {
+  get destination(): DestinationStream {
+    return (this.logger as any)[symbols.streamSym];
+  }
+}
 
 // Helper to create a memory stream that captures log output
 class MemoryStream extends LoggerTransport {
@@ -140,6 +147,27 @@ describe('createLogger', () => {
       msg: 'test message',
       name: 'custom',
     });
+  });
+});
+
+describe('overrideDefaultTransports', () => {
+  it('should not fall back to stdout without a default transport', () => {
+    const logger = new InspectablePinoLogger({ overrideDefaultTransports: true });
+
+    expect((logger.destination as { fd?: number }).fd).not.toBe(1);
+  });
+
+  it('should use an explicitly configured default transport', async () => {
+    const memoryStream = new MemoryStream();
+    const logger = new PinoLogger({
+      overrideDefaultTransports: true,
+      transports: { default: memoryStream },
+    });
+
+    logger.info('test message');
+    await waitForLogs(memoryStream);
+
+    expect((await memoryStream.listLogs())[0]).toMatchObject({ msg: 'test message' });
   });
 });
 
