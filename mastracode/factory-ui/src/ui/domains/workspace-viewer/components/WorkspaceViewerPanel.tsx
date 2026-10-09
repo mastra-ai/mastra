@@ -97,6 +97,7 @@ export function WorkspaceViewerPanel({
     return (
       <WorkspaceFileBrowser
         files={listing.data?.files}
+        repositories={listing.data?.repositories}
         selectedFilePath={view.selectedPath}
         isLoading={listing.isLoading}
         isRefreshing={listing.isFetching}

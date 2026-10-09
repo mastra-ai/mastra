@@ -4,10 +4,16 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeft, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
+import type { ReactNode } from 'react';
 
-import type { WorkspaceChange, WorkspaceChanges, WorkspaceChangeStatus } from '../../../../api/types';
+import type {
+  WorkspaceChange,
+  WorkspaceChanges,
+  WorkspaceChangesRepository,
+  WorkspaceChangeStatus,
+} from '../../../../api/types';
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
 import { treeRowContainmentClass } from '../layout';
 
@@ -95,13 +101,13 @@ function ensureChangeDirectory(nodes: ChangeTreeNode[], path: string, name: stri
   return directory;
 }
 
-function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange) {
-  const segments = change.path.split('/').filter(Boolean);
+function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange, prefix: string) {
+  const segments = change.path.slice(prefix.length).split('/').filter(Boolean);
   let siblings = nodes;
-  let currentPath = '';
+  let currentPath = prefix;
 
   segments.forEach((segment, index) => {
-    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+    currentPath = currentPath && !currentPath.endsWith('/') ? `${currentPath}/${segment}` : `${currentPath}${segment}`;
     if (index === segments.length - 1) {
       siblings.push({ path: change.path, name: segment, change, children: [] });
       return;
@@ -132,10 +138,46 @@ function sortChangeTree(nodes: ChangeTreeNode[]): ChangeTreeNode[] {
   });
 }
 
-function buildChangeTree(changes: WorkspaceChange[]): ChangeTreeNode[] {
+/**
+ * Build the folder tree of a change list. `prefix` is the repository
+ * directory the paths carry in a multi-repository session: it is stripped
+ * for display only, every node keeps the prefixed path the routes expect.
+ */
+function buildChangeTree(changes: WorkspaceChange[], prefix = ''): ChangeTreeNode[] {
   const nodes: ChangeTreeNode[] = [];
-  changes.forEach(change => addChange(nodes, change));
+  changes.forEach(change => addChange(nodes, change, prefix));
   return sortChangeTree(nodes);
+}
+
+interface RepositoryGroupHeaderProps {
+  slug: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children?: ReactNode;
+}
+
+/** The collapsible row a repository's files sit under when the session holds several repositories. */
+export function RepositoryGroupHeader({ slug, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-8 w-full items-center gap-1.5 px-2 text-left"
+      aria-expanded={open}
+      aria-label={`${open ? 'Hide' : 'Show'} files in ${slug}`}
+      data-testid="workspace-repository-group"
+      onClick={() => onOpenChange(!open)}
+    >
+      {open ? (
+        <ChevronDown className="text-muted-foreground shrink-0" size={14} />
+      ) : (
+        <ChevronRight className="text-muted-foreground shrink-0" size={14} />
+      )}
+      <Txt as="span" tone="ink" variant="column" font="mono" className="min-w-0 flex-1 truncate">
+        {slug}
+      </Txt>
+      {children}
+    </button>
+  );
 }
 
 interface ChangeTreeItemProps {
@@ -307,7 +349,12 @@ export function WorkspaceChangesPanel({
   const selectedPath = selectedChange?.path;
   const diff = useWorkspaceDiff(workspacePath, selectedPath, selectedChange?.previousPath, { enabled: visible });
   const selectedDiff = diff.data?.path === selectedPath ? diff.data : undefined;
-  const changeTree = buildChangeTree(changes?.changes ?? []);
+  const repositories = changes?.repositories && changes.repositories.length > 1 ? changes.repositories : undefined;
+  const changeTree = repositories ? [] : buildChangeTree(changes?.changes ?? []);
+  const onFolderOpenChange = (path: string, open: boolean) =>
+    setOpenFolders(previous => ({ ...previous, [path]: open }));
+  const treeSelectedId = view.type === 'list' ? view.selectedPath : undefined;
+  const selectForDiff = (path: string) => setView({ type: 'diff', path });
 
   if (selectedPath) {
     return (
@@ -372,27 +419,90 @@ export function WorkspaceChangesPanel({
           </Txt>
         </div>
       ) : null}
-      {!isLoading && !error && changeTree.length === 0 ? (
+      {!isLoading && !error && !repositories && changeTree.length === 0 ? (
         <ChangesEmptyState available={changes?.available ?? false} />
       ) : null}
-      {!isLoading && !error && changeTree.length > 0 ? (
+      {!isLoading && !error && !repositories && changeTree.length > 0 ? (
         <ScrollArea className="min-h-0 flex-1">
-          <Tree
-            selectedId={view.type === 'list' ? view.selectedPath : undefined}
-            onSelect={path => setView({ type: 'diff', path })}
-            className="p-2"
-          >
+          <Tree selectedId={treeSelectedId} onSelect={selectForDiff} className="p-2">
             {changeTree.map(node => (
               <ChangeTreeItem
                 key={node.path}
                 node={node}
                 openFolders={openFolders}
-                onFolderOpenChange={(path, open) => setOpenFolders(previous => ({ ...previous, [path]: open }))}
+                onFolderOpenChange={onFolderOpenChange}
               />
             ))}
           </Tree>
         </ScrollArea>
       ) : null}
+      {!isLoading && !error && repositories ? (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex flex-col p-2">
+            {repositories.map(repository => (
+              <RepositoryChangesGroup
+                key={repository.prefix}
+                repository={repository}
+                open={openFolders[repository.prefix] ?? true}
+                onOpenChange={open => onFolderOpenChange(repository.prefix, open)}
+                openFolders={openFolders}
+                onFolderOpenChange={onFolderOpenChange}
+                selectedId={treeSelectedId}
+                onSelect={selectForDiff}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      ) : null}
     </aside>
+  );
+}
+
+interface RepositoryChangesGroupProps {
+  repository: WorkspaceChangesRepository;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  openFolders: Record<string, boolean>;
+  onFolderOpenChange: (path: string, open: boolean) => void;
+  selectedId?: string;
+  onSelect: (path: string) => void;
+}
+
+function RepositoryChangesGroup({
+  repository,
+  open,
+  onOpenChange,
+  openFolders,
+  onFolderOpenChange,
+  selectedId,
+  onSelect,
+}: RepositoryChangesGroupProps) {
+  const tree = buildChangeTree(repository.changes, repository.prefix);
+
+  return (
+    <section aria-label={`Changes in ${repository.slug}`}>
+      <RepositoryGroupHeader slug={repository.slug} open={open} onOpenChange={onOpenChange}>
+        <Txt as="span" tone="muted" variant="meta" className="shrink-0">
+          {!repository.available
+            ? 'Unavailable'
+            : `${repository.changes.length} ${repository.changes.length === 1 ? 'file' : 'files'}`}
+        </Txt>
+        {repository.changes.length ? (
+          <ChangeCounts additions={repository.additions} deletions={repository.deletions} />
+        ) : null}
+      </RepositoryGroupHeader>
+      {open && tree.length > 0 ? (
+        <Tree selectedId={selectedId} onSelect={onSelect} className="pl-2">
+          {tree.map(node => (
+            <ChangeTreeItem
+              key={node.path}
+              node={node}
+              openFolders={openFolders}
+              onFolderOpenChange={onFolderOpenChange}
+            />
+          ))}
+        </Tree>
+      ) : null}
+    </section>
   );
 }

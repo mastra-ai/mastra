@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { treeRowContainmentClass } from '../layout';
+import { RepositoryGroupHeader } from './WorkspaceChangesPanel';
 
 function getFileIcon(path: string): ReactNode {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -62,6 +63,11 @@ interface WorkspaceFileEntry {
   path: string;
 }
 
+interface WorkspaceFileRepository {
+  slug: string;
+  prefix: string;
+}
+
 function ensureDirectory(nodes: WorkspaceTreeNode[], path: string, name: string): WorkspaceTreeNode {
   const existing = nodes.find(node => node.path === path);
   if (existing) return existing;
@@ -71,13 +77,13 @@ function ensureDirectory(nodes: WorkspaceTreeNode[], path: string, name: string)
   return directory;
 }
 
-function addFile(nodes: WorkspaceTreeNode[], file: WorkspaceFileEntry) {
-  const segments = file.path.split('/').filter(Boolean);
+function addFile(nodes: WorkspaceTreeNode[], file: WorkspaceFileEntry, prefix: string) {
+  const segments = file.path.slice(prefix.length).split('/').filter(Boolean);
   let siblings = nodes;
-  let currentPath = '';
+  let currentPath = prefix;
 
   segments.forEach((segment, index) => {
-    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+    currentPath = currentPath && !currentPath.endsWith('/') ? `${currentPath}/${segment}` : `${currentPath}${segment}`;
     if (index === segments.length - 1) {
       siblings.push({ path: file.path, name: segment, type: 'file', children: [] });
       return;
@@ -95,10 +101,47 @@ function sortTree(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode[] {
     });
 }
 
-function buildTree(files: WorkspaceFileEntry[]): WorkspaceTreeNode[] {
+function countFiles(nodes: WorkspaceTreeNode[]): number {
+  return nodes.reduce((total, node) => total + (node.type === 'file' ? 1 : countFiles(node.children)), 0);
+}
+
+/**
+ * Build the folder tree of a file list. `prefix` is the repository directory
+ * the paths carry in a multi-repository session: it is stripped for display
+ * only, every node keeps the prefixed path the file route expects.
+ */
+function buildTree(files: WorkspaceFileEntry[], prefix = ''): WorkspaceTreeNode[] {
   const nodes: WorkspaceTreeNode[] = [];
-  files.forEach(file => addFile(nodes, file));
+  files.forEach(file => addFile(nodes, file, prefix));
   return sortTree(nodes);
+}
+
+interface FileGroup {
+  repository?: WorkspaceFileRepository;
+  nodes: WorkspaceTreeNode[];
+}
+
+/**
+ * One group per repository, in payload order, then a trailing ungrouped tree
+ * for the entries no repository prefix claims (root `.artifacts`, paths
+ * persisted before the session had a layout).
+ */
+function groupFiles(files: WorkspaceFileEntry[], repositories: WorkspaceFileRepository[]): FileGroup[] {
+  const byPrefix = [...repositories].sort((a, b) => b.prefix.length - a.prefix.length);
+  const buckets = new Map<string | undefined, WorkspaceFileEntry[]>();
+  for (const file of files) {
+    const owner = byPrefix.find(repository => file.path.startsWith(repository.prefix));
+    const bucket = buckets.get(owner?.prefix) ?? [];
+    bucket.push(file);
+    buckets.set(owner?.prefix, bucket);
+  }
+  const groups: FileGroup[] = repositories.map(repository => ({
+    repository,
+    nodes: buildTree(buckets.get(repository.prefix) ?? [], repository.prefix),
+  }));
+  const ungrouped = buckets.get(undefined);
+  if (ungrouped?.length) groups.push({ nodes: buildTree(ungrouped) });
+  return groups;
 }
 
 function WorkspaceTreeItem({
@@ -146,6 +189,8 @@ function WorkspaceTreeItem({
 
 interface WorkspaceFileBrowserProps {
   files?: WorkspaceFileEntry[];
+  /** The environment repositories the paths are prefixed by; grouping applies with two or more. */
+  repositories?: WorkspaceFileRepository[];
   selectedFilePath?: string;
   isLoading: boolean;
   isRefreshing: boolean;
@@ -159,6 +204,7 @@ interface WorkspaceFileBrowserProps {
 
 export function WorkspaceFileBrowser({
   files,
+  repositories,
   selectedFilePath,
   isLoading,
   isRefreshing,
@@ -170,7 +216,8 @@ export function WorkspaceFileBrowser({
   onBack,
 }: WorkspaceFileBrowserProps) {
   const persistedFiles = files ?? [];
-  const nodes = buildTree(persistedFiles);
+  const groups = repositories && repositories.length > 1 ? groupFiles(persistedFiles, repositories) : undefined;
+  const nodes = groups ? [] : buildTree(persistedFiles);
 
   return (
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
@@ -210,14 +257,58 @@ export function WorkspaceFileBrowser({
           </Txt>
         </div>
       ) : null}
-      {!isLoading && !error && nodes.length === 0 ? (
+      {!isLoading && !error && !groups && nodes.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
           <Txt tone="muted" variant="caption">
             No files
           </Txt>
         </div>
       ) : null}
-      {!isLoading && !error && nodes.length > 0 ? (
+      {!isLoading && !error && groups ? (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex flex-col p-1.5">
+            {groups.map(group =>
+              group.repository ? (
+                <section key={group.repository.prefix} aria-label={`Files in ${group.repository.slug}`}>
+                  <RepositoryGroupHeader
+                    slug={group.repository.slug}
+                    open={openFolders[group.repository.prefix] ?? true}
+                    onOpenChange={open => onFolderOpenChange(group.repository!.prefix, open)}
+                  >
+                    <Txt as="span" tone="muted" variant="meta" className="shrink-0">
+                      {countFiles(group.nodes)} {countFiles(group.nodes) === 1 ? 'file' : 'files'}
+                    </Txt>
+                  </RepositoryGroupHeader>
+                  {(openFolders[group.repository.prefix] ?? true) && group.nodes.length > 0 ? (
+                    <Tree className="pl-2" selectedId={selectedFilePath} onSelect={onFileSelect}>
+                      {group.nodes.map(node => (
+                        <WorkspaceTreeItem
+                          key={node.path}
+                          node={node}
+                          openFolders={openFolders}
+                          onFolderOpenChange={onFolderOpenChange}
+                        />
+                      ))}
+                    </Tree>
+                  ) : null}
+                </section>
+              ) : (
+                <Tree key="ungrouped" selectedId={selectedFilePath} onSelect={onFileSelect}>
+                  {group.nodes.map(node => (
+                    <WorkspaceTreeItem
+                      key={node.path}
+                      node={node}
+                      openFolders={openFolders}
+                      onFolderOpenChange={onFolderOpenChange}
+                    />
+                  ))}
+                </Tree>
+              ),
+            )}
+          </div>
+        </ScrollArea>
+      ) : null}
+      {!isLoading && !error && !groups && nodes.length > 0 ? (
         <ScrollArea className="min-h-0 flex-1">
           <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={onFileSelect}>
             {nodes.map(node => (
