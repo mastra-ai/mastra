@@ -22,7 +22,6 @@ import {
   FactorySourceSessionResolutionError,
   resolveFactoryDefaultModelId,
   resolveFactorySourceControl,
-  resolveFactorySourceRepository,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -232,18 +231,11 @@ async function inheritEarlierSession(
   input: FactoryBindingPreparationInput,
   board: { roleForPhase(phase: string): string | undefined } | undefined,
   branch: string,
-  repositorySlug: string,
+  projectRepositoryId: string,
 ): Promise<EnsuredFactorySourceSession | undefined> {
   if (input.role === 'review') return undefined;
   // The card's linked repository can change after an earlier role ran; only
   // continue in a session on the repository a fresh session would use.
-  const repository = await resolveFactorySourceRepository({
-    sourceControl,
-    orgId: input.record.orgId,
-    factoryProjectId: input.record.factoryProjectId,
-    repositorySlug,
-  });
-  if (!repository.found) return undefined;
   const candidates: string[] = [];
   for (const entry of [...(input.item.stageHistory ?? [])].reverse()) {
     const role = board?.roleForPhase(entry.stage);
@@ -254,7 +246,7 @@ async function inheritEarlierSession(
   }
   for (const role of candidates) {
     const session = await reuseBoundSession(sourceControl, input, role);
-    if (session && session.branch === branch && session.projectRepositoryId === repository.projectRepositoryId) {
+    if (session && session.branch === branch && session.projectRepositoryId === projectRepositoryId) {
       return session;
     }
   }
@@ -328,15 +320,7 @@ export async function prepareFactoryRuleBinding(
       const linked =
         link && (await sourceControl.repositories.get({ orgId: input.record.orgId, id: link.repositoryId }));
       if (linked && repository.candidates.includes(linked.slug)) {
-        const match = await resolveFactorySourceRepository({
-          sourceControl,
-          orgId: input.record.orgId,
-          factoryProjectId: input.record.factoryProjectId,
-          repositorySlug: linked.slug,
-        });
-        if (match.found && match.projectRepositoryId === boundSession.projectRepositoryId) {
-          repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: match.projectRepositoryId };
-        }
+        repository = { status: 'resolved', slug: linked.slug, projectRepositoryId: link.id };
       }
     }
     if (repository.status !== 'resolved') {
@@ -357,14 +341,17 @@ export async function prepareFactoryRuleBinding(
         `The existing session is bound to a different repository than ${repository.slug}. Choose the correct repository and retry.`,
       );
     }
+    // The session is filed under the card's repository: the sandbox holds
+    // every environment repository, but the coordinator, the PR tools and the
+    // subscriptions follow the session's link, and the card names which one.
     const preparedSession =
       boundSession ??
-      (await inheritEarlierSession(sourceControl, input, board, branch, repository.slug)) ??
+      (await inheritEarlierSession(sourceControl, input, board, branch, repository.projectRepositoryId)) ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
-        repositorySlug: repository.slug,
+        projectRepositoryId: repository.projectRepositoryId,
         branch,
         // A person who approved the run is its interactive user: attribute it to
         // them, not the repo connector. An agent's pre-approval names no person.

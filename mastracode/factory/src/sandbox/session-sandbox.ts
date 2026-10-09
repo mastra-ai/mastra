@@ -1,5 +1,11 @@
 import path from 'node:path';
-import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
+import {
+  SETUP_FAILED_MARKER_PATH,
+  SETUP_MARKER_PATH,
+  WORKSPACE_SETUP_MARKER_PATH,
+  repoSetupMarkerPath,
+  setupMarkerContent,
+} from '@internal/workspace';
 
 import type {
   FactorySandbox,
@@ -9,7 +15,7 @@ import type {
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
 import { timedPhase } from '../timing.js';
-import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir.js';
+import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder, repositoryDirectoryName } from './workdir.js';
 
 /**
  * Everything factory knows about a session's sandbox needs: the whole contract
@@ -74,6 +80,34 @@ export interface SessionSetupGate {
  * still needs its pull); only the setup command consults `gate`.
  */
 export type SessionSetupRun = (sandbox: WorkspaceSandbox, workdir: string, gate: SessionSetupGate) => Promise<void>;
+
+/** One environment repository as the boot hook needs it: its slug and setup command. */
+export interface SessionEnvironmentRepository {
+  slug: string;
+  setupCommand?: string;
+}
+
+/** What the environment hook learned about one repository before the boot runs. */
+export interface SessionEnvironmentRepositoryGate extends SessionEnvironmentRepository {
+  /** `<root>/<repoDir>`, the directory the template cloned this repository into. */
+  dir: string;
+  gate: SessionSetupGate;
+}
+
+/** The environment hook's view of the workspace: the root, every repository in position order, the workspace gate. */
+export interface SessionEnvironmentGate {
+  /** The workspace root, parent of every repository directory. */
+  root: string;
+  repos: SessionEnvironmentRepositoryGate[];
+  /** Gate for `workspaceSetupCommand`; `setupDone` when there is no command or its marker matches. */
+  workspace: SessionSetupGate;
+}
+
+/** The list-form session boot: run on every start, like `SessionSetupRun`. */
+export type SessionEnvironmentSetupRun = (
+  sandbox: WorkspaceSandbox,
+  environment: SessionEnvironmentGate,
+) => Promise<void>;
 
 /**
  * Per-process session-id → sandbox instance memo.
@@ -272,6 +306,131 @@ export function createSessionSetupHook(
     await run(sandbox, workdir, {
       setupDone,
       markSetupDone: () => (marker ? writeMarker(sandbox, workdir, marker) : Promise.resolve()),
+    });
+  };
+}
+
+/**
+ * Shell-quote one marker file's content. Marker contents are digests, but
+ * the quoting keeps an edited command's digest from ever reaching the shell
+ * unquoted.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The list-form marker probe: trust a repository's marker only when its
+ * checkout exists, the marker names this command, and the template did not
+ * record the repository in `setup-failed` (a failed per-repo setup still
+ * writes the marker because every step ran; the failure list says it failed).
+ */
+async function repoMarkerMatches(
+  sandbox: WorkspaceSandbox,
+  root: string,
+  repoDir: string,
+  content: string,
+): Promise<boolean> {
+  const marker = `${root}/${repoSetupMarkerPath(repoDir)}`;
+  const failed = `${root}/${SETUP_FAILED_MARKER_PATH}`;
+  const probe = await sandbox.executeCommand!(
+    `test -d "${root}/${repoDir}/.git" && test -f "${marker}" && [ "$(cat "${marker}")" = ${shellQuote(content)} ] && ! grep -qxF -- ${shellQuote(repoDir)} "${failed}" 2>/dev/null`,
+  );
+  return probe.exitCode === 0;
+}
+
+/** Write a repository's marker and drop it from `setup-failed`. Best-effort, like `writeMarker`. */
+async function writeRepoMarker(
+  sandbox: WorkspaceSandbox,
+  root: string,
+  repoDir: string,
+  content: string,
+): Promise<void> {
+  const marker = `${root}/${repoSetupMarkerPath(repoDir)}`;
+  const failed = `${root}/${SETUP_FAILED_MARKER_PATH}`;
+  await sandbox.executeCommand!(
+    `mkdir -p "$(dirname "${marker}")" && printf '%s' ${shellQuote(content)} > "${marker}" && { test -f "${failed}" && { grep -vxF -- ${shellQuote(repoDir)} "${failed}" > "${failed}.tmp" || true; } && mv "${failed}.tmp" "${failed}" || true; }`,
+  ).catch(() => {});
+}
+
+async function workspaceMarkerMatches(sandbox: WorkspaceSandbox, root: string, content: string): Promise<boolean> {
+  const marker = `${root}/${WORKSPACE_SETUP_MARKER_PATH}`;
+  const probe = await sandbox.executeCommand!(
+    `test -f "${marker}" && [ "$(cat "${marker}")" = ${shellQuote(content)} ]`,
+  );
+  return probe.exitCode === 0;
+}
+
+async function writeWorkspaceMarker(sandbox: WorkspaceSandbox, root: string, content: string): Promise<void> {
+  const marker = `${root}/${WORKSPACE_SETUP_MARKER_PATH}`;
+  await sandbox.executeCommand!(
+    `mkdir -p "$(dirname "${marker}")" && printf '%s' ${shellQuote(content)} > "${marker}"`,
+  ).catch(() => {});
+}
+
+/**
+ * The list-form start hook for a session whose factory has an environment:
+ * the same lifecycle as `createSessionSetupHook`, with one gate per
+ * repository plus one for the workspace setup command. The markers are the
+ * ones the multi-repo templates write (`.mastra-sandbox/repos/<repoDir>`,
+ * `.mastra-sandbox/workspace-setup`, `.mastra-sandbox/setup-failed`), all
+ * under the workspace root, which is the parent of the primary repository's
+ * directory: `resolveSessionWorkdir` keeps answering that directory so the
+ * PR tools and passive readers see the primary checkout, and the root is
+ * derived from it rather than probed twice.
+ *
+ * `repos` is in position order and must include the primary (`repoFullName`).
+ */
+export function createEnvironmentSetupHook(
+  run: SessionEnvironmentSetupRun,
+  sessionId: string,
+  repoFullName: string,
+  environment: { repos: SessionEnvironmentRepository[]; workspaceSetupCommand?: string },
+): SandboxStartHook {
+  const workspaceCommand = environment.workspaceSetupCommand?.trim() ? environment.workspaceSetupCommand : undefined;
+  const workspaceMarker = workspaceCommand ? setupMarkerContent(workspaceCommand) : undefined;
+  return async ({ sandbox }) => {
+    if (!sandbox.executeCommand) {
+      throw new Error(`Sandbox '${sandbox.id}' cannot run the session setup: no executeCommand implementation`);
+    }
+    const workdir = await resolveSessionWorkdir(sessionId, sandbox, repoFullName);
+    const root = path.posix.dirname(workdir);
+    const repos: SessionEnvironmentRepositoryGate[] = [];
+    for (const repo of environment.repos) {
+      const repoDir = repositoryDirectoryName(repo.slug);
+      const marker = repo.setupCommand?.trim() ? setupMarkerContent(repo.setupCommand) : undefined;
+      const setupDone = marker
+        ? await timedPhase(`workspace.setup-marker(${repoDir})`, () =>
+            repoMarkerMatches(sandbox, root, repoDir, marker),
+          )
+        : true;
+      if (marker) {
+        process.stderr.write(
+          `[factory:setup] ${repo.slug}: ${setupDone ? 'marker matches, skipping setup command' : 'no matching marker, setup command will run'} (${root}/${repoSetupMarkerPath(repoDir)})\n`,
+        );
+      }
+      repos.push({
+        ...repo,
+        dir: `${root}/${repoDir}`,
+        gate: {
+          setupDone,
+          markSetupDone: () => (marker ? writeRepoMarker(sandbox, root, repoDir, marker) : Promise.resolve()),
+        },
+      });
+    }
+    const workspaceDone = workspaceMarker
+      ? await timedPhase('workspace.setup-marker(workspace)', () =>
+          workspaceMarkerMatches(sandbox, root, workspaceMarker),
+        )
+      : true;
+    await run(sandbox, {
+      root,
+      repos,
+      workspace: {
+        setupDone: workspaceDone,
+        markSetupDone: () =>
+          workspaceMarker ? writeWorkspaceMarker(sandbox, root, workspaceMarker) : Promise.resolve(),
+      },
     });
   };
 }

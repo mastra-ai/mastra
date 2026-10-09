@@ -277,10 +277,17 @@ function gitAuthenticationEnvironment(
     throw new MaterializeError('Repository access did not include usable credentials.', code);
   }
   const authorization = Buffer.from(`${username}:${token}`, 'utf8').toString('base64');
+  // Git applies `http.<url>.*` only when the config URL matches the remote at
+  // a path boundary, and `origin` may spell the repository either way: Factory
+  // clones with `.git`, a sandbox template clones from the normalized URL
+  // without it. Scope the header to both so neither checkout prompts.
+  const alternate = scope.endsWith('.git') ? scope.slice(0, -4) : `${scope}.git`;
   return {
-    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_COUNT: '2',
     GIT_CONFIG_KEY_0: `http.${scope}.extraHeader`,
     GIT_CONFIG_VALUE_0: `Authorization: Basic ${authorization}`,
+    GIT_CONFIG_KEY_1: `http.${alternate}.extraHeader`,
+    GIT_CONFIG_VALUE_1: `Authorization: Basic ${authorization}`,
     GIT_TERMINAL_PROMPT: '0',
   };
 }
@@ -509,6 +516,115 @@ export async function checkoutSessionBranch(
   options: SessionBranchOptions,
 ): Promise<void> {
   return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
+}
+
+export interface SyncEnvironmentRepositoryOptions {
+  /** The session branch to resume when the remote already carries it. */
+  branch: string;
+  /** The repository's default branch; a detached checkout moves to its tip. */
+  defaultBranch: string;
+  token: string;
+  repoFullName: string;
+  cloneUrl?: string;
+  authUsername?: string;
+}
+
+export interface EnvironmentSyncResult {
+  outcome: 'resumed' | 'created' | 'kept';
+  /** The branch the checkout ends on; `null` when it stays detached. */
+  branch: string | null;
+}
+
+/**
+ * Bring a secondary environment repository onto the session branch at
+ * session start. The primary repository keeps {@link checkoutSessionBranch};
+ * every other repository follows a conservative rule: resume the session
+ * branch when the remote or the local clone has it, otherwise create it from
+ * the default branch tip (a detached HEAD, the template image pinned at its
+ * build commit, is moved there first). A checkout that sits on any other
+ * branch is left alone: it may carry local-only commits.
+ */
+export async function syncEnvironmentRepository(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  options: SyncEnvironmentRepositoryOptions,
+): Promise<EnvironmentSyncResult> {
+  const { branch, defaultBranch, token, repoFullName, cloneUrl, authUsername } = options;
+  if (!isValidGitRef(branch) || !isValidGitRef(defaultBranch)) {
+    throw new MaterializeError('Refusing to sync a repository from an invalid branch name.', 'pull-failed');
+  }
+  const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
+  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
+  if (current.exitCode !== 0) throw classifyGitFailure(current, 'pull-failed');
+  const currentBranch = current.stdout.trim();
+  const kept = { outcome: 'kept' as const, branch: currentBranch || null };
+  if (currentBranch === branch) return kept;
+
+  // A local session branch may hold commits the remote never saw; switch
+  // to it instead of resetting it onto the remote tip.
+  const local = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+  if (local.exitCode === 0) {
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
+  const remoteHeads = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+    { env: authEnv, timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'environment branch probe' },
+  );
+  if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
+  if (remoteHeads.stdout.trim()) {
+    const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch fetch',
+    });
+    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', branch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
+  // A checkout on any other branch stays where it is: it may hold work the
+  // remote never saw. The default branch and a detached HEAD (the template
+  // image pinned at its build commit) become the session branch.
+  if (currentBranch && currentBranch !== defaultBranch) return kept;
+  if (!currentBranch) {
+    const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment default fetch',
+    });
+    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', defaultBranch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment default checkout',
+    });
+    if (checkout.exitCode !== 0) {
+      if (isBlockedByLocalWork(checkout)) return kept;
+      throw classifyGitFailure(checkout, 'pull-failed');
+    }
+  }
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch], {
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'environment branch create',
+  });
+  if (created.exitCode === 0) return { outcome: 'created', branch };
+  throw classifyGitFailure(created, 'pull-failed');
 }
 
 /** Refresh an existing GitLab review checkout without exposing its credential to the agent. */

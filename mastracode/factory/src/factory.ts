@@ -94,6 +94,7 @@ import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
+import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
@@ -1115,10 +1116,14 @@ export class MastraFactory {
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        // The environment signal tells the agent which repositories its
+        // sandbox holds and where; the phase signal, when work items are on,
+        // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
+          const environmentProcessor = new FactoryEnvironmentStateProcessor();
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [factoryProcessor];
+            return [environmentProcessor, factoryProcessor];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1126,7 +1131,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [];
+          return [environmentProcessor];
         },
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
