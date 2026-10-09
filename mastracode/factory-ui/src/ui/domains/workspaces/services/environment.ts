@@ -36,7 +36,7 @@ export interface FactoryEnvironmentPayload {
   sandbox: FactoryEnvironmentSandbox;
   /** Provider settings the user set; absent keys use the provider default. */
   settings: Record<string, unknown>;
-  sandboxWorkdir: string | null;
+  sandboxWorkingDirectory: string | null;
   workspaceSetupCommand: string | null;
   activeTemplateId: string | null;
   activeTemplateHeads: Record<string, string> | null;
@@ -56,7 +56,7 @@ export interface FactoryEnvironmentRepositoryPatch {
 }
 
 export interface FactoryEnvironmentPatch {
-  sandboxWorkdir?: string | null;
+  sandboxWorkingDirectory?: string | null;
   /** Merged onto the stored settings; null removes a key. */
   settings?: Record<string, unknown | null>;
   workspaceSetupCommand?: string | null;
