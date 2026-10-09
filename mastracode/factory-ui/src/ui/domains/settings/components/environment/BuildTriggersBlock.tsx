@@ -46,7 +46,7 @@ export function BuildTriggersRows({
       </SettingsRow>
       {push.enabled && (
         <SettingsRow label="Push debounce" description="Minimum minutes between push-triggered builds, 0 to 1440.">
-          <div className="w-full lg:max-w-96">
+          <div className="w-full lg:max-w-40">
             <CommittedInput
               label="Push debounce in minutes"
               type="number"
