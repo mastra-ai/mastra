@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.76.0-alpha.5
+
+### Patch Changes
+
+- Fixed aborted suspended runs staying listed as suspended. When `session.abort()` cancels a run that is parked in a tool `suspend()` (for example `ask_user`), the run's in-memory registration and its workflow snapshot rows are now released, so `agent.listSuspendedRuns()` no longer returns it and memory no longer grows with each aborted run. This applies to both regular and durable agents. ([#26181](https://github.com/mastra-ai/mastra/pull/26181))
+
+- Fixed tools running with empty input when using `agent.stream()`. Some providers, like OpenAI Responses and Anthropic programmatic tool calling, send tool arguments only at the end of a tool call. Tools now wait for the complete arguments before they run. Tools with required inputs no longer fail validation in this case. ([#26251](https://github.com/mastra-ai/mastra/pull/26251))
+
+- Fixed durable, evented, and Inngest agents to stop before model execution when processor resolution or input processing throws. ([#26347](https://github.com/mastra-ai/mastra/pull/26347))
+
+- Fixed aborted agent streams reporting the wrong finish reason and emitting completed tool results more than once. ([#26345](https://github.com/mastra-ai/mastra/pull/26345))
+
 ## 1.76.0-alpha.4
 
 ### Minor Changes
