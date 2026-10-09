@@ -240,7 +240,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       return { acquired: false, record: current };
     }
     this.db.runOwners.set(runId, {
-      generation: (current?.generation ?? 0) + 1,
+      generation: current ? current.generation + 1 : Math.max(1, Date.now()),
       ownerId,
       leaseExpiresAt: new Date(Date.now() + leaseMs),
     });
