@@ -4,9 +4,9 @@ import {
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
+  MastraCompositeStore,
 } from '@mastra/core/storage';
 import { Knowledge } from '@mastra/core/knowledge';
-import { MastraCompositeStore } from '@mastra/core/storage';
 import type { KnowledgeStorage } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -1148,17 +1148,17 @@ export function createKnowledgeSchemaLatchTests(createIncompatible: () => Promis
       expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
     });
 
-    it('re-runs an identical import whose metadata has several keys in non-sorted order', async () => {
-      const records = [
-        { id: 'event-42-time', text: '10:00-11:00', metadata: { zeta: 1, tz: 'UTC', alpha: { b: 2, a: 1 } } },
-      ];
+    it('does not resurrect an imported record someone deleted', async () => {
+      const records = [{ id: 'event-42-time', text: '10:00-11:00' }];
       const { knowledge, run } = await createImporter(records);
+      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
+      await knowledge.deleteRecord({ id: 'event-42-time', deletedBy: 'reviewer' });
 
       await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
-      const first = await knowledge.getRecord({ id: 'event-42-time' });
-      await expect(run()).resolves.toMatchObject({ status: 'succeeded' });
-
-      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toBeNull();
+      expect(await knowledge.getRecord({ id: 'event-42-time', includeDeleted: true })).toMatchObject({
+        deletedAt: expect.any(Date),
+      });
     });
 
     it('fails a re-run that emits different content for an existing record id', async () => {

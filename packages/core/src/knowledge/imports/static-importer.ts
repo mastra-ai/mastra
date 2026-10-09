@@ -125,6 +125,9 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       const storage = await this.#knowledge.getStorage();
       const existing = await storage.getRecord({ id: input.id, includeDeleted: true });
       if (existing) {
+        // Someone deleted this importer's record; a re-run must not resurrect it.
+        if (existing.deletedAt && existing.nodeId === this.node.id && existing.source === this.#importer.source)
+          return existing;
         const reemitted =
           !existing.deletedAt &&
           existing.nodeId === this.node.id &&
