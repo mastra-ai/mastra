@@ -58,6 +58,25 @@ const SETTINGS_SCHEMA = {
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
+/**
+ * The settings schema with the provider's effective defaults as `default`:
+ * the built-in values, overridden by the host's `defaults` option. The schema
+ * is what clients show as placeholders, so it must match what the provider
+ * applies when a setting is unset.
+ */
+function settingsSchema(
+  defaults: Partial<PlatformFactorySandboxSettings> | undefined,
+): PublicSchema<PlatformFactorySandboxSettings> {
+  const effective = { ...DEFAULT_SETTINGS, ...defaults };
+  const properties = Object.fromEntries(
+    Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
+      key,
+      { ...property, default: effective[key as keyof typeof effective] },
+    ]),
+  );
+  return { ...SETTINGS_SCHEMA, properties } as PublicSchema<PlatformFactorySandboxSettings>;
+}
+
 export interface PlatformFactorySandboxOptions extends Omit<
   PlatformSandboxOptions,
   'id' | 'sandboxId' | 'sessionId' | 'template'
@@ -78,7 +97,7 @@ export interface PlatformFactorySandboxOptions extends Omit<
  */
 export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandboxSettings> {
   readonly provider = 'platform';
-  readonly settings: PublicSchema<PlatformFactorySandboxSettings> = SETTINGS_SCHEMA;
+  readonly settings: PublicSchema<PlatformFactorySandboxSettings>;
 
   readonly #options: PlatformFactorySandboxOptions;
 
@@ -101,6 +120,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
   constructor(options: PlatformFactorySandboxOptions = {}) {
     super();
     this.#options = options;
+    this.settings = settingsSchema(options.defaults);
   }
 
   template(

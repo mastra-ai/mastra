@@ -101,7 +101,7 @@ abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record
     name: 'builds',
     type: 'FactorySandboxBuilds<TSettings>',
     description:
-      'Builds the template ahead of a session. Its presence is the capability: `start(ctx, settings)` begins or finds a build, `get(ctx, settings, buildId)` reads its status and logs, and the optional `list(ctx, settings)` returns the history. E2B implements all three today.',
+      'Builds the template ahead of a session. Its presence is the capability: `start(ctx, settings)` begins or finds a build, `get(ctx, settings, buildId)` reads its status and logs, and the optional `list(ctx, settings)` returns the history. Platform and Docker implement `start` and `get`; E2B also implements `list`.',
     isOptional: true,
   },
 ]}

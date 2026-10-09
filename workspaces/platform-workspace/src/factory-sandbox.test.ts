@@ -72,6 +72,22 @@ describe('PlatformFactorySandbox', () => {
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
   });
 
+  it('advertises the effective defaults: built-in values overridden by the defaults option', () => {
+    const defaults = (sandbox: PlatformFactorySandbox) =>
+      Object.fromEntries(
+        Object.entries(describeFactorySandbox(sandbox).settingsSchema.properties ?? {}).map(([key, schema]) => [
+          key,
+          (schema as { default?: unknown }).default,
+        ]),
+      );
+    expect(defaults(new PlatformFactorySandbox())).toEqual({ cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 });
+    expect(defaults(new PlatformFactorySandbox({ defaults: { cpuCount: 4 } }))).toEqual({
+      cpuCount: 4,
+      memoryMb: 1024,
+      idleTimeoutMinutes: 5,
+    });
+  });
+
   it('builds the web host callback template sized by the 2 CPU / 1024 MB defaults', async () => {
     for (const ctx of [listContext(), singleContext()]) {
       const callback = await identity(createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 1024 }));
