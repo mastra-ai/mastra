@@ -53,21 +53,6 @@ class DelayedReasoningPubSub extends JSONStreamPubSub {
   }
 }
 
-class HeldStreamPubSub extends JSONStreamPubSub {
-  readonly gate = barrier();
-  held = false;
-  constructor(private boundary: 'reasoning-delta' | 'step-finish') {
-    super();
-  }
-  override async publish(...args: Parameters<EventEmitterPubSub['publish']>) {
-    if (!this.held && args[0].startsWith('agent.stream.') && args[1].data?.type === this.boundary) {
-      this.held = true;
-      await this.gate.promise;
-    }
-    return super.publish(...args);
-  }
-}
-
 type Engine = 'durable' | 'evented' | 'evented-split' | 'evented-json';
 
 function createOwner(
@@ -1245,87 +1230,95 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
   it.each(['provider', 'cached'] as const)(
     'accepts completed %s reasoning before publishing the step',
     async source => {
-      const transport = new HeldStreamPubSub('step-finish');
       let requestSignal: AbortSignal | undefined;
-      const held = transport.gate;
+      const held = barrier();
+      const completed = barrier();
       let requests = 0;
       const prompts: unknown[] = [];
       const memory = new MockMemory();
       const onStepFinish = vi.fn();
-      const { agent, customPubsub } = createOwner(
-        engine,
-        {
-          id: crypto.randomUUID(),
-          name: 'Accepted reasoning',
-          instructions: 'Test',
-          memory,
-          model: new MockLanguageModelV2({
-            doStream: async ({ prompt, abortSignal }) => {
-              prompts.push(prompt);
-              requestSignal ??= abortSignal;
-              return {
-                warnings: [],
-                stream: convertArrayToReadableStream(
-                  source === 'provider' && prompts.length === 1
-                    ? [
-                        { type: 'stream-start', warnings: [] },
-                        { type: 'reasoning-start', id: 'completed' },
-                        { type: 'reasoning-delta', id: 'completed', delta: 'ACCEPTED_REASONING' },
-                        {
-                          type: 'reasoning-end',
-                          id: 'completed',
-                          providerMetadata: { anthropic: { signature: 'ACCEPTED_SIGNATURE' } },
-                        },
-                        {
-                          type: 'finish',
-                          finishReason: 'stop',
-                          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-                        },
-                      ]
-                    : answer(),
-                ),
-              };
-            },
-          }),
-          inputProcessors: [
-            {
-              id: 'cache',
-              processLLMRequest() {
-                requests++;
-                if (source !== 'cached' || requests !== 1) return;
-                return {
-                  response: {
-                    chunks: [
-                      { type: 'reasoning-start', payload: { id: 'completed' } },
-                      { type: 'reasoning-delta', payload: { id: 'completed', text: 'ACCEPTED_REASONING' } },
+      const { agent, customPubsub } = createOwner(engine, {
+        id: crypto.randomUUID(),
+        name: 'Accepted reasoning',
+        instructions: 'Test',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async ({ prompt, abortSignal }) => {
+            prompts.push(prompt);
+            requestSignal ??= abortSignal;
+            return {
+              warnings: [],
+              stream: convertArrayToReadableStream(
+                source === 'provider' && prompts.length === 1
+                  ? [
+                      { type: 'stream-start', warnings: [] },
+                      { type: 'reasoning-start', id: 'completed' },
+                      { type: 'reasoning-delta', id: 'completed', delta: 'ACCEPTED_REASONING' },
                       {
                         type: 'reasoning-end',
-                        payload: {
-                          id: 'completed',
-                          providerMetadata: { anthropic: { signature: 'ACCEPTED_SIGNATURE' } },
-                        },
+                        id: 'completed',
+                        providerMetadata: { anthropic: { signature: 'ACCEPTED_SIGNATURE' } },
                       },
                       {
                         type: 'finish',
-                        payload: {
-                          stepResult: { reason: 'stop', warnings: [], isContinued: false },
-                          output: {
-                            text: '',
-                            toolCalls: [],
-                            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-                          },
-                          metadata: { modelId: 'mock-model', request: {} },
-                        },
+                        finishReason: 'stop',
+                        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
                       },
-                    ],
-                  },
-                };
-              },
+                    ]
+                  : answer(),
+              ),
+            };
+          },
+        }),
+        inputProcessors: [
+          {
+            id: 'cache',
+            processLLMRequest() {
+              requests++;
+              if (source !== 'cached' || requests !== 1) return;
+              return {
+                response: {
+                  chunks: [
+                    { type: 'reasoning-start', payload: { id: 'completed' } },
+                    { type: 'reasoning-delta', payload: { id: 'completed', text: 'ACCEPTED_REASONING' } },
+                    {
+                      type: 'reasoning-end',
+                      payload: {
+                        id: 'completed',
+                        providerMetadata: { anthropic: { signature: 'ACCEPTED_SIGNATURE' } },
+                      },
+                    },
+                    {
+                      type: 'finish',
+                      payload: {
+                        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+                        output: {
+                          text: '',
+                          toolCalls: [],
+                          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                        },
+                        metadata: { modelId: 'mock-model', request: {} },
+                      },
+                    },
+                  ],
+                },
+              };
             },
-          ],
-        },
-        transport,
-      );
+          },
+        ],
+        outputProcessors: [
+          {
+            id: 'hold-completed-step',
+            async processOutputStep({ messages, stepNumber }) {
+              if (stepNumber === 0) {
+                completed.release();
+                await held.promise;
+              }
+              return messages;
+            },
+          },
+        ],
+      });
       const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
       const stream = await agent.stream('initial question', {
         memory: { thread: scope.threadId, resource: scope.resourceId },
@@ -1336,7 +1329,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       const chunks: ChunkType[] = [];
       const consumption = collect(stream.fullStream, chunks);
       try {
-        await vi.waitFor(() => expect(transport.held).toBe(true));
+        await completed.promise;
         await (
           await agent.sendSignal({ type: 'user', contents: 'AFTER_COMPLETION_SIGNAL' }, scope)
         ).accepted;
@@ -1359,7 +1352,6 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         await entry.workflowExecution;
         stream.cleanup();
         await customPubsub?.close();
-        await transport.close();
       }
     },
   );
