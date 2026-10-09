@@ -52,7 +52,7 @@ describe('runLoginCommand', () => {
     vi.mocked(seedProviderOMDefault).mockClear();
   });
 
-  it('signs in through the browser and seeds the memory model', async () => {
+  it('signs in through the browser without pinning the memory model', async () => {
     const { exitCode, authStorage, openUrl, output } = run([optionFor('kimi-for-coding')], async (_id, callbacks) => {
       callbacks.onAuth({ url: 'https://auth.kimi.com/device?user_code=ABCD', instructions: 'Enter code: ABCD' });
     });
@@ -60,7 +60,7 @@ describe('runLoginCommand', () => {
     expect(authStorage.login).toHaveBeenCalledWith('kimi-for-coding', expect.objectContaining({ authMode: undefined }));
     expect(openUrl).toHaveBeenCalledWith('https://auth.kimi.com/device?user_code=ABCD');
     expect(output()).toContain('Enter code: ABCD');
-    expect(seedProviderOMDefault).toHaveBeenCalledWith('kimi-for-coding');
+    expect(seedProviderOMDefault).not.toHaveBeenCalled();
   });
 
   it('asks which sign-in method to use when a provider offers several', async () => {
