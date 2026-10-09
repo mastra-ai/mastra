@@ -1413,6 +1413,7 @@ export class DurableAgent<
       errorProcessors,
       processorStates,
       drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
+      subscribePendingSignals: (listener: () => void) => wrapped.__getSubscribePendingSignals()(runId, listener),
       cleanup: () => {},
     };
     this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController);

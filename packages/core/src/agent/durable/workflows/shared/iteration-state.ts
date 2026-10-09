@@ -119,8 +119,10 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
           outputTokens: undefined,
           totalTokens: undefined,
         };
-  const newUsage = calculateAccumulatedUsage(currentUsage, executionOutput.output.usage);
-  const stepRecord = buildStepRecord(executionOutput);
+  const signalPreempted = executionOutput.stepResult.signalPreempted === true;
+  const newUsage = signalPreempted
+    ? currentState.accumulatedUsage
+    : calculateAccumulatedUsage(currentUsage, executionOutput.output.usage);
   const lastStepResult = { ...executionOutput.stepResult };
   delete lastStepResult.request;
 
@@ -138,10 +140,12 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carried, not recomputed: the request context is fixed for the run, and
     // the steps that rebuild from Mastra have no other source for it.
     requestContextEntries: currentState.requestContextEntries,
-    iterationCount: currentState.iterationCount + 1,
-    accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
+    iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
+    accumulatedSteps: signalPreempted
+      ? currentState.accumulatedSteps
+      : [...currentState.accumulatedSteps, buildStepRecord(executionOutput)],
     accumulatedUsage: newUsage,
-    usageAggregationVersion: 1,
+    usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,

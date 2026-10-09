@@ -59,7 +59,7 @@ When the thread has a running agent stream, `sendMessage()` becomes new input in
 
 ### Input during reasoning
 
-In the default agent loop, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
+In the default loop and experimental durable and evented agents, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
 
 Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. If the run reaches `maxSteps`, queued input may be saved without a response. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
 
@@ -67,7 +67,7 @@ Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The 
 
 Already-streamed reasoning may remain visible until the client reloads history. When input arrives while per-step input processors (`processInputStep`) run, the processors finish and Mastra cancels the model request they prepared. Custom output processors also keep running after a cancellation, and the next request waits for their in-flight work to settle. Mastra discards framework-owned response buffers, but doesn't undo processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
 
-This reasoning interruption applies to the default loop, not the experimental durable or evented agents or the Inngest engine.
+Reasoning interruption doesn't apply to the Inngest engine.
 
 ## Message input
 
