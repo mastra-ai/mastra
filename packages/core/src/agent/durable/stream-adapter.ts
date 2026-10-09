@@ -193,6 +193,16 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * stream is already terminal (including after `cleanup()`/`detach()`).
    */
   forceError: (error: Error) => Promise<void>;
+  /**
+   * Whether a genuine SUSPENDED pubsub event has been handled, regardless of
+   * whether any consumer has read the resulting chunk off `fullStream` yet.
+   * Unlike checking `output.status === 'suspended'`, this cannot race a
+   * caller that hasn't consumed the stream: a safety net deciding whether to
+   * `forceError()` a run that settled without a terminal event should treat a
+   * suspended run as settled even before anything has read its suspend
+   * chunk. See issue #25974.
+   */
+  wasSuspended: () => boolean;
 }
 
 /**
@@ -266,6 +276,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // already-closed stream — observing a finished run (replayed FINISH) or a
   // late/stale event would start a self-renewing timer. Checked by armIdleTimer.
   let terminated = false;
+  // Set the moment a genuine SUSPENDED pubsub event is handled — independent of
+  // whether any consumer ever reads the resulting chunk off `fullStream`. With
+  // the default `closeOnSuspend: false` the stream stays open (not terminal) on
+  // suspend, and `output.status` only flips to `'suspended'` once a caller
+  // consumes that chunk. A caller that settles the driving workflow and checks
+  // termination before consuming anything (see `#ensureDurableStreamTerminated`
+  // in durable-agent.ts) would otherwise race `output.status` and could
+  // force-error a run that only just suspended. This flag is the authoritative,
+  // consumption-independent signal for that check. See issue #25974.
+  let suspended = false;
   let controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> | null = null;
 
   // Promise that resolves when subscription is established
@@ -564,6 +584,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
+          // Authoritative and consumption-independent: set as soon as the event
+          // is handled, regardless of whether anything ever reads the chunk this
+          // produces off `fullStream`. See the `suspended` declaration above.
+          suspended = true;
           // By default we leave the stream open on suspend so a later resume can
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
@@ -790,6 +814,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     ready,
     isTerminal: () => terminated,
     forceError: terminateWithError,
+    wasSuspended: () => suspended,
   };
 }
 

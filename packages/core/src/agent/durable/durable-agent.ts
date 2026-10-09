@@ -2071,17 +2071,19 @@ export class DurableAgent<
    * event (relevant for a transport where delivery is genuinely async)
    * before concluding it is missing and force-terminating the stream with
    * an error.
+   *
+   * Suspension is checked via `stream.wasSuspended()`, not
+   * `output.status === 'suspended'`: the latter only flips once a caller
+   * consumes the suspend chunk off `fullStream`, which this method must not
+   * wait on (the caller may never read it, e.g. a delay-only `resume()`), so
+   * checking it here would race a caller who simply hasn't gotten to it yet
+   * and could force-error a run that only just suspended.
    */
   async #ensureDurableStreamTerminated(
     runId: string,
-    output: MastraModelOutput<any>,
-    stream: Pick<DurableStreamAdapterResult<any>, 'isTerminal' | 'forceError' | 'waitForEventDelivery'>,
+    stream: Pick<DurableStreamAdapterResult<any>, 'isTerminal' | 'forceError' | 'waitForEventDelivery' | 'wasSuspended'>,
   ): Promise<void> {
-    // Wrapped in a closure (rather than inlined) so re-checking after the
-    // await below reads the live status instead of a value TS narrowed away
-    // at the first check — the status can genuinely flip to 'suspended'
-    // during the await.
-    const settled = () => (output.status as string) === 'suspended' || stream.isTerminal();
+    const settled = () => stream.wasSuspended() || stream.isTerminal();
     try {
       if (settled()) return;
       await this.pubsub.flush();
@@ -2405,6 +2407,7 @@ export class DurableAgent<
       waitForEventDelivery,
       isTerminal,
       forceError,
+      wasSuspended,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -2480,7 +2483,7 @@ export class DurableAgent<
         this.emitErrorInBackground(runId, error);
       })
       .finally(() =>
-        this.#ensureDurableStreamTerminated(runId, output, { isTerminal, forceError, waitForEventDelivery }),
+        this.#ensureDurableStreamTerminated(runId, { isTerminal, forceError, waitForEventDelivery, wasSuspended }),
       );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
@@ -2868,6 +2871,7 @@ export class DurableAgent<
       ready,
       isTerminal,
       forceError,
+      wasSuspended,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -2975,7 +2979,7 @@ export class DurableAgent<
         this.emitErrorInBackground(runId, error);
       })
       .finally(() =>
-        this.#ensureDurableStreamTerminated(runId, output, { isTerminal, forceError, waitForEventDelivery }),
+        this.#ensureDurableStreamTerminated(runId, { isTerminal, forceError, waitForEventDelivery, wasSuspended }),
       );
     const trackedResumeEntry = globalRunRegistry.get(runId);
     if (trackedResumeEntry) {
@@ -3516,6 +3520,7 @@ export class DurableAgent<
       waitForEventDelivery,
       isTerminal,
       forceError,
+      wasSuspended,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -3589,7 +3594,7 @@ export class DurableAgent<
         this.emitErrorInBackground(runId, error);
       })
       .finally(() =>
-        this.#ensureDurableStreamTerminated(runId, output, { isTerminal, forceError, waitForEventDelivery }),
+        this.#ensureDurableStreamTerminated(runId, { isTerminal, forceError, waitForEventDelivery, wasSuspended }),
       );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
