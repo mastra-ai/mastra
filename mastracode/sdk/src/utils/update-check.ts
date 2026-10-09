@@ -339,10 +339,39 @@ export function locateOwnInstall(): { dir: string; version: string | null } | nu
   return null;
 }
 
+/**
+ * Result of an update attempt. `message` is a ready-made sentence; the other
+ * fields let callers lay the result out themselves.
+ */
 export type UpdateOutcome =
-  | { status: 'updated'; message: string }
-  | { status: 'unchanged'; message: string }
-  | { status: 'failed'; message: string };
+  | {
+      status: 'updated';
+      message: string;
+      /** The package manager or tool that installed the update. */
+      via: string;
+    }
+  | {
+      status: 'unchanged';
+      message: string;
+      /** Command the user can run to update the install they're running. */
+      command: string;
+      /** Where the running install lives, when known. */
+      installDir?: string;
+      /** Version still on disk after the update ran, when the update ran at all. */
+      runningVersion?: string;
+      /** Tool that ran the update (when it ran but didn't change the running install). */
+      ranWith?: string;
+      /** Tool that owns the install when we only suggest its command (e.g. Homebrew). */
+      managedBy?: string;
+    }
+  | {
+      status: 'failed';
+      message: string;
+      /** Command the user can run instead, when there is one. */
+      command?: string;
+      /** Why it failed: the tail of the package manager's stderr, or our own reason. */
+      details?: string;
+    };
 
 /**
  * Decide what to tell the user after {@link runUpdate}: `updated` when the
@@ -357,15 +386,18 @@ export function resolveUpdateOutcome(opts: {
   install: { dir: string; version: string | null } | null;
   /** Overrides the suggested manual command, e.g. when the update was delegated to the owning tool. */
   manualCommand?: string;
+  /** Tool that ran the update when it wasn't `pm`, e.g. vite-plus. */
+  via?: string;
 }): UpdateOutcome {
   const { pm, targetVersion, result, install } = opts;
   const cmd = opts.manualCommand ?? getInstallCommand(pm, targetVersion);
+  const via = opts.via ?? pm;
 
   if (!result.ok) {
-    const details = formatUpdaterError(result.stderr);
+    const details = formatUpdaterError(result.stderr) ?? undefined;
     let message = `Auto-update failed. Run \`${cmd}\` manually.`;
     if (details) message += `\n\n${details}`;
-    return { status: 'failed', message };
+    return { status: 'failed', message, command: cmd, ...(details ? { details } : {}) };
   }
 
   if (install?.version != null && install.version !== targetVersion) {
@@ -375,10 +407,17 @@ export function resolveUpdateOutcome(opts: {
       : `The update installed, but the Mastra Code you are running (at ${install.dir}) is still ` +
         `v${install.version} — it looks like it is managed by another tool. Update it with that tool, ` +
         `or try \`${cmd}\`.`;
-    return { status: 'unchanged', message };
+    return {
+      status: 'unchanged',
+      message,
+      command: cmd,
+      installDir: install.dir,
+      runningVersion: install.version,
+      ranWith: via,
+    };
   }
 
-  return { status: 'updated', message: `Updated to v${targetVersion}. Please restart Mastra Code.` };
+  return { status: 'updated', message: `Updated to v${targetVersion}. Please restart Mastra Code.`, via };
 }
 
 /** Global node_modules directory the package manager installs into, or null when unknown. */
@@ -435,6 +474,17 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
 }
 
 /**
+ * What {@link performUpdate} will run for this install: the tool and the
+ * command, for showing progress before it starts.
+ */
+export function describeUpdate(pm: PackageManager, targetVersion: string): { via: string; command: string } {
+  const install = locateOwnInstall();
+  const owner = install ? findInstallOwner(install.dir, targetVersion) : null;
+  if (owner) return { via: owner.name, command: owner.command };
+  return { via: pm, command: getInstallCommand(pm, targetVersion) };
+}
+
+/**
  * Update mastracode and verify the result: delegates to the tool that owns the
  * running install when we recognize it, skips the install when it isn't
  * managed by `pm`, otherwise runs the package manager. Every executed update
@@ -443,7 +493,11 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
 export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
   // The registry-provided version reaches shell commands on Windows — accept only version tokens.
   if (!/^[\w.+-]+$/.test(targetVersion)) {
-    return { status: 'failed', message: `Auto-update aborted: unexpected version "${targetVersion}".` };
+    return {
+      status: 'failed',
+      message: `Auto-update aborted: unexpected version "${targetVersion}".`,
+      details: `The npm registry returned an unexpected version: "${targetVersion}".`,
+    };
   }
 
   const install = locateOwnInstall();
@@ -454,7 +508,7 @@ export async function performUpdate(pm: PackageManager, targetVersion: string): 
       const message =
         `Your Mastra Code install (at ${install!.dir}) is managed by ${owner.name}. ` +
         `Update it with \`${owner.command}\`.`;
-      return { status: 'unchanged', message };
+      return { status: 'unchanged', message, command: owner.command, installDir: install!.dir, managedBy: owner.name };
     }
     const result = await execUpdate(owner.exec.cmd, owner.exec.args);
     return resolveUpdateOutcome({
@@ -463,6 +517,7 @@ export async function performUpdate(pm: PackageManager, targetVersion: string): 
       result,
       install: locateOwnInstall(),
       manualCommand: owner.command,
+      via: owner.name,
     });
   }
 
@@ -470,7 +525,7 @@ export async function performUpdate(pm: PackageManager, targetVersion: string): 
     const message =
       `Your Mastra Code install (at ${install!.dir}) is not managed by ${pm} — it looks like it was ` +
       `installed by another tool. Update it with that tool, or try \`${getInstallCommand(pm, targetVersion)}\`.`;
-    return { status: 'unchanged', message };
+    return { status: 'unchanged', message, command: getInstallCommand(pm, targetVersion), installDir: install!.dir };
   }
 
   const result = await runUpdate(pm, targetVersion);

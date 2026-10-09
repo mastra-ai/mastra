@@ -8,15 +8,26 @@ const {
   performUpdateMock,
   loadSettingsMock,
   saveSettingsMock,
-} = vi.hoisted(() => ({
-  fetchLatestVersionMock: vi.fn(),
-  fetchChangelogMock: vi.fn(),
-  detectPackageManagerMock: vi.fn(),
-  isNewerVersionMock: vi.fn(),
-  performUpdateMock: vi.fn(),
-  loadSettingsMock: vi.fn(),
-  saveSettingsMock: vi.fn(),
-}));
+  showInfoMock,
+  showLinesMock,
+  stopProgressMock,
+  showProgressMock,
+} = vi.hoisted(() => {
+  const stopProgressMock = vi.fn();
+  return {
+    fetchLatestVersionMock: vi.fn(),
+    fetchChangelogMock: vi.fn(),
+    detectPackageManagerMock: vi.fn(),
+    isNewerVersionMock: vi.fn(),
+    performUpdateMock: vi.fn(),
+    loadSettingsMock: vi.fn(),
+    saveSettingsMock: vi.fn(),
+    showInfoMock: vi.fn(),
+    showLinesMock: vi.fn(),
+    stopProgressMock,
+    showProgressMock: vi.fn(() => stopProgressMock),
+  };
+});
 
 vi.mock('@mastra/code-sdk/utils/update-check', () => ({
   fetchLatestVersion: fetchLatestVersionMock,
@@ -24,11 +35,18 @@ vi.mock('@mastra/code-sdk/utils/update-check', () => ({
   detectPackageManager: detectPackageManagerMock,
   isNewerVersion: isNewerVersionMock,
   performUpdate: performUpdateMock,
+  describeUpdate: (pm: string, version: string) => ({ via: pm, command: `${pm} add -g mastracode@${version}` }),
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: loadSettingsMock,
   saveSettings: saveSettingsMock,
+}));
+
+vi.mock('../../display.js', () => ({
+  showInfo: showInfoMock,
+  showLines: showLinesMock,
+  showProgress: showProgressMock,
 }));
 
 vi.mock('../../components/ask-question-inline.js', () => ({
@@ -43,6 +61,9 @@ vi.mock('../../components/ask-question-inline.js', () => ({
 
 import { handleUpdateCommand } from '../update.js';
 
+const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '');
+const shownLines = () => showLinesMock.mock.calls.map(([, lines]) => (lines as string[]).map(plain));
+
 function createCtx(version = '0.1.0') {
   return {
     state: {
@@ -54,6 +75,7 @@ function createCtx(version = '0.1.0') {
     showInfo: vi.fn(),
     showError: vi.fn(),
     stop: vi.fn(),
+    exit: vi.fn(),
   } as any;
 }
 
@@ -61,6 +83,13 @@ async function flushPromises(times = 4) {
   for (let i = 0; i < times; i++) {
     await Promise.resolve();
   }
+}
+
+async function answer(ctx: any, choice: string) {
+  const command = handleUpdateCommand(ctx);
+  await flushPromises();
+  ctx.state.activeInlineQuestion.config.onSubmit(choice);
+  await command;
 }
 
 describe('handleUpdateCommand', () => {
@@ -72,50 +101,51 @@ describe('handleUpdateCommand', () => {
     isNewerVersionMock.mockReturnValue(true);
     performUpdateMock.mockResolvedValue({
       status: 'failed',
-      message: 'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.',
+      message: '',
+      command: 'pnpm add -g mastracode@0.2.0',
     });
     loadSettingsMock.mockReturnValue({ updateDismissedVersion: null });
   });
 
-  it('reports registry failure without opening an inline update prompt', async () => {
+  it('spins while checking, then reports a registry failure without opening a prompt', async () => {
     fetchLatestVersionMock.mockResolvedValue(null);
     const ctx = createCtx();
 
     await handleUpdateCommand(ctx);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('Checking for updates…');
-    expect(ctx.showError).toHaveBeenCalledWith('Could not reach the npm registry. Check your network connection.');
+    expect(showProgressMock).toHaveBeenCalledWith(ctx.state, 'Checking for updates');
+    expect(stopProgressMock).toHaveBeenCalled();
+    expect(shownLines()).toEqual([
+      ['Mastra Code  v0.1.0', "✗ Couldn't reach the npm registry. Check your connection and try again."],
+    ]);
     expect(ctx.state.chatContainer.children).toHaveLength(0);
     expect(fetchChangelogMock).not.toHaveBeenCalled();
   });
 
   it('reports already-latest versions without clearing dismissed update state', async () => {
     isNewerVersionMock.mockReturnValue(false);
-    const settings = { updateDismissedVersion: '0.2.0' };
-    loadSettingsMock.mockReturnValue(settings);
+    loadSettingsMock.mockReturnValue({ updateDismissedVersion: '0.2.0' });
     const ctx = createCtx('0.2.0');
 
     await handleUpdateCommand(ctx);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('You are already on the latest version (v0.2.0).');
+    expect(shownLines()).toEqual([['Mastra Code  v0.2.0', '✓ Up to date']]);
     expect(saveSettingsMock).not.toHaveBeenCalled();
     expect(ctx.state.chatContainer.children).toHaveLength(0);
   });
 
-  it('shows changelog text, clears previous dismissals, and persists No for the new version', async () => {
-    const settings = { updateDismissedVersion: '0.1.9' };
-    loadSettingsMock.mockReturnValue(settings);
+  it('shows the versions and changelog, clears previous dismissals, and persists No', async () => {
+    loadSettingsMock.mockReturnValue({ updateDismissedVersion: '0.1.9' });
     const ctx = createCtx('0.1.0');
 
     const command = handleUpdateCommand(ctx);
     await flushPromises();
 
     const component = ctx.state.activeInlineQuestion;
-    expect(component.config.question).toContain('A new version is available: v0.2.0 (current: v0.1.0).');
-    expect(component.config.question).toContain("What's new:\n  • New thing");
+    expect(component.config.question).toBe("Mastra Code v0.1.0 → v0.2.0\n\nWhat's new\n  • New thing\n\nUpdate now?");
     expect(component.config.options).toEqual([
-      { label: 'Yes', description: 'Update and restart' },
-      { label: 'No', description: 'Skip this version' },
+      { label: 'Yes', description: 'Install with pnpm and restart' },
+      { label: 'No', description: 'Skip v0.2.0' },
     ]);
     expect(ctx.state.chatContainer.children).toContain(component);
     expect(component.focused).toBe(true);
@@ -126,67 +156,66 @@ describe('handleUpdateCommand', () => {
     await command;
 
     expect(saveSettingsMock).toHaveBeenLastCalledWith({ updateDismissedVersion: '0.2.0' });
-    expect(ctx.showInfo).toHaveBeenLastCalledWith('Update skipped.');
+    expect(showInfoMock).toHaveBeenLastCalledWith(ctx.state, 'Skipped v0.2.0. Run /update to install it later.');
     expect(performUpdateMock).not.toHaveBeenCalled();
     expect(ctx.state.activeInlineQuestion).toBeUndefined();
   });
 
-  it('surfaces the failure message (with captured stderr) when the update fails', async () => {
+  it('spins while installing, then shows the failure and the command to run', async () => {
     performUpdateMock.mockResolvedValue({
       status: 'failed',
-      message: 'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.\n\nnpm ERR! permission denied',
+      message: '',
+      command: 'pnpm add -g mastracode@0.2.0',
+      details: 'npm ERR! permission denied',
     });
     const ctx = createCtx('0.1.0');
 
-    const command = handleUpdateCommand(ctx);
-    await flushPromises();
-    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
-    await command;
+    await answer(ctx, 'Yes');
 
     expect(performUpdateMock).toHaveBeenCalledWith('pnpm', '0.2.0');
-    expect(ctx.showError).toHaveBeenCalledWith(
-      'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.\n\nnpm ERR! permission denied',
+    expect(plain(showProgressMock.mock.calls[1]![1] as string)).toBe(
+      'Installing with pnpm  pnpm add -g mastracode@0.2.0',
     );
+    expect(stopProgressMock).toHaveBeenCalledTimes(2);
+    expect(shownLines()).toEqual([
+      ['✗ Update failed', '  npm ERR! permission denied', '', 'Run it yourself:  pnpm add -g mastracode@0.2.0'],
+    ]);
     expect(ctx.stop).not.toHaveBeenCalled();
   });
 
-  it('shows an honest message (no restart) when the running install did not change', async () => {
+  it('explains (without restarting) when the running install did not change', async () => {
     performUpdateMock.mockResolvedValue({
       status: 'unchanged',
-      message: 'Your Mastra Code install (at /opt/vite-plus/mastracode) is not managed by pnpm.',
+      message: '',
+      command: 'pnpm add -g mastracode@0.2.0',
+      installDir: '/opt/vite-plus/mastracode',
     });
     const ctx = createCtx('0.1.0');
 
-    const command = handleUpdateCommand(ctx);
-    await flushPromises();
-    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
-    await command;
+    await answer(ctx, 'Yes');
 
-    expect(ctx.showError).toHaveBeenCalledWith(
-      'Your Mastra Code install (at /opt/vite-plus/mastracode) is not managed by pnpm.',
-    );
+    expect(shownLines()[0]).toEqual([
+      "! This Mastra Code wasn't updated",
+      '  It was installed by another tool, at /opt/vite-plus/mastracode',
+      '',
+      'Update it with the tool that installed it, or run:  pnpm add -g mastracode@0.2.0',
+    ]);
     expect(ctx.stop).not.toHaveBeenCalled();
   });
 
-  it('confirms success and restarts when the update is verified on disk', async () => {
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+  it('stops the TUI, prints the result to the shell, and exits on success', async () => {
     const logSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    performUpdateMock.mockResolvedValue({
-      status: 'updated',
-      message: 'Updated to v0.2.0. Please restart Mastra Code.',
-    });
+    performUpdateMock.mockResolvedValue({ status: 'updated', message: '', via: 'pnpm' });
     const ctx = createCtx('0.1.0');
 
-    const command = handleUpdateCommand(ctx);
-    await flushPromises();
-    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
-    await command;
+    await answer(ctx, 'Yes');
 
     // The confirmation is printed after the TUI stops so it survives the exit.
     expect(ctx.stop).toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledWith('Updated to v0.2.0. Please restart Mastra Code.');
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(plain(logSpy.mock.calls[0]![0] as string)).toBe(
+      'Mastra Code  v0.1.0 → v0.2.0\n✓ Updated with pnpm. Run mastracode to start the new version.',
+    );
+    expect(ctx.exit).toHaveBeenCalledWith(0);
     logSpy.mockRestore();
-    exitSpy.mockRestore();
   });
 });

@@ -28,7 +28,6 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
@@ -93,6 +92,7 @@ import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js
 import { updateStatusLine } from './status-line.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
+import { offerUpdate } from './update-flow.js';
 
 // =============================================================================
 // Types
@@ -1846,58 +1846,10 @@ export class MastraTUI {
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
     changelog: string | null,
   ): Promise<void> {
-    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
-    if (changelog) {
-      question += `\n\nWhat's new:\n${changelog}`;
-    }
-    question += `\n\nWould you like to update now?`;
-
-    const answer = await new Promise<string | null>(resolve => {
-      const component = new AskQuestionInlineComponent(
-        {
-          question,
-          options: [
-            { label: 'Yes', description: 'Update and restart' },
-            { label: 'No', description: 'Skip this version' },
-          ],
-          allowCustomResponse: false,
-          onSubmit: answer => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(answer);
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(null);
-          },
-        },
-        this.state.ui,
-      );
-
-      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
-      this.state.activeInlineQuestion = component;
-      component.focused = true;
-      flushRender(this.state);
-    });
-
-    if (answer === 'Yes') {
-      showInfo(this.state, `Updating to v${latestVersion}…`);
-      const outcome = await performUpdate(pm, latestVersion);
-      if (outcome.status === 'updated') {
-        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
-        this.stop();
-        console.info(outcome.message);
-        this.exit(0);
-      } else {
-        showError(this.state, outcome.message);
-      }
-    } else {
-      // User declined — save the dismissed version
-      const settings = loadSettings();
-      settings.updateDismissedVersion = latestVersion;
-      saveSettings(settings);
-      if (answer === 'No') {
-        showInfo(this.state, `Update skipped. Run /update to update later.`);
-      }
-    }
+    await offerUpdate(
+      { state: this.state, stop: () => this.stop(), exit: code => this.exit(code) },
+      { currentVersion, latestVersion, pm, changelog },
+      { dismissOnCancel: true },
+    );
   }
 }

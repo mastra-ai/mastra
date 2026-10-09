@@ -4,10 +4,10 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
-import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { formatRegistryError, formatUpdateHeader, formatUpToDate } from '../../update-output.js';
+import { showLines, showProgress } from '../display.js';
+import { offerUpdate, tuiUpdateStyle } from '../update-flow.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<void> {
@@ -17,16 +17,17 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
     return;
   }
 
-  ctx.showInfo('Checking for updates…');
-
+  const stopChecking = showProgress(ctx.state, 'Checking for updates');
   const latestVersion = await fetchLatestVersion();
+  stopChecking();
+
+  const header = formatUpdateHeader(tuiUpdateStyle, currentVersion);
   if (!latestVersion) {
-    ctx.showError('Could not reach the npm registry. Check your network connection.');
+    showLines(ctx.state, [header, formatRegistryError(tuiUpdateStyle)]);
     return;
   }
-
   if (!isNewerVersion(currentVersion, latestVersion)) {
-    ctx.showInfo(`You are already on the latest version (v${currentVersion}).`);
+    showLines(ctx.state, [header, formatUpToDate(tuiUpdateStyle)]);
     return;
   }
 
@@ -39,56 +40,8 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
     saveSettings(settings);
   }
 
-  // Build question text with optional changelog
-  let question = `A new version is available: v${latestVersion} (current: v${currentVersion}).`;
-  if (changelog) {
-    question += `\n\nWhat's new:\n${changelog}`;
-  }
-  question += `\n\nWould you like to update now?`;
-
-  const answer = await new Promise<string | null>(resolve => {
-    const component = new AskQuestionInlineComponent(
-      {
-        question,
-        options: [
-          { label: 'Yes', description: 'Update and restart' },
-          { label: 'No', description: 'Skip this version' },
-        ],
-        allowCustomResponse: false,
-        onSubmit: answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve(answer);
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve(null);
-        },
-      },
-      ctx.state.ui,
-    );
-
-    insertChatComponentWithBoundarySpacing(ctx.state.chatContainer, component);
-    ctx.state.activeInlineQuestion = component;
-    component.focused = true;
-    ctx.state.ui.requestRender();
-  });
-
-  if (answer === 'Yes') {
-    ctx.showInfo(`Updating to v${latestVersion}…`);
-    const outcome = await performUpdate(pm, latestVersion);
-    if (outcome.status === 'updated') {
-      // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
-      ctx.stop();
-      console.info(outcome.message);
-      if (ctx.exit) ctx.exit(0);
-      else process.exit(0);
-    } else {
-      ctx.showError(outcome.message);
-    }
-  } else if (answer === 'No') {
-    const s = loadSettings();
-    s.updateDismissedVersion = latestVersion;
-    saveSettings(s);
-    ctx.showInfo('Update skipped.');
-  }
+  await offerUpdate(
+    { state: ctx.state, stop: () => ctx.stop(), exit: code => (ctx.exit ? ctx.exit(code) : process.exit(code)) },
+    { currentVersion, latestVersion, pm, changelog },
+  );
 }
