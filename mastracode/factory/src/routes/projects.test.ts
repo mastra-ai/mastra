@@ -1168,7 +1168,7 @@ describe('ProjectRoutes', () => {
         expect(sandbox.reads).toHaveLength(readsBefore);
       });
 
-      it('builds after a repository link, edit or unlink, and after a repository patch on the environment', async () => {
+      it('never builds on save: repository patches, edits and unlinks only store the change', async () => {
         const { app, project, sandbox, seed } = await seedBuilding();
         const github = seed.sourceControl.forIntegration('github');
         const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
@@ -1176,8 +1176,8 @@ describe('ProjectRoutes', () => {
         const patched = await patch(app, project.id, {
           repositories: [{ projectRepositoryId: link!.id, setupCommand: 'pnpm i' }],
         });
-        expect(((await patched.json()) as any).environment.buildRequested).toBe(true);
-        expect(sandbox.starts).toHaveLength(1);
+        expect(patched.status).toBe(200);
+        expect((await patched.json()).environment).not.toHaveProperty('buildRequested');
 
         const edited = await app.request(`/web/factory/projects/${project.id}/repositories/${link!.id}`, {
           method: 'PATCH',
@@ -1185,15 +1185,13 @@ describe('ProjectRoutes', () => {
           body: JSON.stringify({ setupCommand: 'pnpm build' }),
         });
         expect(edited.status).toBe(200);
-        await until(async () => sandbox.starts.length === 2);
 
         const unlinked = await app.request(`/web/factory/projects/${project.id}/repositories/${link!.id}`, {
           method: 'DELETE',
         });
         expect(unlinked.status).toBe(204);
-        // The unlink left no environment repository, so the run skipped instead of building.
-        await until(async () => (await seed.projects.getById({ id: project.id }))?.lastBuildId === 'tpl-1:build-1');
-        expect(sandbox.starts).toHaveLength(2);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(sandbox.starts).toEqual([]);
       });
 
       it('deletes the project schedule with the project', async () => {
@@ -1279,17 +1277,17 @@ describe('ProjectRoutes', () => {
         expect((await mastra.schedules.get(scheduleIdFor(project.id)))?.status).toBe('paused');
       });
 
-      it('starts a build when a setting changes and reports buildRequested', async () => {
+      it('saves a setting without building; Build now picks the new settings up', async () => {
         const { app, project, sandbox } = await seedBuilding();
-        const unchanged = await patch(app, project.id, { buildTriggers: { push: { enabled: true } } });
-        expect(((await unchanged.json()) as any).environment.buildRequested).toBe(false);
-        expect(sandbox.starts).toEqual([]);
-
         const changed = await patch(app, project.id, { settings: { cpuCount: 4 } });
         expect(changed.status).toBe(200);
         const body = (await changed.json()) as any;
-        expect(body.environment.buildRequested).toBe(true);
-        expect(body.environment.build).toMatchObject({ buildId: 'tpl-1:build-1' });
+        expect(body.environment.settings).toEqual({ cpuCount: 4 });
+        expect(body.environment.build).toBeNull();
+        expect(sandbox.starts).toEqual([]);
+
+        const built = await app.request(`/web/factory/projects/${project.id}/environment/build`, { method: 'POST' });
+        expect(built.status).toBe(200);
         expect(sandbox.starts).toEqual([{ sessionId: `environment-build:${project.id}`, settings: { cpuCount: 4 } }]);
       });
     });

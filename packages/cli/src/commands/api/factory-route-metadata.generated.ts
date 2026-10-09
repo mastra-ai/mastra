@@ -1262,9 +1262,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
-            },
-            "buildRequested": {
-              "type": "boolean"
             }
           },
           "required": [
@@ -2107,9 +2104,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
-            },
-            "buildRequested": {
-              "type": "boolean"
             }
           },
           "required": [

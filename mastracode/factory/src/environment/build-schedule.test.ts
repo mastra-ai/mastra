@@ -273,7 +273,7 @@ describe('factory-environment-build workflow', () => {
     const runner = new EnvironmentBuildRunner(depsFor(seed, new BuildingSandbox()), {
       getMastra: () => new Mastra({ logger: false, storage: new InMemoryStore({ id: 'no-workflow' }) }),
     });
-    await expect(runner.start(project.id, 'settings')).resolves.toEqual({
+    await expect(runner.start(project.id, 'manual')).resolves.toEqual({
       outcome: 'unavailable',
       reason: 'no_workflow',
     });

@@ -82,7 +82,6 @@ export interface FactoryEnvironmentPayload {
   buildTriggers?: FactoryEnvironmentBuildTriggers;
   build?: FactoryEnvironmentLastBuild | null;
   /** On a PATCH response: this update changed the template and a build was started for it. */
-  buildRequested?: boolean;
 }
 
 export interface FactoryEnvironmentResponse {

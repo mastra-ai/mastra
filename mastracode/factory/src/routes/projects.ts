@@ -450,18 +450,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     ];
   }
 
-  /**
-   * A repository link, unlink or edit changes the template; a capable sandbox
-   * builds it in the background. Never fails the request that changed the link.
-   */
-  #requestBuild(projectId: string): void {
-    const runner = this.deps.environmentBuilds;
-    if (!runner || !this.deps.sandbox?.builds) return;
-    void runner.start(projectId, 'settings').catch((error: unknown) => {
-      console.warn('[factory] environment build request failed after a repository change:', error);
-    });
-  }
-
   /** Best effort: a deleted project's cron schedule must not keep firing. */
   async #dropSchedule(projectId: string): Promise<void> {
     const runner = this.deps.environmentBuilds;
@@ -817,7 +805,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           } catch (error) {
             console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
           }
-          this.#requestBuild(projectId);
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
@@ -954,25 +941,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                 : {}),
             });
           }
-          // A setting, workdir or workspace setup change may change the
-          // template; a capable sandbox builds it right away so the next
-          // session finds the image warm.
-          const templateChanged =
-            runner !== undefined &&
-            (JSON.stringify(project.sandboxSettings ?? {}) !== JSON.stringify(updated.sandboxSettings ?? {}) ||
-              project.sandboxWorkdir !== updated.sandboxWorkdir ||
-              project.workspaceSetupCommand !== updated.workspaceSetupCommand ||
-              (repositoryPatches ?? []).some(
-                ({ projectRepositoryId: _id, ...input }) => Object.keys(input).length > 0,
-              ));
-          let buildRequested = false;
-          if (templateChanged) {
-            const outcome = await runner.start(project.id, 'settings');
-            buildRequested = outcome.outcome === 'started';
-            if (buildRequested) updated = (await this.#project(tenant.orgId, projectId)) ?? updated;
-          }
-          const payload = await this.#environmentPayload(tenant.orgId, updated);
-          return context.json(runner ? { environment: { ...payload.environment, buildRequested } } : payload);
+          // Saving never builds: the next Build now, schedule or push run
+          // picks the changed template up.
+          return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
@@ -995,7 +966,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             id: projectRepositoryId,
             input,
           });
-          this.#requestBuild(projectId);
           return context.json({
             projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository!),
           });
@@ -1018,7 +988,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'session_retirement_unavailable' }, 409);
           }
           await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
-          this.#requestBuild(projectId);
           return context.body(null, 204);
         },
       }),

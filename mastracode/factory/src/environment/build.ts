@@ -16,7 +16,7 @@ import type { SessionEnvironment } from '../workspace.js';
 import { headsChanged, recordedHeadResolver, resolveCurrentHeads } from './heads.js';
 import type { EnvironmentHeads } from './heads.js';
 
-export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push', 'settings'] as const;
+export const ENVIRONMENT_BUILD_TRIGGERS = ['manual', 'schedule', 'push'] as const;
 export type EnvironmentBuildTrigger = (typeof ENVIRONMENT_BUILD_TRIGGERS)[number];
 
 export interface EnvironmentBuildSourceControl {
@@ -38,7 +38,7 @@ export interface EnvironmentBuildOutcome {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
   buildId?: string;
   templateId?: string;
-  /** Why nothing started: `debounced`, `unchanged`, `no_environment`, `no_builds`, `no_source_control`, or an error. */
+  /** Why nothing started: `debounced`, `in_progress`, `unchanged`, `no_environment`, `no_builds`, `no_source_control`, or an error. */
   reason?: string;
   /** The heads the started build pins; the workflow stores them once the build is ready. */
   heads?: EnvironmentHeads;
@@ -102,9 +102,10 @@ export async function resolveEnvironmentHeads(
 
 /**
  * Start a build for `projectId` when `trigger` calls for one. `push` first
- * wins the leading-edge debounce claim; `schedule` and `push` skip when the
- * last build is ready and no head moved; `manual` and `settings` always
- * build. A provider that throws yields `failed` with the attempt still
+ * wins the leading-edge debounce claim; every trigger skips while the last
+ * build is still running; `schedule` and `push` also skip when the last build
+ * is ready and no head moved; `manual` otherwise always builds. Saving
+ * settings never builds. A provider that throws yields `failed` with the attempt still
  * recorded, so the next trigger sees a fresh attempt time, and the last build
  * id cleared, so a later `schedule` or `push` cannot mistake the previous
  * ready build for the current template.
@@ -137,9 +138,19 @@ export async function runEnvironmentBuild(
     const ctx = environmentBuildContext(project, environment, heads, deps.sourceControl.versionControl);
     const settings = environment.settings;
 
-    if ((input.trigger === 'schedule' || input.trigger === 'push') && project.lastBuildId) {
+    if (project.lastBuildId) {
       const last = await builds.get(ctx, settings, project.lastBuildId);
-      if (last.status === 'ready' && !headsChanged(project.activeTemplateHeads, heads)) {
+      // Two runs polling one template fight over it (each poll resubmits its
+      // own definition and the provider cancels the other), so a running
+      // build is never joined by a second one, whatever asked.
+      if (last.status === 'pending' || last.status === 'building') {
+        return { outcome: 'skipped', reason: 'in_progress', buildId: project.lastBuildId };
+      }
+      if (
+        (input.trigger === 'schedule' || input.trigger === 'push') &&
+        last.status === 'ready' &&
+        !headsChanged(project.activeTemplateHeads, heads)
+      ) {
         return { outcome: 'skipped', reason: 'unchanged' };
       }
     }

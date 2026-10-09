@@ -114,8 +114,6 @@ export const projectEnvironmentResponseSchema = z.object({
     repositories: z.array(environmentRepositorySchema),
     buildTriggers: environmentBuildTriggersSchema.optional(),
     build: environmentLastBuildSchema.nullable().optional(),
-    /** True when this update changed a setting and a build was started for it. */
-    buildRequested: z.boolean().optional(),
   }),
 });
 

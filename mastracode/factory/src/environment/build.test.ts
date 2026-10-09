@@ -207,7 +207,7 @@ describe('runEnvironmentBuild', () => {
     expect(sandbox.starts).toHaveLength(2);
   });
 
-  it('never skips manual or settings triggers', async () => {
+  it('manual always builds over a finished build, even with unchanged heads', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     const sandbox = new BuildingSandbox();
     await seed.projects.update({
@@ -216,13 +216,25 @@ describe('runEnvironmentBuild', () => {
       input: { lastBuildId: 'build-0', activeTemplateHeads: { 'acme/api': SHA_A } },
     });
 
-    for (const trigger of ['manual', 'settings'] as const) {
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toMatchObject({ outcome: 'started' });
+    expect(sandbox.gets).toEqual(['build-0']);
+    expect(sandbox.starts).toHaveLength(1);
+  });
+
+  it('never starts a second build while the last one is still running, whatever the trigger', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    sandbox.statusOf = () => 'building';
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { lastBuildId: 'build-0' } });
+
+    for (const trigger of ['manual', 'schedule', 'push'] as const) {
       await expect(
         runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger }),
-      ).resolves.toMatchObject({ outcome: 'started' });
+      ).resolves.toEqual({ outcome: 'skipped', reason: 'in_progress', buildId: 'build-0' });
     }
-    expect(sandbox.gets).toEqual([]);
-    expect(sandbox.starts).toHaveLength(2);
+    expect(sandbox.starts).toEqual([]);
   });
 
   it('debounces pushes on the leading edge and lets the first push in the next window build', async () => {
@@ -274,7 +286,7 @@ describe('runEnvironmentBuild', () => {
     expect(stored?.lastBuildAttemptedAt?.toISOString()).toBe(clock.toISOString());
   });
 
-  it('clears a stale ready build id when a settings build fails, so the next schedule rebuilds', async () => {
+  it('clears a stale ready build id when a manual build fails, so the next schedule rebuilds', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     const sandbox = new BuildingSandbox();
     await seed.projects.update({
@@ -284,7 +296,7 @@ describe('runEnvironmentBuild', () => {
     });
     sandbox.startError = new Error('quota exceeded');
     await expect(
-      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'settings' }),
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
     ).resolves.toEqual({ outcome: 'failed', reason: 'quota exceeded' });
     expect((await seed.projects.getById({ id: project.id }))?.lastBuildId).toBeNull();
 
@@ -293,7 +305,7 @@ describe('runEnvironmentBuild', () => {
     await expect(
       runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
     ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1' });
-    expect(sandbox.gets).toEqual([]);
+    expect(sandbox.gets).toEqual(['build-old']);
   });
 
   it('pins the repository default branch the template clones, not a link branch', async () => {

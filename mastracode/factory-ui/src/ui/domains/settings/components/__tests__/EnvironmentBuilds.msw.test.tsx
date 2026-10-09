@@ -44,7 +44,7 @@ function useEnvironment(holder: { environment: FactoryEnvironmentPayload }) {
   return reads;
 }
 
-function recordPatches(holder: { environment: FactoryEnvironmentPayload }, buildRequested = false) {
+function recordPatches(holder: { environment: FactoryEnvironmentPayload }) {
   const patches: FactoryEnvironmentPatch[] = [];
   server.use(
     http.patch(ENVIRONMENT_URL, async ({ request }) => {
@@ -64,7 +64,7 @@ function recordPatches(holder: { environment: FactoryEnvironmentPayload }, build
           },
         };
       }
-      return HttpResponse.json({ environment: { ...holder.environment, buildRequested } });
+      return HttpResponse.json({ environment: holder.environment });
     }),
   );
   return patches;
@@ -277,18 +277,19 @@ describe('Environment builds', () => {
     expect(failed).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('toasts Build queued when a settings save started a build', async () => {
+  it('saves a setting without starting a build', async () => {
     const holder = { environment: environmentPayload() };
     useFactory();
     useEnvironment(holder);
-    const patches = recordPatches(holder, true);
+    const patches = recordPatches(holder);
 
     renderEnvironmentSettings();
     const user = userEvent.setup();
 
     const memory = await screen.findByRole('spinbutton', { name: 'Memory (MB)' });
     await user.type(memory, '4096{Enter}');
-    expect(await screen.findByText('Build queued')).toBeInTheDocument();
+    expect(await screen.findByText('Environment saved')).toBeInTheDocument();
     expect(patches).toEqual([{ settings: { memoryMb: 4096 } }]);
+    expect(screen.queryByText('Build queued')).not.toBeInTheDocument();
   });
 });

@@ -81,7 +81,7 @@ function EnvironmentBlocks({
       .mutateAsync(
         { factoryId, input },
         {
-          onSuccess: saved => toast.success(saved.environment.buildRequested ? 'Build queued' : 'Environment saved'),
+          onSuccess: () => toast.success('Environment saved'),
           onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
         },
       )
