@@ -4055,10 +4055,15 @@ export class DurableAgent<
       if (workflowInput) {
         const persistedStructuredOutput = workflowInput.options?.structuredOutput;
         if (persistedStructuredOutput?.schema) {
-          structuredOutput = {
-            ...persistedStructuredOutput,
-            schema: toStandardSchema(persistedStructuredOutput.schema),
-          };
+          const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
+          const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
+          // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
+          structuredOutput =
+            errorStrategy === 'fallback'
+              ? fallbackValue === undefined
+                ? { ...rest, schema }
+                : { ...rest, schema, errorStrategy, fallbackValue: fallbackValue as {} }
+              : { ...rest, schema, errorStrategy };
         }
       }
     }

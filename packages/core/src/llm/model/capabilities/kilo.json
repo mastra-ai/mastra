@@ -20,7 +20,6 @@
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
     "anthropic/claude-sonnet-5.5",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -213,7 +212,8 @@
     "stealth/claude-sonnet-4.6",
     "stealth/qwen3.6-plus",
     "stepfun/step-3.7-flash",
-    "stepfun/step-3.7-flash:free",
+    "stepfun/step-5-preview",
+    "stepfun/step-5-preview-free",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
@@ -272,7 +272,6 @@
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "arcee-ai/trinity-large-thinking",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -339,7 +338,7 @@
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
     "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante:free",
+    "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
@@ -523,7 +522,8 @@
     "stealth/qwen3.6-plus",
     "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
-    "stepfun/step-3.7-flash:free",
+    "stepfun/step-5-preview",
+    "stepfun/step-5-preview-free",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-1.8b",
     "tencent/hy-mt2-30b-a3b",
@@ -838,6 +838,7 @@
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-30b-a3b",
     "tencent/hy-mt2-7b",
@@ -1466,12 +1467,6 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "baidu/ernie-4.5-vl-424b-a47b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "x-ai/grok-4.20-multi-agent": [
       {
         "type": "effort",
@@ -1772,12 +1767,6 @@
         "values": ["none", "high"]
       }
     ],
-    "inclusionai/ling-3.0-flash-sante:free": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "inclusionai/ling-3.0-flash": [
       {
         "type": "effort",
@@ -1785,6 +1774,12 @@
       }
     ],
     "inclusionai/ling-3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "inclusionai/ling-3.0-flash-sante": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -1964,7 +1959,7 @@
         "values": ["high"]
       }
     ],
-    "stepfun/step-3.7-flash:free": [
+    "stepfun/step-5-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -1977,6 +1972,12 @@
       }
     ],
     "stepfun/step-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "stepfun/step-5-preview-free": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

@@ -55,6 +55,7 @@ import {
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput, serializeClientTools } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
+import { isJsonSafe } from './workflows/shared/schemas';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -688,6 +689,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // only output guidance. Withhold it there and let the generated schema instruction stand.
         instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
+        hasStructuringModel: so.model ? true : undefined,
+        errorStrategy: so.errorStrategy,
+        // A non-JSON-safe fallback would fail options validation; in-process runs still
+        // have it through the run registry's live config.
+        fallbackValue: isJsonSafe(so.fallbackValue) ? so.fallbackValue : undefined,
         // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
         // live Zod/standard-schema instance does not survive that round trip.
         schema: asJsonSchema(structuredOutputSchema),

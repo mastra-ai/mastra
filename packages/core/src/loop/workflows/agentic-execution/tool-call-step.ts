@@ -1137,6 +1137,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       emittedReplayedToolCalls.add(replayKey);
                     }
 
+                    // Awaited calls return their authoritative outcome through the
+                    // normal mapping step, which emits the terminal tool chunk.
+                    // Synthetic terminal chunks are only needed for deferred calls.
+                    if (info.disposition === 'awaited') return;
+
                     if (chunk.type === 'background-task-completed') {
                       safeEnqueue(
                         controller,
