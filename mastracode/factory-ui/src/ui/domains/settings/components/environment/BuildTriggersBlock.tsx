@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentBuildTriggers } from '../../../workspaces/services/environment';
@@ -181,16 +182,20 @@ function ScheduleRows({
         </Select>
       </SettingsRow>
       {frequency !== 'off' && (
-        <div className="bg-surface3 text-muted-foreground text-ui-sm mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-md px-3 py-2">
+        <div className="bg-surface3 mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-md px-3 py-2">
           {frequency === 'daily' && (
             <>
-              <span>Rebuild at</span>
+              <Txt as="span" variant="caption" tone="muted">
+                Rebuild at
+              </Txt>
               {hourSelect(next => void onCommit(presetCron('daily', next, day)))}
             </>
           )}
           {frequency === 'weekly' && (
             <>
-              <span>On</span>
+              <Txt as="span" variant="caption" tone="muted">
+                On
+              </Txt>
               <Select
                 value={String(day)}
                 onValueChange={next => void onCommit(presetCron('weekly', hour, Number(next)))}
@@ -207,13 +212,17 @@ function ScheduleRows({
                   ))}
                 </SelectContent>
               </Select>
-              <span>at</span>
+              <Txt as="span" variant="caption" tone="muted">
+                at
+              </Txt>
               {hourSelect(next => void onCommit(presetCron('weekly', next, day)))}
             </>
           )}
           {frequency === 'custom' && (
             <>
-              <span>Cron</span>
+              <Txt as="span" variant="caption" tone="muted">
+                Cron
+              </Txt>
               <span className="w-48">
                 <CommittedInput
                   label="Build schedule cron"
@@ -229,7 +238,9 @@ function ScheduleRows({
                   }}
                 />
               </span>
-              <span>{timezone}</span>
+              <Txt as="span" variant="caption" tone="muted">
+                {timezone}
+              </Txt>
             </>
           )}
         </div>
