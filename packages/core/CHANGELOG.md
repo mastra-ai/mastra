@@ -1,5 +1,55 @@
 # @mastra/core
 
+## 1.76.0-alpha.3
+
+### Minor Changes
+
+- Added an optional `usageId` field to exported metrics. Every token and cost metric produced from the same model usage shares one `usageId`, so storage can group a model call's metric rows without relying on the span. Other metrics leave it unset. ([#26461](https://github.com/mastra-ai/mastra/pull/26461))
+
+### Patch Changes
+
+- Keep Studio and Factory sessions alive for the identity provider's full session length. ([#26447](https://github.com/mastra-ai/mastra/pull/26447))
+
+  - `MastraAuthStudio` session cookies now last 14 days by default (was a hardcoded 24 hours), configurable via the new `sessionMaxAgeSeconds` option or the `MASTRA_SESSION_MAX_AGE` environment variable.
+  - When the shared API renews the session during verification, `MastraAuthStudio` re-issues the renewed cookie under the deployment's own cookie domain and exposes it through a new optional `consumePendingResponseHeaders` provider hook.
+  - `@mastra/server`'s auth middleware, `CompositeAuth`, the Factory auth gate, and Factory's per-route `ensureFactoryAuthUser` (used by routes declared `requiresAuth: false`, which skip the gate) forward those headers to the browser, as does the public `GET /auth/me` route. Forwarding is best-effort and never fails a request.
+
+  ```ts
+  import { MastraAuthStudio } from '@mastra/auth-studio';
+
+  // Defaults to 14 days. Override per deployment, or set MASTRA_SESSION_MAX_AGE (seconds).
+  const auth = new MastraAuthStudio({ sessionMaxAgeSeconds: 7 * 24 * 60 * 60 });
+  ```
+
+- Fixed output-stream processing for durable tool results after a restart or cleanup, including Inngest resumes. Restored processors receive the request context, and concurrent cold calls share the published processor pipeline and state. When the agent resolves but its processor pipeline is missing, processor reconstruction or cold-worker dependency-resolution failures (tools, memory, and workspace) stop the step instead of exposing unprocessed output. Unregistered agents, persistence-only callers, and complete live pipelines retain their dependency-resolution fallback. Fixes #26148. ([#26367](https://github.com/mastra-ai/mastra/pull/26367))
+
+- Fixed Inngest tool resumes after a worker restart or cleanup to emit tool-call-resumed before tool-result, preserving configured display transforms. ([#26370](https://github.com/mastra-ai/mastra/pull/26370))
+
+- Fixed plain agents emitting awaited background tool results twice. ([#26344](https://github.com/mastra-ai/mastra/pull/26344))
+
+- Fixed durable and evented agents so they no longer execute tools excluded by `prepareStep`. ([#26339](https://github.com/mastra-ai/mastra/pull/26339))
+
+- Fixed durable and evented agents not saving the structured output object to memory. The saved assistant message now includes `metadata.structuredOutput`, matching regular agents, so reconnecting clients and recovered runs can read the object. ([#26452](https://github.com/mastra-ai/mastra/pull/26452))
+
+  As with regular agents:
+
+  - Truncated responses (finish reason `length` or `content-filter`) and responses that fail validation do not save `metadata.structuredOutput`. The response message itself is still saved.
+  - With `errorStrategy: 'fallback'`, the `fallbackValue` is saved instead.
+
+  This does not yet apply when `structuredOutput.model` is set to a separate structuring model (see [#26431](https://github.com/mastra-ai/mastra/issues/26431)).
+
+  Fixes [#26432](https://github.com/mastra-ai/mastra/issues/26432).
+
+- Fixed agents being told to call `updateWorkingMemory` when `workingMemory.agentManaged` is `false`. The tool is not available in that mode, so agents now receive the read-only working memory instruction instead (#25896). ([#26198](https://github.com/mastra-ai/mastra/pull/26198))
+
+- Fixed durable agents forwarding the parent conversation to delegated agents and delegation hooks, including transient request-processor context. Ordinary tools now receive input-only messages consistently with non-durable agents. ([#26365](https://github.com/mastra-ai/mastra/pull/26365))
+
+- Token and cost metrics now carry a `usageId` shared by all rows from the same model call. Usage rolled up from hidden model calls onto a visible span gets a separate `usageId` per call, so each call stays distinguishable even though the rows share a span. ([#26461](https://github.com/mastra-ai/mastra/pull/26461))
+
+- Fixed durable, evented, and Inngest agents leaking one-step prepareStep system message overrides into later model steps. ([#26343](https://github.com/mastra-ai/mastra/pull/26343))
+
+- Preserve the original `TypeError` when plain agents reject invalid `modelSettings.timeout` stream options, matching durable and evented agents ([#26340](https://github.com/mastra-ai/mastra/pull/26340))
+
 ## 1.76.0-alpha.2
 
 ### Minor Changes
