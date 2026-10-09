@@ -91,18 +91,18 @@ describe('Knowledge structure reconciliation', () => {
     for (const orgId of ['a', 'b']) {
       const org = `org:${orgId}`;
       expect(materializeKnowledgeScopePlan(scopeTypes, { address: org, contextualScopeAddress: org }).scopes).toEqual([
-        { address: org, name: orgId, description: undefined, parentAddresses: undefined, grants: [] },
+        { address: org, name: orgId, metadata: undefined, parentAddresses: undefined, grants: [] },
         {
           address: `${org}:shared`,
           name: 'Shared',
-          description: 'Shared org knowledge',
+          metadata: { description: 'Shared org knowledge' },
           parentAddresses: [org],
           grants: [{ scopeRefAddress: org, role: 'owner', canSuggest: undefined }],
         },
         {
           address: `machines:${orgId}`,
           name: 'Machines',
-          description: undefined,
+          metadata: undefined,
           parentAddresses: [org],
           grants: [
             { scopeRefAddress: org, role: 'mirror', canSuggest: undefined },

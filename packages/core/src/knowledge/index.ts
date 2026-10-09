@@ -236,8 +236,9 @@ export class Knowledge extends MastraBase {
         // Template children are copied on create: a scope that already exists keeps the
         // children it was created with, even when its scope type template changes later.
         if (plan.scopes.length > 1) {
-          const { scopes } = await storage.listScopeNodes({ addresses: [snapshot.address], limit: 1 });
-          if (scopes.length > 0) return storage.reconcileStructure({ ...plan, scopes: plan.scopes.slice(0, 1) });
+          if (await storage.getScopeAddress(snapshot.address)) {
+            return storage.reconcileStructure({ ...plan, scopes: plan.scopes.slice(0, 1) });
+          }
         }
         return storage.reconcileStructure(plan);
       })
