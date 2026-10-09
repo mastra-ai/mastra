@@ -44,7 +44,7 @@ Used when the workflows store cannot fence. The lease key is `mastra:durable-age
 
 This gives liveness and mutual exclusion only. There is no generation, so storage cannot reject a superseded execution's writes; the execution notices loss at its next check or renewal, and anything it writes in between lands. With `NoopLeaseProvider` the claim never expires and every acquire wins.
 
-When `recovery.durableAgents` is `'auto'` and the workflows or memory store cannot fence, `DurableAgent` logs a warning once per store explaining which writes are left unprotected.
+When the workflows or memory store cannot fence, `DurableAgent` logs a warning once per store explaining which writes are left unprotected. It warns whenever it recovers runs, through `recoverActiveRuns()` or `recover()`. When `recovery.durableAgents` is `'auto'`, it also checks the memory store each run resolves when the run starts.
 
 ### Claim modes
 

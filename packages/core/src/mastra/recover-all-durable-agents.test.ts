@@ -59,6 +59,7 @@ describe('Mastra.recoverAllDurableAgents', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('returns zeroed counts when no durable agents are registered', async () => {
@@ -197,6 +198,111 @@ describe('Mastra.recoverAllDurableAgents', () => {
     await vi.advanceTimersByTimeAsync(120_000);
 
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a re-check that throws with doubling delays, starting over once a re-check succeeds', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const durable = makeDurable('durable-a');
+    const mastra = new Mastra({ agents: { durableA: durable as any }, storage: store });
+    const skippedUntil = (ms: number) => async () => ({
+      recovered: [
+        {
+          runId: 'live-elsewhere',
+          status: 'skipped' as const,
+          reason: 'run-active' as const,
+          retryAt: Date.now() + ms,
+        },
+      ],
+      succeeded: 0,
+      failed: 0,
+    });
+    const spy = vi
+      .spyOn(durable, 'recoverActiveRuns')
+      .mockImplementationOnce(skippedUntil(30_000))
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockImplementationOnce(skippedUntil(30_000))
+      .mockRejectedValueOnce(new Error('storage unavailable'))
+      .mockResolvedValueOnce({ recovered: [{ runId: 'live-elsewhere', status: 'success' }], succeeded: 1, failed: 0 });
+
+    await mastra.recoverAllDurableAgents();
+
+    // First re-check at retryAt throws: retried 30s later.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(spy).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(spy).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(spy).toHaveBeenLastCalledWith({ runId: 'live-elsewhere' });
+    // Throws again: the next delay doubles to 60s.
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(spy).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(spy).toHaveBeenCalledTimes(4);
+    // That re-check succeeds (still skipped), so the next failure starts back at 30s.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(spy).toHaveBeenCalledTimes(5);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(spy).toHaveBeenCalledTimes(6);
+    expect(spy).toHaveBeenLastCalledWith({ runId: 'live-elsewhere' });
+    // Recovered: never re-checked again.
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(spy).toHaveBeenCalledTimes(6);
+  });
+
+  it('stops retrying a re-check that keeps throwing after five retries', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const durable = makeDurable('durable-a');
+    const mastra = new Mastra({ agents: { durableA: durable as any }, storage: store });
+    const logError = vi.spyOn(mastra.getLogger(), 'error');
+    const spy = vi
+      .spyOn(durable, 'recoverActiveRuns')
+      .mockResolvedValueOnce({
+        recovered: [{ runId: 'live-elsewhere', status: 'skipped', reason: 'run-active', retryAt: Date.now() + 30_000 }],
+        succeeded: 0,
+        failed: 0,
+      })
+      .mockRejectedValue(new Error('storage unavailable'));
+
+    await mastra.recoverAllDurableAgents();
+
+    // The re-check at 30s, then retries 30s, 60s, 120s, 240s and 480s after each failure.
+    await vi.advanceTimersByTimeAsync(30_000 + 30_000 + 60_000 + 120_000 + 240_000 + 479_999);
+    expect(spy).toHaveBeenCalledTimes(6);
+    expect(logError).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(spy).toHaveBeenCalledTimes(7);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError.mock.calls[0]![0]).toMatch(/next boot or a manual recover\(\)/);
+
+    await vi.advanceTimersByTimeAsync(10_000_000);
+    expect(spy).toHaveBeenCalledTimes(7);
+  });
+
+  it('shutdown() cancels a pending retry of a re-check that threw', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const durable = makeDurable('durable-a');
+    const mastra = new Mastra({ agents: { durableA: durable as any }, storage: store });
+    const spy = vi
+      .spyOn(durable, 'recoverActiveRuns')
+      .mockResolvedValueOnce({
+        recovered: [{ runId: 'live-elsewhere', status: 'skipped', reason: 'run-active', retryAt: Date.now() + 30_000 }],
+        succeeded: 0,
+        failed: 0,
+      })
+      .mockRejectedValue(new Error('storage unavailable'));
+
+    await mastra.recoverAllDurableAgents();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    await mastra.shutdown();
+    await vi.advanceTimersByTimeAsync(10_000_000);
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it('exposes the recovery config via recoveryConfig (default off)', () => {
