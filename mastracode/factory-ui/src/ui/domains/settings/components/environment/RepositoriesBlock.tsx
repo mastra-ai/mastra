@@ -206,22 +206,26 @@ function RepositoryRow({
       {expanded && (
         <>
           <SettingsRow label="Setup" description="Runs in this checkout after it is cloned, before the agent starts.">
-            <CommittedInput
-              label={`Setup command for ${label}`}
-              value={repository.setupCommand ?? ''}
-              placeholder="e.g. pnpm i && pnpm build"
-              disabled={disabled}
-              onCommit={value => onCommands({ setupCommand: value || null })}
-            />
+            <div className="w-full lg:max-w-96">
+              <CommittedInput
+                label={`Setup command for ${label}`}
+                value={repository.setupCommand ?? ''}
+                placeholder="e.g. pnpm i && pnpm build"
+                disabled={disabled}
+                onCommit={value => onCommands({ setupCommand: value || null })}
+              />
+            </div>
           </SettingsRow>
           <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
-            <CommittedInput
-              label={`Teardown command for ${label}`}
-              value={repository.teardownCommand ?? ''}
-              placeholder="e.g. docker compose down"
-              disabled={disabled}
-              onCommit={value => onCommands({ teardownCommand: value || null })}
-            />
+            <div className="w-full lg:max-w-96">
+              <CommittedInput
+                label={`Teardown command for ${label}`}
+                value={repository.teardownCommand ?? ''}
+                placeholder="e.g. docker compose down"
+                disabled={disabled}
+                onCommit={value => onCommands({ teardownCommand: value || null })}
+              />
+            </div>
           </SettingsRow>
         </>
       )}
