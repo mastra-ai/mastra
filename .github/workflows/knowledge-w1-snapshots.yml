@@ -14,13 +14,6 @@ jobs:
         version:
           - 0.0.0-knowledge-w1-20261006001735
           - 0.0.0-knowledge-w1-20261007232522
-          - 0.0.0-knowledge-w1-20261008204450
-          - 0.0.0-knowledge-w1-20261008225219
-          - 0.0.0-knowledge-w1-20261009033246
-          - 0.0.0-knowledge-w1-20261009040610
-          - 0.0.0-knowledge-w1-20261009044833
-          - 0.0.0-knowledge-w1-20261009054256
-          - main-alpha
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
@@ -48,6 +41,12 @@ jobs:
           npm ls @mastra/core @mastra/libsql @mastra/pg @mastra/mysql @mastra/mongodb > "$GITHUB_WORKSPACE/out/${{ matrix.version }}.versions.txt" || true
       - name: Dump
         run: cd /tmp/proj && node dump.mjs "$GITHUB_WORKSPACE/out" '${{ matrix.version }}'
+      - name: DDL dumps
+        run: |
+          V='${{ matrix.version }}'
+          S=$(echo "s_$V" | sed 's/[^a-zA-Z0-9]/_/g' | tr 'A-Z' 'a-z')
+          docker exec pg-test-db pg_dump -U postgres -d mastra --schema-only --no-owner --no-privileges -n "$S" > "out/$V.pg.sql"
+          sqlite3 "/tmp/$V.db" .schema > "out/$V.libsql.sql"
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
