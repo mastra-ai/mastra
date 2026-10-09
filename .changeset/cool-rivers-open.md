@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed empty state descriptions leaving a single word alone on the last line. Multi-line descriptions now wrap into evenly balanced lines.
+Improved empty state description wrapping, so descriptions rarely leave a single word alone on the last line.
