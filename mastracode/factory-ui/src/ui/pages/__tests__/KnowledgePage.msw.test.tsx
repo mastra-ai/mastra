@@ -1237,6 +1237,97 @@ describe('KnowledgePage', () => {
     expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
   });
 
+  it('reads the lens as a tappable list: nodes expand to their records and a record opens its details', async () => {
+    stubKnowledgeRoute();
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?scope=resource&layout=list`);
+
+    const list = await screen.findByTestId('knowledge-list');
+    expect(screen.queryByTestId('knowledge-node')).not.toBeInTheDocument();
+    const nodes = within(list).getByRole('region', { name: 'Knowledge nodes' });
+    const rows = within(nodes).getAllByRole('button');
+    expect(rows.map(row => row.textContent)).toEqual(['Deploy Runbook1 record', 'Payments Service3 records']);
+
+    // A tap selects and expands the node's own records without opening details.
+    fireEvent.click(within(nodes).getByRole('button', { name: /Payments Service/ }));
+    const records = await within(list).findByRole('list', { name: 'Payments Service records' });
+    expect(
+      within(records)
+        .getAllByRole('button')
+        .map(button => button.textContent),
+    ).toEqual(['Payments Service uses Deploy Runbook.', 'Deploys run nightly.']);
+    expect(screen.getByRole('toolbar', { name: 'Selected knowledge' })).toBeInTheDocument();
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+
+    fireEvent.click(within(records).getByRole('button', { name: 'Deploys run nightly.' }));
+    expect(await screen.findByTestId('knowledge-flyout')).toBeInTheDocument();
+    expect(router.state.location.search).toContain('record=record-3');
+
+    // The toggle swaps back to the canvas without losing the selection.
+    fireEvent.click(screen.getByRole('button', { name: 'graph' }));
+    expect(await screen.findAllByTestId('knowledge-node')).not.toHaveLength(0);
+    expect(screen.queryByTestId('knowledge-list')).not.toBeInTheDocument();
+    expect(router.state.location.search).toContain('layout=graph');
+    expect(router.state.location.search).toContain('node=ent-1');
+  });
+
+  it('lists child scopes first and drills into one on tap', async () => {
+    const featuresId = '22222222-2222-4222-8222-222222222222';
+    const memoryId = '33333333-3333-4333-8333-333333333333';
+    const scopeNode = (id: string, name: string) => ({
+      id,
+      name,
+      kind: 'topic',
+      scope: null,
+      rung: null,
+      isScope: true,
+      pinned: false,
+      recordCount: 0,
+    });
+    stubKnowledgeRoute({
+      ...graphFixture,
+      nodes: [scopeNode(featuresId, 'features'), scopeNode(memoryId, 'memory'), graphFixture.nodes[0]!],
+      edges: [],
+      records: [],
+    });
+    const { router } = renderRoute(`/factories/${FACTORY_ID}/knowledge?layout=list&scope=${featuresId}`);
+
+    const list = await screen.findByTestId('knowledge-list');
+    const childScopes = within(list).getByRole('region', { name: 'Child scopes' });
+    // The lens root is the list itself, not one of its rows.
+    expect(
+      within(childScopes)
+        .getAllByRole('button')
+        .map(row => row.textContent),
+    ).toEqual(['memorytopic']);
+    fireEvent.click(within(childScopes).getByRole('button', { name: /memory/ }));
+    await waitFor(() => expect(router.state.location.search).toContain(`scope=${memoryId}`));
+  });
+
+  it('defaults to the list below the md breakpoint', async () => {
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+      query =>
+        ({
+          matches: query === '(max-width: 767px)',
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as MediaQueryList,
+    );
+    try {
+      stubKnowledgeRoute();
+      renderRoute();
+
+      expect(await screen.findByTestId('knowledge-list')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'list' })).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
   it('selecting a node only highlights it; details open from the Details action or a second tap', async () => {
     stubKnowledgeRoute();
     const { router } = renderRoute();

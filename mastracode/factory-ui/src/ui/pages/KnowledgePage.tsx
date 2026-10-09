@@ -19,6 +19,7 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
+import { KnowledgeList } from '../domains/factory/components/knowledge/KnowledgeList';
 import {
   knowledgeActivityLabel,
   KNOWLEDGE_ACTIVITY_TRUNCATED,
@@ -28,6 +29,7 @@ import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowl
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
 import type {
   KnowledgeActivityEvent,
+  KnowledgeGraphNode,
   KnowledgeRung,
   KnowledgeSearchResult,
   KnowledgeScopeNode,
@@ -170,6 +172,8 @@ function ScopeLabel({
   );
 }
 
+type KnowledgeLayout = 'graph' | 'list';
+
 function ScopeTree({
   factoryProjectId,
   threadId,
@@ -178,7 +182,9 @@ function ScopeTree({
   onSelect,
   onOpenSession,
   onNodesLoaded,
+  className,
 }: {
+  className?: string;
   factoryProjectId: string | undefined;
   threadId?: string;
   scopes: KnowledgeScopeTreePayload | undefined;
@@ -338,7 +344,7 @@ function ScopeTree({
   return (
     <aside
       aria-label="Knowledge scopes"
-      className="border-border bg-card w-56 shrink-0 overflow-y-auto rounded-lg border p-3"
+      className={cn('border-border bg-card shrink-0 overflow-y-auto rounded-lg border p-3', className)}
     >
       <Txt as="h2" variant="caption" className="text-foreground mb-2 font-semibold">
         Scopes
@@ -500,6 +506,23 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     : undefined;
   const scopeLevel = selection?.scopeLevel ?? markerRung;
   const activeView = searchParams.get('view') === 'activity' ? 'activity' : 'explore';
+  // Small screens read the lens as a tappable list; `?layout=` keeps an explicit choice linkable.
+  const [defaultLayout] = useState<KnowledgeLayout>(() =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(max-width: 767px)').matches
+      ? 'list'
+      : 'graph',
+  );
+  const requestedLayout = searchParams.get('layout');
+  const layout: KnowledgeLayout =
+    requestedLayout === 'list' || requestedLayout === 'graph' ? requestedLayout : defaultLayout;
+  const setLayout = (next: KnowledgeLayout) =>
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('layout', next);
+      return copy;
+    });
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
@@ -742,6 +765,32 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     const selectedScopeMembers = graphQuery.data.nodes.filter(node => selectedScopeMemberIds.has(node.id));
     const childScopeCount = selectedScopeMembers.filter(node => node.isScope).length;
     const contentNodeCount = selectedScopeMembers.length - childScopeCount;
+    const clickNode = (node: KnowledgeGraphNode) => {
+      // First tap selects and highlights; tapping the selected node again opens its details.
+      const open = selected?.nodeId === node.id;
+      if (node.isScope) {
+        // Scope selection is identical in the tree and canvas: switch the lens
+        // and select that scope; a second tap opens its detail surface.
+        selectScope(
+          { scopeNodeId: node.id },
+          {
+            id: node.id,
+            address: node.name,
+            name: node.name,
+            ...(node.kind ? { kind: node.kind } : {}),
+            ...(node.description ? { description: node.description } : {}),
+            parentIds: [],
+            memberCount: node.memberCount ?? 0,
+            memberCountTruncated: node.memberCountTruncated ?? false,
+            contentNodeCount: node.contentNodeCount ?? 0,
+            childScopeCount: node.childScopeCount ?? 0,
+          },
+          { open },
+        );
+        return;
+      }
+      setSelected({ nodeId: node.id, name: node.name, rung: node.rung }, { open });
+    };
     body = (
       // Details sit beside the canvas on desktop (never over it) and as a bottom sheet below md.
       <div className="flex min-h-0 flex-1">
@@ -752,56 +801,45 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           onPointerMoveCapture={onActivity}
           onWheelCapture={onActivity}
         >
-          <KnowledgeGraph
-            payload={graphQuery.data}
-            arrivals={arrivals}
-            focusedId={selected?.nodeId ?? null}
-            focusedRecordId={selected?.recordId ?? null}
-            // A structural member listing carries no edges — label every member
-            // so the lens reads as a directory, not a field of dots.
-            labelAll={Boolean(selection.scopeNodeId)}
-            onFocusChange={id => {
-              // A pane click clears the selection; node clicks are handled by onNodeClick.
-              if (!id) setSelected(null);
-            }}
-            onNodeClick={node => {
-              // First tap selects and highlights; tapping the selected node again opens its details.
-              const open = selected?.nodeId === node.id;
-              if (node.isScope) {
-                // Scope selection is identical in the tree and canvas: switch the lens
-                // and select that scope; a second tap opens its detail surface.
-                selectScope(
-                  { scopeNodeId: node.id },
-                  {
-                    id: node.id,
-                    address: node.name,
-                    name: node.name,
-                    ...(node.kind ? { kind: node.kind } : {}),
-                    ...(node.description ? { description: node.description } : {}),
-                    parentIds: [],
-                    memberCount: node.memberCount ?? 0,
-                    memberCountTruncated: node.memberCountTruncated ?? false,
-                    contentNodeCount: node.contentNodeCount ?? 0,
-                    childScopeCount: node.childScopeCount ?? 0,
-                  },
-                  { open },
-                );
-                return;
+          {layout === 'list' ? (
+            <KnowledgeList
+              payload={graphQuery.data}
+              rootScopeId={selection.scopeNodeId}
+              selectedNodeId={selected?.nodeId}
+              selectedRecordId={selected?.recordId}
+              onNodeClick={clickNode}
+              onRecordClick={(node, recordId) =>
+                // Tapping a record is an explicit request to read it.
+                setSelected({ nodeId: node.id, name: node.name, rung: node.rung, recordId }, { open: true })
               }
-              setSelected({ nodeId: node.id, name: node.name, rung: node.rung }, { open });
-            }}
-            onEdgeClick={edge => {
-              // Selecting an edge selects its source node and the supporting knowledge record (A7),
-              // which the details panel expands once opened.
-              const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-              setSelected({
-                nodeId: edge.source,
-                name: node?.name ?? edge.source,
-                recordId: edge.recordId,
-                rung: node?.rung,
-              });
-            }}
-          />
+            />
+          ) : (
+            <KnowledgeGraph
+              payload={graphQuery.data}
+              arrivals={arrivals}
+              focusedId={selected?.nodeId ?? null}
+              focusedRecordId={selected?.recordId ?? null}
+              // A structural member listing carries no edges — label every member
+              // so the lens reads as a directory, not a field of dots.
+              labelAll={Boolean(selection.scopeNodeId)}
+              onFocusChange={id => {
+                // A pane click clears the selection; node clicks are handled by onNodeClick.
+                if (!id) setSelected(null);
+              }}
+              onNodeClick={clickNode}
+              onEdgeClick={edge => {
+                // Selecting an edge selects its source node and the supporting knowledge record (A7),
+                // which the details panel expands once opened.
+                const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
+                setSelected({
+                  nodeId: edge.source,
+                  name: node?.name ?? edge.source,
+                  recordId: edge.recordId,
+                  rung: node?.rung,
+                });
+              }}
+            />
+          )}
           {selected && !detailsOpen ? (
             <div
               role="toolbar"
@@ -915,7 +953,26 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               </button>
             ))}
           </div>
-          <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
+          <div className="flex items-start gap-2">
+            {activeView === 'explore' ? (
+              <div className="flex gap-1" role="group" aria-label="Knowledge layout">
+                {(['graph', 'list'] as const).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={layout === option}
+                    className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                      layout === option ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => setLayout(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
+          </div>
         </div>
         <Breadcrumb
           threadId={threadId}
@@ -932,8 +989,9 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           }}
         />
       </header>
-      <div className="flex min-h-0 flex-1 gap-4">
+      <div className={cn('flex min-h-0 flex-1 gap-4', layout === 'list' && 'flex-col')}>
         <ScopeTree
+          className={layout === 'list' ? 'max-h-48 w-full' : 'w-56'}
           key={`${factoryProjectId}:${threadId ?? 'project'}`}
           factoryProjectId={factoryProjectId}
           threadId={threadId}
