@@ -13,8 +13,9 @@ import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from: the
- * repositories, the workspace setup and the sandbox provider's own settings.
+ * The Factory's environment: what every session's sandbox boots from. The
+ * repositories it clones, then its configuration: workspace setup and the
+ * sandbox provider's own settings.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -84,25 +85,29 @@ function EnvironmentBlocks({
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
         scope="factory"
-        title="Template"
-        description={`Repositories cloned into each new sandbox, in this order. ${providerLine(environment.sandbox.provider)}`}
+        title="Repositories"
+        description="Repositories cloned into each new sandbox, in this order."
       >
-        <div className="flex flex-col gap-4">
-          <RepositoriesBlock
-            repositories={environment.repositories}
-            providers={providers}
-            disabled={disabled}
-            onSave={save}
-          />
-          <WorkspaceSetupBlock
-            workdir={environment.sandboxWorkdir}
-            command={environment.workspaceSetupCommand}
-            disabled={disabled}
-            onSave={save}
-          >
-            <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
-          </WorkspaceSetupBlock>
-        </div>
+        <RepositoriesBlock
+          repositories={environment.repositories}
+          providers={providers}
+          disabled={disabled}
+          onSave={save}
+        />
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="factory"
+        title="Configuration"
+        description={`How each sandbox is set up. ${providerLine(environment.sandbox.provider)}`}
+      >
+        <WorkspaceSetupBlock
+          workdir={environment.sandboxWorkdir}
+          command={environment.workspaceSetupCommand}
+          disabled={disabled}
+          onSave={save}
+        >
+          <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+        </WorkspaceSetupBlock>
       </SettingsSubsection>
     </div>
   );
