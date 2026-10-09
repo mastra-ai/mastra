@@ -472,7 +472,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       const drainOutcome = await drainSignalsToTranscript({
-        drainPendingSignals: rt.drainPendingSignals,
+        drainPendingSignals: rest.options?.abortSignal?.aborted ? undefined : rt.drainPendingSignals,
         rotateResponseMessageId: sealMessageId => rest.rotateResponseMessageId(sealMessageId),
         addSignal: signal => messageList.addSignal(signal),
         emitChunk: chunk => this.emitChunk(rt, chunk),
@@ -495,7 +495,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
+      // A signal replaces the physical request, not the logical step or its budget.
+      if (typedInputData.stepResult?.signalPreempted && typedInputData.stepResult.reason !== 'abort') {
+        return typedInputData.stepResult.isContinued;
+      }
+
+      const responseMessages = typedInputData.messages.nonUser;
+      const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
 
