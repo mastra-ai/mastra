@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { ProviderInfo } from '../../../../api/types';
@@ -8,24 +7,33 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
-import { useFactoryModelChoice } from '../hooks/useFactoryModelChoice';
+import { useState } from 'react';
+import { useProviderModels } from '../hooks/useProviderModels';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 export interface FactoryDefaultModelFormProps {
-  factoryId: string;
+  scope?: 'org' | 'user';
+  initialModelId?: string;
   provider: ProviderInfo;
-  onSaved: () => void;
+  onContinue: (modelId: string) => void;
   onChangeProvider: () => void;
+  onPreviewModel?: (model: string) => void;
+  submitLabel?: string;
 }
 
-/** The model a connected provider runs on, saved as the Factory default. */
+/** Choose the draft default; the wizard persists it only on final confirmation. */
 export function FactoryDefaultModelForm({
-  factoryId,
+  scope = 'org',
+  initialModelId,
   provider,
-  onSaved,
+  onContinue,
   onChangeProvider,
+  onPreviewModel,
+  submitLabel = 'Continue',
 }: FactoryDefaultModelFormProps) {
-  const choice = useFactoryModelChoice({ factoryId, providerId: provider.provider, onSaved });
+  const choice = useProviderModels(provider.provider);
+  const [selectedModelId, setModelId] = useState(initialModelId);
+  const modelId = choice.models.find(model => model.id === selectedModelId)?.id ?? choice.suggestedModelId ?? '';
 
   if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
   if (choice.catalogError) {
@@ -45,34 +53,31 @@ export function FactoryDefaultModelForm({
             {providerDisplayName(provider.provider)}
           </Txt>
         </div>
-        <Button disabled={choice.saving} onClick={onChangeProvider}>
-          Change provider
-        </Button>
+        <Button onClick={onChangeProvider}>Change provider</Button>
       </div>
       <Field>
-        <FieldLabel>Factory default model</FieldLabel>
+        <FieldLabel>{scope === 'user' ? 'Your default model' : 'Factory default model'}</FieldLabel>
         <ModelCombobox
           models={choice.models}
-          value={choice.modelId}
-          onValueChange={choice.setModelId}
+          value={modelId}
+          onValueChange={modelId => {
+            setModelId(modelId);
+            onPreviewModel?.(modelId);
+          }}
           placeholder="Select a default model…"
-          disabled={choice.saving}
         />
       </Field>
-      <SharedCredentialNotice modelId={choice.modelId || undefined} />
-      {choice.error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground m-0" role="alert">
-          {choice.error}
-        </Txt>
-      )}
+      {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
       <Button
         variant="primary"
         className="w-full"
-        disabled={!choice.modelId || choice.saving}
-        onClick={() => void choice.save()}
+        disabled={!modelId}
+        onClick={() => {
+          onPreviewModel?.(modelId);
+          onContinue(modelId);
+        }}
       >
-        {choice.saving && <Spinner size="sm" aria-label="Saving model defaults" />}
-        Finish setup
+        {submitLabel}
       </Button>
     </div>
   );

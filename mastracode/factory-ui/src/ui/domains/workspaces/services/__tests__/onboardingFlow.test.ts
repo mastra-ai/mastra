@@ -52,6 +52,13 @@ describe('Factory onboarding flow', () => {
     expect(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY)).not.toBeNull();
   });
 
+  it('keeps final confirmation resumable after the Factory is created', () => {
+    persistOnboardingStep('review');
+    persistOnboardingFactory('factory-1');
+    expect(readOnboardingStep()).toBe('review');
+    expect(hasResumableFactoryOnboarding([{ id: 'factory-1' }])).toBe(true);
+  });
+
   it('resumes the personal provider step for its pending Factory', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     persistOnboardingStep('personal-provider');

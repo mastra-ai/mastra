@@ -73,6 +73,8 @@ export interface ProviderConnectControlProps {
   /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
+  /** Short visible action when the provider is already named beside it. */
+  buttonLabel?: string;
   size?: 'sm' | 'md';
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
@@ -91,6 +93,7 @@ export function ProviderConnectControl({
   provider,
   reconnectConnectionId,
   label,
+  buttonLabel,
   size = 'sm',
   variant = 'default',
   icon,
@@ -131,9 +134,10 @@ export function ProviderConnectControl({
         icon={icon}
         className={className}
         disabled={pending}
+        aria-label={label}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
-        {pending ? 'Connecting…' : label}
+        {pending ? 'Connecting…' : (buttonLabel ?? label)}
       </Button>
       {collectingApiKey && (
         <ApiKeyDialog

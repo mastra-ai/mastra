@@ -1,23 +1,11 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { ProjectManagementFactoryStep } from '../ProjectManagementFactoryStep';
-
-// The step never opens the popup itself in these specs, but the control it
-// renders pulls in the SDK, which expects a browser window on import.
-vi.mock('@nangohq/frontend', () => ({
-  default: class MockNango {
-    auth() {
-      return Promise.resolve({});
-    }
-  },
-  AuthError: class AuthError extends Error {
-    type = 'unknown';
-  },
-}));
 
 function renderStep() {
   server.use(
@@ -91,5 +79,58 @@ describe('ProjectManagementFactoryStep', () => {
       expect(screen.getByText('Connected to acme.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
+  });
+});
+
+describe('Tracker connection recovery', () => {
+  it.each([
+    ['jira', 'Jira'],
+    ['incident-io', 'incident.io'],
+  ] as const)('keeps %s visible after a temporary failure and retries', async (provider, name) => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/integrations/platform/${provider}/connections`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ connections: [] });
+      }),
+    );
+    renderStep();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: `Retry ${name}` }));
+    expect(await screen.findByRole('button', { name: `Connect ${name}` })).toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it.each([
+    ['jira', 'Jira'],
+    ['incident-io', 'incident.io'],
+  ] as const)('reauthorizes the existing %s connection instead of creating another', async (provider, name) => {
+    const reconnects: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/integrations/platform/${provider}/connections`, () =>
+        HttpResponse.json({
+          connections: [
+            { id: 'expired-account', integrationId: provider, status: 'needs_reauth', accountLabel: 'Acme' },
+          ],
+        }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/integrations/platform/${provider}/connections/expired-account/reconnect-session`,
+        ({ request }) => {
+          reconnects.push(request.url);
+          return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        },
+      ),
+    );
+    renderStep();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: `Reconnect ${name}` }));
+    if (provider === 'incident-io') {
+      await user.type(screen.getByLabelText('incident.io API key'), 'demo-key');
+      await user.click(screen.getByRole('button', { name: 'Connect' }));
+    }
+    await waitFor(() => expect(reconnects).toHaveLength(1));
+    expect(screen.queryByRole('button', { name: `Connect ${name}` })).not.toBeInTheDocument();
   });
 });

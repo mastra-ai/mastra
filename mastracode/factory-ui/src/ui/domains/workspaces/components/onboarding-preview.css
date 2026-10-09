@@ -1,0 +1,91 @@
+/* Form entrances and progress stay separate from the SVG figure's clock. */
+@keyframes onboarding-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes onboarding-source {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes onboarding-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.onboarding-progress-fill {
+  transform-origin: left;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-reveal {
+    animation: onboarding-reveal 240ms ease-out both;
+  }
+  .onboarding-stagger {
+    animation: onboarding-fade 500ms ease-out backwards;
+  }
+  .onboarding-step-check {
+    animation: onboarding-source 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .onboarding-context {
+    animation: onboarding-fade 240ms ease-out backwards;
+  }
+  .onboarding-progress-fill {
+    transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+/* The figures use Hairline's unmodified skill kernel, with the app's palette.
+   The scene is transparent; only solid paper faces occlude geometry behind them. */
+.onboarding-figure {
+  width: 100%;
+  --hairline-plate: var(--color-card, var(--color-background));
+  --hairline-hi: color-mix(in oklab, var(--color-foreground) 60%, var(--color-background));
+  --hairline-edge: color-mix(in oklab, var(--color-muted-foreground) 65%, var(--color-background));
+  --hairline-mid: var(--color-border);
+  --hairline-lo: var(--color-border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-figure svg * {
+    transition: none;
+  }
+}
+
+/* A single SVG persists through every step. Only its HTML annotations fade. */
+.onboarding-diagram {
+  aspect-ratio: 5 / 4;
+}
+.onboarding-scene {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.onboarding-scene[data-active='true'] {
+  opacity: 1;
+  visibility: visible;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-scene {
+    transition:
+      opacity 100ms ease-out,
+      visibility 0s 100ms;
+  }
+  .onboarding-scene[data-active='true'] {
+    transition:
+      opacity 200ms ease-out 480ms,
+      visibility 0s;
+  }
+}

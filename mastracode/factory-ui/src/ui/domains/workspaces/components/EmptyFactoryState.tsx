@@ -1,16 +1,18 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { OnboardingProgress } from './OnboardingProgress';
+import { onboardingSteps, onboardingStepMeta, personalModelChoice } from '../services/onboardingSteps';
+import { useIsMutating } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
-import { useCreateFactoryMutation, useFactoriesQuery, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
+import { useCompleteFactorySetup } from '../hooks/useCompleteFactorySetup';
 import { connectLinear } from '../../factory/services/linear';
-import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
+import type { SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
-  clearOnboardingFlow,
-  ONBOARDING_FACTORY_KEY as FACTORY_KEY,
-  persistOnboardingFactory,
+  ONBOARDING_REVIEW_RETURN_KEY,
+  persistOnboardingDraft,
+  readOnboardingDraft,
+  type OnboardingDraft,
   persistOnboardingStep,
   readOnboardingStep,
   type OnboardingStep as Step,
@@ -18,192 +20,132 @@ import {
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft } from 'lucide-react';
-import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { OnboardingPreview } from './OnboardingPreview';
+import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
+import type { OnboardingSource } from './OnboardingPreview';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
-import { useNavigate } from 'react-router';
+import { OnboardingReviewStep } from './OnboardingReviewStep';
+import { ModelSetupPresetStep } from './ModelSetupPresetStep';
+import { DEFAULT_MODEL_PRESET, allowsPersonalSetup } from '../services/modelSetupPreset';
+import type { SaveModelSetupPreset } from '../services/modelSetupPreset';
 
-const STEP_META: Record<Step, { title: string; description?: string }> = {
-  initial: {
-    title: 'Build software with a Factory that knows your work.',
-    description:
-      'Mastra Factory connects your code, project context, and coding sessions in one shared workspace. It keeps every agent grounded in the repository and work that matters to your team.',
-  },
-  vcs: {
-    title: 'Choose your codebase.',
-    description: 'Connect GitHub or GitLab, then select the repository that will become your first Factory.',
-  },
-  'project-management': {
-    title: 'Connect the work behind the code.',
-  },
-  'model-provider': {
-    title: 'Choose your Factory model.',
-    description: 'Connect a shared organization provider and select the default model for Factory runs.',
-  },
-  'personal-provider': {
-    title: 'Connect your personal providers.',
-    description: 'Optionally add personal provider credentials before you start using your Factory.',
-  },
-};
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-}
-
-export function EmptyFactoryState() {
+export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: SaveModelSetupPreset } = {}) {
   const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const persistedFactories = useFactoriesQuery();
-  const createFactory = useCreateFactoryMutation();
-  const linkRepository = useLinkRepositoryMutation();
-  const [step, setStep] = useState<Step>(readOnboardingStep);
-  const [pendingFactory, setPendingFactory] = useState<FactoryProject | FactoryProjectPayload | null>(null);
-  const [mutationError, setMutationError] = useState<string | null>(null);
-  const [completionError, setCompletionError] = useState<string | null>(null);
-  const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | string | null>(null);
+  const mutationInFlight = useIsMutating() > 0;
+  const complete = useCompleteFactorySetup(onSaveModelPreset);
+  const [draft, setDraft] = useState<OnboardingDraft>(readOnboardingDraft);
+  const [step, setStep] = useState<Step>(() => {
+    const saved = readOnboardingStep();
+    const stored = readOnboardingDraft();
+    if (saved !== 'initial' && !stored.repository) return 'vcs';
+    if (onSaveModelPreset && !stored.preset && ['model-provider', 'personal-provider', 'review'].includes(saved))
+      return 'model-preset';
+    if (!onSaveModelPreset && saved === 'model-preset') return 'model-provider';
+    return saved;
+  });
+  const [returnToReview, setReviewReturn] = useState(
+    () => sessionStorage.getItem(ONBOARDING_REVIEW_RETURN_KEY) === 'true',
+  );
+  const setReturnToReview = (value: boolean) => {
+    if (value) sessionStorage.setItem(ONBOARDING_REVIEW_RETURN_KEY, 'true');
+    else sessionStorage.removeItem(ONBOARDING_REVIEW_RETURN_KEY);
+    setReviewReturn(value);
+  };
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const navigate = useNavigate();
+  const [previewRepository, setPreviewRepository] = useState<SourceControlRepository>();
+  const [previewSource, setPreviewSource] = useState<OnboardingSource>();
+  const [previewProvider, setPreviewProvider] = useState<string>();
+  const [previewModel, setPreviewModel] = useState<string>();
+  const [previewPersonalProvider, setPreviewPersonalProvider] = useState<string>();
+  const [previewPersonalModel, setPreviewPersonalModel] = useState<string>();
+  const [previewMethod, setPreviewMethod] = useState<ProviderConnectionMethod>();
+  const [previewPersonalMethod, setPreviewPersonalMethod] = useState<ProviderConnectionMethod>();
 
-  useEffect(() => {
-    if (persistedFactories.isPending || pendingFactory) return;
-    const pendingId = sessionStorage.getItem(FACTORY_KEY);
-    if (!pendingId) {
-      if (step !== 'initial' && step !== 'vcs') setStep('vcs');
-      return;
-    }
-    const restored = persistedFactories.data?.find(factory => factory.id === pendingId);
-    if (restored) {
-      setPendingFactory(restored);
-      return;
-    }
-    sessionStorage.removeItem(FACTORY_KEY);
-    persistOnboardingStep('vcs');
-    setStep('vcs');
-  }, [pendingFactory, persistedFactories.data, persistedFactories.isPending, step]);
-
+  const updateDraft = (next: OnboardingDraft) => {
+    persistOnboardingDraft(next);
+    setDraft(next);
+  };
   const goTo = (next: Step) => {
     persistOnboardingStep(next);
     setStep(next);
+    setPreviewRepository(undefined);
+    setPreviewProvider(undefined);
+    setPreviewModel(undefined);
+    setPreviewPersonalProvider(undefined);
+    setPreviewPersonalModel(undefined);
+    setPreviewMethod(undefined);
+    setPreviewPersonalMethod(undefined);
+    complete.reset();
   };
-
+  const advance = (next: Step) => {
+    goTo(returnToReview ? 'review' : next);
+    setReturnToReview(false);
+  };
   const persistBeforeRedirect = (currentStep: Step) => {
+    persistOnboardingDraft(draft);
     persistOnboardingStep(currentStep);
-    if (pendingFactory) persistOnboardingFactory(pendingFactory.id);
   };
-
-  const chooseRepository = async (repo: SourceControlRepository) => {
-    if (createFactory.isPending || linkRepository.isPending) return;
-    setMutationError(null);
-    setConnectingRepositoryId(repo.id);
-    try {
-      // A prior attempt may have created the Factory before the link step
-      // failed. Reuse that Factory so retrying cannot create a duplicate.
-      const factory = pendingFactory ?? (await createFactory.mutateAsync({ name: repo.name }));
-      if (!pendingFactory) {
-        setPendingFactory(factory);
-        persistOnboardingFactory(factory.id);
-      }
-      const linkedRepository = await linkRepository.mutateAsync({
-        factoryProjectId: factory.id,
-        repo,
-      });
-      const linkedFactory: FactoryProject = {
-        ...factory,
-        repositories: [linkedRepository],
-      };
-      setPendingFactory(linkedFactory);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-      goTo('project-management');
-    } catch (error) {
-      setMutationError(errorMessage(error));
-    } finally {
-      setConnectingRepositoryId(null);
-    }
-  };
-
-  const finish = async () => {
-    if (!pendingFactory) {
-      setCompletionError('Your pending Factory could not be found. Choose a repository again.');
-      return;
-    }
-    setCompletionError(null);
-    try {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-      clearOnboardingFlow();
-      void navigate(`/factories/${pendingFactory.id}`);
-    } catch (error) {
-      setCompletionError(errorMessage(error));
-    }
-  };
-
-  const steps: Step[] = ['initial', 'vcs', 'project-management', 'model-provider', 'personal-provider'];
+  const preset = onSaveModelPreset ? (draft.preset ?? DEFAULT_MODEL_PRESET) : undefined;
+  const steps = onboardingSteps(preset);
   const stepIndex = steps.indexOf(step);
   const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
-  // Once a Factory has been created for the user's first repository pick, Back
-  // can no longer safely land on `vcs`: rewinding would either orphan the
-  // server Factory or race against the retry that already links to it. Drop
-  // the affordance in that case rather than shipping a destructive delete.
-  const backDisabled = Boolean(pendingFactory) && previousStep === 'vcs';
+  const repository = previewRepository ?? draft.repository;
+  const model = previewModel ?? (previewProvider ? undefined : draft.model?.modelId);
+  const personalModel = previewPersonalModel ?? (previewPersonalProvider ? undefined : draft.personal?.modelId);
+  const meta = onboardingStepMeta(step, preset);
 
   return (
-    <main className="bg-sidebar text-foreground min-h-dvh">
-      <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
-        <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
-          <div className="w-full max-w-2xl">
-            <div className="mb-9 flex items-center gap-3">
-              {previousStep && !backDisabled && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => goTo(previousStep)}
-                  aria-label="Go back to previous step"
-                  // A pending chooseRepository run ends with goTo('project-management');
-                  // letting Back fire mid-flight would move the user forward again
-                  // right after they chose to go back. connectingRepositoryId covers
-                  // the whole run — including the factories invalidation await after
-                  // both mutations have settled.
-                  disabled={createFactory.isPending || linkRepository.isPending || connectingRepositoryId !== null}
-                >
-                  <ArrowLeft aria-hidden="true" />
-                  Back
-                </Button>
-              )}
-              <ol className="flex min-w-0 gap-2" aria-label="Factory setup progress">
-                {steps.map((item, index) => (
-                  <li
-                    key={item}
-                    aria-current={step === item ? 'step' : undefined}
-                    className={`h-1 w-14 rounded-full transition-colors ${index <= stepIndex ? 'bg-success-indicator' : 'bg-fill'}`}
+    <main className="bg-background text-foreground min-h-dvh pb-20">
+      <div className="grid min-h-[calc(100dvh-5rem)] w-full grid-cols-1 lg:grid-cols-[minmax(400px,44%)_minmax(0,1fr)]">
+        <section className="relative z-3 flex min-w-0 flex-col px-6 py-5 sm:px-10 lg:px-12 lg:py-8 xl:px-16">
+          <div className="mb-4 flex items-center gap-3 lg:mb-8">
+            <LogoWithoutText className="w-6" aria-hidden="true" />
+            <Txt variant="label">Factory</Txt>
+          </div>
+          <div className="w-full max-w-lg lg:pt-20">
+            <div className="mb-6">
+              <div className="h-8">
+                {previousStep && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setReturnToReview(false);
+                      goTo(previousStep);
+                    }}
+                    aria-label="Go back to previous step"
+                    disabled={mutationInFlight || complete.isPending}
                   >
-                    <span className="sr-only">Step {index + 1}</span>
-                  </li>
-                ))}
-              </ol>
+                    <ArrowLeft aria-hidden="true" />
+                    Back
+                  </Button>
+                )}
+              </div>
             </div>
 
-            <Txt as="h1" variant="hero" className="max-w-xl text-balance">
-              {STEP_META[step].title}
+            <Txt as="h1" variant="hero" className="min-h-[2lh] max-w-lg text-balance">
+              {meta.title}
             </Txt>
-            {STEP_META[step].description && (
-              <Txt as="p" variant="lead" tone="muted" className="mt-6 max-w-lg">
-                {STEP_META[step].description}
+            {meta.description && (
+              <Txt as="p" variant="caption" tone="muted" className="mt-3 min-h-[2lh] max-w-md lg:mt-4">
+                {meta.description}
               </Txt>
             )}
 
-            <div
-              key={step}
-              className="animate-in fade-in slide-in-from-bottom-2 mt-11 w-full duration-300 motion-reduce:animate-none"
-            >
+            <div key={step} className="onboarding-reveal mt-6 w-full lg:mt-8">
               {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
               {step === 'vcs' && (
                 <VcsFactoryStep
-                  connectingRepositoryId={connectingRepositoryId}
+                  initialRepository={draft.repository}
+                  connectingRepositoryId={null}
                   githubRedirecting={githubRedirecting}
-                  mutationPending={createFactory.isPending || linkRepository.isPending}
-                  mutationError={mutationError}
+                  mutationPending={false}
+                  mutationError={null}
                   onConnect={() => {
                     setGithubRedirecting(true);
                     persistBeforeRedirect('vcs');
@@ -213,36 +155,99 @@ export function EmptyFactoryState() {
                     persistBeforeRedirect('vcs');
                     manageGithubConnection(baseUrl);
                   }}
-                  onSelectRepository={repo => void chooseRepository(repo)}
+                  onPreviewRepository={setPreviewRepository}
+                  onSelectRepository={repo => {
+                    updateDraft({ ...draft, repository: repo });
+                    advance('project-management');
+                  }}
                 />
               )}
               {step === 'project-management' && (
                 <ProjectManagementFactoryStep
+                  onPreviewSource={setPreviewSource}
                   onConnect={() => {
                     persistBeforeRedirect('project-management');
                     connectLinear(baseUrl);
                   }}
-                  onContinue={() => goTo('model-provider')}
+                  onContinue={() => advance(preset ? 'model-preset' : 'model-provider')}
                 />
               )}
-              {step === 'model-provider' && pendingFactory && (
+              {step === 'model-preset' && preset && (
+                <ModelSetupPresetStep
+                  value={preset}
+                  onChange={next => updateDraft({ ...draft, preset: next })}
+                  onContinue={() => {
+                    updateDraft({ ...draft, preset });
+                    // A changed preset must visit its setup, even when entered from review.
+                    setReturnToReview(false);
+                    goTo(preset.kind === 'company' ? 'model-provider' : 'personal-provider');
+                  }}
+                />
+              )}
+              {step === 'model-provider' && (
                 <ModelProviderFactoryStep
-                  factoryId={pendingFactory.id}
-                  completionError={completionError ?? undefined}
-                  onComplete={() => goTo('personal-provider')}
+                  initialChoice={draft.model}
+                  onPreviewModel={setPreviewModel}
+                  onPreviewProvider={(providerId, method) => {
+                    setPreviewMethod(method);
+                    setPreviewProvider(providerId);
+                    setPreviewModel(undefined);
+                  }}
+                  onComplete={model => {
+                    updateDraft({ ...draft, model });
+                    advance(!preset || allowsPersonalSetup(preset) ? 'personal-provider' : 'review');
+                  }}
                 />
               )}
-              {step === 'personal-provider' && pendingFactory && (
-                <PersonalProviderFactoryStep onContinue={() => void finish()} />
+              {step === 'personal-provider' && (
+                <PersonalProviderFactoryStep
+                  initialChoice={draft.personal}
+                  modelChoice={personalModelChoice(preset)}
+                  onPreviewModel={setPreviewPersonalModel}
+                  onContinue={personal => {
+                    updateDraft({ ...draft, personal });
+                    advance('review');
+                  }}
+                  onPreviewProvider={(providerId, method) => {
+                    setPreviewPersonalProvider(providerId);
+                    setPreviewPersonalMethod(method);
+                    setPreviewPersonalModel(undefined);
+                  }}
+                />
+              )}
+              {step === 'review' && (
+                <OnboardingReviewStep
+                  draft={draft}
+                  pending={complete.isPending}
+                  error={complete.error?.message}
+                  onConfirm={() => {
+                    if (!complete.isPending) complete.mutate(draft);
+                  }}
+                  onEdit={target => {
+                    setReturnToReview(true);
+                    goTo(target);
+                  }}
+                />
               )}
             </div>
           </div>
         </section>
 
-        <div className="hidden lg:grid">
-          <FactoryHalftoneField />
-        </div>
+        <OnboardingPreview
+          step={step}
+          repository={repository}
+          factoryName={draft.repository?.name}
+          source={previewSource}
+          model={model}
+          providerId={previewProvider ?? draft.model?.providerId}
+          personalProviderId={previewPersonalProvider ?? draft.personal?.providerId}
+          connectionMethod={previewMethod ?? draft.model?.method}
+          personalConnectionMethod={previewPersonalMethod ?? draft.personal?.method}
+          preset={preset}
+          personalModel={personalModel}
+        />
       </div>
+      <OnboardingProgress step={step} preset={preset} editingReview={returnToReview} />
     </main>
   );
 }

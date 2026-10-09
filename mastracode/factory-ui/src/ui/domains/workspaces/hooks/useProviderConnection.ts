@@ -11,10 +11,13 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 
 export type ProviderCredentialScope = 'org' | 'user';
+export type ProviderConnectionMethod = 'api_key' | 'oauth';
+export type PreviewProvider = (providerId: string | undefined, method?: ProviderConnectionMethod) => void;
 
 export interface ActiveProviderOAuth {
   provider: string;
   session: OAuthStartResponse;
+  replaces?: ProviderConnectionMethod;
 }
 
 export interface ProviderConnection {
@@ -26,13 +29,14 @@ export interface ProviderConnection {
   keyProviders: ProviderInfo[];
   provider?: ProviderInfo;
   connected: boolean;
+  method?: ProviderConnectionMethod;
   hasConfiguredProvider: boolean;
   pending: boolean;
   error?: string;
   keyDialogProvider?: ProviderInfo;
   activeOAuth?: ActiveProviderOAuth;
-  isConfigured: (provider: ProviderInfo) => boolean;
-  canConfigure: (provider: ProviderInfo) => boolean;
+  isConfigured: (provider: ProviderInfo, method?: ProviderConnectionMethod) => boolean;
+  canConfigure: (provider: ProviderInfo, method?: ProviderConnectionMethod) => boolean;
   clear: () => void;
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
@@ -45,18 +49,30 @@ export function isProviderConfigured(provider: ProviderInfo): boolean {
   return provider.source !== 'none';
 }
 
-function hasScopedCredential(provider: ProviderInfo, scope: ProviderCredentialScope): boolean {
-  // Runs on the server's own credentials, so it covers every account and scope.
-  if (provider.source === 'deployment') return true;
+/** Read the requested scope, independently of the caller's winning credential. */
+export function providerCredentialMethod(
+  provider: ProviderInfo,
+  scope?: ProviderCredentialScope,
+): ProviderConnectionMethod | undefined {
+  if (provider.source === 'deployment') return 'api_key';
   if (scope === 'org') {
-    return (
-      provider.orgCredential !== undefined ||
-      provider.orgKey === true ||
-      provider.source === 'oauth-org' ||
-      provider.source === 'stored-org'
-    );
+    if (provider.orgCredential) return provider.orgCredential;
+    if (provider.orgKey || provider.source === 'stored-org') return 'api_key';
+    if (provider.source === 'oauth-org') return 'oauth';
+    return undefined;
   }
-  return provider.userCredential !== undefined || provider.source === 'oauth-user' || provider.source === 'stored-user';
+  if (scope === 'user') {
+    if (provider.userCredential) return provider.userCredential;
+    if (provider.source === 'stored-user') return 'api_key';
+    if (provider.source === 'oauth-user') return 'oauth';
+    return undefined;
+  }
+  if (provider.source === 'none') return undefined;
+  return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
+}
+
+export function hasScopedCredential(provider: ProviderInfo, scope: ProviderCredentialScope): boolean {
+  return providerCredentialMethod(provider, scope) !== undefined;
 }
 
 export function matchesProviderQuery(provider: ProviderInfo, query: string): boolean {
@@ -69,30 +85,38 @@ export function matchesProviderQuery(provider: ProviderInfo, query: string): boo
 }
 
 /** Pick a model provider and connect it, by browser sign-in or by API key. */
-export function useProviderConnection({ scope }: { scope?: ProviderCredentialScope } = {}): ProviderConnection {
+export function useProviderConnection({
+  scope,
+  initialSelection,
+}: {
+  scope?: ProviderCredentialScope;
+  initialSelection?: { providerId: string; method: ProviderConnectionMethod };
+} = {}): ProviderConnection {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const startOAuthMutation = useStartProviderOAuth();
   const cancelOAuthMutation = useCancelProviderOAuth();
-  const [providerId, setProviderId] = useState<string>();
+  const [selection, setSelection] = useState(initialSelection);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
   const [activeOAuth, setActiveOAuth] = useState<ActiveProviderOAuth>();
   const [error, setError] = useState<string>();
 
   const authEnabled = authQuery.data?.authEnabled === true;
   const orgKeyAdmin = !authEnabled || (orgKeyAdminQuery.data ?? true);
-  const isConfigured = (provider: ProviderInfo) =>
-    scope && authEnabled ? hasScopedCredential(provider, scope) : isProviderConfigured(provider);
+  const isConfigured = (provider: ProviderInfo, method?: ProviderConnectionMethod) => {
+    const saved = providerCredentialMethod(provider, authEnabled ? scope : undefined);
+    return method ? saved === method : saved !== undefined;
+  };
   const byConfiguredThenName = (left: ProviderInfo, right: ProviderInfo): number => {
     if (isConfigured(left) !== isConfigured(right)) return isConfigured(left) ? -1 : 1;
     return providerDisplayName(left.provider).localeCompare(providerDisplayName(right.provider));
   };
   const providers = (providersQuery.data ?? []).toSorted(byConfiguredThenName);
-  const provider = providers.find(candidate => candidate.provider === providerId);
+  const provider = providers.find(candidate => candidate.provider === selection?.providerId);
 
-  const select = (nextProviderId: string | undefined) => {
-    setProviderId(nextProviderId);
+  const select = (nextSelection: typeof selection) => {
+    setSelection(nextSelection);
     setError(undefined);
   };
 
@@ -105,13 +129,18 @@ export function useProviderConnection({ scope }: { scope?: ProviderCredentialSco
         mode: modes.length === 1 ? modes[0] : undefined,
         ...(authEnabled && scope ? { scope } : {}),
       });
-      setActiveOAuth({ provider: chosen.provider, session });
+      setActiveOAuth({
+        provider: chosen.provider,
+        session,
+        replaces: providerCredentialMethod(chosen, authEnabled ? scope : undefined),
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to start provider sign in');
     }
   };
 
-  const canConfigure = (chosen: ProviderInfo) => scope !== 'org' || !authEnabled || orgKeyAdmin || isConfigured(chosen);
+  const canConfigure = (chosen: ProviderInfo, method?: ProviderConnectionMethod) =>
+    scope !== 'org' || !authEnabled || orgKeyAdmin || isConfigured(chosen, method);
 
   return {
     isPending:
@@ -121,12 +150,20 @@ export function useProviderConnection({ scope }: { scope?: ProviderCredentialSco
     catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
     authEnabled,
     orgKeyAdmin,
-    // Providers with a browser sign-in flow get their own action; the rest connect with an API key.
+    // A provider can offer both methods; sign-in support must not hide API-key access.
     signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
-    keyProviders: providers.filter(candidate => candidate.oauth?.supported !== true),
+    keyProviders: providers.filter(
+      candidate =>
+        Boolean(candidate.envVar) ||
+        candidate.oauth?.supported !== true ||
+        candidate.userCredential === 'api_key' ||
+        candidate.orgCredential === 'api_key' ||
+        candidate.orgKey === true,
+    ),
     provider,
-    connected: provider ? isConfigured(provider) : false,
-    hasConfiguredProvider: providers.some(isConfigured),
+    connected: provider ? isConfigured(provider, selection?.method) : false,
+    method: selection?.method,
+    hasConfiguredProvider: providers.some(candidate => isConfigured(candidate)),
     pending: startOAuthMutation.isPending,
     error,
     keyDialogProvider,
@@ -135,14 +172,14 @@ export function useProviderConnection({ scope }: { scope?: ProviderCredentialSco
     canConfigure,
     clear: () => select(undefined),
     chooseSignInProvider: chosen => {
-      if (!canConfigure(chosen)) return;
-      select(chosen.provider);
-      if (!isConfigured(chosen)) void startOAuth(chosen);
+      if (!canConfigure(chosen, 'oauth')) return;
+      select({ providerId: chosen.provider, method: 'oauth' });
+      if (!isConfigured(chosen, 'oauth')) void startOAuth(chosen);
     },
     chooseKeyProvider: chosen => {
-      if (!canConfigure(chosen)) return;
-      select(chosen.provider);
-      if (!isConfigured(chosen)) setKeyDialogProvider(chosen);
+      if (!canConfigure(chosen, 'api_key')) return;
+      select({ providerId: chosen.provider, method: 'api_key' });
+      if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
     },
     closeKeyDialog: () => setKeyDialogProvider(undefined),
     closeOAuth: () => {

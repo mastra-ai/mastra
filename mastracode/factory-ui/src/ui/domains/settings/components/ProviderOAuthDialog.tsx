@@ -23,23 +23,40 @@ import { providerDisplayName } from './provider-display-name';
 interface ProviderOAuthDialogProps {
   provider: string;
   session: OAuthStartResponse;
+  scopeNotice?: string;
   onClose: () => void;
   onComplete: () => void;
 }
 
-export function ProviderOAuthDialog({ provider, session, onClose, onComplete }: ProviderOAuthDialogProps) {
+export function ProviderOAuthDialog({ provider, session, onClose, onComplete, scopeNotice }: ProviderOAuthDialogProps) {
   if (session.kind === 'paste-code') {
-    return <PasteCodeDialog provider={provider} session={session} onClose={onClose} onComplete={onComplete} />;
+    return (
+      <PasteCodeDialog
+        provider={provider}
+        session={session}
+        onClose={onClose}
+        onComplete={onComplete}
+        scopeNotice={scopeNotice}
+      />
+    );
   }
 
-  return <DeviceCodeDialog provider={provider} session={session} onClose={onClose} onComplete={onComplete} />;
+  return (
+    <DeviceCodeDialog
+      provider={provider}
+      session={session}
+      onClose={onClose}
+      onComplete={onComplete}
+      scopeNotice={scopeNotice}
+    />
+  );
 }
 
 function openAuthorizationUrl(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAuthDialogProps) {
+function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }: ProviderOAuthDialogProps) {
   const displayName = providerDisplayName(provider);
   const completeMutation = useCompleteProviderOAuth();
   const [code, setCode] = useState('');
@@ -62,7 +79,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Sign in to {displayName}</DialogTitle>
-          <DialogDescription>Authorize your account and paste the returned code.</DialogDescription>
+          <DialogDescription>{scopeNotice ?? 'Authorize your account and paste the returned code.'}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Txt as="p" variant="caption" tone="muted">
@@ -99,7 +116,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
   );
 }
 
-function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOAuthDialogProps) {
+function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice }: ProviderOAuthDialogProps) {
   const displayName = providerDisplayName(provider);
   const pollMutation = usePollProviderOAuth();
   const { mutate: poll } = pollMutation;
@@ -147,7 +164,9 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
       <DialogContent>
         <DialogHeader className="items-center text-center">
           <DialogTitle>Sign in to {displayName}</DialogTitle>
-          <DialogDescription>Enter the device code on the provider authorization page.</DialogDescription>
+          <DialogDescription>
+            {scopeNotice ?? 'Enter the device code on the provider authorization page.'}
+          </DialogDescription>
         </DialogHeader>
         <DialogBody className="items-center text-center">
           {session.userCode && (

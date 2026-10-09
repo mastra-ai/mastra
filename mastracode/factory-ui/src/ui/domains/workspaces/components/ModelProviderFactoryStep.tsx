@@ -1,44 +1,71 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useProviderConnection } from '../hooks/useProviderConnection';
+import type { PreviewProvider } from '../hooks/useProviderConnection';
+import type { OnboardingModelChoice } from '../services/onboardingFlow';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
 import { ModelProviderPicker } from './ModelProviderPicker';
 import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 
 export interface ModelProviderFactoryStepProps {
-  factoryId: string;
+  initialChoice?: OnboardingModelChoice;
   completionError?: string;
-  onComplete: () => void;
+  onComplete: (choice?: OnboardingModelChoice) => void;
+  onPreviewProvider?: PreviewProvider;
+  onPreviewModel?: (model: string | undefined) => void;
 }
 
-export function ModelProviderFactoryStep({ factoryId, completionError, onComplete }: ModelProviderFactoryStepProps) {
-  const connection = useProviderConnection({ scope: 'org' });
+export function ModelProviderFactoryStep({
+  initialChoice,
+  completionError,
+  onComplete,
+  onPreviewModel,
+  onPreviewProvider,
+}: ModelProviderFactoryStepProps) {
+  const connection = useProviderConnection({ scope: 'org', initialSelection: initialChoice });
   const error = connection.error ?? completionError;
+  const needsAdmin =
+    !connection.isPending &&
+    !connection.catalogError &&
+    connection.authEnabled &&
+    !connection.orgKeyAdmin &&
+    !connection.hasConfiguredProvider;
 
   return (
     <section aria-label="Model provider setup" className="flex max-w-xl flex-col gap-5">
-      <Txt as="p" variant="body" tone="muted" className="m-0">
-        Connect an organization provider so everyone can use the default model for Factory runs.
-      </Txt>
-
-      {!connection.isPending &&
-        connection.authEnabled &&
-        !connection.orgKeyAdmin &&
-        !connection.hasConfiguredProvider && (
-          <Txt as="p" variant="caption" tone="muted" className="m-0">
-            Ask an organization admin to connect a provider, then return here to continue.
+      {needsAdmin ? (
+        <div className="flex flex-col gap-3">
+          <Txt variant="caption" tone="muted">
+            An admin connects organization access. You can set up your personal access next.
           </Txt>
-        )}
-
-      {connection.connected && connection.provider ? (
+          <div>
+            <Button variant="primary" onClick={() => onComplete()}>
+              Continue with personal access
+            </Button>
+          </div>
+        </div>
+      ) : connection.connected && connection.provider ? (
         <FactoryDefaultModelForm
-          factoryId={factoryId}
+          key={connection.provider.provider}
+          initialModelId={
+            initialChoice?.providerId === connection.provider.provider ? initialChoice.modelId : undefined
+          }
           provider={connection.provider}
-          onSaved={onComplete}
-          onChangeProvider={connection.clear}
+          onContinue={modelId => {
+            if (connection.provider && connection.method)
+              onComplete({ providerId: connection.provider.provider, modelId, method: connection.method });
+          }}
+          onPreviewModel={onPreviewModel}
+          submitLabel="Continue"
+          onChangeProvider={() => {
+            connection.clear();
+            onPreviewModel?.(undefined);
+            onPreviewProvider?.(undefined);
+          }}
         />
       ) : (
-        <ModelProviderPicker connection={connection} />
+        <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />
       )}
 
       {error && (

@@ -1,7 +1,7 @@
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -29,6 +29,38 @@ const repo = {
 };
 
 describe('VCS Factory step', () => {
+  beforeEach(() => {
+    server.use(http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })));
+  });
+
+  it('requires an explicit selection and Continue, and clears selection when searching', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)));
+    const onSelectRepository = vi.fn();
+    renderWithProviders(
+      <VcsFactoryStep
+        connectingRepositoryId={null}
+        githubRedirecting={false}
+        mutationPending={false}
+        mutationError={null}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={onSelectRepository}
+      />,
+    );
+    const user = userEvent.setup();
+    const radio = await screen.findByRole('radio', { name: 'octo/hello' });
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    // The whole label is a touch target, not just its small radio control.
+    await user.click(screen.getByText('octo/hello'));
+    expect(radio).toBeChecked();
+    expect(onSelectRepository).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onSelectRepository).toHaveBeenCalledExactlyOnceWith(repo);
+    await user.type(screen.getByLabelText('Search repositories'), 'other');
+    expect(radio).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  });
+
   it('debounces repository searches before requesting filtered results', async () => {
     const queries: string[] = [];
     server.use(
@@ -51,9 +83,6 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Connect GitHub/ }));
     const search = await screen.findByLabelText('Search repositories');
     await waitForMutationsIdle(client);
     expect(queries).toEqual(['']);
@@ -68,7 +97,7 @@ describe('VCS Factory step', () => {
     expect(queries).toEqual(['jal']);
   });
 
-  it('shows matching provider choices before showing a repository filter', async () => {
+  it('opens connected repositories directly and lets the user switch providers', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
@@ -109,12 +138,13 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Choose GitLab repository/ })).toBeInTheDocument();
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'vertical');
+    expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change provider' }));
+    expect(screen.getByRole('button', { name: 'Continue with GitHub' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continue with GitLab/ })).toBeInTheDocument();
     expect(screen.queryByLabelText('Search repositories')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Choose GitLab repository/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Continue with GitLab/ }));
 
     expect(await screen.findByLabelText('Search repositories')).toBeInTheDocument();
     expect(await screen.findByText('group/project')).toBeInTheDocument();
@@ -149,7 +179,7 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: /Connect GitHub/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect GitHub' }));
 
     expect(onConnect).toHaveBeenCalledOnce();
     expect(open).not.toHaveBeenCalled();
@@ -198,7 +228,8 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Connect GitLab/ }));
 
     // The button triggers a Nango connect session on the server, not a redirect to projects.mastra.ai.
@@ -288,7 +319,8 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByText('Join an organization to connect GitLab repositories.')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText('Join an organization to connect GitLab.')).toBeInTheDocument();
     const gitlab = screen.getByRole('button', { name: /Connect GitLab/ });
     expect(gitlab).toBeDisabled();
     await userEvent.click(gitlab);
@@ -323,7 +355,8 @@ describe('VCS Factory step', () => {
       />,
     );
 
-    expect(await screen.findByText('Connect GitLab to choose a repository.')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText('Projects, branches, and merge requests.')).toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN')).not.toBeInTheDocument();
     expect(screen.queryByText('GITLAB_ACCESS_TOKEN_TYPE')).not.toBeInTheDocument();
   });

@@ -23,6 +23,15 @@ export function ProviderConnectionDialogs({
   onCloseOAuth,
   onCompleteOAuth,
 }: ProviderConnectionDialogsProps) {
+  const scopeNotice =
+    fixedScope === 'org'
+      ? 'Everyone in your organization can use this provider connection.'
+      : fixedScope === 'user'
+        ? 'This provider connection is only for you. Shared organization access stays unchanged.'
+        : undefined;
+  const replacementNotice = oauth?.replaces
+    ? ' Completing sign-in replaces the existing connection for this provider at this scope.'
+    : '';
   return (
     <>
       {keyProvider && (
@@ -39,6 +48,7 @@ export function ProviderConnectionDialogs({
         <ProviderOAuthDialog
           provider={oauth.provider}
           session={oauth.session}
+          scopeNotice={authEnabled && scopeNotice ? scopeNotice + replacementNotice : undefined}
           onClose={onCloseOAuth}
           onComplete={onCompleteOAuth}
         />

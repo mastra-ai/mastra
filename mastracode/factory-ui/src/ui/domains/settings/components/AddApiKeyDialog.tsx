@@ -48,6 +48,14 @@ export function AddApiKeyDialog({
   const [keyDraft, setKeyDraft] = useState('');
   const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
 
+  const scopedCredential =
+    fixedScope === 'org' ? provider.orgCredential : fixedScope === 'user' ? provider.userCredential : undefined;
+  const description =
+    fixedScope === 'org'
+      ? 'Everyone in your organization can use this key.'
+      : fixedScope === 'user'
+        ? 'Only you can use this key. Shared organization access stays unchanged.'
+        : 'The key is stored securely and never displayed again.';
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
@@ -74,7 +82,10 @@ export function AddApiKeyDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>API key for {displayName}</DialogTitle>
-          <DialogDescription>The key is stored securely and never displayed again.</DialogDescription>
+          <DialogDescription>
+            {description}
+            {scopedCredential === 'oauth' && ' Saving replaces the provider sign-in at this scope.'}
+          </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Input

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -6,16 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
-import { providerDisplayName } from '../../../settings/components/provider-display-name';
 import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
-
-function rowFor(provider: string): HTMLElement {
-  const row = screen.getByText(providerDisplayName(provider)).closest('[data-slot="settings-row"]');
-  if (!(row instanceof HTMLElement)) throw new Error(`Provider row not found for ${provider}`);
-  return row;
-}
 
 function registerAuthHandler() {
   window.__MASTRACODE_CONFIG__ = { authEnabled: true };
@@ -39,7 +32,7 @@ describe('PersonalProviderFactoryStep', () => {
 
     renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
 
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Review setup' }));
 
     expect(onContinue).toHaveBeenCalledOnce();
   });
@@ -66,16 +59,13 @@ describe('PersonalProviderFactoryStep', () => {
     const user = userEvent.setup();
     const { client } = renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
 
-    await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    await screen.findByText('OpenAI');
-    expect(within(rowFor('openai')).getByText('Not set')).toBeInTheDocument();
-
-    await user.click(within(rowFor('openai')).getByRole('button', { name: 'Add API key for OpenAI' }));
+    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-openai');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitForMutationsIdle(client);
 
-    await user.click(within(rowFor('google')).getByRole('button', { name: 'Add API key for Google' }));
+    await user.click(screen.getByRole('button', { name: 'Add another' }));
+    await user.click(screen.getByRole('button', { name: 'Google' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-google');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitForMutationsIdle(client);
@@ -84,7 +74,7 @@ describe('PersonalProviderFactoryStep', () => {
       { provider: 'openai', body: { key: 'sk-openai', scope: 'user' } },
       { provider: 'google', body: { key: 'sk-google', scope: 'user' } },
     ]);
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('button', { name: 'Review setup' }));
     await waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
   });
 });
