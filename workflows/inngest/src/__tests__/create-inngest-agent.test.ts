@@ -910,6 +910,45 @@ describe('InngestAgent parity surface', () => {
         sendSpy.mockRestore();
       }
     });
+
+    it('resolves resume() defaultOptions against the snapshot once it is persisted', async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDynamicDefaults(
+        'default-callbacks-resume-late-snapshot',
+        ({ requestContext }) => ({
+          onFinish: () => {
+            fired.push(`onFinish:${requestContext.get('tenant')}`);
+          },
+        }),
+      );
+      // The suspension reaches the caller before the suspended snapshot is persisted.
+      const loadWorkflowSnapshot = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          value: {},
+          context: {},
+          status: 'suspended',
+          suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+          requestContext: { tenant: 'acme' },
+        });
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot }) }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-late-snapshot-run';
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme']));
+        expect(loadWorkflowSnapshot).toHaveBeenCalledTimes(2);
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
   });
 
   it('continues the existing thread run when resume() finds a live continuation', async () => {

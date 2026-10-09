@@ -1176,34 +1176,53 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
 
       const existingRegistryEntry = globalRunRegistry.get(runId);
+      const priorExecution = existingRegistryEntry?.workflowExecution;
+
+      // Settle the prior segment before reading its snapshot or event offset. Otherwise a late
+      // suspension event can be replayed into the new segment and close it early.
+      await priorExecution?.catch(() => {
+        /* errors already handled by the prior segment */
+      });
+
+      // The suspension reaches the caller's stream before the loop's finalize step
+      // persists the suspended snapshot. Resuming inside that window used to find no
+      // suspended step and dispatch a fresh run whose input was the resume payload,
+      // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
+      // After a resume re-suspends, the stored snapshot is still the previous suspended
+      // one until the new suspension is persisted, so a named tool call must also wait
+      // for its label to appear rather than failing against the stale labels (#25158).
+      const resumableSnapshot = (async (): Promise<{ hasStore: boolean; snapshot?: any }> => {
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        if (!workflowsStore) return { hasStore: false };
+        const loadSnapshot = async (): Promise<any> =>
+          workflowsStore.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
+        const toolCallId = resumeOptions?.toolCallId;
+        const isReady = (s: any) => s?.status === 'suspended' && (!toolCallId || !!s.resumeLabels?.[toolCallId]);
+        let snapshot: any = await loadSnapshot();
+        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+        while (!isReady(snapshot) && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+          snapshot = await loadSnapshot();
+        }
+        return { hasStore: true, snapshot };
+      })();
+      // Storage failures surface through dispatch; don't let them go unhandled meanwhile.
+      resumableSnapshot.catch(() => {});
 
       // Resolve defaults against the run's saved request context with the
       // caller's values on top, matching core `DurableAgent.resume`, so dynamic
       // defaults pick the same callbacks they did for the original run. A resume
-      // in a fresh process has no registry entry, so fall back to the snapshot.
-      let savedRequestContext: Iterable<readonly [string, unknown]> | undefined =
-        existingRegistryEntry?.requestContext?.entries();
-      if (!savedRequestContext) {
-        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-          runId,
-        });
-        savedRequestContext = Object.entries(snapshot?.requestContext ?? {});
-      }
+      // in a fresh process has no registry entry, so use the suspended snapshot
+      // that dispatch resumes from.
+      const savedRequestContext: Iterable<readonly [string, unknown]> =
+        existingRegistryEntry?.requestContext?.entries() ??
+        Object.entries((await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext ?? {});
       const callbackOptions = await withDefaultOptions(agent, {
         ...resumeOptions,
         requestContext: new RequestContext([
           ...savedRequestContext,
           ...(resumeOptions?.requestContext?.entries() ?? []),
         ]),
-      });
-      const priorExecution = existingRegistryEntry?.workflowExecution;
-
-      // Settle the prior segment before taking its event offset. Otherwise a late
-      // suspension event can be replayed into the new segment and close it early.
-      await priorExecution?.catch(() => {
-        /* errors already handled by the prior segment */
       });
       const resumeOffset = await getPubsubOffset(runId);
 
@@ -1315,26 +1334,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       );
 
       const dispatch = ready.then(async () => {
-        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-        const loadSnapshot = async (): Promise<any> =>
-          workflowsStore?.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
-
-        // The suspension reaches the caller's stream before the loop's finalize step
-        // persists the suspended snapshot. Resuming inside that window used to find no
-        // suspended step and dispatch a fresh run whose input was the resume payload,
-        // crashing with "Cannot read properties of undefined (reading 'threadId')" (#24749).
-        // After a resume re-suspends, the stored snapshot is still the previous suspended
-        // one until the new suspension is persisted, so a named tool call must also wait
-        // for its label to appear rather than failing against the stale labels (#25158).
+        const { hasStore, snapshot } = await resumableSnapshot;
         const toolCallId = resumeOptions?.toolCallId;
-        const isReady = (s: any) => s?.status === 'suspended' && (!toolCallId || !!s.resumeLabels?.[toolCallId]);
-        let snapshot: any = await loadSnapshot();
-        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (workflowsStore && !isReady(snapshot) && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
-          snapshot = await loadSnapshot();
-        }
-        if (workflowsStore && snapshot?.status !== 'suspended') {
+        if (hasStore && snapshot?.status !== 'suspended') {
           notResumable = true;
           throw new NonRetriableError(
             `Cannot resume run ${runId}: it is not suspended` +
