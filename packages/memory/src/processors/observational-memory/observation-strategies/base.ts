@@ -175,7 +175,8 @@ export abstract class ObservationStrategy {
       let processed = await this.process(output, existingObservations);
       let committedRecord = record;
       const outcome = await this.persist(processed);
-      this.settleObservationCommit(outcome?.status === 'committed');
+      // A cycle another instance already covered wrote nothing, so there is nothing new to curate.
+      this.settleObservationCommit(outcome?.status === 'committed' && !outcome.alreadyCovered);
       if (outcome?.status === 'not-committed') {
         // Nothing landed on the head: no completion marker, no reflection, and the caller
         // keeps the source messages in context (`observed: false`).
@@ -428,6 +429,10 @@ export abstract class ObservationStrategy {
    * The write is conditional on the head text the observations were composed from. When the
    * target generation was retired by a reflection, or another writer changed the text, the
    * observations are recomposed against the fresh head and the commit is retried (bounded).
+   * When the fresh head's `observedMessageIds` already include every message this cycle observed
+   * (another instance observed them first), nothing is written and `alreadyCovered` is set, so
+   * callers advance cursors and markers without adding a second copy of the same observations.
+   * The cursor alone is not proof: an activation can move it past a message it never covered.
    * Returns null when no commit landed — callers must then leave cursors, markers, and the live
    * context untouched.
    */
@@ -436,7 +441,13 @@ export abstract class ObservationStrategy {
     composedFrom: string;
     target: ObservationalMemoryRecord;
     recompose: (head: ObservationalMemoryRecord) => Promise<ProcessedObservation>;
-  }): Promise<{ processed: ProcessedObservation; record: ObservationalMemoryRecord } | null> {
+    /** Ids of the messages this cycle observed. */
+    cycleMessageIds: string[];
+  }): Promise<{
+    processed: ProcessedObservation;
+    record: ObservationalMemoryRecord;
+    alreadyCovered?: boolean;
+  } | null> {
     let { processed, composedFrom, target } = opts;
     for (let attempt = 0; attempt <= MAX_HEAD_COMMIT_RETRIES; attempt++) {
       const input = {
@@ -458,11 +469,27 @@ export abstract class ObservationStrategy {
       if (attempt === MAX_HEAD_COMMIT_RETRIES) break;
       const head = await getLineageHead(this.storage, target);
       if (!head) return null;
+      if (this.headCoversCycle(head, opts.cycleMessageIds)) {
+        omDebug(`[OM:observe] head ${head.id} already covers this cycle's messages; skipping the duplicate commit`);
+        // Nothing of ours landed; what follows (reflection snapshot, token counts) reads the head.
+        const headText = head.activeObservations ?? '';
+        return {
+          processed: { ...processed, observations: headText, observationTokens: head.observationTokenCount },
+          record: head,
+          alreadyCovered: true,
+        };
+      }
       target = head;
       composedFrom = head.activeObservations ?? '';
       processed = await opts.recompose(head);
     }
     return null;
+  }
+
+  private headCoversCycle(head: ObservationalMemoryRecord, cycleMessageIds: string[]): boolean {
+    if (cycleMessageIds.length === 0) return false;
+    const headIds = new Set(Array.isArray(head.observedMessageIds) ? head.observedMessageIds : []);
+    return cycleMessageIds.every(id => headIds.has(id));
   }
 
   protected async indexObservationGroups(

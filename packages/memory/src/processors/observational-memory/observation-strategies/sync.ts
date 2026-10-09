@@ -247,13 +247,16 @@ export class SyncObservationStrategy extends ObservationStrategy {
       composedFrom: this.composedFrom,
       target: liveRecord,
       recompose: head => this.compose(this.observerResult, head.activeObservations ?? '', head),
+      cycleMessageIds: messages.map(m => m.id),
     });
     if (!committed) {
       return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
     }
     processed = committed.processed;
 
-    const thread = await this.storage.getThreadById({ threadId });
+    // A covered cycle wrote nothing; the instance that did commit owns the thread's title,
+    // task, and cursor metadata, so this cycle's output must not overwrite them.
+    const thread = committed.alreadyCovered ? null : await this.storage.getThreadById({ threadId });
     if (thread) {
       const oldTitle = thread.title?.trim();
       const newTitle = resolveThreadTitleUpdate(thread, processed.threadTitle);
@@ -291,15 +294,17 @@ export class SyncObservationStrategy extends ObservationStrategy {
       }
     }
 
-    await this.indexObservationGroups(
-      processed.observations,
-      threadId,
-      resourceId,
-      processed.lastObservedAt,
-      committed.record.id,
-    );
+    if (!committed.alreadyCovered) {
+      await this.indexObservationGroups(
+        processed.observations,
+        threadId,
+        resourceId,
+        processed.lastObservedAt,
+        committed.record.id,
+      );
+    }
 
-    return { status: 'committed', processed, record: committed.record };
+    return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

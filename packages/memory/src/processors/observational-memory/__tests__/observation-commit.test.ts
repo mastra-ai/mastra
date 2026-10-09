@@ -13,7 +13,7 @@ import type {
   ProcessedObservation,
 } from '../observation-strategies/types';
 
-type PersistOutcome = 'commit' | 'skip' | 'fail';
+type PersistOutcome = 'commit' | 'covered' | 'skip' | 'fail';
 
 /** Strategy whose persist step commits, skips, or fails, exposing the commit settlement hooks receive. */
 class CommitStrategy extends ObservationStrategy {
@@ -73,6 +73,9 @@ class CommitStrategy extends ObservationStrategy {
   async persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void> {
     if (this.outcome === 'fail') throw new Error('commit failed');
     if (this.outcome === 'skip') return;
+    if (this.outcome === 'covered') {
+      return { status: 'committed', processed, record: this.opts.record, alreadyCovered: true };
+    }
     return { status: 'committed', processed, record: this.opts.record };
   }
   async emitStartMarkers(): Promise<void> {}
@@ -106,6 +109,15 @@ describe('Observation commit settlement', () => {
     await expect(strategy.run()).resolves.toMatchObject({ observed: true });
 
     await expect(strategy.committed).resolves.toBe(true);
+  });
+
+  it("settles false when another instance had already committed this cycle's messages", async () => {
+    const strategy = createStrategy('covered');
+
+    // The cycle still completes: its messages are observed, just not by this commit.
+    await expect(strategy.run()).resolves.toMatchObject({ observed: true });
+
+    await expect(strategy.committed).resolves.toBe(false);
   });
 
   it('settles false when the cycle skips its commit', async () => {
