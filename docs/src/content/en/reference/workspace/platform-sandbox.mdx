@@ -470,7 +470,8 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'stop',
     type: '() => Promise<void>',
-    description: 'Alias for destroy().',
+    description:
+      "Release this process's lease on the sandbox without touching the remote one. The sandbox keeps running under the environment's idle policy and sandboxId is kept, so a later start() reattaches. Only destroy() releases the sandbox.",
   },
   {
     name: 'executeCommand',
