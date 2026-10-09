@@ -327,8 +327,9 @@ export function FilterBarProvider({
       setDraftState(null);
       const existing = fieldItem(fieldId, groupId);
       if (existing) {
+        // An unknown field has no operator contract to widen into: the new filter replaces the old one.
         const field = getField(fieldId);
-        const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : operators);
+        const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : []);
         const item = { ...existing, ...condition };
         emit(updateTreeItem(exprRef.current, existing.id, condition));
         setLastCommit({ item, from, glint: true });
@@ -340,7 +341,7 @@ export function FilterBarProvider({
       setLastCommit({ item, from, glint: true, groupId });
       announce('Filter added');
     },
-    [emit, announce, newItemId, inputTarget, fieldItem, getField, getFieldOperators, operators],
+    [emit, announce, newItemId, inputTarget, fieldItem, getField, getFieldOperators],
   );
 
   const updateItem = useCallback(
