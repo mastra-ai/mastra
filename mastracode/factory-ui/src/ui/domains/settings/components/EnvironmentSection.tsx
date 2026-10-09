@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -23,9 +24,8 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * The Factory's environment: what every session's sandbox boots from. The
- * repositories it clones, then its configuration: workspace setup, the
- * sandbox provider's own settings and, when the sandbox can build, the build
- * triggers and history.
+ * repositories it clones, its configuration (workspace setup and the sandbox
+ * provider's own settings) and, when the sandbox can build, its builds.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -109,27 +109,37 @@ function EnvironmentBlocks({
       <SettingsSubsection
         scope="factory"
         title="Configuration"
-        description={`How each sandbox is set up${canBuild ? ' and when its template rebuilds' : ''}. ${providerLine(environment.sandbox.provider)}`}
-        action={canBuild ? <BuildNow factoryId={factoryId} environment={environment} /> : undefined}
+        description={`How each sandbox is set up. ${providerLine(environment.sandbox.provider)}`}
       >
-        <div className="flex flex-col gap-4">
-          <WorkspaceSetupBlock
-            workdir={environment.sandboxWorkdir}
-            command={environment.workspaceSetupCommand}
-            disabled={disabled}
-            onSave={save}
-          >
-            <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
-            {canBuild && <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />}
-          </WorkspaceSetupBlock>
-          {canBuild && environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
-        </div>
+        <WorkspaceSetupBlock
+          workdir={environment.sandboxWorkdir}
+          command={environment.workspaceSetupCommand}
+          disabled={disabled}
+          onSave={save}
+        >
+          <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+        </WorkspaceSetupBlock>
       </SettingsSubsection>
+      {canBuild && (
+        <SettingsSubsection
+          scope="factory"
+          title="Builds"
+          description="The template image built ahead of sessions, and when it rebuilds."
+          action={<BuildNow factoryId={factoryId} environment={environment} />}
+        >
+          <div className="flex flex-col gap-4">
+            <SettingsContainer>
+              <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+            </SettingsContainer>
+            {environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
+          </div>
+        </SettingsSubsection>
+      )}
     </div>
   );
 }
 
-/** Build now with the last build's live status beside it; in the Configuration header. */
+/** Build now with the last build's live status beside it; in the Builds header. */
 function BuildNow({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
   const requestBuild = useRequestEnvironmentBuildMutation();
   const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);

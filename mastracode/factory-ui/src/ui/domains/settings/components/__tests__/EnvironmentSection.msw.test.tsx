@@ -57,7 +57,7 @@ describe('Environment settings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Repositories', 'Configuration']);
+    expect(headings).toEqual(['Repositories', 'Configuration', 'Builds']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     const command = screen.getByRole('textbox', { name: 'Workspace setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));

@@ -75,11 +75,11 @@ describe('Environment builds', () => {
 
     expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /build now/i })).toBeNull();
-    expect(screen.queryByRole('switch', { name: 'Rebuild on a schedule' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
     expect(screen.queryByRole('switch', { name: 'Rebuild on push' })).toBeNull();
   });
 
-  it('builds now from the Configuration header, polls until ready, and lists no history on platform', async () => {
+  it('builds now from the Builds header, polls until ready, and lists no history on platform', async () => {
     const holder = { environment: environmentPayload() };
     useFactory();
     const reads = useEnvironment(holder);
@@ -126,6 +126,7 @@ describe('Environment builds', () => {
     await new Promise(resolve => setTimeout(resolve, 6_000));
     expect(reads.count).toBe(readsAtPin);
     expect(historyReads).toBe(0);
+    expect(screen.getByRole('heading', { name: 'Builds' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Build tpl/ })).toBeNull();
   }, 25_000);
 
@@ -214,7 +215,7 @@ describe('Environment builds', () => {
     renderEnvironmentSettings();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Builds' })).toBeInTheDocument();
     const failed = await screen.findByRole('button', { name: 'Build tpl-1:bld-2' });
     const ready = screen.getByRole('button', { name: 'Build tpl-1:bld-1' });
     expect(within(failed).getByText('Failed')).toBeInTheDocument();
