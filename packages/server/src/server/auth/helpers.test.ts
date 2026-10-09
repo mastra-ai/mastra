@@ -235,6 +235,15 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
+    it('should let an overlapping protected pattern win over an earlier public pattern', () => {
+      const config = new Map<string, boolean>([
+        ['GET:/custom/*', false],
+        ['GET:/custom/private/:id', true],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+    });
+
     it('should return false when customRouteAuthConfig is undefined', () => {
       expect(isCustomRoutePublic('/api/test', 'GET', undefined)).toBe(false);
     });

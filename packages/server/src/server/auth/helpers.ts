@@ -146,7 +146,9 @@ export const isCustomRoutePublic = (
     return !customRouteAuthConfig.get(allRouteKey);
   }
 
-  // Check pattern matches for dynamic routes (e.g., '/users/:id')
+  // Check pattern matches for dynamic routes (e.g., '/users/:id').
+  // Any matching pattern that requires auth wins over overlapping public patterns.
+  let matchedPublic = false;
   for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
     const colonIndex = routeKey.indexOf(':');
     if (colonIndex === -1) {
@@ -161,13 +163,15 @@ export const isCustomRoutePublic = (
       continue;
     }
 
-    // Check if path matches the pattern
     if (pathMatchesPattern(path, routePattern)) {
-      return !requiresAuth; // True when route opts out of auth
+      if (requiresAuth) {
+        return false;
+      }
+      matchedPublic = true;
     }
   }
 
-  return false;
+  return matchedPublic;
 };
 
 // NOTE: This uses isProtectedCustomRoute (default-allow for unknown paths) rather than
