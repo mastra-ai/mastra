@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ContentBlock, ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
@@ -92,6 +93,7 @@ export function RepositoriesBlock({
               {dragHandleProps => (
                 <RepositoryRow
                   repository={repository}
+                  position={index + 1}
                   provider={providers[repository.projectRepositoryId] ?? 'github'}
                   disabled={disabled}
                   dragHandleProps={dragHandleProps}
@@ -111,21 +113,12 @@ export function RepositoriesBlock({
   );
 }
 
-/** How the repository's last setup went; nothing to show before the first one. */
-const STATUS_BADGE: Record<
-  FactoryEnvironmentRepository['lastBuildStatus'],
-  { label: string; variant: 'success' | 'destructive' } | null
-> = {
-  unbuilt: null,
-  configured: { label: 'Setup OK', variant: 'success' },
-  failed: { label: 'Setup failed', variant: 'destructive' },
-};
-
 /** Keeps a click on a control inside the header row from toggling the row. */
 const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
 function RepositoryRow({
   repository,
+  position,
   provider,
   disabled,
   dragHandleProps,
@@ -133,6 +126,7 @@ function RepositoryRow({
   onCommands,
 }: {
   repository: FactoryEnvironmentRepository;
+  position: number;
   provider: 'github' | 'gitlab';
   disabled: boolean;
   dragHandleProps: React.HTMLAttributes<HTMLElement> | null;
@@ -141,7 +135,6 @@ function RepositoryRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const label = repository.slug ?? '';
-  const status = STATUS_BADGE[repository.lastBuildStatus];
 
   const toggleExpanded = () => setExpanded(v => !v);
 
@@ -152,7 +145,7 @@ function RepositoryRow({
         tabIndex={0}
         aria-expanded={expanded}
         aria-label={`${expanded ? 'Hide' : 'Show'} details for ${label}`}
-        className="hover:bg-surface3 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2"
+        className="group/row hover:bg-surface3 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2"
         onClick={toggleExpanded}
         onKeyDown={event => {
           if (event.target !== event.currentTarget) return;
@@ -162,18 +155,28 @@ function RepositoryRow({
           }
         }}
       >
-        <span
-          {...dragHandleProps}
-          className="text-muted-foreground flex cursor-grab items-center"
-          aria-label={`Drag ${label}`}
-          onClick={stop}
-          onPointerDown={event => {
-            stop(event);
-            dragHandleProps?.onPointerDown?.(event);
-          }}
-        >
-          <GripVertical className="size-4" aria-hidden />
-        </span>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span
+                {...dragHandleProps}
+                className="text-muted-foreground flex size-5 shrink-0 cursor-grab items-center justify-center"
+                aria-label={`Drag ${label}`}
+                onClick={stop}
+                onPointerDown={event => {
+                  stop(event);
+                  dragHandleProps?.onPointerDown?.(event);
+                }}
+              />
+            }
+          >
+            <Txt as="span" variant="caption" tone="muted" font="mono" className="group-hover/row:hidden">
+              {position}
+            </Txt>
+            <GripVertical className="hidden size-4 group-hover/row:block" aria-hidden />
+          </TooltipTrigger>
+          <TooltipContent>Drag to reorder</TooltipContent>
+        </Tooltip>
         <span className="min-w-0 flex-1">
           <Txt as="span" tone={repository.inEnvironment ? 'ink' : 'muted'} className="flex items-center gap-1.5">
             {provider === 'gitlab' ? (
@@ -189,11 +192,15 @@ function RepositoryRow({
             </Txt>
           )}
         </span>
-        {status && (
-          <Badge size="sm" variant={status.variant}>
-            {status.label}
+        {repository.lastBuildStatus === 'failed' ? (
+          <Badge size="sm" variant="destructive">
+            Last build failed
           </Badge>
-        )}
+        ) : repository.lastBuildStatus === 'configured' ? (
+          <Txt as="span" variant="caption" tone="muted">
+            Configured
+          </Txt>
+        ) : null}
         <span className="flex items-center gap-2" onClick={stop}>
           <Txt as="span" variant="caption" tone="muted">
             {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
@@ -216,8 +223,8 @@ function RepositoryRow({
             {repository.inEnvironment
               ? 'Cloned into every session and the template build.'
               : 'Not cloned; sessions and builds skip this repository.'}
-            {repository.lastBuildStatus === 'configured' && ' Its setup command finished cleanly last time.'}
-            {repository.lastBuildStatus === 'failed' && ' Its setup command failed last time:'}
+            {repository.lastBuildStatus === 'configured' && ' Its setup command passed in the last build.'}
+            {repository.lastBuildStatus === 'failed' && ' Its setup command failed in the last build:'}
           </Txt>
           {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
             <Txt as="p" font="mono" variant="meta" className="text-destructive whitespace-pre-wrap">

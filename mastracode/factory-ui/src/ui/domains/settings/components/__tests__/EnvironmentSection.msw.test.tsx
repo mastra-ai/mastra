@@ -123,8 +123,8 @@ describe('Environment settings', () => {
     expect(names).toEqual(['acme/link-web', 'acme/link-api']);
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole('switch', { name: /Clone .* into every session/ })).toHaveLength(2);
-    expect(screen.getByText('Setup OK')).toBeInTheDocument();
-    expect(screen.getByText('Setup failed')).toBeInTheDocument();
+    expect(screen.getByText('Configured')).toBeInTheDocument();
+    expect(screen.getByText('Last build failed')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Clone acme/link-web into every session' })).toBeChecked();
     expect(screen.getAllByText('Cloned')).toHaveLength(2);
 
