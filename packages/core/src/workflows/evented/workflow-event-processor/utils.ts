@@ -81,7 +81,16 @@ export function getStepEntry(workflow: Workflow, executionPath: number[]): Singl
  */
 export function getStepId(workflow: Workflow, executionPath: number[]): string | null {
   const entry = getStepEntry(workflow, executionPath);
-  return entry ? getEntryId(entry) : null;
+  if (entry) {
+    return getEntryId(entry);
+  }
+
+  let controlEntry = workflow.stepGraph[executionPath[0]!];
+  if (controlEntry?.type === 'parallel' || controlEntry?.type === 'conditional') {
+    controlEntry = controlEntry.steps[executionPath[1]!];
+  }
+
+  return controlEntry?.type === 'sleep' || controlEntry?.type === 'sleepUntil' ? controlEntry.id : null;
 }
 
 export function isExecutableStep(step: StepFlowEntry<any>) {
