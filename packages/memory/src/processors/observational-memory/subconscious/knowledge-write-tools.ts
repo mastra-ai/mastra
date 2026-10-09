@@ -1,4 +1,4 @@
-import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
 import { isKnowledgeScopeVisible, KnowledgeConflictError } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -106,6 +106,52 @@ async function requireVisible(
     throw new Error(`${label} is outside the curator's visible scope.`);
 }
 
+const ISO_DATE = /\d{4}-\d{2}-\d{2}(?:[t ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:z|[+-]\d{2}:?\d{2})?)?/g;
+
+/** Name words with dates and punctuation removed, so "Payments-Service (2026-10-08)" matches "payments service". */
+function nameWords(name: string): string[] {
+  return name
+    .toLocaleLowerCase()
+    .replace(ISO_DATE, ' ')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
+
+function namesOverlap(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  const words = new Set(longer);
+  return shorter.every(word => words.has(word));
+}
+
+/**
+ * Visible nodes that likely describe the same thing as `name`: an exact name match at any visible
+ * scope (for example, the same entity first captured in another session), or names that match once
+ * case, punctuation, and dates are ignored, or where one name's words all appear in the other.
+ */
+async function findSimilarNodes(
+  store: KnowledgeStorage,
+  scopeIds: KnowledgeScopeIds,
+  name: string,
+): Promise<{ exact?: KnowledgeNode; similar: Array<{ id: string; name: string }> }> {
+  const words = nameWords(name);
+  const probe = [...words].sort((a, b) => b.length - a.length)[0];
+  if (!probe) return { similar: [] };
+  const canonical = name.trim().toLocaleLowerCase();
+  const seen = new Set<string>();
+  const similar: Array<{ id: string; name: string }> = [];
+  for (const hit of await store.search({ query: probe, scopeIds, limit: 50 })) {
+    if (hit.type !== 'node' || seen.has(hit.id)) continue;
+    seen.add(hit.id);
+    if (hit.name.trim().toLocaleLowerCase() === canonical) {
+      const exact = await store.getNode(hit.id);
+      if (exact) return { exact, similar: [] };
+    }
+    if (namesOverlap(words, nameWords(hit.name))) similar.push({ id: hit.id, name: hit.name });
+  }
+  return { similar };
+}
+
 export function createKnowledgeWriteTools(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
@@ -132,6 +178,11 @@ export function createKnowledgeWriteTools(
           nodeScope: nodePlacementSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
+          confirmDistinct: {
+            type: 'boolean',
+            description:
+              'Set true only after a previous call reported similar existing nodes and this node is genuinely a different thing.',
+          },
         },
         required: ['name', 'kind', 'text'],
         additionalProperties: false,
@@ -144,6 +195,7 @@ export function createKnowledgeWriteTools(
           nodeScope?: string;
           scope?: SubconsciousScopeSelection;
           when?: string;
+          confirmDistinct?: boolean;
         };
         requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
@@ -151,15 +203,26 @@ export function createKnowledgeWriteTools(
         const recordScope = resolveWriteScopeIds(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
+        const record = {
+          text: value.text,
+          scopeIds: recordScope,
+          source: CURATOR_IDENTITY,
+          metadata: { sourceThreadId: options.sourceThreadId, ...(when ? { when: when.toISOString() } : {}) },
+          resolutionScopeIds: options.scopeIds,
+        };
+        if (!value.confirmDistinct) {
+          const { exact, similar } = await findSimilarNodes(store, options.scopeIds, value.name);
+          // An exact-name visible node is reused rather than duplicated at another scope.
+          if (exact) return { node: exact, record: await store.createRecord({ ...record, node: exact }) };
+          if (similar.length > 0) {
+            throw new Error(
+              `Similar nodes already exist: ${similar.map(node => `${node.id} "${node.name}"`).join(', ')}. Append to one of them with knowledge_append, or retry with confirmDistinct: true if this is a different thing.`,
+            );
+          }
+        }
         return store.createNodeWithRecord({
           node: { name: value.name, kind: value.kind, scopeIds: nodeScope },
-          record: {
-            text: value.text,
-            scopeIds: recordScope,
-            source: CURATOR_IDENTITY,
-            metadata: { sourceThreadId: options.sourceThreadId, ...(when ? { when: when.toISOString() } : {}) },
-            resolutionScopeIds: options.scopeIds,
-          },
+          record,
         });
       },
     }),
