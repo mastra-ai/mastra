@@ -307,17 +307,43 @@ export const INTERIM_KNOWLEDGE_INDEX_NAMES: ReadonlySet<string> = new Set([
   'idx_knowledge_activity_import_run',
 ]);
 
+function withInterimRecordColumns(
+  extraRecordColumns: readonly string[],
+  extraTables: readonly (readonly [string, readonly string[]])[] = [],
+): ReadonlyMap<string, readonly string[]> {
+  const layout = new Map(INTERIM_KNOWLEDGE_COLUMNS);
+  layout.set(TABLE_KNOWLEDGE_RECORDS, [
+    ...INTERIM_KNOWLEDGE_COLUMNS.get(TABLE_KNOWLEDGE_RECORDS)!,
+    ...extraRecordColumns,
+  ]);
+  for (const [table, columns] of extraTables) layout.set(table, columns);
+  return layout;
+}
+
 /**
- * True when `columnsByTable` (every Knowledge-prefixed table and its columns) is exactly the interim
- * layout: every interim table present, no other tables, and each with exactly the interim columns.
- * Pass `timestampShadows` for PostgreSQL, whose adapters add a `<column>Z` timestamptz shadow.
+ * Every column layout a published interim build created. Snapshots `0.0.0-knowledge-w1-20261008204450`
+ * onward match {@link INTERIM_KNOWLEDGE_COLUMNS}. Earlier snapshots kept extra record columns, and
+ * `0.0.0-knowledge-w1-20261006001735` also the v1 cursors table. Later builds never dropped those, so a
+ * database first initialized by an early snapshot keeps its layout; it only gains the later indexes.
  */
-export function isInterimKnowledgeLayout(
+export const INTERIM_KNOWLEDGE_LAYOUTS: readonly ReadonlyMap<string, readonly string[]>[] = [
+  INTERIM_KNOWLEDGE_COLUMNS,
+  // 0.0.0-knowledge-w1-20261007232522
+  withInterimRecordColumns(['maxScope']),
+  // 0.0.0-knowledge-w1-20261006001735
+  withInterimRecordColumns(
+    ['nodeId', 'source', 'createdAt', 'maxScope'],
+    [['mastra_knowledge_cursors', ['sourceThreadId', 'agent', 'lastKnowledgeId', 'updatedAt']]],
+  ),
+];
+
+function matchesLayout(
   columnsByTable: ReadonlyMap<string, readonly string[]>,
-  { timestampShadows = false }: { timestampShadows?: boolean } = {},
+  layout: ReadonlyMap<string, readonly string[]>,
+  timestampShadows: boolean,
 ): boolean {
-  if (columnsByTable.size !== INTERIM_KNOWLEDGE_COLUMNS.size) return false;
-  for (const [table, expected] of INTERIM_KNOWLEDGE_COLUMNS) {
+  if (columnsByTable.size !== layout.size) return false;
+  for (const [table, expected] of layout) {
     const columns = columnsByTable.get(table);
     if (!columns) return false;
     const actual = timestampShadows
@@ -326,6 +352,18 @@ export function isInterimKnowledgeLayout(
     if (actual.length !== expected.length || !expected.every(column => actual.includes(column))) return false;
   }
   return true;
+}
+
+/**
+ * True when `columnsByTable` (every Knowledge-prefixed table and its columns) is exactly one of the
+ * {@link INTERIM_KNOWLEDGE_LAYOUTS}: every table present, no other tables, and each with exactly those
+ * columns. Pass `timestampShadows` for PostgreSQL, whose adapters add a `<column>Z` timestamptz shadow.
+ */
+export function isInterimKnowledgeLayout(
+  columnsByTable: ReadonlyMap<string, readonly string[]>,
+  { timestampShadows = false }: { timestampShadows?: boolean } = {},
+): boolean {
+  return INTERIM_KNOWLEDGE_LAYOUTS.some(layout => matchesLayout(columnsByTable, layout, timestampShadows));
 }
 
 /**
