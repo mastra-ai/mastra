@@ -151,6 +151,63 @@ describe('InMemoryMemory listMessages include resource scope', () => {
   });
 });
 
+describe('InMemoryMemory listMessages hasMore with include and a date filter', () => {
+  let store: InMemoryMemory;
+  const ids = Array.from({ length: 10 }, (_, minute) => `m${minute}`);
+  // The filter keeps m4..m9; m0..m3 are outside it.
+  const dateRange = { start: new Date(Date.UTC(2024, 0, 1, 0, 4)) };
+
+  beforeEach(async () => {
+    store = new InMemoryMemory({ db: new InMemoryDB() });
+    await store.saveMessages({
+      messages: ids.map((id, minute) =>
+        makeMessage({ id, threadId: 'thread-1', resourceId: 'resource-1', text: id, minute }),
+      ),
+    });
+  });
+
+  it('reports more pages when include adds messages from outside the filter', async () => {
+    const result = await store.listMessages({
+      threadId: 'thread-1',
+      perPage: 2,
+      page: 0,
+      filter: { dateRange },
+      include: ['m0', 'm1', 'm2', 'm3'].map(id => ({ id })),
+    });
+
+    expect(result.total).toBe(6);
+    expect(result.messages.map(message => message.id)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4', 'm5']);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('reports no more pages on the last page when include adds a message from outside the filter', async () => {
+    const result = await store.listMessages({
+      threadId: 'thread-1',
+      perPage: 2,
+      page: 2,
+      filter: { dateRange },
+      include: [{ id: 'm0' }],
+    });
+
+    expect(result.total).toBe(6);
+    expect(result.messages.map(message => message.id)).toEqual(['m0', 'm8', 'm9']);
+    expect(result.hasMore).toBe(false);
+  });
+
+  it('reports no more pages when include returns every filtered message', async () => {
+    const result = await store.listMessages({
+      threadId: 'thread-1',
+      perPage: 2,
+      page: 0,
+      filter: { dateRange },
+      include: ['m6', 'm7', 'm8', 'm9'].map(id => ({ id })),
+    });
+
+    expect(result.messages.map(message => message.id)).toEqual(['m4', 'm5', 'm6', 'm7', 'm8', 'm9']);
+    expect(result.hasMore).toBe(false);
+  });
+});
+
 describe('InMemoryMemory updateThread partial updates', () => {
   it('leaves the stored title alone when only metadata is provided', async () => {
     const memory = new InMemoryMemory({ db: new InMemoryDB() });
