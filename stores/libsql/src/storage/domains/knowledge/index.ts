@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
@@ -314,14 +315,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #rawClient: Client;
   readonly #rawDb: LibSQLDB;
   #initError?: Error;
+  readonly #schemaAccess = new AsyncLocalStorage<true>();
 
-  // A failed schema check latches: every operation rethrows it until init() succeeds or dangerouslyReset() runs.
+  // A failed schema check latches: every operation rethrows it until init() or dangerouslyReset() succeeds.
   get #client(): Client {
-    if (this.#initError) throw this.#initError;
+    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
     return this.#rawClient;
   }
   get #db(): LibSQLDB {
-    if (this.#initError) throw this.#initError;
+    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
     return this.#rawDb;
   }
 
@@ -346,9 +348,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
-    this.#initError = undefined;
     try {
-      await this.#init();
+      // The retry runs with schema access; concurrent callers stay latched until it succeeds.
+      await this.#schemaAccess.run(true, () => this.#init());
+      this.#initError = undefined;
     } catch (error) {
       const { KnowledgeSchemaError } = await loadKnowledgeCore();
       if (error instanceof KnowledgeSchemaError) this.#initError = error;
@@ -539,9 +542,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
-    this.#initError = undefined;
-    await withClientWriteLock(this.#client, async () => {
-      await this.#client.batch(
+    // The latch clears only when the follow-up init() succeeds, so a failed reset stays latched.
+    await withClientWriteLock(this.#rawClient, async () => {
+      await this.#rawClient.batch(
         [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()].map(table => ({
           sql: `DROP TABLE IF EXISTS "${table}"`,
           args: [],
