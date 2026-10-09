@@ -8,7 +8,7 @@ Recovery only takes runs that are orphaned. Whether a run is orphaned is decided
 
 - The agent is registered on a `Mastra` instance with storage (`DURABLE_AGENT_RECOVER_NO_MASTRA`, `DURABLE_AGENT_RECOVER_NO_STORAGE` otherwise).
 - The run has a persisted `running` snapshot. `listActiveRuns()` and `recover()` read nothing else. A plain `DurableAgent` writes `running` snapshots only when `recovery.durableAgents` is `'auto'`, or when a user `shouldPersistSnapshot` includes `running`. `EventedAgent` always writes them.
-- The workflows store supports run fencing. Without it recovery still works, but liveness comes from the pubsub lease and a superseded execution's writes are not rejected. `recoverActiveRuns()` warns once per store when that applies.
+- The workflows store supports run fencing. Without it recovery still works, but liveness comes from the pubsub lease and a superseded execution's writes are not rejected. `recoverActiveRuns()` and `recover()` warn once per store when that applies.
 
 ## Entry points
 
@@ -30,7 +30,7 @@ Recovery only takes runs that are orphaned. Whether a run is orphaned is decided
 4. No other execution holds a live claim on it, unless `force` is set.
 5. For a run without an ownership record (started by a version from before ownership records existed), its thread lease is not held. A run without a thread, or a pubsub without leases, gives no signal, so such a run counts as not live.
 
-The checks happen in that order. The claim in step 4 is atomic with the check: from the moment it succeeds no other execution can write to the run.
+The checks happen in that order. The claim in step 4 is atomic with the check, so no other execution can claim the run once it succeeds. With storage fencing, no other execution can write to the run from that moment either. With a pubsub lease, an execution that lost the run can still write until it notices the loss (see [`force`](#force)).
 
 ## The sequence
 

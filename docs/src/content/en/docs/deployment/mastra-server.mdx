@@ -170,7 +170,7 @@ export const mastra = new Mastra({
 })
 ```
 
-A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Recovering from multiple replicas requires a storage adapter that supports run fencing or a PubSub backend that every replica shares. See [multi-instance deployments](/docs/harness/durable-agents#multi-instance-deployments).
+A plain `agent.stream()` call can't resume after its server process exits. If a stream ends without its expected terminal event, treat the turn as interrupted and let the client retry or reconcile it. Use [durable agents](/docs/harness/durable-agents) when turns must survive process replacement. [Crash recovery](/docs/harness/durable-agents#crash-recovery) requires shared persistent run storage and idempotent tools. Replaying missed events after a restart also requires a shared persistent cache such as Redis because the default event cache is in-memory. Recovering from multiple replicas requires a storage adapter that supports run fencing or a PubSub backend whose lease every replica shares. See [multi-instance deployments](/docs/harness/durable-agents#multi-instance-deployments).
 
 ## Troubleshooting
 

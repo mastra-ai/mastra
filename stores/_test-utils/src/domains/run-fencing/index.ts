@@ -560,6 +560,31 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect((await memory.getThreadById({ threadId: thread.id }))?.title).toBe('b');
     });
 
+    it('fences atomic working memory merges made inside a run fence scope', async ctx => {
+      if (!(await memory.supportsRunFencing()) || !memory.supportsAtomicWorkingMemoryMerge) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const fenceA = fence(runId, 1);
+      const fenceB = fence(runId, 2);
+      const resourceId = `resource-${randomUUID()}`;
+      await memory.raiseRunFence(fenceA);
+      await memory.updateResource({ resourceId, workingMemory: 'a' });
+      await memory.raiseRunFence(fenceB);
+
+      const scopeA = recordingScope(store => (store === memory ? fenceA : undefined));
+      await inRunFenceScope(scopeA, () =>
+        expectFenceConflict(memory.mergeResourceWorkingMemory({ resourceId, merge: () => 'stale' })),
+      );
+      expect(scopeA.conflicts).toEqual([fenceA]);
+      expect((await memory.getResourceById({ resourceId }))?.workingMemory).toBe('a');
+
+      const scopeB = recordingScope(store => (store === memory ? fenceB : undefined));
+      await inRunFenceScope(scopeB, () =>
+        memory.mergeResourceWorkingMemory({ resourceId, merge: existing => `${existing}b` }),
+      );
+      expect(scopeB.conflicts).toEqual([]);
+      expect((await memory.getResourceById({ resourceId }))?.workingMemory).toBe('ab');
+    });
+
     it('fences observational memory content writes made inside a run fence scope', async ctx => {
       if (!(await memory.supportsRunFencing()) || !memory.supportsObservationalMemory) return ctx.skip();
       const runId = `run-${randomUUID()}`;

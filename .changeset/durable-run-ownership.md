@@ -12,7 +12,7 @@ Each run is now claimed by the execution driving it: `stream()`, `generate()`, `
 - `recover()` throws `DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY` for a run the same process is still executing, even with `force: true`. Previously it started a second execution of the run. Wait for the run to finish instead.
 - Starting a run with a `runId` that another execution holds waits up to 5 seconds, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`.
 - `mastra.shutdown()` releases runs still executing after the drain window, so the next boot recovers them right away.
-- Run streams drop events from an execution that lost its run. With a storage adapter that supports run fencing, that execution's writes are also rejected, so it can't overwrite messages, threads, or workflow state. With `recovery: { durableAgents: 'auto' }`, a warning is logged when the workflows or memory store doesn't support run fencing.
+- Run streams drop events from an execution that lost its run. With a storage adapter that supports run fencing, that execution's writes are also rejected, so it can't overwrite messages, threads, or workflow state. A warning is logged when the workflows or memory store doesn't support run fencing: whenever runs are recovered, through `recoverActiveRuns()` or `recover()`, and, with `recovery: { durableAgents: 'auto' }`, when a run starts.
 
 ```ts
 const { recovered } = await durableAgent.recoverActiveRuns();
