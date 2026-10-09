@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { DatasetExperiment } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -7,6 +8,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '../experiment-crumb';
+import { DATASET_ID, experimentsResponseOf, makeExperiment } from './fixtures/experiment-crumb';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -26,12 +28,8 @@ const renderCrumb = (experimentId: string) => {
   );
 };
 
-const stubExperiments = (experiments: Array<{ id: string; datasetId: string; name?: string; status?: string }>) => {
-  server.use(
-    http.get(`${BASE_URL}/api/experiments`, () =>
-      HttpResponse.json({ experiments, pagination: { total: experiments.length, page: 0 } }),
-    ),
-  );
+const stubExperiments = (experiments: DatasetExperiment[]) => {
+  server.use(http.get(`${BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponseOf(experiments))));
 };
 
 afterEach(() => cleanup());
@@ -39,7 +37,7 @@ afterEach(() => cleanup());
 describe('ExperimentCrumb', () => {
   it('should render the experiment name when the experiment has one', async () => {
     // Given an experiment with a name
-    stubExperiments([{ id: 'exp-named-0001', datasetId: 'ds-1', name: 'Nightly regression' }]);
+    stubExperiments([makeExperiment({ id: 'exp-named-0001', name: 'Nightly regression' })]);
 
     // When the crumb renders for that experiment
     renderCrumb('exp-named-0001');
@@ -51,7 +49,7 @@ describe('ExperimentCrumb', () => {
 
   it('should fall back to the short id when the experiment has no name', async () => {
     // Given an experiment without a name
-    stubExperiments([{ id: 'abcdef1234567890', datasetId: 'ds-1' }]);
+    stubExperiments([makeExperiment({ id: 'abcdef1234567890' })]);
 
     // When the crumb renders
     renderCrumb('abcdef1234567890');
@@ -90,10 +88,10 @@ describe('ExperimentCrumbStatusIcon', () => {
 
   it('should stop spinning once the experiment detail reports it has completed', async () => {
     // Given a stale experiments list that still says "running" while the detail endpoint says "completed"
-    stubExperiments([{ id: 'exp-1', datasetId: 'ds-1', status: 'running' }]);
+    stubExperiments([makeExperiment({ id: 'exp-1', status: 'running' })]);
     server.use(
-      http.get(`${BASE_URL}/api/datasets/ds-1/experiments/exp-1`, () =>
-        HttpResponse.json({ id: 'exp-1', datasetId: 'ds-1', status: 'completed' }),
+      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/exp-1`, () =>
+        HttpResponse.json(makeExperiment({ id: 'exp-1', status: 'completed' })),
       ),
     );
 
@@ -107,8 +105,8 @@ describe('ExperimentCrumbStatusIcon', () => {
 
   it('should fall back to the list status until the detail query resolves', async () => {
     // Given a running experiment whose detail request never resolves
-    stubExperiments([{ id: 'exp-2', datasetId: 'ds-1', status: 'running' }]);
-    server.use(http.get(`${BASE_URL}/api/datasets/ds-1/experiments/exp-2`, () => new Promise(() => {})));
+    stubExperiments([makeExperiment({ id: 'exp-2', status: 'running' })]);
+    server.use(http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/exp-2`, () => new Promise(() => {})));
 
     // When the status icon renders
     renderIcon('exp-2');
