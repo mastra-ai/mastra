@@ -114,6 +114,12 @@ export const metadataParamToFieldId = (param: string) =>
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
+
+/** Synthetic fields keep their own URL param instead of a `filterX` one. */
+const TRACE_SYNTHETIC_PARAM_BY_FIELD: Record<string, string> = {
+  rootEntityType: TRACE_ROOT_ENTITY_TYPE_PARAM,
+  status: TRACE_STATUS_PARAM,
+};
 export const TRACE_LIST_MODE_PARAM = 'listMode';
 /** Branch-mode only: identifies the anchor span that defines the displayed subtree.
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
@@ -715,15 +721,6 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Tra
 export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
   const next = new URLSearchParams();
 
-  const rootEntityType = searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM);
-  if (rootEntityType) next.set(TRACE_ROOT_ENTITY_TYPE_PARAM, rootEntityType);
-
-  const status = searchParams.get(TRACE_STATUS_PARAM);
-  if (status) next.set(TRACE_STATUS_PARAM, status);
-
-  const listMode = searchParams.get(TRACE_LIST_MODE_PARAM);
-  if (listMode) next.set(TRACE_LIST_MODE_PARAM, listMode);
-
   const preserve = (param: string) => {
     const operatorId = readTraceFilterOperator(searchParams, param);
     const values = searchParams.getAll(param).filter(value => value || isPresenceOperator(operatorId));
@@ -731,6 +728,12 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
     for (const value of values) next.append(param, value);
     if (operatorId) next.set(traceFilterOperatorParam(param), operatorId);
   };
+
+  preserve(TRACE_ROOT_ENTITY_TYPE_PARAM);
+  preserve(TRACE_STATUS_PARAM);
+
+  const listMode = searchParams.get(TRACE_LIST_MODE_PARAM);
+  if (listMode) next.set(TRACE_LIST_MODE_PARAM, listMode);
 
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];
@@ -770,8 +773,10 @@ export function applyTracePropertyFilterTokens(
   tokens: TraceFilterToken[],
   groups: TraceFilterGroup[] = [],
 ) {
-  params.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
-  params.delete(TRACE_STATUS_PARAM);
+  for (const param of Object.values(TRACE_SYNTHETIC_PARAM_BY_FIELD)) {
+    params.delete(param);
+    params.delete(traceFilterOperatorParam(param));
+  }
   params.delete(TRACE_FILTER_GROUP_PARAM);
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];
@@ -783,18 +788,10 @@ export function applyTracePropertyFilterTokens(
   }
 
   for (const token of tokens) {
-    if (token.fieldId === 'rootEntityType' && typeof token.value === 'string') {
-      params.set(TRACE_ROOT_ENTITY_TYPE_PARAM, token.value);
-      continue;
-    }
-    if (token.fieldId === 'status' && typeof token.value === 'string') {
-      params.set(TRACE_STATUS_PARAM, token.value);
-      continue;
-    }
-
     const param = isTraceMetadataFieldId(token.fieldId)
       ? metadataFieldIdToParam(token.fieldId)
-      : TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[token.fieldId as keyof typeof TRACE_PROPERTY_FILTER_PARAM_BY_FIELD];
+      : (TRACE_SYNTHETIC_PARAM_BY_FIELD[token.fieldId] ??
+        TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[token.fieldId as keyof typeof TRACE_PROPERTY_FILTER_PARAM_BY_FIELD]);
     if (!param) continue;
 
     if (Array.isArray(token.value)) {
