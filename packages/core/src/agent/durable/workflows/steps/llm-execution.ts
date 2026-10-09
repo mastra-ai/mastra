@@ -1784,7 +1784,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 if (processedChunk !== null) {
                   const persistedChunk = processedChunk ?? rawChunk;
                   collectedChunks.push({
-                    type: rawChunk.type,
+                    type: persistedChunk.type,
                     payload: 'payload' in persistedChunk ? persistedChunk.payload : undefined,
                     metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
                   });

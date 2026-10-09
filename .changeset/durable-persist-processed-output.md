@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed durable agents saving the raw model output to memory when an output processor rewrites the stream. Text changed or removed by `processOutputStream` (for example a redaction processor) is now stored exactly as it was streamed, matching regular agents, so redacted values no longer reappear on reload or get replayed to the model.
+Fixed durable agents saving raw model output after `processOutputStream` changed or removed streamed text. Stored text now matches the stream, as it does for regular agents. Redacted values no longer reappear on reload or reach the model on a later turn.
