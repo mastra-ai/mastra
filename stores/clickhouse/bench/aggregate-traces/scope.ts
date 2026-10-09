@@ -117,7 +117,11 @@ export type Variant =
   | 'ex'
   | 'mcall'
   | 'mcallf'
-  | 'spanu';
+  | 'spanu'
+  | 'spcols'
+  | 'spcolsnd'
+  | 'spb'
+  | 'rsb';
 
 /** Lab-only tables created by `lab.ts derive` (memory track 3); see `ROLLUP_DDL`. */
 /** One row per model call (trace, span) holding that call's token/cost totals. */
@@ -167,6 +171,14 @@ export const VARIANT_SETTINGS: Partial<Record<Variant, Record<string, string | n
  *
  * Schema candidates (memory track 3, lab only; need the tables from `lab.ts derive`):
  * - `urollup`: read token/cost usage from a per-trace rollup (`mastra_trace_usage`) instead of raw metric rows
+ * - `spcols`: the span relation selects only `traceId` and `name` (today it selects ~20 columns, including JSON
+ *   extracted from `attributes`). Same dedupe, so same results. Only for predicates on the span name.
+ * - `spcolsnd`: `spcols` without `LIMIT 1 BY dedupeKey`. Exact for name-only predicates, since a span's stored copies
+ *   never differ in name (X33).
+ * - `spb`: bound the span relation by `endedAt >= from - 1 hour` so `PARTITION BY toDate(endedAt)` prunes; dedupe and
+ *   columns unchanged. Exact when each trace has one root: its spans start after the root does, and the root started
+ *   at or after `from`. The hour covers clock skew (measured < 1 s; spans ending hours early were all multi-root).
+ * - `rsb`: `rs` plus `spb` when the query has a span relation. Exact when each trace has one root.
  * - `snidx`: answer `spans.some(name = ?)` from a `(org, project, name, traceId)` index (`mastra_trace_span_names`)
  *   instead of scanning spans; only when the span predicate uses `name` alone
  * - `rio` (compiler): `r1`, ordered `startedAt, traceId, dedupeKey` so the root dedupe follows the sort key
@@ -246,6 +258,16 @@ export function applyVariant(compiled: CompiledClickHouseTraceQuery, variant: Va
       return usageRollup(compiled);
     case 'snidx':
       return spanNameIndex(compiled);
+    case 'spcols':
+      return spanColumns(compiled, false);
+    case 'spcolsnd':
+      return spanColumns(compiled, true);
+    case 'spb':
+      return spanTimeBound(compiled);
+    case 'rsb': {
+      const out = scopedReread(compiled);
+      return out.query.includes('current_spans AS (') ? spanTimeBound(out) : out;
+    }
     case 'rio':
       return readInOrderDedupe(singleRootDedupe(compiled));
     case 'hourly':
@@ -438,6 +460,37 @@ function usageRollup(compiled: CompiledClickHouseTraceQuery): CompiledClickHouse
     GROUP BY traceId
   ),`;
   return { ...compiled, query: q.slice(0, start) + replacement + q.slice(end + endMarker.length) };
+}
+
+function spanColumns(compiled: CompiledClickHouseTraceQuery, dropDedupe: boolean): CompiledClickHouseTraceQuery {
+  const name = dropDedupe ? 'spcolsnd' : 'spcols';
+  for (const m of compiled.query.matchAll(
+    /FROM current_spans s\n\s+WHERE isNotNull\(s\.traceId\)\n\s+AND (\(.*\))\n/g,
+  )) {
+    if (/\bs\.(?!name\b)/.test(m[1]!))
+      throw new RewriteError(`Variant ${name}: span predicate uses more than the span name`);
+  }
+  let count = 0;
+  const query = compiled.query.replace(
+    /current_spans AS \(\n(\s+)SELECT\n[\s\S]*?\n(\s+)FROM mastra_span_events\n([\s\S]*?)\n(\s+)ORDER BY dedupeKey\n\s+LIMIT 1 BY dedupeKey\n/g,
+    (_m, i1: string, i2: string, where: string, i3: string) => {
+      count++;
+      const dedupe = dropDedupe ? '' : `${i3}ORDER BY dedupeKey\n${i3}LIMIT 1 BY dedupeKey\n`;
+      return `current_spans AS (\n${i1}SELECT traceId, name\n${i2}FROM mastra_span_events\n${where}\n${dedupe}`;
+    },
+  );
+  if (count !== 1) throw new RewriteError(`Variant ${name}: expected one current_spans CTE, found ${count}`);
+  return { ...compiled, query };
+}
+
+function spanTimeBound(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {
+  const { from } = windowParams(compiled.query);
+  return rewriteEach(compiled, 'spb', [
+    [
+      /(FROM mastra_span_events\n\s+WHERE [\s\S]*?AND traceId IN \(SELECT traceId FROM root_scope\))/g,
+      `$1\n      AND endedAt >= ${from} - INTERVAL 1 HOUR`,
+    ],
+  ]);
 }
 
 function spanNameIndex(compiled: CompiledClickHouseTraceQuery): CompiledClickHouseTraceQuery {

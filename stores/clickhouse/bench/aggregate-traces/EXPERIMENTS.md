@@ -568,6 +568,52 @@ Isolating that step on prod (largest project, ~2.3M token rows): grouping alone 
 | T1   | 303–305    | 289–292   | 845–854        | 766–768       |
 | T3   | 299–300    | 291       | 860–867        | 758–766       |
 
+### X38: where cold `spans.some` time goes, and time bounds under one root per trace (prod replica, 2026-10-09)
+
+The team ruled that a trace with more than one root span is a bug, so query shapes may assume one root per trace.
+Under that rule a trace's spans start after its root, and the root started at or after the window start.
+
+- **Clock skew** (`span-index.ts --only skew,skew-detail`, single-root traces, 1 day, 73,792 traces): 56 spans in
+  26 traces end before their root starts. In single-root traces the gap is always under 1 s. Spans ending an hour
+  or more early only occur in multi-root traces.
+- **Narrower span columns** (`spcols`/`spcolsnd`, 80 combinations): same bytes as today at every size. ClickHouse
+  already skips unread columns. Dropping the span dedupe saves 20–30% only at the largest project.
+- **`EXPLAIN indexes = 1`** (`explain-parts.ts`, counts only): the span scan's primary key already narrows it to
+  ~220 granules (small) / ~16k (largest) of 157k. The cost is `mastra_trace_roots`: the unscoped outer re-read
+  selects 6,534 of 6,568 granules for a 25-trace project. Tenant scope (`w1`, mastra#26327) cuts that to 147. A
+  time bound as well (`rs`) cuts it to 74 and prunes parts 297 → 88.
+- **Exactness** (`span-bound.ts`, in-SQL digest, F0/F3/Q3 × 7d/30d × 15 projects): `spb` 60/60 match. `rsb`
+  86/90 match. The 4 mismatches are all one largest project with 148 multi-root traces whose other root falls
+  outside the window (the bug).
+
+Cold s (median over projects; TO = 30 s limit) | warm ms | MB read | warm MiB:
+
+| Case   | Bucket  | base                   | `w1`                   | `rs`                   | `rsb` (= `rs` + `spb`) |
+| ------ | ------- | ---------------------- | ---------------------- | ---------------------- | ---------------------- |
+| F0 7d  | small   | 14.3 / 203 / 103 / 166 | 4.4 / 115 / 5 / 180    | (= `rsb`)              | 2.8 / 43 / 2 / 184     |
+| F0 7d  | largest | 20.8 / 356 / 132 / 180 | 8.1 / 158 / 49 / 215   | (= `rsb`)              | 10.1 / 246 / 72 / 240  |
+| F0 30d | largest | 26.0 / 604 / 215 / 202 | 12.6 / 330 / 123 / 255 | (= `rsb`)              | 23.6 / 699 / 155 / 253 |
+| F3 7d  | small   | TO / 540 / 209 / 169   | 16.1 / 401 / 12 / 195  | 7.4 / 201 / 7 / 193    | 5.7 / 189 / 6 / 192    |
+| F3 7d  | p99     | TO / 647 / 280 / 180   | 15.4 / 336 / 86 / 236  | 8.9 / 251 / 79 / 214   | 8.2 / 276 / 56 / 211   |
+| F3 7d  | largest | TO / 805 / 350 / 204   | TO / 851 / 490 / 367   | 25.2 / 812 / 469 / 362 | TO / 993 / 440 / 362   |
+| F3 30d | small   | TO / 607 / 213 / 169   | 16.3 / 338 / 17 / 195  | 14.4 / 348 / 17 / 174  | 18.9 / 335 / 18 / 176  |
+| F3 30d | p99     | TO / 952 / 371 / 190   | 22.3 / 451 / 174 / 265 | 23.9 / 448 / 174 / 229 | 27.9 / 741 / 167 / 234 |
+| F3 30d | largest | TO / 1541 / 619 / 349  | TO / 2260 / 821 / 549  | TO / 2196 / 828 / 549  | TO / 2379 / 852 / 549  |
+
+Q3 tracks F3. Full tables: `results/rsb.jsonl`, `results/w1rs.jsonl`, `results/spb.jsonl`. Cold is one forced-cold
+sample per project (filesystem cache off), so treat ±3 s as noise.
+
+Conclusions:
+
+1. **Most of the gain is the tenant scope on the outer root re-read (`w1`, mastra#26327).** Cold F0 drops from
+   14–26 s to 4–13 s. Cold `spans.some` goes from timing out to 12–23 s at small–p99.
+2. **A root time bound on top (`rs`) halves 7-day cold `spans.some` again (13–17 s → 7–9 s)** but not 30-day
+   (14–25 s either way). It is exact under the one-root rule.
+3. **The span time bound (`spb`) adds nothing measurable.** It prunes span parts 460 → 112, but the span scan was
+   never the bottleneck. A span-name index (OBS-595) targets the same scan, so it isn't justified by this data.
+4. **Open:** at the largest project, `w1`/`rs` raise warm `spans.some` memory 204 → ~362 MiB and bytes 350 →
+   ~470 MB, and cold still times out. 30-day cold `spans.some` stays above the 15 s API timeout at every size.
+
 ### X37: platform#3407 settings on mobs-query's own reads (prod replica, read-only, 2026-10-08)
 
 `mobs-ab.ts` calls mobs-query's real service functions (lists, trace/branch/span detail, logs, metrics, scores,

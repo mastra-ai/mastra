@@ -11,7 +11,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { anchorTo, CASES, compileCase, compilePayloadStage, timeRangeFor } from './cases';
@@ -673,6 +673,8 @@ async function main(): Promise<void> {
       variants: { type: 'string' },
       shared: { type: 'boolean', default: false },
       'memory-session': { type: 'boolean', default: false },
+      /** Write to (and resume from) `results/<name>` instead of the default results file. */
+      results: { type: 'string' },
       tier: { type: 'string', default: '1' },
       'gate-b-approved': { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
@@ -733,7 +735,11 @@ async function main(): Promise<void> {
     runId,
     tier: TIERS[tierId],
     lastQueryEnd: 0,
-    resultsFile: values['memory-session'] ? MEMORY_FILE : RESULTS_FILE,
+    resultsFile: values.results
+      ? join(RESULTS_DIR, basename(values.results))
+      : values['memory-session']
+        ? MEMORY_FILE
+        : RESULTS_FILE,
     pauseMs: values.shared ? SHARED_PAUSE_MS : PAUSE_MS,
     shared: Boolean(values.shared),
   };

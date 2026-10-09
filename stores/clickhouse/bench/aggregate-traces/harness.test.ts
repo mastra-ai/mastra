@@ -187,7 +187,7 @@ describe('run planning', () => {
         .filter(p => p.def.id === 'F0')
         .map(p => p.project.hash)
         .sort(),
-    ).toEqual(['a', 'a', 'b', 'b']);
+    ).toEqual(['a', 'a', 'a', 'b', 'b']);
     expect(planned.filter(p => p.def.id === 'F2').map(p => p.project.hash)).toEqual(['a']);
     const costs = planned.map(p => p.def.cost);
     expect(costs).toEqual([...costs].sort((x, y) => x - y));

@@ -26,7 +26,7 @@ describe('case catalogue', () => {
       // Every tenant-scoped scan also carries the project, and the project is a bound parameter.
       const usage = def.group === 'tokens' ? 1 : 0;
       expect(compiled.query.includes('usage AS (')).toBe(usage === 1);
-      const expected = 2 + def.relations.length + usage + (variant === 'w1' ? 1 : 0);
+      const expected = 2 + def.relations.length + usage + (['w1', 'rs', 'rsb'].includes(variant) ? 1 : 0);
       expect(scopedCount(compiled.query)).toBe(expected);
       expect(compiled.query).not.toContain('proj-test');
       expect(compiled.query).not.toContain('org-test');
@@ -278,6 +278,46 @@ describe('schema variants (lab)', () => {
     const c = compile('F3', 'base');
     const tampered = { ...c, query: c.query.replace(/ifNull\(s\.name = /, 'ifNull(s.spanType = ') };
     expect(() => applyVariant(tampered, 'snidx')).toThrow(/more than the span name/);
+  });
+
+  it('spcols selects only traceId and name from spans and keeps the dedupe; spcolsnd drops it', () => {
+    const base = compile('F3', 'base').query;
+    const cols = compile('F3', 'spcols').query;
+    const nd = compile('F3', 'spcolsnd').query;
+    expect(base).toContain("JSONExtractString(attributes, 'model')");
+    for (const q of [cols, nd]) {
+      expect(q).toMatch(/current_spans AS \(\n\s+SELECT traceId, name\n\s+FROM mastra_span_events\n/);
+      expect(q).not.toContain('JSONExtractString(attributes');
+      expect(q).toContain('AND traceId IN (SELECT traceId FROM root_scope)');
+    }
+    const spans = (q: string) =>
+      q.slice(q.indexOf('current_spans AS ('), q.indexOf('\n  )', q.indexOf('current_spans AS (')));
+    expect(spans(cols)).toContain('LIMIT 1 BY dedupeKey');
+    expect(spans(nd)).not.toContain('LIMIT 1 BY dedupeKey');
+    expect(() => compile('F0', 'spcols')).toThrow(RewriteError);
+    const tampered = { ...compile('F3', 'base'), query: base.replace(/ifNull\(s\.name = /, 'ifNull(s.spanType = ') };
+    expect(() => applyVariant(tampered, 'spcols')).toThrow(/more than the span name/);
+  });
+
+  it('spb bounds only the span scan by the window start minus an hour, keeping its columns and dedupe', () => {
+    const base = compile('F3', 'base').query;
+    const q = compile('F3', 'spb').query;
+    const spans = (s: string) =>
+      s.slice(s.indexOf('current_spans AS ('), s.indexOf('\n  )', s.indexOf('current_spans AS (')));
+    const from = /startedAt >= (\{trace_query_\d+:DateTime64\(3, 'UTC'\)\})/.exec(base)![1]!;
+    expect(spans(q)).toContain(`AND endedAt >= ${from} - INTERVAL 1 HOUR`);
+    expect(spans(q)).toContain('LIMIT 1 BY dedupeKey');
+    expect(spans(q)).toContain("JSONExtractString(attributes, 'model')");
+    expect(q.replace(`\n      AND endedAt >= ${from} - INTERVAL 1 HOUR`, '')).toBe(base);
+    expect(compile('Q3', 'spb').query).toContain('- INTERVAL 1 HOUR');
+    expect(() => compile('F0', 'spb')).toThrow(RewriteError);
+  });
+
+  it('rsb is rs, plus spb when there is a span relation', () => {
+    expect(compile('F0', 'rsb').query).toBe(compile('F0', 'rs').query);
+    const q = compile('F3', 'rsb').query;
+    expect(q).toContain('- INTERVAL 1 HOUR');
+    expect(q).toMatch(/FROM mastra_trace_roots\s+WHERE organizationId = /);
   });
 
   it('arch combines shape, rollup and index where they apply', () => {
