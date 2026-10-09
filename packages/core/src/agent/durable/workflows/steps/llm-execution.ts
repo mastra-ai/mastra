@@ -1714,12 +1714,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // Defer 'step-finish' until the loop predicate resolves whether the run continues.
                 // Carry it through llm-mapping so tool-result chunks are emitted first, matching the
                 // regular agent's ordering (tool-result → step-finish).
+                // Set when output processors ran on this chunk: the processed chunk
+                // (what the client received), or null when a processor dropped it.
+                let processedChunk: typeof clientChunk | null | undefined;
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
                   } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {
-                      await processAndEmitChunk(clientChunk, {
+                      processedChunk = await processAndEmitChunk(clientChunk, {
                         runner: getToolResultRunner(),
                         processorStates: registryEntry.processorStates,
                         observabilityContext: createObservabilityContext(
@@ -1765,23 +1768,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
 
                 // Collect every chunk for post-stream message building and the
-                // processLLMResponse hook. Always collect — reasoning parts
-                // (including empty spans with providerMetadata carrying
-                // OpenAI itemIds) are required to correctly reconstruct the
-                // assistant message and preserve pairing with subsequent
-                // tool-calls (#19365). The payload always comes from the raw
-                // chunk (internal state is never affected by display-layer
-                // transforms), but the metadata comes from the client chunk:
-                // the payload transform is purely additive metadata
+                // processLLMResponse hook. Collect every chunk an output processor
+                // didn't drop — reasoning parts (including empty spans with
+                // providerMetadata carrying OpenAI itemIds) are required to
+                // correctly reconstruct the assistant message and preserve
+                // pairing with subsequent tool-calls (#19365). When output
+                // processors ran, persist the processed payload so memory holds
+                // exactly what the client streamed (default-loop parity, #26335);
+                // otherwise the raw payload. Metadata comes from the client
+                // chunk: the payload transform is purely additive metadata
                 // (`mastra.toolPayloadTransform`), and buildMessagesFromChunks
                 // layers it into the persisted providerMetadata so transcript
-                // targets apply on recall (L18b). When no transform is
-                // configured the client chunk IS the raw chunk.
-                collectedChunks.push({
-                  type: rawChunk.type,
-                  payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
-                  metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
-                });
+                // targets apply on recall (L18b). Internal state below (tool
+                // args, finish reason, usage) still reads the raw chunk.
+                if (processedChunk !== null) {
+                  const persistedChunk = processedChunk ?? rawChunk;
+                  collectedChunks.push({
+                    type: rawChunk.type,
+                    payload: 'payload' in persistedChunk ? persistedChunk.payload : undefined,
+                    metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
+                  });
+                }
 
                 if (STEP_CONTENT_CHUNK_TYPES.has(rawChunk.type)) {
                   hasStepContent = true;
