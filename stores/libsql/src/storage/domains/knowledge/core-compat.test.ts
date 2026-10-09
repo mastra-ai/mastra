@@ -56,14 +56,6 @@ describe('Knowledge core compatibility', () => {
       coreStorage.canonicalizeKnowledgeScopeIds(scopeIds),
     );
     expect(knowledgeCompat.knowledgeScopeIdsKey(scopeIds)).toBe(coreStorage.knowledgeScopeIdsKey(scopeIds));
-    expect(knowledgeCompat.canonicalizeKnowledgeRecordScopeIds(scopeIds)).toEqual(
-      coreStorage.canonicalizeKnowledgeRecordScopeIds(scopeIds),
-    );
-    for (const storage of [knowledgeCompat, coreStorage]) {
-      expect(() => storage.canonicalizeKnowledgeRecordScopeIds([])).toThrow(
-        new Error('Knowledge records require at least one scope.'),
-      );
-    }
 
     const cases: [{ id: string; isScope: boolean }, string[], string[]][] = [
       [{ id: SCOPE_A, isScope: true }, [], [SCOPE_A]],

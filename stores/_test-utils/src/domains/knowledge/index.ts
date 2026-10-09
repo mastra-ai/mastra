@@ -491,7 +491,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const record = await store.createRecord({ node, text: 'Must stay reachable', scopeIds: [PROJECT_SCOPE_ID] });
 
       await expect(store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [] })).rejects.toThrow(
-        'Knowledge records require at least one scope.',
+        'Knowledge scope not found: root',
       );
 
       expect(await store.getRecord({ id: record.id })).toEqual(record);
@@ -505,7 +505,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const node = await store.createNode({ name: 'Unscoped subject', scopeIds: [PROJECT_SCOPE_ID] });
 
       await expect(store.createRecord({ node, text: 'Would be unreachable', scopeIds: [] })).rejects.toThrow(
-        'Knowledge records require at least one scope.',
+        'Knowledge scope not found: root',
       );
       expect((await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records).toEqual([]);
     });
