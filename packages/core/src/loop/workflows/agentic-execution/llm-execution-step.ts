@@ -2703,6 +2703,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         for (const id of openReasoningIds) {
           safeEnqueue(controller, { type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } });
         }
+        modelSpanTracker?.interruptInference?.();
         const steps = inputData.output?.steps ?? [];
         const aborted = options?.abortSignal?.aborted === true;
         const result = {

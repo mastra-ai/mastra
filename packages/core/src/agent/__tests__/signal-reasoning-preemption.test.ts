@@ -115,6 +115,9 @@ describe('queued signals preempt default-loop reasoning', () => {
       await consumption;
       await stream._waitUntilFinished();
       expect(await stream.text).toBe('replacement answer');
+      expect(await stream.reasoningText).toBeUndefined();
+      expect(await stream.reasoning).toEqual([]);
+      expect(JSON.stringify(await stream.getFullOutput())).not.toContain('STALE_');
       expect(prompts).toHaveLength(2);
       expect(JSON.stringify(prompts[1]).match(/SYNTHETIC_SIGNAL_MARKER_A/g)).toHaveLength(1);
       expect(JSON.stringify(prompts[1]).match(/SYNTHETIC_SIGNAL_MARKER_B/g)).toHaveLength(1);

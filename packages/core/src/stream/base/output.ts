@@ -299,6 +299,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #bufferedSources: LLMStepResult<OUTPUT>['sources'] = [];
   #bufferedReasoning: LLMStepResult<OUTPUT>['reasoning'] = [];
+  /** Run-level reasoning as of the last `step-start` that has no `step-finish` yet. */
+  #reasoningAtStepStart?: {
+    length: number;
+    details: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]>;
+  };
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
@@ -686,6 +691,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // cancelled by a queued signal ends without step-finish, so drop what it streamed.
               self.#bufferedByStep.reasoning = [];
               self.#bufferedByStepReasoningDetails = {};
+              if (self.#reasoningAtStepStart) {
+                self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
+                self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
+              }
+              self.#reasoningAtStepStart = {
+                length: self.#bufferedReasoning.length,
+                details: { ...self.#bufferedReasoningDetails },
+              };
               break;
             case 'raw':
               if (!self.#options.includeRawChunks) {
@@ -1011,6 +1024,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 finishReason: undefined,
               };
               self.#bufferedByStepReasoningDetails = {};
+              self.#reasoningAtStepStart = undefined;
 
               // A continuing goal evaluation arrived while this step was still
               // in flight (in-process chunk ordering): this step-finish belongs
@@ -2241,6 +2255,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedSources.length = 0;
     this.#bufferedReasoning.length = 0;
     this.#bufferedReasoningDetails = {};
+    this.#reasoningAtStepStart = undefined;
     this.#bufferedFiles.length = 0;
     this.#toolCalls.length = 0;
     this.#toolResults.length = 0;
