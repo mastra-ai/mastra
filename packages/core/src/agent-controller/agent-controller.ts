@@ -417,7 +417,11 @@ export class AgentController<TState = {}> {
       getState: () => session.state.get() as Record<string, unknown>,
       getCurrentModelId: () => session.model.get() || undefined,
       setState: (updates, event) =>
-        session.state.update(() => ({ updates: updates as Partial<TState>, events: event ? [event] : [], result: undefined })),
+        session.state.update(() => ({
+          updates: updates as Partial<TState>,
+          events: event ? [event] : [],
+          result: undefined,
+        })),
       omConfig: this.config.omConfig,
       gateways: this.config.gateways ?? [],
     });
