@@ -60,16 +60,16 @@ describe('contextual onboarding previews', () => {
     const shared = within(screen.getByLabelText('Factory work model'));
     const personal = within(screen.getByLabelText('Personal sessions provider'));
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
-    expect(await personal.findByText('Connect to use · only you')).toBeInTheDocument();
+    expect(await personal.findByText('Connect your account')).toBeInTheDocument();
     expect(personal.getByText('Anthropic')).toBeInTheDocument();
 
     saved = true;
     await client.invalidateQueries({ queryKey: queryKeys.providers() });
-    expect(await personal.findByText('Connected · only you')).toBeInTheDocument();
+    expect(await personal.findByText('Connected · your account')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
 
     rerender(<OnboardingPreview step="personal-provider" model="openai/gpt-5.6-sol" />);
-    expect(personal.getByText('No extra connection needed')).toBeInTheDocument();
+    expect(personal.getByText('Shared access available')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
   });
 });

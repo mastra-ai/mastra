@@ -7,7 +7,7 @@ export function OnboardingSessionLabels({ individual = false }: { individual?: b
     <>
       <OnboardingAnnotation x={28} y={260} width={104}>
         <Txt variant="meta" tone="muted">
-          {individual ? 'Teammate' : 'Factory work'}
+          Factory work
         </Txt>
       </OnboardingAnnotation>
       <OnboardingAnnotation x={148} y={260} width={104}>

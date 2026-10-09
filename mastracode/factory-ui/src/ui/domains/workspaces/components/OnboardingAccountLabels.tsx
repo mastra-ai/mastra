@@ -13,15 +13,18 @@ export function OnboardingAccountLabels({ mode = 'shared' }: { mode?: FigureMode
           ) : (
             <Building2 className="text-muted-foreground size-3" />
           )}
-          <Txt variant="meta">{mode === 'individual' ? 'Teammate' : 'Company'}</Txt>
+          <Txt variant="meta">{mode === 'individual' ? 'Personal' : 'Company'}</Txt>
         </div>
       </OnboardingAnnotation>
       {mode === 'individual' && (
-        <OnboardingAnnotation x={38} y={62} width={84}>
+        <OnboardingAnnotation x={38} y={54} width={84}>
           <div className="flex items-center gap-2">
             <UserRound className="text-muted-foreground size-3" />
-            <Txt variant="meta">Teammate</Txt>
+            <Txt variant="meta">Run account</Txt>
           </div>
+          <Txt variant="meta" tone="muted" className="mt-1">
+            Shared → personal
+          </Txt>
         </OnboardingAnnotation>
       )}
       {mode !== 'shared' && (

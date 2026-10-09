@@ -40,7 +40,7 @@ function figureScene(step: OnboardingStep): FigureScene {
 function figureMode(step: OnboardingStep, preset?: ModelSetupPreset): FigureMode {
   if (preset?.kind === 'individual') return 'individual';
   if (step === 'model-provider' || step === 'review') return 'shared';
-  if (step === 'personal-provider' || preset?.allowPersonal) return 'hybrid';
+  if (step === 'personal-provider' || preset?.setupPersonal) return 'hybrid';
   return 'shared';
 }
 

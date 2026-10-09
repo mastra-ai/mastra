@@ -3,21 +3,21 @@ import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/Rad
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Building2, Users } from 'lucide-react';
+import { ArrowRight, Building2, UserRound } from 'lucide-react';
 import type { ModelSetupPreset } from '../services/modelSetupPreset';
 
 const choices = [
   {
     value: 'company',
     title: 'Company account',
-    description: 'One shared account. No setup for teammates.',
+    description: 'A shared account and default model for Factory work.',
     icon: Building2,
   },
   {
     value: 'individual',
-    title: 'Everyone brings their own',
-    description: 'Each person chooses their account and model.',
-    icon: Users,
+    title: 'My account',
+    description: 'Your account, with a starting model for this Factory.',
+    icon: UserRound,
   },
 ] as const;
 
@@ -33,10 +33,10 @@ export function ModelSetupPresetStep({
   return (
     <section aria-label="Model setup preset" className="flex flex-col gap-5">
       <RadioGroup
-        aria-label="How your team uses models"
+        aria-label="Accounts to set up"
         value={value.kind}
         onValueChange={kind => {
-          if (kind === 'company') onChange({ kind, allowPersonal: false });
+          if (kind === 'company') onChange({ kind, setupPersonal: false });
           if (kind === 'individual') onChange({ kind });
         }}
         className="gap-2"
@@ -66,17 +66,17 @@ export function ModelSetupPresetStep({
         {value.kind === 'company' ? (
           <label className="flex w-full cursor-pointer items-center justify-between gap-4">
             <Txt variant="caption" tone="muted">
-              Allow personal connections
+              Set up my account too
             </Txt>
             <Switch
-              aria-label="Allow personal connections"
-              checked={value.allowPersonal}
-              onCheckedChange={allowPersonal => onChange({ kind: 'company', allowPersonal })}
+              aria-label="Set up my account too"
+              checked={value.setupPersonal}
+              onCheckedChange={setupPersonal => onChange({ kind: 'company', setupPersonal })}
             />
           </label>
         ) : (
           <Txt variant="meta" tone="muted">
-            Factory work uses the run owner’s account.
+            Factory work still prefers shared credentials when available.
           </Txt>
         )}
       </div>

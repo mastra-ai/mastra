@@ -5,7 +5,7 @@ import { GitBranch, Sparkles, UserRound, Users } from 'lucide-react';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { isGitLabRepository } from '../services/github';
 import type { OnboardingDraft, OnboardingStep } from '../services/onboardingFlow';
-import { allowsPersonalSetup, modelSetupLabel } from '../services/modelSetupPreset';
+import { includesPersonalSetup, modelSetupLabel } from '../services/modelSetupPreset';
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
 
@@ -49,7 +49,16 @@ export function OnboardingReviewStep({
             onEdit={() => onEdit('model-preset')}
           />
         )}
-        {draft.preset?.kind !== 'individual' && (
+        {draft.preset?.kind === 'individual' ? (
+          <OnboardingReviewRow
+            icon={<Sparkles />}
+            label="Model"
+            value={personal?.modelId ?? 'Choose a model'}
+            detail={`${personalMethod} · Factory + your default`}
+            disabled={pending}
+            onEdit={() => onEdit('personal-provider')}
+          />
+        ) : (
           <OnboardingReviewRow
             icon={<Sparkles />}
             label="Model"
@@ -59,7 +68,7 @@ export function OnboardingReviewStep({
             onEdit={() => onEdit('model-provider')}
           />
         )}
-        {(!draft.preset || allowsPersonalSetup(draft.preset)) && (
+        {draft.preset?.kind !== 'individual' && (!draft.preset || includesPersonalSetup(draft.preset)) && (
           <OnboardingReviewRow
             icon={<UserRound />}
             label="Access"

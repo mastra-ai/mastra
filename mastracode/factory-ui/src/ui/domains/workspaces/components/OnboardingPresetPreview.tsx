@@ -32,15 +32,15 @@ function ConversationPreview({ x, person }: { x: number; person: string }) {
 
 export function OnboardingPresetPreview({ preset }: { preset: ModelSetupPreset }) {
   const individual = preset.kind === 'individual';
-  const personal = individual || preset.allowPersonal;
+  const personal = individual || preset.setupPersonal;
   return (
     <section aria-label="Model setup preview" className="relative h-full">
       <span className="sr-only">
         {individual
-          ? 'Factory work uses the run owner’s personal account. Each teammate connects their own account for their agent sessions.'
+          ? 'Set up your own account. For the selected model’s provider, Factory work tries shared credentials first, then the acting user’s account. This does not change teammates’ connections.'
           : personal
-            ? 'The company account supplies Factory work and team sessions. Your sessions can use your own account.'
-            : 'One company account supplies Factory work and everyone’s agent sessions.'}
+            ? 'Set up a shared company account and your own account. Factory work prefers shared credentials. Sessions prefer personal credentials for their selected provider, with shared credentials as fallback.'
+            : 'Set up a shared company account for Factory work. Sessions can also use it when no personal credential exists for their selected provider. Existing personal connections remain available.'}
       </span>
       <OnboardingAnnotation x={158} y={62} width={84}>
         <div className="flex items-center gap-2">
@@ -53,11 +53,14 @@ export function OnboardingPresetPreview({ preset }: { preset: ModelSetupPreset }
         </div>
       </OnboardingAnnotation>
       {individual && (
-        <OnboardingAnnotation x={38} y={62} width={84}>
+        <OnboardingAnnotation x={38} y={54} width={84}>
           <div className="flex items-center gap-2">
             <KeyRound className="text-muted-foreground size-3" />
-            <Txt variant="meta">Run owner</Txt>
+            <Txt variant="meta">Run account</Txt>
           </div>
+          <Txt variant="meta" tone="muted" className="mt-1">
+            Shared → personal
+          </Txt>
         </OnboardingAnnotation>
       )}
       {personal && (
@@ -75,6 +78,11 @@ export function OnboardingPresetPreview({ preset }: { preset: ModelSetupPreset }
       </OnboardingAnnotation>
       <ConversationPreview x={148} person="Teammate" />
       <ConversationPreview x={268} person="You" />
+      <OnboardingAnnotation x={28} y={292} width={344}>
+        <Txt variant="meta" tone="muted">
+          Sessions prefer personal credentials, then shared, for their chosen provider.
+        </Txt>
+      </OnboardingAnnotation>
     </section>
   );
 }

@@ -35,10 +35,13 @@ export function OnboardingModelPreview({
       <OnboardingSessionLabels />
       <div className="onboarding-scene-detail absolute inset-x-7 top-[89%]" style={{ animationDelay: '160ms' }}>
         <Txt variant="caption">
-          {repository?.name ? `Power the work in ${repository.name}` : 'One model for your Factory work'}
+          {repository?.name ? `Power the work in ${repository.name}` : 'Default model for Factory work'}
         </Txt>
         <Txt variant="meta" tone="muted" className="mt-2">
-          {provider ? `${method} · shared Factory default` : 'Choose a provider to connect your model.'}
+          {provider ? `${method} · shared credentials` : 'Choose a provider to connect your model.'}
+        </Txt>
+        <Txt variant="meta" tone="muted" className="mt-2">
+          Sessions can use this account for the same provider. Personal credentials take priority.
         </Txt>
       </div>
     </section>

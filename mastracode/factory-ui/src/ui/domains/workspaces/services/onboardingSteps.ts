@@ -1,6 +1,6 @@
 import type { OnboardingStep as Step } from './onboardingFlow';
 import type { ModelSetupPreset } from './modelSetupPreset';
-import { allowsPersonalSetup } from './modelSetupPreset';
+import { includesPersonalSetup } from './modelSetupPreset';
 
 export const STEP_META: Record<Step, { label: string; title: string; description: string }> = {
   initial: {
@@ -26,7 +26,7 @@ export const STEP_META: Record<Step, { label: string; title: string; description
   'model-preset': {
     label: 'Setup',
     title: 'Choose your setup.',
-    description: 'Start with a preset. You can change it later.',
+    description: 'Choose which accounts to connect.',
   },
   review: {
     label: 'Review',
@@ -44,17 +44,17 @@ export function onboardingSteps(preset?: ModelSetupPreset): Step[] {
   const start: Step[] = ['initial', 'vcs', 'project-management'];
   if (!preset) return [...start, 'model-provider', 'personal-provider', 'review'];
   if (preset.kind === 'individual') return [...start, 'model-preset', 'personal-provider', 'review'];
-  if (allowsPersonalSetup(preset)) return [...start, 'model-preset', 'model-provider', 'personal-provider', 'review'];
+  if (includesPersonalSetup(preset)) return [...start, 'model-preset', 'model-provider', 'personal-provider', 'review'];
   return [...start, 'model-preset', 'model-provider', 'review'];
 }
 
 export function onboardingStepMeta(step: Step, preset?: ModelSetupPreset) {
   if (!preset) return STEP_META[step];
   if (step === 'model-provider')
-    return { title: 'Choose the team model.', description: 'Organization account · shared Factory default.' };
+    return { title: 'Choose the Factory model.', description: 'Shared credentials · default for Factory work.' };
   if (step !== 'personal-provider') return STEP_META[step];
   if (preset.kind === 'individual')
-    return { title: 'Choose your model.', description: 'Your account · your default model.' };
+    return { title: 'Choose your model.', description: 'Your default model, also used for this Factory.' };
   return { title: 'Your personal model.', description: 'Optional · for your personal sessions.' };
 }
 

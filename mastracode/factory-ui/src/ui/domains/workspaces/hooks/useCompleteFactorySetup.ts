@@ -4,7 +4,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
-import { allowsPersonalSetup } from '../services/modelSetupPreset';
+import { includesPersonalSetup } from '../services/modelSetupPreset';
 import type { SaveModelSetupPreset } from '../services/modelSetupPreset';
 import { readJsonOrThrow } from '../services/http';
 import {
@@ -62,16 +62,17 @@ export function useCompleteFactorySetup(savePreset?: SaveModelSetupPreset) {
           await unlinkRepository(baseUrl, factory.id, previous.projectRepositoryId);
         }
       }
-      if (draft.model && draft.preset?.kind !== 'individual') {
-        await updateFactoryDefaultModel(baseUrl, factory.id, draft.model.modelId);
+      const factoryModel = draft.preset?.kind === 'individual' ? draft.personal?.modelId : draft.model?.modelId;
+      if (factoryModel) {
+        await updateFactoryDefaultModel(baseUrl, factory.id, factoryModel);
         // Observer/Reflector remain Auto. Explicit existing role choices stay untouched.
       } else if (existing?.defaultModelId) {
         await updateFactoryDefaultModel(baseUrl, factory.id, null);
       }
-      if (draft.personal?.modelId && (!draft.preset || allowsPersonalSetup(draft.preset))) {
+      if (draft.personal?.modelId && (!draft.preset || includesPersonalSetup(draft.preset))) {
         await setPersonalDefault.mutateAsync(draft.personal.modelId);
       }
-      // Only the preview supplies this adapter until a real, enforced policy API exists.
+      // Only the preview supplies this checklist adapter. It never changes routing or permissions.
       if (draft.preset && savePreset) await savePreset(factory.id, draft.preset);
       return factory.id;
     },

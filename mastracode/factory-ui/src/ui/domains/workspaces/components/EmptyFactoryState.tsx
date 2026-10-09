@@ -31,7 +31,7 @@ import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './OnboardingReviewStep';
 import { ModelSetupPresetStep } from './ModelSetupPresetStep';
-import { DEFAULT_MODEL_PRESET, allowsPersonalSetup } from '../services/modelSetupPreset';
+import { DEFAULT_MODEL_PRESET, includesPersonalSetup } from '../services/modelSetupPreset';
 import type { SaveModelSetupPreset } from '../services/modelSetupPreset';
 
 export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: SaveModelSetupPreset } = {}) {
@@ -194,8 +194,15 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
                     setPreviewModel(undefined);
                   }}
                   onComplete={model => {
+                    if (!model && preset) {
+                      // A member without shared access can still connect their own account.
+                      updateDraft({ ...draft, model, preset: { kind: 'individual' } });
+                      setReturnToReview(false);
+                      goTo('personal-provider');
+                      return;
+                    }
                     updateDraft({ ...draft, model });
-                    advance(!preset || allowsPersonalSetup(preset) ? 'personal-provider' : 'review');
+                    advance(!preset || includesPersonalSetup(preset) ? 'personal-provider' : 'review');
                   }}
                 />
               )}
