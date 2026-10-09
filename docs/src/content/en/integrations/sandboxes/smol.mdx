@@ -50,7 +50,7 @@ const response = await agent.generate('Run the project tests and explain any fai
 console.log(response.text)
 ```
 
-Choose an OCI image that has your project's runtime and tools. The default image is `node:22-slim`. A mounted VM stops with its disk and host files retained. On its next start, it boots again; a VM without host mounts pauses with memory intact and resumes from that point.
+Choose an OCI image that has your project's runtime and tools. The default image is `node:22-slim`. For a local VM that needs only the built-in shell tools, set `image: null`; this skips the image pull. Smol Cloud requires an image. A mounted VM stops with its disk and host files retained. On its next start, it boots again; a VM without host mounts pauses with memory intact and resumes from that point.
 
 ## Use Smol Cloud
 

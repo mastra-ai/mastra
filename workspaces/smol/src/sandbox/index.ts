@@ -43,8 +43,8 @@ function retainTail(old: string, chunk: string, limit: number): string {
 export interface SmolSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Logical workspace ID used to reconnect to the same local machine. */
   id?: string;
-  /** Prebuilt OCI image containing tools your agent needs. */
-  image?: string;
+  /** OCI image containing your tools; use null locally for Smol's built-in guest. */
+  image?: string | null;
   /** Local machine by default; cloud requires Smol Cloud credentials. */
   target?: 'local' | 'cloud';
   /** Explicit cloud machine ID to adopt across process restarts. */
@@ -84,6 +84,7 @@ export class SmolSandbox extends MastraSandbox {
     this.target = options.target ?? 'local';
     this.supportsCheckpoints = this.target === 'cloud' || !!options.checkpointPath;
     if (this.target === 'local' && options.cloud) throw new Error('Smol cloud credentials require target: "cloud".');
+    if (this.target === 'cloud' && options.image === null) throw new Error('Smol cloud machines require an image.');
     if (options.mounts && this.target !== 'local') throw new Error('Host directory mounts are local-only.');
     if (options.mounts?.length && options.checkpointPath)
       throw new Error('Local portable checkpoints cannot capture host mounts.');
@@ -117,7 +118,7 @@ export class SmolSandbox extends MastraSandbox {
     return createHash('sha256')
       .update(
         JSON.stringify({
-          image: config.image ?? DEFAULT_IMAGE,
+          image: config.image === null ? null : config.image ?? DEFAULT_IMAGE,
           workdir: this.workingDirectory,
           resources: config.resources,
           network: config.network ?? (this.target === 'local' ? true : undefined),
@@ -183,7 +184,7 @@ export class SmolSandbox extends MastraSandbox {
       Object.entries(this.getEnv()).filter((pair): pair is [string, string] => pair[1] !== undefined),
     );
     const create: MachineConfig = {
-      image: this.config.image ?? DEFAULT_IMAGE,
+      image: this.config.image === null ? undefined : this.config.image ?? DEFAULT_IMAGE,
       name: this.machineName,
       workdir: this.workingDirectory,
       env,
@@ -324,7 +325,7 @@ export class SmolSandbox extends MastraSandbox {
       metadata: {
         target: this.target,
         machineId: this.machine?.id ?? this.config.machineId,
-        image: this.config.image ?? DEFAULT_IMAGE,
+        image: this.config.image === null ? undefined : this.config.image ?? DEFAULT_IMAGE,
         checkpointId: this.lastCheckpoint?.id,
       },
     };

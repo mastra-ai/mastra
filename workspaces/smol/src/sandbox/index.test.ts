@@ -118,6 +118,13 @@ describe('SmolSandbox', () => {
     expect(sdk.machine.pause).not.toHaveBeenCalled();
   });
 
+  it('uses the built-in local guest when image is null', async () => {
+    const sandbox = new SmolSandbox({ id: 'builtin', image: null });
+    await sandbox.start();
+    expect(sdk.create).toHaveBeenCalledWith(expect.objectContaining({ image: undefined }), expect.anything());
+    expect(() => new SmolSandbox({ target: 'cloud', image: null })).toThrow('require an image');
+  });
+
   it('rejects cloud host mounts and contradictory egress configuration', () => {
     expect(() => new SmolSandbox({ target: 'cloud', mounts: [{ source: '/host', target: '/workspace' }] })).toThrow(
       'local-only',
