@@ -172,3 +172,149 @@ describe('evented mid-step recording (issue #22636)', () => {
     }
   });
 });
+
+describe('evented restart position for composite shapes (issue #24984)', () => {
+  const step = (id: string, execute: StepExecute) =>
+    createStep({ id, execute, inputSchema: looseObject, outputSchema: looseObject });
+
+  async function hostFor(workflow: any, storage: InstanceType<typeof MockStore>) {
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [workflow.id]: workflow },
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startWorkers();
+    return mastra;
+  }
+
+  const hang = async () => {
+    await new Promise<never>(() => {});
+    return {};
+  };
+
+  it('parallel: only the unfinished branch re-runs after restart', async () => {
+    const storage = new MockStore();
+    const runId = `parallel-restart-${Date.now()}`;
+    const build = (a: StepExecute, b: StepExecute) =>
+      createWorkflow({ id: 'parallel-restart-wf', inputSchema: looseObject, outputSchema: looseObject })
+        .parallel([step('a', a), step('b', b)])
+        .commit();
+
+    let signal!: () => void;
+    const bStarted = new Promise<void>(r => (signal = r));
+    let aDone = false;
+    const wfA = build(
+      async () => {
+        aDone = true;
+        return { a: 1 };
+      },
+      async () => {
+        signal();
+        return hang();
+      },
+    );
+    const hostA = await hostFor(wfA, storage);
+    (await wfA.createRun({ runId })).start({ inputData: {} }).catch(() => {});
+    await bStarted;
+    await vi.waitFor(() => expect(aDone).toBe(true));
+    await new Promise(r => setTimeout(r, 50));
+
+    const aB = vi.fn(async () => ({ a: 'rerun' }));
+    const bB = vi.fn(async () => ({ b: 2 }));
+    const wfB = build(aB, bB);
+    const hostB = await hostFor(wfB, storage);
+    try {
+      const result = await (await wfB.createRun({ runId })).restart();
+      expect(result.status).toBe('success');
+      expect(aB).not.toHaveBeenCalled();
+      expect(bB).toHaveBeenCalledTimes(1);
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
+  it('foreach: finished iterations do not re-run after restart', async () => {
+    const storage = new MockStore();
+    const runId = `foreach-restart-${Date.now()}`;
+    const build = (exec: StepExecute) =>
+      createWorkflow({
+        id: 'foreach-restart-wf',
+        inputSchema: z.array(looseObject),
+        outputSchema: z.array(looseObject),
+      })
+        .foreach(step('item', exec), { concurrency: 1 })
+        .commit();
+
+    let signal!: () => void;
+    const thirdStarted = new Promise<void>(r => (signal = r));
+    const wfA = build(async ({ inputData }) => {
+      if (inputData.i === 2) {
+        signal();
+        return hang();
+      }
+      return { i: inputData.i };
+    });
+    const hostA = await hostFor(wfA, storage);
+    (await wfA.createRun({ runId })).start({ inputData: [{ i: 0 }, { i: 1 }, { i: 2 }, { i: 3 }] }).catch(() => {});
+    await thirdStarted;
+    await new Promise(r => setTimeout(r, 50));
+
+    const execB = vi.fn(async ({ inputData }: { inputData: any }) => ({ i: inputData.i }));
+    const wfB = build(execB);
+    const hostB = await hostFor(wfB, storage);
+    try {
+      const result = await (await wfB.createRun({ runId })).restart();
+      expect(result.status).toBe('success');
+      expect((result as any).result).toEqual([{ i: 0 }, { i: 1 }, { i: 2 }, { i: 3 }]);
+      expect(execB.mock.calls.map(c => c[0].inputData.i)).toEqual([2, 3]);
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
+  it('nested workflow: completed parent steps do not re-run after restart', async () => {
+    const storage = new MockStore();
+    const runId = `nested-restart-${Date.now()}`;
+    const build = (first: StepExecute, inner: StepExecute) => {
+      const nested = createWorkflow({ id: 'nested-inner', inputSchema: looseObject, outputSchema: looseObject })
+        .then(step('inner', inner))
+        .commit();
+      return createWorkflow({ id: 'nested-restart-wf', inputSchema: looseObject, outputSchema: looseObject })
+        .then(step('first', first))
+        .then(nested)
+        .commit();
+    };
+
+    let signal!: () => void;
+    const innerStarted = new Promise<void>(r => (signal = r));
+    const wfA = build(
+      async () => ({ seed: 's' }),
+      async () => {
+        signal();
+        return hang();
+      },
+    );
+    const hostA = await hostFor(wfA, storage);
+    (await wfA.createRun({ runId })).start({ inputData: {} }).catch(() => {});
+    await innerStarted;
+    await new Promise(r => setTimeout(r, 50));
+
+    const firstB = vi.fn(async () => ({ seed: 'rerun' }));
+    const innerB = vi.fn(async ({ inputData }: { inputData: any }) => ({ got: inputData.seed }));
+    const wfB = build(firstB, innerB);
+    const hostB = await hostFor(wfB, storage);
+    try {
+      const result = await (await wfB.createRun({ runId })).restart();
+      expect(result.status).toBe('success');
+      expect(firstB).not.toHaveBeenCalled();
+      expect(innerB).toHaveBeenCalledTimes(1);
+      expect((result as any).result).toEqual({ got: 's' });
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+});

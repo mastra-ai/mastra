@@ -1,8 +1,8 @@
 ---
-title: "Scheduled workflows | Workflows"
-description: "Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime."
+title: 'Scheduled workflows | Workflows'
+description: 'Run Mastra workflows on one or more cron schedules, inspect trigger history in Studio, and pause or resume scheduled execution at runtime.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Scheduled workflows
@@ -159,6 +159,26 @@ When you change the `schedule` config and redeploy, Mastra diffs the existing sc
 - User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten, unless the cadence change above requires a status update.
 
 Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
+
+## Recovering runs after a restart
+
+Scheduled workflows run on the evented engine. By default, a run that's in progress when the process stops stays `running` after a restart. To have Mastra recover these runs on boot, set `autoRestartActiveRuns: true`:
+
+```typescript title="src/mastra/workflows/price-check.ts"
+export const priceCheck = createWorkflow({
+  id: 'price-check',
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  schedule: { cron: '0 */6 * * *' },
+  options: { autoRestartActiveRuns: true },
+})
+```
+
+On boot, `mastra.restartAllActiveWorkflowRuns()` continues each recovered run from the step that was running. Completed steps don't run again, but the interrupted step runs again from the start. Only opt in if that step is safe to repeat.
+
+:::warning
+Only use `autoRestartActiveRuns` with a single Mastra instance. The boot sweep restarts every run marked `running` in storage and can't tell whether another instance is still executing it, because there is no lease or lock yet. In a multi-instance deployment that shares storage, a replica that boots while another is mid-step runs that step a second time.
+:::
 
 ## Deployment topology
 
