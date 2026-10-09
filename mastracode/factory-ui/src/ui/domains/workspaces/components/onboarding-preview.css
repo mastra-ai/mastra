@@ -76,8 +76,15 @@
 }
 
 /* A single SVG persists through every step. Only its HTML annotations fade. */
+.onboarding-preview {
+  display: grid;
+  align-content: center;
+  align-self: start;
+  height: calc(100dvh - 5rem);
+}
 .onboarding-diagram {
   aspect-ratio: 5 / 4;
+  width: min(100%, calc((100dvh - 7rem) * 1.25));
 }
 .onboarding-intake-card {
   left: var(--intake-1-x, 9%);
@@ -113,7 +120,7 @@
   opacity: var(--intake-2-opacity, 1);
 }
 /* A visual earns its space; the form stays reachable on short screens. */
-@media (max-width: 1023px) {
+@media (max-width: 899px) {
   .onboarding-page {
     height: 100dvh;
     min-height: 0;
@@ -167,10 +174,11 @@
   .onboarding-preview {
     grid-area: visual;
     container-type: size;
-    display: block;
     padding: 0;
     min-height: 0;
     width: 100%;
+    height: 100%;
+    align-self: stretch;
   }
   .onboarding-diagram {
     width: min(100cqw, 125cqh, 400px);
@@ -189,7 +197,7 @@
     display: none;
   }
 }
-@media (min-width: 600px) and (max-width: 1023px) {
+@media (min-width: 600px) and (max-width: 899px) {
   .onboarding-layout {
     padding-inline: 40px;
   }

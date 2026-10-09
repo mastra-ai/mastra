@@ -23,12 +23,11 @@ export function OnboardingFigure({
   useEffect(() => {
     const element = stage.current;
     if (!element) return;
-    const desktop = window.matchMedia('(min-width: 1024px)');
     let mounted = false;
     let stop = () => {};
     function syncVisibility() {
       if (!element) return;
-      const visible = desktop.matches || (element.clientWidth >= 260 && element.clientHeight >= 208);
+      const visible = element.clientWidth > 0 && element.clientHeight > 0;
       if (visible === mounted) return;
       stop();
       mounted = visible;
@@ -74,11 +73,9 @@ export function OnboardingFigure({
       };
     }
     syncVisibility();
-    desktop.addEventListener('change', syncVisibility);
     const observer = new ResizeObserver(syncVisibility);
     observer.observe(element);
     return () => {
-      desktop.removeEventListener('change', syncVisibility);
       observer.disconnect();
       stop();
     };

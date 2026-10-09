@@ -101,13 +101,13 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
-      <div className="onboarding-layout grid min-h-[calc(100dvh-5rem)] w-full grid-cols-1 lg:grid-cols-[minmax(400px,44%)_minmax(0,1fr)]">
-        <section className="onboarding-form-column relative z-3 flex min-w-0 flex-col px-6 py-5 sm:px-10 lg:px-12 lg:py-8 xl:px-16">
-          <div className="onboarding-brand mb-4 flex items-center gap-3 lg:mb-8">
+      <div className="onboarding-layout grid min-h-[calc(100dvh-5rem)] w-full grid-cols-1 min-[900px]:grid-cols-[minmax(400px,44%)_minmax(0,1fr)]">
+        <section className="onboarding-form-column relative z-3 flex min-w-0 flex-col px-6 py-5 min-[900px]:px-10 min-[900px]:py-8 lg:px-12 xl:px-16">
+          <div className="onboarding-brand mb-4 flex items-center gap-3 min-[900px]:mb-8">
             <LogoWithoutText className="w-6" aria-hidden="true" />
             <Txt variant="label">Factory</Txt>
           </div>
-          <div className="onboarding-content w-full max-w-lg lg:pt-20">
+          <div className="onboarding-content w-full max-w-lg min-[900px]:pt-20">
             <div className="onboarding-back mb-6">
               <div className="h-8">
                 {previousStep && (
