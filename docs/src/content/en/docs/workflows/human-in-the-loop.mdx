@@ -167,6 +167,42 @@ const step1 = createStep({
 })
 ```
 
+#### When every run must reach a terminal step
+
+`bail()` skips any logic after the rejecting step, which is the right behavior for simple approvals. Some workflows, however, must always run a terminal step — audit logging, result persistence, resource cleanup — even when a human rejects. For those cases, reject softly instead of bailing: record the rejection in the step output, route around the remaining work with control flow, and keep the terminal step unconditional.
+
+```typescript
+const approvalStep = createStep({
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { approved, feedback } = resumeData ?? {}
+    if (approved === undefined) {
+      return await suspend({ reason: 'Human approval required.' })
+    }
+    // Soft reject: the decision travels in the output, not via bail()
+    return { approved, feedback }
+  },
+})
+
+const cleanupStep = createStep({
+  execute: async ({ inputData }) => {
+    // Always runs: persist outcome, release resources, write audit trail
+    return { recorded: true, approved: inputData.approved }
+  },
+})
+
+const workflow = createWorkflow({})
+  .then(approvalStep)
+  .branch([
+    // Only continue with the real work when approved
+    [async ({ inputData }) => inputData.approved === true, workStep],
+    [async () => true, noopStep],
+  ])
+  .then(cleanupStep)
+  .commit()
+```
+
+This pattern pairs well with [`.dountil()` loops](/docs/workflows/control-flow#looping-with-dountil): the loop's exit condition can treat a rejection as terminal feedback, while steps after the loop still execute for every run.
+
 ## Multi-turn human input
 
 For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
