@@ -73,6 +73,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@mastra/hono": "workspace:*",
     "@internal/lint": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",

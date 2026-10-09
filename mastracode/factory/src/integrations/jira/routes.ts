@@ -1,7 +1,7 @@
 /**
  * Mastra `apiRoutes` for the Jira intake feature.
  *
- * Registered alongside the other `/web/*` routes, behind the host auth gate.
+ * Registered alongside the other `/web/*` routes, behind core route auth.
  * Mirrors the Linear module minus everything OAuth: there is no
  * connect/callback flow, no state signer, and no per-org connection storage —
  * Jira credentials are deployment-global constructor config on the
@@ -167,7 +167,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   routes.push(
     registerApiRoute('/web/jira/status', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         if (!enabled || !jira || !intake) {
           return c.json({
@@ -220,7 +219,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   routes.push(
     registerApiRoute('/web/jira/projects', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -247,7 +245,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   routes.push(
     registerApiRoute('/web/jira/issues', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -322,7 +319,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   routes.push(
     registerApiRoute('/web/jira/issues/:identifier', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;

@@ -783,7 +783,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return [
       registerApiRoute('/web/factory/projects/:id/knowledge/scopes', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
@@ -964,7 +963,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/search', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
@@ -1063,7 +1061,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/subgraph', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveView(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -1430,7 +1427,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       // ── Node flyout payload: details + provenance-rich records ───────────────
       registerApiRoute('/web/factory/projects/:id/knowledge/nodes/:nodeId', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveView(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -1502,7 +1498,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       // ── Recent activity feed for the live-arrival affordance ───────────────
       registerApiRoute('/web/factory/projects/:id/knowledge/activity', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveView(loose(c));
           if ('response' in resolved) return resolved.response;

@@ -13,7 +13,7 @@
  *   custom provider routes.
  *
  * Snapshots are primed per request by `createCustomProvidersPrimer` (mounted
- * after the web auth gate) and invalidated on writes via
+ * after authentication (`afterAuth`)) and invalidated on writes via
  * `invalidateCustomProvidersSnapshots` so changes are visible immediately.
  */
 
@@ -135,7 +135,7 @@ export function resetCustomProvidersSourceForTests(): void {
 }
 
 /**
- * Middleware mounted after the web auth gate: primes the caller's org snapshot
+ * Middleware mounted after authentication (`afterAuth`): primes the caller's org snapshot
  * so the request's first model call sees their custom providers without an
  * async seam in model resolution. Cheap when fresh (TTL check), best-effort
  * when not — a failed hydrate serves the last snapshot, never blocks a request.

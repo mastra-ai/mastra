@@ -514,7 +514,6 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
     return [
       registerApiRoute('/web/github/status', {
         method: 'GET',
-        requiresAuth: false,
         handler: c =>
           c.json({
             enabled: false,
@@ -536,7 +535,6 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
     return [
       registerApiRoute('/web/linear/status', {
         method: 'GET',
-        requiresAuth: false,
         handler: c =>
           c.json({
             enabled: false,
@@ -556,7 +554,6 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
     return [
       registerApiRoute('/web/jira/status', {
         method: 'GET',
-        requiresAuth: false,
         handler: c =>
           c.json({
             enabled: false,
@@ -591,7 +588,6 @@ function absentSlackChannelAccountsRoutes(): ApiRoute[] {
   return [
     registerApiRoute('/web/channel-accounts', {
       method: 'GET',
-      requiresAuth: false,
       handler: c => c.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
     }),
   ];
