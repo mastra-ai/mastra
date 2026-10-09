@@ -222,7 +222,8 @@ async function emitAgentAudit(
   }
 }
 
-const changeRequestSchema = z.object({
+const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
+const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
 });
 
@@ -246,6 +247,8 @@ export async function createSourceControlTools({
     await describeSessionRepositories(controller.resourceId, providers),
   );
   const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
+  const targetFor = (input: { repository?: string }) =>
+    withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
   const reference = async (target: SessionTarget) => ({
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
@@ -292,9 +295,9 @@ export async function createSourceControlTools({
     source_control_push_branch: createTool({
       id: 'source_control_push_branch',
       description: `Push the active Factory session branch to its connected source-control provider. Credentials are resolved and scrubbed server-side; this tool takes no token, remote, or branch arguments. ${repositoryArgument}`,
-      inputSchema: z.object({ repository: z.string().trim().min(1).optional() }),
+      inputSchema: repositorySchema,
       execute: async (input, { workspace }) => {
-        const target = await withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
+        const target = await targetFor(input);
         const sandbox = executableSandbox(workspace?.sandbox);
         const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
         const access = await target.provider.versionControl.getRepositoryAccess({
@@ -320,11 +323,10 @@ export async function createSourceControlTools({
     }),
     source_control_get_change_request: createTool({
       id: 'source_control_get_change_request',
-      description:
-        'Read a pull request or merge request in the active Factory repository by its numeric repository-local ID.',
+      description: `Read a pull request or merge request in the active Factory repository by its numeric repository-local ID. ${repositoryArgument}`,
       inputSchema: changeRequestSchema,
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.getPullRequest({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -333,10 +335,10 @@ export async function createSourceControlTools({
     }),
     source_control_list_change_request_reviews: createTool({
       id: 'source_control_list_change_request_reviews',
-      description: 'List submitted reviews and approvals on a pull request or merge request in the active repository.',
+      description: `List submitted reviews and approvals on a pull request or merge request in the active repository. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({ cursor: z.string().trim().min(1).optional() }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.listReviews({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -347,14 +349,13 @@ export async function createSourceControlTools({
     source_control_create_change_request: createTool({
       id: 'source_control_create_change_request',
       description: `Open a pull request or merge request from the active Factory session branch into the repository's base branch (the session's persisted base branch in its own repository, the linked or default branch elsewhere). Push the branch with source_control_push_branch first. ${repositoryArgument}`,
-      inputSchema: z.object({
+      inputSchema: repositorySchema.extend({
         title: z.string().trim().min(1),
         body: z.string().optional(),
         draft: z.boolean().optional(),
-        repository: z.string().trim().min(1).optional(),
       }),
       execute: async input => {
-        const target = await withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
+        const target = await targetFor(input);
         const baseBranch = target.ownRepository
           ? target.session.baseBranch
           : (target.projectRepository.branch ?? target.repository.defaultBranch);
@@ -391,7 +392,7 @@ export async function createSourceControlTools({
     }),
     source_control_update_change_request: createTool({
       id: 'source_control_update_change_request',
-      description: 'Update the title, body, target branch, or open/closed state of a change request.',
+      description: `Update the title, body, target branch, or open/closed state of a change request. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({
         title: z.string().trim().min(1).optional(),
         body: z.string().nullable().optional(),
@@ -399,7 +400,7 @@ export async function createSourceControlTools({
         state: z.enum(['open', 'closed']).optional(),
       }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.updatePullRequest({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -412,10 +413,10 @@ export async function createSourceControlTools({
     }),
     source_control_comment_change_request: createTool({
       id: 'source_control_comment_change_request',
-      description: 'Add a top-level comment to a pull request or merge request in the active repository.',
+      description: `Add a top-level comment to a pull request or merge request in the active repository. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({ body: z.string().trim().min(1) }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.createComment({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -425,10 +426,10 @@ export async function createSourceControlTools({
     }),
     source_control_list_change_request_comments: createTool({
       id: 'source_control_list_change_request_comments',
-      description: 'List top-level comments on a pull request or merge request in the active repository.',
+      description: `List top-level comments on a pull request or merge request in the active repository. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({ cursor: z.string().trim().min(1).optional() }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.listComments({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -438,10 +439,10 @@ export async function createSourceControlTools({
     }),
     source_control_update_change_request_comment: createTool({
       id: 'source_control_update_change_request_comment',
-      description: 'Edit a top-level pull-request or merge-request comment in the active repository.',
-      inputSchema: z.object({ commentId: z.string().trim().min(1), body: z.string().trim().min(1) }),
+      description: `Edit a top-level pull-request or merge-request comment in the active repository. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({ commentId: z.string().trim().min(1), body: z.string().trim().min(1) }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.updateComment({
           ...(await reference(target)),
           commentId: input.commentId,
@@ -451,10 +452,10 @@ export async function createSourceControlTools({
     }),
     source_control_delete_change_request_comment: createTool({
       id: 'source_control_delete_change_request_comment',
-      description: 'Delete a top-level pull-request or merge-request comment in the active repository.',
-      inputSchema: z.object({ commentId: z.string().trim().min(1) }),
+      description: `Delete a top-level pull-request or merge-request comment in the active repository. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({ commentId: z.string().trim().min(1) }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         await target.provider.versionControl.deleteComment({
           ...(await reference(target)),
           commentId: input.commentId,
@@ -464,11 +465,10 @@ export async function createSourceControlTools({
     }),
     source_control_list_diff_comments: createTool({
       id: 'source_control_list_diff_comments',
-      description:
-        'List line-anchored review comments and discussion replies on a pull request or merge request in the active repository.',
+      description: `List line-anchored review comments and discussion replies on a pull request or merge request in the active repository. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({ cursor: z.string().trim().min(1).optional() }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.listReviewComments({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -478,8 +478,7 @@ export async function createSourceControlTools({
     }),
     source_control_create_diff_comment: createTool({
       id: 'source_control_create_diff_comment',
-      description:
-        'Create a line-anchored review comment or reply to an existing diff discussion. Use replyToId alone for a reply; otherwise provide commitId, path, line, and side.',
+      description: `Create a line-anchored review comment or reply to an existing diff discussion. Use replyToId alone for a reply; otherwise provide commitId, path, line, and side. ${repositoryArgument}`,
       // A root-level union is not representable as provider function parameters, which must be
       // an object schema, so both modes share one object shape and a refinement.
       inputSchema: changeRequestSchema
@@ -509,7 +508,7 @@ export async function createSourceControlTools({
           },
         ),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         const base = {
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -540,10 +539,10 @@ export async function createSourceControlTools({
     }),
     source_control_update_diff_comment: createTool({
       id: 'source_control_update_diff_comment',
-      description: 'Edit a line-anchored review comment or discussion reply in the active repository.',
-      inputSchema: z.object({ commentId: z.string().trim().min(1), body: z.string().trim().min(1) }),
+      description: `Edit a line-anchored review comment or discussion reply in the active repository. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({ commentId: z.string().trim().min(1), body: z.string().trim().min(1) }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.updateReviewComment({
           ...(await reference(target)),
           commentId: input.commentId,
@@ -553,10 +552,10 @@ export async function createSourceControlTools({
     }),
     source_control_delete_diff_comment: createTool({
       id: 'source_control_delete_diff_comment',
-      description: 'Delete a line-anchored review comment or discussion reply in the active repository.',
-      inputSchema: z.object({ commentId: z.string().trim().min(1) }),
+      description: `Delete a line-anchored review comment or discussion reply in the active repository. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({ commentId: z.string().trim().min(1) }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         await target.provider.versionControl.deleteReviewComment({
           ...(await reference(target)),
           commentId: input.commentId,
@@ -566,14 +565,13 @@ export async function createSourceControlTools({
     }),
     source_control_resolve_diff_thread: createTool({
       id: 'source_control_resolve_diff_thread',
-      description:
-        'Resolve or reopen the review thread containing a diff comment. Providers without resolvable threads return an explicit limitation.',
-      inputSchema: z.object({
+      description: `Resolve or reopen the review thread containing a diff comment. Providers without resolvable threads return an explicit limitation. ${repositoryArgument}`,
+      inputSchema: repositorySchema.extend({
         commentId: z.string().trim().min(1),
         resolved: z.boolean().default(true),
       }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         const resolveReviewThread = target.provider.versionControl.resolveReviewThread;
         if (!resolveReviewThread) {
           throw new Error(`${target.provider.id} does not support resolving review threads.`);
@@ -588,8 +586,7 @@ export async function createSourceControlTools({
     }),
     source_control_review_change_request: createTool({
       id: 'source_control_review_change_request',
-      description:
-        'Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly.',
+      description: `Submit an approve, request-changes, or comment review to a change request. Provider limitations are returned explicitly. ${repositoryArgument}`,
       inputSchema: changeRequestSchema
         .extend({
           event: z.enum(['approve', 'request-changes', 'comment']),
@@ -619,7 +616,7 @@ export async function createSourceControlTools({
           }
         }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         const reviewedHead = reviewedHeadFromBody(input.body);
         if (reviewedHead) {
           const pullRequest = await target.provider.versionControl.getPullRequest({
@@ -656,14 +653,13 @@ export async function createSourceControlTools({
     }),
     source_control_request_reviewers: createTool({
       id: 'source_control_request_reviewers',
-      description:
-        'Request individual or team reviewers on a pull request or merge request. Provider limitations are returned explicitly.',
+      description: `Request individual or team reviewers on a pull request or merge request. Provider limitations are returned explicitly. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({
         users: z.array(z.string().trim().min(1)).default([]),
         teams: z.array(z.string().trim().min(1)).default([]),
       }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.requestReviewers({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -674,14 +670,14 @@ export async function createSourceControlTools({
     }),
     source_control_merge_change_request: createTool({
       id: 'source_control_merge_change_request',
-      description: 'Merge a pull request or merge request using the requested provider-supported merge method.',
+      description: `Merge a pull request or merge request using the requested provider-supported merge method. ${repositoryArgument}`,
       inputSchema: changeRequestSchema.extend({
         method: z.enum(['merge', 'squash', 'rebase']).optional(),
         commitTitle: z.string().optional(),
         commitMessage: z.string().optional(),
       }),
       execute: async input => {
-        const target = await withTarget();
+        const target = await targetFor(input);
         return target.provider.versionControl.mergePullRequest({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
