@@ -97,7 +97,7 @@ function EnvironmentBlocks({
       <SettingsSubsection
         scope="factory"
         title="Repositories"
-        description="Repositories cloned into each new sandbox, in this order."
+        description="Each repository is pre-cloned and set up in the sandbox for new sessions, in this order."
       >
         <RepositoriesBlock
           repositories={environment.repositories}
