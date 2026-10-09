@@ -833,3 +833,56 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
     });
   });
 }
+
+export interface KnowledgeSchemaLatchFixture {
+  /** A store whose backing storage already holds an incompatible Knowledge layout, before init(). */
+  store: KnowledgeStorage;
+  /** Removes the incompatible layout out-of-band so a later init() can succeed. */
+  repair: () => Promise<void>;
+}
+
+/** Shared contract: a failed schema check latches the domain until init() or dangerouslyReset() succeeds. */
+export function createKnowledgeSchemaLatchTests(createIncompatible: () => Promise<KnowledgeSchemaLatchFixture>) {
+  describe('Knowledge schema init latch', () => {
+    async function latched() {
+      const fixture = await createIncompatible();
+      const initError = await fixture.store.init().then(
+        () => undefined,
+        error => error as Error,
+      );
+      expect(initError?.name).toBe('KnowledgeSchemaError');
+      return { ...fixture, initError: initError! };
+    }
+
+    it('rethrows the schema error from reads and writes', async () => {
+      const { store, initError } = await latched();
+      await expect(store.createNode({ name: 'New', scopeIds: [] })).rejects.toBe(initError);
+      await expect(store.getNode('old')).rejects.toBe(initError);
+    });
+
+    it('stays latched when a retry fails again', async () => {
+      const { store, initError } = await latched();
+      const retryError = await store.init().then(
+        () => undefined,
+        error => error as Error,
+      );
+      expect(retryError?.name).toBe('KnowledgeSchemaError');
+      await expect(store.getNode('old')).rejects.toBe(retryError ?? initError);
+    });
+
+    it('clears once a retry succeeds', async () => {
+      const { store, repair } = await latched();
+      await repair();
+      await store.init();
+      const node = await store.createNode({ name: 'New', scopeIds: [] });
+      expect(await store.getNode(node.id)).toMatchObject({ name: 'New' });
+    });
+
+    it('clears after a successful reset', async () => {
+      const { store } = await latched();
+      await store.dangerouslyReset();
+      const node = await store.createNode({ name: 'New', scopeIds: [] });
+      expect(await store.getNode(node.id)).toMatchObject({ name: 'New' });
+    });
+  });
+}

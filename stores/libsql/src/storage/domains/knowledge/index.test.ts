@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { InMemoryStore, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHEMA } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +21,19 @@ createKnowledgeStorageTests(() => {
   const client = createClient({ url: `file:${path}` });
   fixtures.push({ client, path });
   return new KnowledgeLibSQL({ client });
+});
+createKnowledgeSchemaLatchTests(async () => {
+  const path = join(tmpdir(), `mastra-knowledge-latch-${randomUUID()}.db`);
+  const client = createClient({ url: `file:${path}` });
+  fixtures.push({ client, path });
+  await client.execute('CREATE TABLE mastra_knowledge_nodes (id TEXT PRIMARY KEY, name TEXT)');
+  await client.execute("INSERT INTO mastra_knowledge_nodes (id, name) VALUES ('old', 'Old')");
+  return {
+    store: new KnowledgeLibSQL({ client }),
+    repair: async () => {
+      await client.execute('DROP TABLE mastra_knowledge_nodes');
+    },
+  };
 });
 afterEach(async () => {
   for (const { client, path } of fixtures.splice(0)) {
@@ -254,26 +267,6 @@ describe('KnowledgeLibSQL schema completion marker', () => {
       const threads = await client.execute('SELECT id FROM mastra_threads');
       expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
       await new KnowledgeLibSQL({ client }).init();
-    } finally {
-      client.close();
-    }
-  });
-
-  it('rethrows the init schema error from domain methods until reset', async () => {
-    const client = createClient({ url: ':memory:' });
-    try {
-      await client.execute('CREATE TABLE mastra_knowledge_nodes (id TEXT PRIMARY KEY, name TEXT)');
-      await client.execute("INSERT INTO mastra_knowledge_nodes (id, name) VALUES ('old', 'Old')");
-      const store = new KnowledgeLibSQL({ client });
-      const initError = await store.init().catch(error => error);
-      expect(initError).toBeInstanceOf(KnowledgeSchemaError);
-
-      await expect(store.createNode({ name: 'New', scopeIds: [] })).rejects.toBe(initError);
-      await expect(store.getNode('old')).rejects.toBe(initError);
-
-      await store.dangerouslyReset();
-      const node = await store.createNode({ name: 'New', scopeIds: [] });
-      expect(await store.getNode(node.id)).toMatchObject({ name: 'New' });
     } finally {
       client.close();
     }

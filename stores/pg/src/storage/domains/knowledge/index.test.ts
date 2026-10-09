@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KnowledgeSchemaError,
   MastraCompositeStore,
@@ -28,6 +28,20 @@ createKnowledgeStorageTests(async () => {
   schemas.push(schemaName);
   await pool.query(`CREATE SCHEMA "${schemaName}"`);
   return new KnowledgePG({ pool, schemaName });
+});
+
+createKnowledgeSchemaLatchTests(async () => {
+  const schemaName = `knowledge_latch_${process.pid}_${schemaCounter++}`;
+  schemas.push(schemaName);
+  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  await pool.query(`CREATE TABLE "${schemaName}".mastra_knowledge_nodes (id TEXT PRIMARY KEY, name TEXT)`);
+  await pool.query(`INSERT INTO "${schemaName}".mastra_knowledge_nodes (id, name) VALUES ('old', 'Old')`);
+  return {
+    store: new KnowledgePG({ pool, schemaName }),
+    repair: async () => {
+      await pool.query(`DROP TABLE "${schemaName}".mastra_knowledge_nodes`);
+    },
+  };
 });
 
 afterAll(async () => {
@@ -148,24 +162,6 @@ describe('KnowledgePG schema completion marker', () => {
     const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
     expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
     await new KnowledgePG({ pool, schemaName }).init();
-  });
-
-  it('rethrows the init schema error from domain methods until reset', async () => {
-    const schemaName = `knowledge_latch_${process.pid}_${schemaCounter++}`;
-    schemas.push(schemaName);
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
-    await pool.query(`CREATE TABLE "${schemaName}".mastra_knowledge_nodes (id TEXT PRIMARY KEY, name TEXT)`);
-    await pool.query(`INSERT INTO "${schemaName}".mastra_knowledge_nodes (id, name) VALUES ('old', 'Old')`);
-    const store = new KnowledgePG({ pool, schemaName });
-    const initError = await store.init().catch(error => error);
-    expect(initError).toBeInstanceOf(KnowledgeSchemaError);
-
-    await expect(store.createNode({ name: 'New', scopeIds: [] })).rejects.toBe(initError);
-    await expect(store.getNode('old')).rejects.toBe(initError);
-
-    await store.dangerouslyReset();
-    const node = await store.createNode({ name: 'New', scopeIds: [] });
-    expect(await store.getNode(node.id)).toMatchObject({ name: 'New' });
   });
 
   it('refuses to reset when unrelated objects depend on Knowledge tables', async () => {
