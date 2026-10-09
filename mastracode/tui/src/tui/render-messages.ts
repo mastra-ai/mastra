@@ -1058,7 +1058,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
           // Render ask_user with the proper question component
           if (toolName === 'ask_user' && hasResult) {
             const askArgs = toolArgs as
-              { question?: string; options?: Array<{ label: string; description?: string }> } | undefined;
+              | { question?: string; options?: Array<{ label: string; description?: string }> }
+              | undefined;
             const answer = typeof resultValue === 'string' ? resultValue : formatToolResult(resultValue);
             const cancelled = answer === '(skipped)';
             if (askArgs?.question) {

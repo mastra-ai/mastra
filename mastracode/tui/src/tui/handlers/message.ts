@@ -363,7 +363,8 @@ export async function handlePackFallbackState(
         if (!isOriginThreadActive()) return;
 
         const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
-          string | undefined;
+          | string
+          | undefined;
         const currentModeId = ectx.state.session.mode.get();
         const runtimeSettings = {
           ...settings,
