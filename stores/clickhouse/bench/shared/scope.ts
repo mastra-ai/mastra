@@ -62,10 +62,12 @@ export function injectProjectScope<T extends CompiledClickHouseTraceQuery>(
   const nameIndex = countOccurrences(compiled.query, 'FROM mastra_trace_span_names\n');
   // A narrow current-roots table (QX19) replaces the seed and the re-read with one scoped scan.
   const narrow = countOccurrences(compiled.query, 'FROM mastra_trace_current_roots\n') > 0 ? -1 : 0;
+  // One root per trace (QX24): root_scope reads the window once, without a seed.
+  const oneRoot = countOccurrences(compiled.query, 'FROM mastra_trace_roots r /* one root per trace */\n') > 0 ? -1 : 0;
   return addProjectAfterTenant(
     compiled,
     projectId,
-    2 + keyed + windows + deltaIndex + nameIndex + narrow + relations.length,
+    2 + keyed + windows + deltaIndex + nameIndex + narrow + oneRoot + relations.length,
   );
 }
 
