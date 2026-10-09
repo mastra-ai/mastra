@@ -14,6 +14,11 @@ describe('withToolTitle MCP App pointer', () => {
     }
   });
 
+  it('only forwards resourceUri and serverId from _meta.ui', () => {
+    const extra = { mcp: { _meta: { ui: { resourceUri: 'ui://w/view', serverId: 'w', secret: 'x' } } } } as any;
+    expect(withToolTitle({ type: 'tool-call', payload: {} }, extra).payload.toolMetadata.app).toEqual(app);
+  });
+
   it('leaves tools without a UI pointer and non-tool chunks unchanged', () => {
     const chunk = { type: 'tool-call', payload: { toolCallId: 'c' } };
     expect(withToolTitle(chunk, { mcp: { _meta: {} } } as any)).toBe(chunk);

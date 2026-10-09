@@ -1,3 +1,4 @@
+import { readUIMessageStream } from '@internal/ai-v6';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
@@ -541,5 +542,27 @@ describe('MCP App pointer', () => {
   it('omits toolMetadata when there is nothing to carry', () => {
     const available = toUI({ type: 'tool-call', payload: { toolCallId: 'c1', toolName: 't', args: {} } });
     expect(available).not.toHaveProperty('toolMetadata');
+  });
+
+  it('survives AI SDK v6 client parsing onto the tool UI part', async () => {
+    const chunks = [
+      { type: 'start' },
+      toUI({
+        type: 'tool-call-input-streaming-start',
+        payload: { toolCallId: 'c1', toolName: 't', toolMetadata: { app } },
+      }),
+      toUI({ type: 'tool-call', payload: { toolCallId: 'c1', toolName: 't', args: {}, toolMetadata: { app } } }),
+      { type: 'finish' },
+    ];
+    const stream = new ReadableStream({
+      start(controller) {
+        chunks.forEach(c => controller.enqueue(c));
+        controller.close();
+      },
+    });
+    let last: any;
+    for await (const message of readUIMessageStream({ stream })) last = message;
+    const part = last.parts.find((p: any) => p.toolCallId === 'c1');
+    expect(part.toolMetadata).toEqual({ app });
   });
 });

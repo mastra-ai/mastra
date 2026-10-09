@@ -17,7 +17,12 @@ export function getMcpAppPointer(tool: ResolvedTool): Record<string, unknown> | 
   if (!ui || typeof ui !== 'object' || typeof (ui as { resourceUri?: unknown }).resourceUri !== 'string') {
     return undefined;
   }
-  return { ...(ui as Record<string, unknown>), mimeType: MCP_APP_MIME_TYPE };
+  const { resourceUri, serverId } = ui as { resourceUri: string; serverId?: unknown };
+  return {
+    resourceUri,
+    ...(typeof serverId === 'string' ? { serverId } : {}),
+    mimeType: MCP_APP_MIME_TYPE,
+  };
 }
 
 export function withToolTitle<T extends { type: string; payload?: any }>(chunk: T, tool: ResolvedTool): T {
