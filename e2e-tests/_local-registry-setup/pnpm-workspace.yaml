@@ -32,5 +32,7 @@ overrides:
   'raw-body@<4.0.0': 4.0.0
   # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
   'http-cache-semantics@<4.3.0': 4.3.0
+  # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
+  'handlebars@<4.7.10': 4.7.10
 patchedDependencies:
   'body-parser@1.20.6': patches/body-parser@1.20.6.patch
