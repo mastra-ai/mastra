@@ -45,8 +45,12 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Claim a run for an execution. Succeeds when the run has no live owner, or
-   * when `force` is set, and increments the run's generation. Lease expiry is
-   * computed on the store's clock.
+   * when `force` is set, and increments the run's generation. A run with no
+   * record starts at the store's clock in epoch milliseconds (at least 1)
+   * rather than 1, so a run claimed again after `workflows.runOwnership`
+   * retention pruned its record still gets a higher generation than any fence
+   * or event left from before. Lease expiry is computed on the store's clock.
+   * Every claim, renewal and release sets `updatedAt` from the store's clock.
    */
   async claimRunOwnership(_args: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
@@ -62,9 +66,9 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Give up a claim by clearing its lease, so the run can be claimed without
-   * `force`. The record keeps its generation and owner: claims stay
-   * monotonic, and the released owner's late writes are still accepted until
-   * the run is claimed again. Returns false if the claim was no longer current.
+   * `force`. The record keeps its generation and owner, and the released
+   * owner's late writes are still accepted until the run is claimed again or
+   * its record is pruned. Returns false if the claim was no longer current.
    */
   async releaseRunOwnership(_args: RunFence): Promise<boolean> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);

@@ -84,8 +84,8 @@ export abstract class MemoryStorage extends StorageDomain {
   }): Promise<StorageThreadType | null>;
 
   /**
-   * Whether this adapter implements run fencing: `raiseRunFence`, and
-   * rejecting the writes listed below when their fence is no longer the run's
+   * Whether this adapter implements run fencing: `raiseRunFence`,
+   * `retireRunFence`, and rejecting the writes listed below when their fence is no longer the run's
    * current fence, atomically with the write. A write's fence is its `fence`
    * argument, otherwise the one `resolveRunFence()` returns.
    *
@@ -115,9 +115,23 @@ export abstract class MemoryStorage extends StorageDomain {
    * Make `fence` the run's current fence in this domain, unless the domain
    * already holds a newer generation for the run. Returns whether `fence` is
    * current afterwards. Called once a run is claimed in the workflows domain,
-   * so that writes from older claims are rejected here too.
+   * so that writes from older claims are rejected here too. Clears the
+   * fence's `retiredAt` whenever it writes, so a fence raised again is not
+   * pruned while its execution runs.
    */
   async raiseRunFence(_fence: RunFence): Promise<boolean> {
+    throw runFencingNotSupportedError('memory', this.constructor.name);
+  }
+
+  /**
+   * Mark `fence` as retired once the execution holding it has settled, by
+   * setting `retiredAt` from the store's clock. Only takes effect while
+   * `fence` is still the run's current fence, so a late retire cannot mark a
+   * newer execution's fence. Returns whether it took effect. Retiring does not
+   * change which writes are accepted; it only makes the fence eligible for
+   * `memory.runFences` retention.
+   */
+  async retireRunFence(_fence: RunFence): Promise<boolean> {
     throw runFencingNotSupportedError('memory', this.constructor.name);
   }
 

@@ -109,7 +109,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     };
 
     describe('ownership', () => {
-      it('claims an unowned run at generation 1', async ctx => {
+      it("claims an unowned run at a generation seeded from the store's clock", async ctx => {
         if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         expect(await workflows.getRunOwnership({ runId })).toBeNull();
@@ -118,15 +118,19 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         const result = await claim(runId, 'owner-a');
 
         expect(result.acquired).toBe(true);
-        expect(result.record).toMatchObject({ runId, generation: 1, ownerId: 'owner-a', live: true });
+        expect(result.record).toMatchObject({ runId, ownerId: 'owner-a', live: true });
         // The store's clock may differ from ours; allow generous skew.
+        const { generation } = result.record!;
+        expect(Number.isSafeInteger(generation)).toBe(true);
+        expect(generation).toBeGreaterThan(before - 60_000);
+        expect(generation).toBeLessThan(before + 60_000);
         const expiresAt = result.record!.leaseExpiresAt!.getTime();
         expect(expiresAt).toBeGreaterThan(before + LEASE_MS - 60_000);
         expect(expiresAt).toBeLessThan(before + LEASE_MS + 60_000);
 
         expect(await workflows.getRunOwnership({ runId })).toMatchObject({
           runId,
-          generation: 1,
+          generation,
           ownerId: 'owner-a',
           live: true,
         });
@@ -135,15 +139,15 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       it('refuses to claim a live run without force, and takes it over with force', async ctx => {
         if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
-        await claimed(runId, 'owner-a');
+        const fenceA = await claimed(runId, 'owner-a');
 
         const refused = await claim(runId, 'owner-b');
         expect(refused.acquired).toBe(false);
-        expect(refused.record).toMatchObject({ generation: 1, ownerId: 'owner-a', live: true });
+        expect(refused.record).toMatchObject({ generation: fenceA.generation, ownerId: 'owner-a', live: true });
 
         const forced = await claim(runId, 'owner-b', { force: true });
         expect(forced.acquired).toBe(true);
-        expect(forced.record).toMatchObject({ generation: 2, ownerId: 'owner-b', live: true });
+        expect(forced.record).toMatchObject({ generation: fenceA.generation + 1, ownerId: 'owner-b', live: true });
       });
 
       it('claims a run whose lease expired without force', async ctx => {
@@ -157,7 +161,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
 
         const second = await claim(runId, 'owner-b');
         expect(second.acquired).toBe(true);
-        expect(second.record).toMatchObject({ generation: 2, ownerId: 'owner-b' });
+        expect(second.record).toMatchObject({ generation: first.record!.generation + 1, ownerId: 'owner-b' });
       });
 
       it('lets exactly one of several concurrent claims win', async ctx => {
@@ -169,34 +173,36 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
 
         const winners = results.filter(r => 'acquired' in r && r.acquired);
         expect(winners).toHaveLength(1);
+        const winner = (winners[0] as { record: { generation: number; ownerId: string } }).record;
         const owner = await workflows.getRunOwnership({ runId });
-        expect(owner).toMatchObject({ generation: 1, live: true });
-        expect(owner!.ownerId).toBe((winners[0] as { record: { ownerId: string } }).record.ownerId);
+        expect(owner).toMatchObject({ generation: winner.generation, ownerId: winner.ownerId, live: true });
       });
 
       it('lets exactly one of several concurrent forced claims that saw the same generation win', async ctx => {
         if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
-        await claimed(runId, 'owner-a');
+        const fenceA = await claimed(runId, 'owner-a');
 
         const results = await Promise.all(
           Array.from({ length: 8 }, (_, i) =>
-            claim(runId, `taker-${i}`, { force: true, expectedGeneration: 1 }).catch(error => ({ error })),
+            claim(runId, `taker-${i}`, { force: true, expectedGeneration: fenceA.generation }).catch(error => ({
+              error,
+            })),
           ),
         );
 
         expect(results.filter(r => 'acquired' in r && r.acquired)).toHaveLength(1);
-        expect(await workflows.getRunOwnership({ runId })).toMatchObject({ generation: 2 });
+        expect(await workflows.getRunOwnership({ runId })).toMatchObject({ generation: fenceA.generation + 1 });
       });
 
       it('refuses a claim whose expected generation is stale', async ctx => {
         if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
-        await claimed(runId, 'owner-a');
+        const fenceA = await claimed(runId, 'owner-a');
 
         const result = await claim(runId, 'owner-b', { force: true, expectedGeneration: 0 });
         expect(result.acquired).toBe(false);
-        expect(result.record).toMatchObject({ generation: 1, ownerId: 'owner-a' });
+        expect(result.record).toMatchObject({ generation: fenceA.generation, ownerId: 'owner-a' });
       });
 
       it('renews only while the claim is current, even after the lease expired', async ctx => {
@@ -208,12 +214,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         await sleep(SHORT_LEASE_MS * 3);
         const renewed = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS });
         expect(renewed.renewed).toBe(true);
-        expect(renewed.record).toMatchObject({ generation: 1, ownerId: 'owner-a', live: true });
+        expect(renewed.record).toMatchObject({ generation: fenceA.generation, ownerId: 'owner-a', live: true });
 
         await claimed(runId, 'owner-b', true);
         const afterTakeover = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS });
         expect(afterTakeover.renewed).toBe(false);
-        expect(afterTakeover.record).toMatchObject({ generation: 2, ownerId: 'owner-b' });
+        expect(afterTakeover.record).toMatchObject({ generation: fenceA.generation + 1, ownerId: 'owner-b' });
       });
 
       it('release clears the lease and keeps the generation and owner', async ctx => {
@@ -221,11 +227,11 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
 
-        expect(await workflows.releaseRunOwnership({ ...fenceA, generation: 99 })).toBe(false);
+        expect(await workflows.releaseRunOwnership({ ...fenceA, generation: fenceA.generation + 1 })).toBe(false);
         expect(await workflows.releaseRunOwnership({ ...fenceA, ownerId: 'someone-else' })).toBe(false);
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
         expect(await workflows.getRunOwnership({ runId })).toMatchObject({
-          generation: 1,
+          generation: fenceA.generation,
           ownerId: 'owner-a',
           leaseExpiresAt: null,
           live: false,
@@ -234,7 +240,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect((await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS })).renewed).toBe(false);
 
         const fenceB = await claimed(runId, 'owner-b');
-        expect(fenceB.generation).toBe(2);
+        expect(fenceB.generation).toBe(fenceA.generation + 1);
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(false);
       });
     });
@@ -450,9 +456,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       memory = store;
     });
 
-    const fence = (runId: string, generation: number, ownerId = `owner-${generation}`): RunFence => ({
+    // Fences carry claim generations, which start at the store's clock, so
+    // the n-th fence of a run is offset from a clock-sized base.
+    const generationBase = Date.now();
+    const fence = (runId: string, n: number, ownerId = `owner-${n}`): RunFence => ({
       runId,
-      generation,
+      generation: generationBase + n,
       ownerId,
     });
 
@@ -465,6 +474,67 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect(await memory.raiseRunFence(fence(runId, 2, 'someone-else'))).toBe(false);
       expect(await memory.raiseRunFence(fence(runId, 1))).toBe(false);
       expect(await memory.raiseRunFence(fence(runId, 3))).toBe(true);
+    });
+
+    it('retires only the current fence', async ctx => {
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const fenceA = fence(runId, 1);
+
+      expect(await memory.retireRunFence(fenceA)).toBe(false);
+      await memory.raiseRunFence(fenceA);
+      expect(await memory.retireRunFence({ ...fenceA, ownerId: 'someone-else' })).toBe(false);
+      expect(await memory.retireRunFence(fence(runId, 2, fenceA.ownerId))).toBe(false);
+      expect(await memory.retireRunFence(fenceA)).toBe(true);
+      expect(await memory.retireRunFence(fenceA)).toBe(true);
+    });
+
+    it('ignores a late retire from a superseded fence', async ctx => {
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const fenceA = fence(runId, 1);
+      const fenceB = fence(runId, 2);
+      await memory.raiseRunFence(fenceA);
+      await memory.raiseRunFence(fenceB);
+
+      expect(await memory.retireRunFence(fenceA)).toBe(false);
+      expect(await memory.retireRunFence(fenceB)).toBe(true);
+    });
+
+    it('raises and retires a retired fence again', async ctx => {
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const fenceA = fence(runId, 1);
+      const fenceB = fence(runId, 2);
+      await memory.raiseRunFence(fenceA);
+      expect(await memory.retireRunFence(fenceA)).toBe(true);
+
+      expect(await memory.raiseRunFence(fenceA)).toBe(true);
+      expect(await memory.retireRunFence(fenceA)).toBe(true);
+      expect(await memory.raiseRunFence(fenceB)).toBe(true);
+      expect(await memory.retireRunFence(fenceB)).toBe(true);
+      expect(await memory.raiseRunFence(fenceA)).toBe(false);
+    });
+
+    it('keeps accepting writes from a retired fence while it is current', async ctx => {
+      if (!(await memory.supportsRunFencing())) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const fenceA = fence(runId, 1);
+      await memory.raiseRunFence(fenceA);
+      const thread = createSampleThread();
+      await memory.saveThread({ thread, fence: fenceA });
+      expect(await memory.retireRunFence(fenceA)).toBe(true);
+
+      await memory.updateThread({ id: thread.id, title: 'retired-a', fence: fenceA });
+      await memory.saveMessages({
+        messages: [createSampleMessageV2({ threadId: thread.id, resourceId: thread.resourceId })],
+        fence: fenceA,
+      });
+      expect((await memory.getThreadById({ threadId: thread.id }))?.title).toBe('retired-a');
+      expect((await memory.listMessages({ threadId: thread.id })).messages).toHaveLength(1);
+
+      await memory.raiseRunFence(fence(runId, 2));
+      await expectFenceConflict(memory.updateThread({ id: thread.id, title: 'stale', fence: fenceA }));
     });
 
     it('accepts writes from the current fence and rejects writes from an older one', async ctx => {
