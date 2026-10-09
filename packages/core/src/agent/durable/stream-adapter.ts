@@ -28,6 +28,7 @@ import type {
   AgentStreamEvent,
   AgentChunkEventData,
   AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -111,7 +112,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
-  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when execution finishes — routed through MastraModelOutput for rich step data */
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
@@ -245,6 +246,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       threadId,
       resourceId,
     });
+
+  // Match the plain Agent (model.loop.ts), which stamps the run id onto every step payload.
+  const onStepFinishWithRunId = onStepFinish
+    ? (data: AgentStepFinishEventData) => onStepFinish({ ...data, runId })
+    : undefined;
 
   // Track subscription state
   let isSubscribed = false;
@@ -414,7 +420,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.STEP_FINISH: {
           const data = streamEvent.data as AgentStepFinishEventData;
-          await onStepFinish?.(data);
+          await onStepFinishWithRunId?.(data);
           break;
         }
 
@@ -475,7 +481,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               const steps = (data.output?.steps ?? []) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
+              // The structured object is parsed while the output drains the (now closed) chunk
+              // stream; awaiting it starts that drain when nobody is consuming the stream.
+              const object = structuredOutput?.schema
+                ? await output.object.catch(() => output._getImmediateObject())
+                : output._getImmediateObject();
               await onFinish({
+                runId,
+                ...(model.modelId && model.provider && model.version ? { model } : {}),
+                messages: messageList.get.response.aiV5.model(),
+                object,
+                usedFallbackValue: output.usedFallbackValue,
+                error: output.error,
                 // Every step's streamed text, retried attempts included — matches the main loop,
                 // whose onFinish text is everything the run streamed.
                 text: steps.length > 0 ? steps.map((s: any) => s?.text ?? '').join('') : (data.output?.text ?? ''),
@@ -727,7 +744,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     finishUsageIsTotal: true,
     options: {
       runId,
-      onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,
+      onStepFinish: onStepFinishWithRunId as MastraOnStepFinishCallback<OUTPUT> | undefined,
       // For durable agents there is only one MastraModelOutput for the whole run.
       // isLLMExecutionStep must be true so output processors run per-chunk
       // (processOutputStream / processPart path) rather than the batch

@@ -10,10 +10,7 @@
  * Two shapes are ported:
  *   - `normal` — two tool steps (`STEP_COUNT`), then an answer: three step-finish chunks in all, the
  *     extra one closing the answering step.
- *   - `abort`  — aborted once the step tool reports it is parked, so no timer decides it. Plain's
- *     abort surface (the aborted step's `tool-result` delivered a second time, the finish reported as
- *     `tripwire`) differs from the wrapped engines' and is declared below against COR-1415; every
- *     other field of the stream is still compared exactly.
+ *   - `abort`  — aborted once the step tool reports it is parked, so no timer decides it.
  *
  *   - `error`  — one tool step, then the model call itself fails (`doStream` throws). The script model
  *     is what makes this shape inexpressible to the parity helper: its recording model always turns a
@@ -26,8 +23,8 @@
  * The engines also genuinely disagree on what the callbacks themselves see — the harness's own
  * recorded pairing for the callback contract is red, and the helper does not compare callbacks — so
  * each engine's contract is pinned literally below, with plain's as the reference. Two of those
- * divergences are ticketed under COR-1390: plain's `onFinish` payload carries keys the wrappers do not,
- * and the wrappers report `onError` after both steps where plain reports it between them.
+ * divergences are ticketed under COR-1390: the wrappers report `onError` after both steps where plain
+ * reports it between them.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -42,7 +39,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import type { Deferred } from './abort-parity-support';
-import { ABORT_ARTIFACT, aborted, deferred, toolResultCount } from './abort-parity-support';
+import { aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
   EngineHandle,
   EngineParityResults,
@@ -136,7 +133,6 @@ async function runT36(variant: StreamedVariant): Promise<{
 
   const scenario: EngineParityScenario = {
     model: script,
-    ...(variant === 'abort' ? { differences: { durable: ABORT_ARTIFACT, evented: ABORT_ARTIFACT } } : {}),
     buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV2 }) => {
       const parked = deferred<void>();
       const release = deferred<void>();
@@ -217,9 +213,8 @@ const PLAIN_PUBLIC_CHUNK_TYPES = [
 
 /**
  * `Object.keys(payload).sort()` for each `onStepFinish`, measured on all three engines (harness case
- * T36, `normal` shape; the callback contract it records is `names` + `payloadKeys`). The values are
- * identical durable vs evented, so the wrapped contract is expressed as plain's list minus the
- * `runId` key only plain sends.
+ * T36, `normal` shape; the callback contract it records is `names` + `payloadKeys`). Every engine
+ * sends the same keys.
  */
 const PLAIN_STEP_FINISH_KEYS = [
   'content',
@@ -246,17 +241,7 @@ const PLAIN_STEP_FINISH_KEYS = [
   'warnings',
 ];
 
-/** Durable and evented observe the same callback contract, without plain's `runId` payload key. */
-const WRAPPED_STEP_FINISH_KEYS = PLAIN_STEP_FINISH_KEYS.filter(key => key !== 'runId');
-
-/**
- * `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above).
- * COR-1390: plain's `onFinish` payload carries `runId`, `error`, `messages`, `model`, `object` and
- * `usedFallbackValue`, none of which reach the wrapped engines' `onFinish`, so the two key sets are
- * pinned separately rather than derived from each other. Pinning the wrapped set at its current keys
- * is what makes this go stale — and red — when COR-1390 lands. The parity helper compares streams,
- * not callbacks, so the ticket is declared here instead of in `differences`.
- */
+/** `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above). */
 const PLAIN_FINISH_KEYS = [
   'content',
   'dynamicToolCalls',
@@ -285,10 +270,6 @@ const PLAIN_FINISH_KEYS = [
   'usedFallbackValue',
   'warnings',
 ];
-
-const WRAPPED_FINISH_KEYS = PLAIN_FINISH_KEYS.filter(
-  key => !['runId', 'error', 'messages', 'model', 'object', 'usedFallbackValue'].includes(key),
-);
 
 /** `onAbort` received the same key set on every engine. */
 const ON_ABORT_KEYS = ['steps', 'text'];
@@ -334,10 +315,10 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
       'step-finish',
     ],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onFinish', keys: WRAPPED_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onFinish', keys: PLAIN_FINISH_KEYS },
     ],
     requests: 3,
   },
@@ -357,27 +338,22 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
       'step-finish',
     ],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onFinish', keys: WRAPPED_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onFinish', keys: PLAIN_FINISH_KEYS },
     ],
     requests: 3,
   },
 };
 
-/**
- * The public stream plain produced for the `abort` shape: the abort lands while the step tool is
- * parked, and plain delivers that step's `tool-result` a second time before the `abort` chunk
- * (COR-1415). Pinned literally so a plain-side change — including the fix — fails here.
- */
+/** The public stream produced for the `abort` shape. */
 const PLAIN_ABORT_PUBLIC_CHUNK_TYPES = [
   'start',
   'step-start',
   'tool-call',
   'tool-result',
   'step-finish',
-  'tool-result',
   'abort',
   'finish',
 ];
@@ -396,7 +372,7 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
     callbacks: ['onStepFinish', 'onAbort'],
     onChunk: ['start', 'tool-call', 'tool-result', 'step-finish'],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
       { name: 'onAbort', keys: ON_ABORT_KEYS },
     ],
     requests: 1,
@@ -405,7 +381,7 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
     callbacks: ['onStepFinish', 'onAbort'],
     onChunk: ['start', 'tool-call', 'tool-result', 'step-finish'],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
       { name: 'onAbort', keys: ON_ABORT_KEYS },
     ],
     requests: 1,
@@ -650,14 +626,12 @@ describe('T36 callback order parity', () => {
       expect(state.payloadKeys, `${engine}: callback payload keys`).toEqual(contract.payloadKeys);
     }
 
-    // Plain's abort surface, pinned literally: the extra `tool-result` for the parked step and the
-    // `tripwire` finish reason are COR-1415, declared for the wrapped engines above.
     expect(results.plain!.turns.at(-1)!.chunkTypes, 'plain: public chunk types').toEqual(
       PLAIN_ABORT_PUBLIC_CHUNK_TYPES,
     );
     expect(results.plain!.turns.at(-1)!.finishReason, 'plain: finish reason').toBe('aborted');
-    expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('tripwire');
-    expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(2);
+    expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('abort');
+    expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(1);
   });
 
   it('reports a failed model call through onError, and never onFinish, without a throw', async () => {
@@ -699,10 +673,9 @@ describe('T36 callback order parity', () => {
 
       // harness: `each callback received the recorded payload keys`. Keyed by callback name so the
       // engines may report the same error at different points in the sequence (see the note below).
-      const stepFinishKeys = engine === 'plain' ? PLAIN_STEP_FINISH_KEYS : WRAPPED_STEP_FINISH_KEYS;
       for (const entry of state.payloadKeys) {
         expect(entry.keys, `${engine}: ${entry.name} payload keys`).toEqual(
-          entry.name === 'onError' ? ['error'] : stepFinishKeys,
+          entry.name === 'onError' ? ['error'] : PLAIN_STEP_FINISH_KEYS,
         );
       }
 

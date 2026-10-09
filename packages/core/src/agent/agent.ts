@@ -187,7 +187,7 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
-import type { AgentStepFinishEventData, AgentSuspendedEventData } from './durable/types';
+import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
@@ -8201,6 +8201,8 @@ export class Agent<
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: (runId, scope) =>
         agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub, scope),
+      subscribePendingSignals: (runId, listener) =>
+        agentThreadStreamRuntime.subscribePendingSignals(runId, listener, threadStreamPubSub),
     });
 
     // Register Mastra (if any) on the workflow for storage/observability access.
@@ -10859,7 +10861,7 @@ export class Agent<
        */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
-      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;

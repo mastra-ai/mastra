@@ -6,7 +6,10 @@ import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '@mastra/code-sdk/utils/errors';
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
-import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
 import { sendNotification } from './notify.js';
@@ -51,6 +54,41 @@ export function showInfo(state: TUIState, message: string): void {
   const component = new InfoMessageComponent([new Text(theme.fg('muted', message), 1, 0)]);
   insertChatComponentWithBoundarySpacing(state.chatContainer, component, getInsertIndexBeforePrompt(state));
   state.ui.requestRender();
+}
+
+/** Show already-styled lines as one system message. */
+export function showLines(state: TUIState, lines: string[]): void {
+  const component = new InfoMessageComponent([new Text(lines.join('\n'), 1, 0)]);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component, getInsertIndexBeforePrompt(state));
+  state.ui.requestRender();
+}
+
+const PROGRESS_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+/**
+ * Show a spinner line with elapsed seconds until the returned function is
+ * called, which removes it from the chat.
+ */
+export function showProgress(state: TUIState, label: string): () => void {
+  const text = new Text('', 1, 0);
+  const component = new InfoMessageComponent([text]);
+  const started = Date.now();
+  let frame = 0;
+  const draw = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    text.setText(`${theme.fg('accent', PROGRESS_FRAMES[frame]!)} ${label}  ${theme.fg('muted', `${seconds}s`)}`);
+    frame = (frame + 1) % PROGRESS_FRAMES.length;
+    state.ui.requestRender();
+  };
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component, getInsertIndexBeforePrompt(state));
+  draw();
+  const timer = setInterval(draw, 80);
+  return () => {
+    clearInterval(timer);
+    state.chatContainer.removeChild(component);
+    reconcileChatBoundarySpacers(state.chatContainer);
+    state.ui.requestRender();
+  };
 }
 
 export function showFormattedError(

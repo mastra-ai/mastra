@@ -20,6 +20,7 @@ import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
 import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
@@ -181,6 +182,29 @@ describe('DurableAgent.recover(runId)', () => {
     expect(entry?.workflowExecution).toBeInstanceOf(Promise);
 
     await entry?.workflowExecution;
+    cleanup();
+  });
+
+  it('restores the agent tools so the recovered model step is offered them (#25890)', async () => {
+    const lookup = createTool({ id: 'lookup', description: 'lookup', execute: async () => ({ ok: true }) });
+    const baseAgent = new Agent({
+      id: 'agent-T',
+      name: 'agent-T',
+      instructions: 'x',
+      model: makeMockModel(),
+      tools: { lookup },
+    });
+    const toolAgent = createDurableAgent({ agent: baseAgent });
+    const toolStore = new InMemoryStore();
+    void new Mastra({ agents: { 'agent-T': toolAgent as any }, storage: toolStore });
+    await seed(toolStore, 'run-tools', 'running', 'agent-T');
+    stubWorkflow(toolAgent, 'success');
+
+    const { cleanup } = await toolAgent.recover('run-tools');
+
+    expect(Object.keys(globalRunRegistry.get('run-tools')?.tools ?? {})).toContain('lookup');
+
+    await globalRunRegistry.get('run-tools')?.workflowExecution;
     cleanup();
   });
 
@@ -437,6 +461,62 @@ describe('DurableAgent.recover(runId)', () => {
     await reading;
     resumed.cleanup();
     recovered.cleanup();
+  });
+
+  describe('closeOnSuspend (#26463)', () => {
+    const mockSuspendingRestart = (runId: string) => {
+      const restart = vi.fn(async () => {
+        await emitChunkEvent(agent.pubsub, runId, {
+          type: 'tool-call-approval',
+          runId,
+          from: 'AGENT',
+          payload: { toolCallId: 'call-1', toolName: 'issue-refund', args: {} },
+        } as any);
+        return { status: 'suspended' as const };
+      });
+      vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+        createRun: vi.fn(async () => ({ restart, runId })),
+        deleteWorkflowRunById: vi.fn(async () => {}),
+      } as any);
+    };
+
+    it('closes the recovered fullStream when the run suspends', async () => {
+      const runId = 'recover-close-on-suspend';
+      await seed(store, runId, 'running', 'agent-A');
+      mockSuspendingRestart(runId);
+      const deleteSnapshots = vi.spyOn(agent, 'deleteRunSnapshots');
+
+      const recovered = await agent.recover(runId, { closeOnSuspend: true });
+      const types: string[] = [];
+      for await (const chunk of recovered.fullStream) types.push(chunk.type);
+
+      expect(types).toContain('tool-call-approval');
+      expect(deleteSnapshots).not.toHaveBeenCalled();
+      recovered.cleanup();
+    });
+
+    it('keeps the recovered fullStream open across suspension by default', async () => {
+      const runId = 'recover-default-open';
+      await seed(store, runId, 'running', 'agent-A');
+      mockSuspendingRestart(runId);
+
+      const recovered = await agent.recover(runId);
+      const reader = recovered.fullStream.getReader();
+      const types: string[] = [];
+      const drained = (async () => {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) return 'closed';
+          types.push(value.type);
+        }
+      })();
+      await globalRunRegistry.get(runId)?.workflowExecution;
+      await vi.waitFor(() => expect(types).toContain('tool-call-approval'));
+      const outcome = await Promise.race([drained, new Promise(r => setTimeout(() => r('open'), 200))]);
+      expect(outcome).toBe('open');
+      reader.releaseLock();
+      recovered.cleanup();
+    });
   });
 
   it('allows only the recovery-lease holder to register and restart a run', async () => {

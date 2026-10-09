@@ -23,6 +23,7 @@ import type {
   ToolCallChunk,
 } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { CoreTool } from '../../tools/types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -44,7 +45,7 @@ import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEve
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type {
   AgentAbortEventData,
-  AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
   DurableToolCallInput,
@@ -226,7 +227,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
-  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when execution finishes — receives rich step data (text, steps, toolResults) */
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback on error */
@@ -590,7 +591,7 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /** Callback when a step finishes */
-  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when the recovered run finishes */
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback when the recovered run errors */
@@ -599,6 +600,11 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
   /** Callback when the recovered run suspends again */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /**
+   * Close the recovered stream once the run suspends (e.g. awaiting tool
+   * approval) so callers can hand off to `resume()`. Defaults to `false`.
+   */
+  closeOnSuspend?: boolean;
   /**
    * Optional abort signal for the recovered segment. Forwarded onto a fresh
    * internal `AbortController` installed on the run's registry entry, so
@@ -1066,8 +1072,9 @@ export class DurableAgent<
           }
         },
         onSuspended: options?.onSuspended,
-        // Keep recovered runs observable if they suspend again so a later
-        // resume or recovery can pick them up.
+        // Close (when requested) on the persisted workflow result in recover(),
+        // not on the SUSPENDED event, which can precede a resumable snapshot.
+        closeOnSuspend: false,
         messageList,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
@@ -1098,7 +1105,7 @@ export class DurableAgent<
         this.getPubSub(),
         {
           strict: true,
-          continuation: 'across-suspension',
+          ...(options?.closeOnSuspend ? {} : { continuation: 'across-suspension' as const }),
           validate: () => recoveryLease.assertOwned(),
         },
       );
@@ -1267,6 +1274,26 @@ export class DurableAgent<
     }
     recoveryLease.assertOwned();
 
+    // The entry below carries a live model, so resolveRuntimeDependencies trusts
+    // it as fully hydrated and never rebuilds tools — they must be restored here.
+    let tools: Record<string, CoreTool> = {};
+    let workspace;
+    try {
+      tools = await wrapped.getToolsForExecution({
+        runId,
+        threadId,
+        resourceId,
+        requestContext,
+        memoryConfig: workflowInput.state?.memoryConfig,
+        autoResumeSuspendedTools: workflowInput.options?.autoResumeSuspendedTools,
+        clientTools: workflowInput.options?.clientTools as ToolsInput | undefined,
+      });
+      workspace = await wrapped.getWorkspace({ requestContext });
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) tool resolution failed: ${error}`);
+    }
+    recoveryLease.assertOwned();
+
     const saveQueueManager = memory
       ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
       : undefined;
@@ -1357,6 +1384,8 @@ export class DurableAgent<
       mastra: this.#mastra,
       model,
       modelList,
+      tools,
+      workspace,
       memory,
       saveQueueManager,
       requestContext,
@@ -1994,7 +2023,10 @@ export class DurableAgent<
    * @param workflowInput - The serialized workflow input
    * @internal
    */
-  protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  protected async executeWorkflow(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<{ status?: string } | void> {
     const workflow = this.getWorkflow();
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
@@ -2026,6 +2058,19 @@ export class DurableAgent<
     if (result?.status && result.status !== 'suspended') {
       await this.deleteRunSnapshots(runId);
     }
+    return result;
+  }
+
+  /**
+   * Whether `executeWorkflow()` resolves only after a suspended snapshot has
+   * been persisted, reporting `{ status: 'suspended' }`. When true,
+   * `closeOnSuspend` streams close on that result instead of on the SUSPENDED
+   * pubsub event (which the tool-call step publishes before persistence), so
+   * an immediate cold resume finds the `suspended` snapshot.
+   * @internal
+   */
+  protected get suspendPersistedOnReturn(): boolean {
+    return true;
   }
 
   /**
@@ -2407,11 +2452,14 @@ export class DurableAgent<
     // to false (stream stays open for a same-reader resume). The same value
     // gates the `across-suspension` continuation so the two cannot drift.
     const closeOnSuspend = options?.closeOnSuspend ?? false;
+    const closeOnPersistedSuspend = closeOnSuspend && this.suspendPersistedOnReturn;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
       output,
       cleanup: createdStreamCleanup,
+      detach: detachStream,
+      waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2445,7 +2493,10 @@ export class DurableAgent<
       // now calls it in-process from globalRunRegistry and honors its return
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
-      closeOnSuspend,
+      // When the engine reports the persisted suspension, the stream is closed
+      // after executeWorkflow() returns (below) rather than on the SUSPENDED
+      // event, which is published before the snapshot is saved.
+      closeOnSuspend: closeOnSuspend && !closeOnPersistedSuspend,
       hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
@@ -2478,10 +2529,18 @@ export class DurableAgent<
             requestContext: globalRunRegistry.get(runId)?.requestContext,
           });
         }
+        let result: { status?: string } | void;
         try {
-          return await this.executeWorkflow(runId, workflowInput);
+          result = await this.executeWorkflow(runId, workflowInput);
         } finally {
           await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
+        if (closeOnPersistedSuspend && result?.status === 'suspended') {
+          // The workflow result is the persisted suspension boundary. Deliver
+          // buffered events (including onSuspended) before closing the stream.
+          await this.pubsub.flush();
+          await waitForEventDelivery();
+          detachStream();
         }
       })
       .catch(error => {
@@ -3274,6 +3333,14 @@ export class DurableAgent<
           await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           recoveryLease.assertOwned();
         }
+        if (result?.status === 'suspended' && options?.closeOnSuspend) {
+          // Same contract as resume(): close on the persisted suspension,
+          // after flushing and delivering already-published events.
+          await this.pubsub.flush();
+          await stream.waitForEventDelivery();
+          recoveryLease.assertOwned();
+          stream.detach();
+        }
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()
         // contract.
@@ -3873,19 +3940,33 @@ export class DurableAgent<
         // callers only care about counts — so we just await the workflow
         // execution promise that `recover()` parks on the registry entry,
         // capture any failure it surfaces via `onError`, and drop the
-        // stream.
+        // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
+        // suspended runs registered, so thread subscribers still see the
+        // terminal event and a later approval can resume the run (#25891).
+        // With auto-cleanup disabled nothing else releases a finished run, and
+        // bulk callers never get the cleanup handle. Release it once the
+        // terminal event has been delivered; suspended runs never get here.
+        let releaseAfterTerminal: (() => void) | undefined;
+        const onTerminal = () => {
+          if (this.#cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+        };
         const { cleanup } = await this.recover(targetRunId, {
           onError: ({ error }) => {
             runError = error instanceof Error ? error : new Error(String(error));
+            onTerminal();
           },
+          onFinish: onTerminal,
+          onAbort: onTerminal,
         });
+        releaseAfterTerminal = cleanup;
         try {
           const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
           if (workflowExecution) {
             await workflowExecution;
           }
-        } finally {
+        } catch (error) {
           cleanup();
+          throw error;
         }
         if (runError) throw runError;
         recovered.push({ runId: targetRunId, status: 'success' });
@@ -3955,7 +4036,7 @@ export class DurableAgent<
       isAlive?: () => boolean | Promise<boolean>;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       experimentalTransform?: MastraStreamTransformOptions<TOutput>;
-      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onAbort?: (data: AgentAbortEventData) => void | Promise<void>;

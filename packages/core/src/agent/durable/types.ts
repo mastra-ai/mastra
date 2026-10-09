@@ -410,9 +410,7 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
-  /** Deferred step-finish chunk for intermediate steps.
-   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
-   *  chunks, matching the regular agent's chunk ordering. */
+  /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
 }
 
@@ -555,6 +553,8 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Step-finish chunk awaiting the loop's final continuation decision */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**
@@ -621,6 +621,11 @@ export interface AgentStepFinishEventData {
   stepResult: DurableLLMStepOutput['stepResult'];
   toolResults?: DurableToolCallOutput[];
 }
+
+/**
+ * Payload passed to a durable agent's `onStepFinish` callback: the step-finish event data plus the run it belongs to.
+ */
+export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: string };
 
 /**
  * Finish event data

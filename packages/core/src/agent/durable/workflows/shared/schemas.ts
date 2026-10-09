@@ -184,6 +184,8 @@ export const baseIterationStateSchema = z.object({
   usageAggregationVersion: z.literal(1).optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
+  // Step-finish waits here until the loop's continuation policy resolves.
+  deferredStepFinishChunk: z.any().optional(),
   // Background task tracking
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop
