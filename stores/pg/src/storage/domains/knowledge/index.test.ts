@@ -187,11 +187,11 @@ describe('KnowledgePG schema completion marker', () => {
   });
 });
 
-async function createSchemaWithPublishedKnowledgeV1(prefix: string): Promise<string> {
+async function createSchemaWithPublishedKnowledgeV1(prefix: string, fixture = 'published-1.29.0.sql'): Promise<string> {
   const schemaName = `${prefix}_${process.pid}_${schemaCounter++}`;
   schemas.push(schemaName);
   await pool.query(`CREATE SCHEMA "${schemaName}"`);
-  const sql = await readFile(new URL('./fixtures/published-1.29.0.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL(`./fixtures/${fixture}`, import.meta.url), 'utf8');
   const client = await pool.connect();
   try {
     await client.query(`SET search_path TO "${schemaName}"`);
@@ -598,5 +598,55 @@ describe('KnowledgePG timestamps', () => {
       if (tz === undefined) delete process.env.TZ;
       else process.env.TZ = tz;
     }
+  });
+});
+
+describe('KnowledgePG interim canonical-model layout', () => {
+  const INTERIM_FIXTURE = 'interim-1.76.0-alpha.3.sql';
+
+  it('replaces the layout the interim release created, discarding its rows and keeping other storage', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_interim_rows', INTERIM_FIXTURE);
+    await pool.query(
+      `INSERT INTO "${schemaName}".mastra_knowledge_semantic_outbox (id,"idempotencyKey","documentId","documentType",operation,scope,"scopeKey",status,attempts,"availableAt","createdAt") VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,now(),now())`,
+    );
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_threads (id TEXT PRIMARY KEY)`);
+    await pool.query(`INSERT INTO "${schemaName}".mastra_threads (id) VALUES ('preserved')`);
+
+    await new KnowledgePG({ pool, schemaName }).init();
+
+    const marker = await pool.query(
+      `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
+    );
+    expect(marker.rows[0]?.version).toBe(1);
+    const outbox = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_semantic_outbox`);
+    expect(outbox.rows).toEqual([]);
+    const nodeColumns = await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'mastra_knowledge_nodes'`,
+      [schemaName],
+    );
+    expect(nodeColumns.rows.map(row => row.column_name)).not.toContain('canonicalName');
+    const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
+    expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+    await new KnowledgePG({ pool, schemaName }).init();
+  });
+
+  it('leaves a modified interim layout untouched', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_interim_column', INTERIM_FIXTURE);
+    await pool.query(`ALTER TABLE "${schemaName}".mastra_knowledge_nodes ADD COLUMN host_note text`);
+    const before = await knowledgeObjects(schemaName);
+
+    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
+  });
+
+  it('leaves an interim layout with an unfamiliar index untouched', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_interim_index', INTERIM_FIXTURE);
+    await pool.query(`CREATE INDEX host_index ON "${schemaName}".mastra_knowledge_records ("text")`);
+    const before = await knowledgeObjects(schemaName);
+
+    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
   });
 });

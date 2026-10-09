@@ -159,6 +159,194 @@ export const PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES: ReadonlySet<string> = new Set([
   'idx_knowledge_outbox_claim',
 ]);
 
+/**
+ * Columns of the Knowledge tables that the first canonical-model release (`@mastra/core` 1.76.0-alpha.3,
+ * `@mastra/libsql`/`@mastra/pg` from the same commit) created. That release wrote no schema marker and
+ * kept nullable v1 facade columns, so canonical storage cannot open it. Its data is not migrated.
+ */
+export const INTERIM_KNOWLEDGE_COLUMNS: ReadonlyMap<string, readonly string[]> = new Map([
+  [
+    TABLE_KNOWLEDGE_NODES,
+    [
+      'id',
+      'name',
+      'kind',
+      'isScope',
+      'metadata',
+      'version',
+      'createdAt',
+      'updatedAt',
+      'deletedAt',
+      'deletedBy',
+      'type',
+      'canonicalName',
+      'content',
+      'description',
+      'scope',
+      'scopeKey',
+      'mergedInto',
+    ],
+  ],
+  [
+    TABLE_KNOWLEDGE_RECORDS,
+    [
+      'id',
+      'node',
+      'text',
+      'metadata',
+      'version',
+      'capturedAt',
+      'updatedAt',
+      'deletedAt',
+      'deletedBy',
+      'scope',
+      'scopeKey',
+      'sourceThreadId',
+      'when',
+    ],
+  ],
+  [TABLE_KNOWLEDGE_MENTIONS, ['recordId', 'targetNodeId', 'sourceType', 'sourceId']],
+  [
+    TABLE_KNOWLEDGE_ACTIVITY,
+    [
+      'id',
+      'action',
+      'targetType',
+      'targetId',
+      'contextScopeId',
+      'importRunId',
+      'details',
+      'createdAt',
+      'recordType',
+      'recordId',
+      'scope',
+      'scopeKey',
+      'sourceThreadId',
+    ],
+  ],
+  [
+    TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+    [
+      'id',
+      'idempotencyKey',
+      'documentId',
+      'documentType',
+      'operation',
+      'scope',
+      'scopeKey',
+      'status',
+      'attempts',
+      'availableAt',
+      'claimedAt',
+      'claimedBy',
+      'createdAt',
+      'completedAt',
+    ],
+  ],
+  [TABLE_KNOWLEDGE_NODE_SCOPES, ['nodeId', 'scopeNodeId', 'addedAt']],
+  [TABLE_KNOWLEDGE_RECORD_SCOPES, ['recordId', 'scopeNodeId', 'addedAt']],
+  [TABLE_KNOWLEDGE_SCOPE_GRANTS, ['scopeNodeId', 'scopeRefId', 'role', 'canSuggest']],
+  [TABLE_KNOWLEDGE_ACCESS_STATE, ['id', 'epoch', 'schemaVersion']],
+  [TABLE_KNOWLEDGE_SCOPE_ADDRESSES, ['address', 'scopeNodeId']],
+  [TABLE_KNOWLEDGE_NODE_ADDRESSES, ['source', 'address', 'nodeId']],
+  [TABLE_KNOWLEDGE_IMPORT_STATE, ['importerId', 'binding', 'key', 'value']],
+  [
+    TABLE_KNOWLEDGE_IMPORT_RUNS,
+    [
+      'id',
+      'importerId',
+      'binding',
+      'importKind',
+      'triggerKind',
+      'status',
+      'error',
+      'transcriptThreadId',
+      'traceId',
+      'queuedAt',
+      'startedAt',
+      'completedAt',
+    ],
+  ],
+  [
+    TABLE_KNOWLEDGE_PROPOSALS,
+    [
+      'id',
+      'targetType',
+      'targetId',
+      'action',
+      'changes',
+      'reason',
+      'proposerContextScopeId',
+      'expectedVersion',
+      'status',
+      'reviewerContextScopeId',
+      'reviewedAt',
+      'createdAt',
+    ],
+  ],
+]);
+
+/** Indexes the interim release created on {@link INTERIM_KNOWLEDGE_COLUMNS} tables. */
+export const INTERIM_KNOWLEDGE_INDEX_NAMES: ReadonlySet<string> = new Set([
+  'idx_knowledge_nodes_identity',
+  'idx_knowledge_nodes_scope',
+  'idx_knowledge_nodes_name',
+  'idx_knowledge_records_node_latest',
+  'idx_knowledge_records_thread_latest',
+  'idx_knowledge_mentions_record',
+  'idx_knowledge_activity_latest',
+  'idx_knowledge_records_scope',
+  'idx_knowledge_activity_scope',
+  'idx_knowledge_outbox_idempotency',
+  'idx_knowledge_outbox_claim',
+  'idx_knowledge_node_scopes_scope',
+  'idx_knowledge_record_scopes_scope',
+  'idx_knowledge_scope_grants_ref',
+  'idx_knowledge_node_addresses_node',
+  'idx_knowledge_import_runs_lookup',
+  'idx_knowledge_activity_import_run',
+]);
+
+/**
+ * True when `columnsByTable` (every Knowledge-prefixed table and its columns) is exactly the interim
+ * layout: every interim table present, no other tables, and each with exactly the interim columns.
+ * Pass `timestampShadows` for PostgreSQL, whose adapters add a `<column>Z` timestamptz shadow.
+ */
+export function isInterimKnowledgeLayout(
+  columnsByTable: ReadonlyMap<string, readonly string[]>,
+  { timestampShadows = false }: { timestampShadows?: boolean } = {},
+): boolean {
+  if (columnsByTable.size !== INTERIM_KNOWLEDGE_COLUMNS.size) return false;
+  for (const [table, expected] of INTERIM_KNOWLEDGE_COLUMNS) {
+    const columns = columnsByTable.get(table);
+    if (!columns) return false;
+    const actual = timestampShadows
+      ? columns.filter(column => !(column.endsWith('Z') && expected.includes(column.slice(0, -1))))
+      : columns;
+    if (actual.length !== expected.length || !expected.every(column => actual.includes(column))) return false;
+  }
+  return true;
+}
+
+/**
+ * Index names a replaceable non-canonical layout may carry, or `null` when `columnsByTable` is neither
+ * the published v1 layout nor the interim layout.
+ */
+export function replaceableKnowledgeLayoutIndexNames(
+  columnsByTable: ReadonlyMap<string, readonly string[]>,
+  options: { timestampShadows?: boolean } = {},
+): ReadonlySet<string> | null {
+  if (isPublishedKnowledgeV1Layout(columnsByTable, options)) return PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES;
+  if (isInterimKnowledgeLayout(columnsByTable, options)) return INTERIM_KNOWLEDGE_INDEX_NAMES;
+  return null;
+}
+
+/** Tables a replaceable non-canonical layout may contain. */
+export const REPLACEABLE_KNOWLEDGE_TABLE_NAMES: ReadonlySet<string> = new Set([
+  ...PUBLISHED_KNOWLEDGE_V1_COLUMNS.keys(),
+  ...INTERIM_KNOWLEDGE_COLUMNS.keys(),
+]);
+
 /** Appended to schema errors so callers learn the one supported way forward. */
 export const KNOWLEDGE_RESET_GUIDANCE =
   'Existing Knowledge data is not migrated. To replace it, call `await storage.stores?.knowledge?.dangerouslyReset()`, which deletes every Knowledge row and nothing else.';

@@ -273,12 +273,21 @@ describe('KnowledgeLibSQL schema completion marker', () => {
   });
 });
 
-async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
-  const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
+async function seedPublishedKnowledgeV1(
+  client: ReturnType<typeof createClient>,
+  fixture = 'published-1.21.1.sql',
+): Promise<void> {
+  const sql = await readFile(new URL(`./fixtures/${fixture}`, import.meta.url), 'utf8');
   await client.batch(
     sql
       .split(';')
-      .map(statement => statement.trim())
+      .map(statement =>
+        statement
+          .split('\n')
+          .filter(line => !line.startsWith('--'))
+          .join('\n')
+          .trim(),
+      )
       .filter(Boolean),
     'write',
   );
@@ -521,6 +530,65 @@ describe('KnowledgeLibSQL shared-database concurrency', () => {
       releaseLock();
       const [, node] = await Promise.all([lockedWrite, create]);
       expect(await store.getNode(node.id)).toEqual(expect.objectContaining({ name: 'Queued write' }));
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe('KnowledgeLibSQL interim canonical-model layout', () => {
+  const INTERIM_FIXTURE = 'interim-1.76.0-alpha.3.sql';
+
+  it('replaces the layout the interim release created, discarding its rows and keeping other storage', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client, INTERIM_FIXTURE);
+      await client.execute(
+        "INSERT INTO mastra_knowledge_semantic_outbox (id,idempotencyKey,documentId,documentType,operation,scope,scopeKey,status,attempts,availableAt,createdAt) VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,'2026-10-01','2026-10-01')",
+      );
+      await client.execute('CREATE TABLE mastra_threads (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO mastra_threads (id) VALUES ('preserved')");
+
+      await new KnowledgeLibSQL({ client }).init();
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+      expect((await client.execute('SELECT id FROM mastra_knowledge_semantic_outbox')).rows).toEqual([]);
+      const nodeColumns = await client.execute('PRAGMA table_info("mastra_knowledge_nodes")');
+      expect(nodeColumns.rows.map(row => String(row.name))).not.toContain('canonicalName');
+      const threads = await client.execute('SELECT id FROM mastra_threads');
+      expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+      await new KnowledgeLibSQL({ client }).init();
+    } finally {
+      client.close();
+    }
+  });
+
+  it('leaves a modified interim layout untouched', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client, INTERIM_FIXTURE);
+      await client.execute('ALTER TABLE mastra_knowledge_nodes ADD COLUMN host_note TEXT');
+      const before = await knowledgeObjects(client);
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      expect(await knowledgeObjects(client)).toEqual(before);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('leaves an interim layout with an unfamiliar index untouched', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client, INTERIM_FIXTURE);
+      await client.execute('CREATE INDEX host_index ON mastra_knowledge_records (text)');
+      const before = await knowledgeObjects(client);
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      expect(await knowledgeObjects(client)).toEqual(before);
     } finally {
       client.close();
     }
