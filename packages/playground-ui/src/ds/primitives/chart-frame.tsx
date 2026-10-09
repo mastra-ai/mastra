@@ -49,7 +49,10 @@ export function timeXAxis({
   );
 }
 
-/** Width of the y-axis label column when shown. */
+/**
+ * Room the y-axis labels take at most. The axis itself is as wide as its longest label, so the
+ * labels line up with the card's content; this only sizes the plot for spacing the x labels.
+ */
 export const Y_AXIS_WIDTH = 44;
 
 export function valueYAxis({
@@ -75,7 +78,7 @@ export function valueYAxis({
       tick={CHART_TICK}
       tickLine={false}
       axisLine={false}
-      width={Y_AXIS_WIDTH}
+      width="auto"
       tickMargin={4}
       tickFormatter={formatter}
       domain={domain}
