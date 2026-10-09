@@ -1573,12 +1573,14 @@ export class ObservationalMemory {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    opts?: { notAfter?: Date },
   ): Promise<void> {
     try {
       const result = await this.storage.listMessages({
         threadId,
         perPage: 20,
         orderBy: { field: 'createdAt', direction: 'DESC' },
+        ...(opts?.notAfter ? { filter: { dateRange: { end: opts.notAfter } } } : {}),
       });
       const messages = result?.messages ?? [];
       const markerData = marker.data as { cycleId?: string; operationType?: string } | undefined;
@@ -2591,7 +2593,11 @@ ${formattedMessages}
       threadIds: [threadId],
       config: this.getObservationMarkerConfig(),
     });
-    await this.persistMarkerToStorage(startMarker, threadId, freshRecord.resourceId ?? undefined);
+    // Same cutoff as the end marker's lookup, so a message saved after the cycle started never
+    // takes the start marker the end marker then could not find.
+    await this.persistMarkerToStorage(startMarker, threadId, freshRecord.resourceId ?? undefined, {
+      notAfter: new Date(startedAt),
+    });
 
     // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
     if (writer) {
@@ -3626,7 +3632,9 @@ ${formattedMessages}
         threadIds: [threadId],
         config: this.getObservationMarkerConfig(),
       });
-      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
+      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined, {
+        notAfter: new Date(startedAt),
+      });
 
       // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
       const writer = opts.writer;

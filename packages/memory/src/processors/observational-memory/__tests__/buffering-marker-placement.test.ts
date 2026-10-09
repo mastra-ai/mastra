@@ -136,4 +136,59 @@ describe('buffering end marker placement', () => {
     const saved = (await stored()).find(m => m.id === streaming.id)!;
     expect(saved.content.parts).toContainEqual({ type: 'text', text: 'FINAL_ANSWER' });
   });
+
+  it.each(['buffer()', 'threshold-triggered buffering'] as const)(
+    'puts the start marker on a message from before the cycle started, so the end marker can find it (%s)',
+    async entry => {
+      const storage = new InMemoryMemory({ db: new InMemoryDB() });
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+      const t0 = new Date(Date.now() - 60_000);
+      await storage.saveThread({ thread: { id: threadId, resourceId, title: 't', createdAt: t0, updatedAt: t0 } });
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: { model: 'openai/gpt-4o-mini', messageTokens: 100_000, bufferTokens: 200 },
+        reflection: { model: 'openai/gpt-4o-mini', observationTokens: 200_000 },
+      });
+      const record = await om.getOrCreateRecord(threadId, resourceId);
+      const buffered = [
+        msg(threadId, resourceId, 'user', new Date(t0.getTime() + 1000), [`question ${'words '.repeat(400)}`]),
+        msg(threadId, resourceId, 'assistant', new Date(t0.getTime() + 2000), [`answer ${'words '.repeat(400)}`]),
+      ];
+      await storage.saveMessages({ messages: buffered });
+      vi.spyOn(om.observer, 'call').mockResolvedValue({ observations: '* BUFFERED_FACT' } as any);
+
+      // The agent saves a newer assistant message after the cycle starts but before its start marker is written.
+      const newer = msg(threadId, resourceId, 'assistant', new Date(Date.now() + 1000), ['newer']);
+      const listMessages = storage.listMessages.bind(storage);
+      let first = true;
+      vi.spyOn(storage, 'listMessages').mockImplementation(async (args: any) => {
+        if (first && args?.orderBy?.direction === 'DESC') {
+          first = false;
+          await storage.saveMessages({ messages: [structuredClone(newer)] });
+        }
+        return listMessages(args);
+      });
+
+      const carrying = async (type: string) =>
+        (await listMessages({ threadId, perPage: false })).messages
+          .filter(m => (m.content.parts as any[]).some(p => p?.type === type))
+          .map(m => m.id);
+      if (entry === 'buffer()') {
+        await expect(om.buffer({ threadId, resourceId, record, messages: buffered })).resolves.toMatchObject({
+          buffered: true,
+        });
+      } else {
+        const internals = om as any;
+        const lockKey = internals.buffering.getLockKey(threadId, resourceId);
+        await internals.startAsyncBufferedObservation({ ...record }, threadId, buffered, lockKey, undefined, 1_000);
+        await vi.waitFor(async () => expect(await carrying('data-om-buffering-end')).toHaveLength(1));
+      }
+      vi.mocked(storage.listMessages).mockRestore();
+
+      expect(await carrying('data-om-buffering-start')).toEqual([buffered[1]!.id]);
+      expect(await carrying('data-om-buffering-end')).toEqual([buffered[1]!.id]);
+    },
+  );
 });
