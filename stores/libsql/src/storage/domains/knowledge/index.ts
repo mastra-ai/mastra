@@ -1306,20 +1306,20 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const node = await this.#getNode(tx, String(nodeId));
       if (!node) throw new KnowledgeNotFoundError('node', String(nodeId));
       if (node.isScope) throw new KnowledgeConflictError(`Knowledge scopes cannot be permanently deleted: ${node.id}`);
-      await tx.execute({
-        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=? AND nodeId=?`,
-        args: [input.source, input.address, node.id],
-      });
       const owned = await tx.execute({
         sql: `SELECT r.id FROM "${TABLE_KNOWLEDGE_RECORDS}" r WHERE r.nodeId=? AND r.source=? AND (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id)=1 AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" rs WHERE rs.recordId=r.id AND rs.scopeNodeId=?)`,
         args: [node.id, input.source, input.scopeId],
       });
       for (const row of owned.rows) await this.#deleteRecordPermanently(tx, String(row.id), input.importRunId);
       const remaining = await tx.execute({
-        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE nodeId=? UNION ALL SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? LIMIT 1`,
-        args: [node.id, node.id],
+        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE nodeId=? AND NOT (source=? AND address=?) UNION ALL SELECT 1 FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE nodeId=? LIMIT 1`,
+        args: [node.id, input.source, input.address, node.id],
       });
       if (remaining.rows[0]) return { node, deleted: false };
+      await tx.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=? AND nodeId=?`,
+        args: [input.source, input.address, node.id],
+      });
       const scopeIds = await this.#getNodeScopeIds(tx, node.id);
       await this.#activity(tx, 'delete', 'node', node.id, scopeIds[0], input.importRunId);
       await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, scopeIds);

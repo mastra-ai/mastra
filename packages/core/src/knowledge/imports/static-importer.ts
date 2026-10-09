@@ -565,6 +565,10 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       scopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
     });
+    // Curated content kept the node alive; the source item is gone, so release the importer's binding explicitly.
+    if (!result.deleted) {
+      await storage.removeNodeAddress({ source: this.#importer.source, address: normalized, nodeId: node.id });
+    }
     await this.#setTrackedNode(normalized, undefined);
     return result;
   }

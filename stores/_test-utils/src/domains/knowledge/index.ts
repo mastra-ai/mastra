@@ -782,10 +782,67 @@ export function createKnowledgeStorageTests(
 
       expect(result.deleted).toBe(false);
       expect(await store.getNode(node.id)).toEqual(beforeDelete);
-      expect(await store.getNodeAddress({ source: 'github', address: 'issue:broadened' })).toBeNull();
+      expect(await store.getNodeAddress({ source: 'github', address: 'issue:broadened' })).toEqual({
+        source: 'github',
+        address: 'issue:broadened',
+        nodeId: node.id,
+      });
       expect(await store.getRecord({ id: bindingLocal.id, includeDeleted: true })).toBeNull();
       expect(await store.getRecord({ id: broadened.id })).toEqual(broadened);
       expect(await store.getRecordScopeIds(broadened.id)).toEqual([PROJECT_SCOPE_ID, OTHER_SCOPE_ID].sort());
+    });
+
+    it('keeps the address when a non-source record prevents node deletion', async () => {
+      const node = await store.createNodeWithAddress({
+        source: 'github',
+        address: 'issue:kept',
+        node: { name: 'Kept imported issue', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      const manual = await store.createRecord({ node, text: 'Manual note', scopeIds: [PROJECT_SCOPE_ID] });
+
+      const result = await store.deleteNodeByAddress({
+        source: 'github',
+        address: 'issue:kept',
+        scopeId: PROJECT_SCOPE_ID,
+      });
+
+      expect(result.deleted).toBe(false);
+      expect(await store.getNodeAddress({ source: 'github', address: 'issue:kept' })).toEqual({
+        source: 'github',
+        address: 'issue:kept',
+        nodeId: node.id,
+      });
+      expect(await store.getRecord({ id: manual.id })).toEqual(manual);
+      const retry = await store.deleteNodeByAddress({
+        source: 'github',
+        address: 'issue:kept',
+        scopeId: PROJECT_SCOPE_ID,
+      });
+      expect(retry.deleted).toBe(false);
+    });
+
+    it('keeps the node while another address still binds it, then deletes with the last address', async () => {
+      const node = await store.createNodeWithAddress({
+        source: 'github',
+        address: 'issue:first',
+        node: { name: 'Doubly addressed issue', scopeIds: [PROJECT_SCOPE_ID] },
+      });
+      await store.setNodeAddress({ source: 'linear', address: 'FACT-1', nodeId: node.id });
+
+      const first = await store.deleteNodeByAddress({
+        source: 'github',
+        address: 'issue:first',
+        scopeId: PROJECT_SCOPE_ID,
+      });
+      expect(first.deleted).toBe(false);
+      expect(await store.getNodeAddress({ source: 'github', address: 'issue:first' })).not.toBeNull();
+      expect(await store.getNodeAddress({ source: 'linear', address: 'FACT-1' })).not.toBeNull();
+
+      await store.removeNodeAddress({ source: 'github', address: 'issue:first', nodeId: node.id });
+      const last = await store.deleteNodeByAddress({ source: 'linear', address: 'FACT-1', scopeId: PROJECT_SCOPE_ID });
+      expect(last.deleted).toBe(true);
+      expect(await store.getNode(node.id)).toBeNull();
+      expect(await store.getNodeAddress({ source: 'linear', address: 'FACT-1' })).toBeNull();
     });
 
     it('searches canonical node and record text within visible memberships', async () => {

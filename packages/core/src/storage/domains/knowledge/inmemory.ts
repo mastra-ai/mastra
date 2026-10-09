@@ -390,7 +390,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       const node = this.#db.knowledgeNodes.get(binding.nodeId);
       if (!node) throw new KnowledgeNotFoundError('node', binding.nodeId);
       if (node.isScope) throw new KnowledgeConflictError(`Knowledge scopes cannot be permanently deleted: ${node.id}`);
-      this.#db.knowledgeNodeAddresses.delete(key);
       for (const record of [...this.#db.knowledgeRecords.values()]) {
         if (record.nodeId !== node.id || record.source !== input.source) continue;
         const recordScopeIds = this.#recordScopeIds(record.id);
@@ -402,11 +401,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         this.#db.knowledgeRecords.delete(record.id);
       }
       if (
-        [...this.#db.knowledgeNodeAddresses.values()].some(entry => entry.nodeId === node.id) ||
+        [...this.#db.knowledgeNodeAddresses.entries()].some(([k, entry]) => k !== key && entry.nodeId === node.id) ||
         [...this.#db.knowledgeRecords.values()].some(record => record.nodeId === node.id)
       ) {
         return { node: cloneNode(node), deleted: false };
       }
+      this.#db.knowledgeNodeAddresses.delete(key);
       const nodeScopeIds = this.#nodeScopeIds(node.id);
       this.#recordActivity('delete', 'node', node.id, nodeScopeIds[0], input.importRunId);
       this.#enqueue('node', node.id, 'delete', node.version + 1, nodeScopeIds);
