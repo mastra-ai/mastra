@@ -186,11 +186,6 @@ function RepositoryRow({
             )}
             <span className="min-w-0 truncate">{label}</span>
           </Txt>
-          {repository.defaultBranch && (
-            <Txt as="span" variant="caption" tone="muted" className="block truncate">
-              Default branch: {repository.defaultBranch}
-            </Txt>
-          )}
         </span>
         {repository.lastBuildStatus === 'failed' ? (
           <Badge size="sm" variant="destructive">
