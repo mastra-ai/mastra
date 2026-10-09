@@ -82,7 +82,7 @@ export function OnboardingIntakePreview({ source }: { source: OnboardingSource }
           </Txt>
         </div>
       </OnboardingAnnotation>
-      <OnboardingAnnotation x={36} y={196} width={88}>
+      <div className="onboarding-intake-card absolute min-w-0">
         <div className="flex items-center gap-1.5">
           <Icon className="text-muted-foreground size-3 shrink-0" />
           <Txt variant="meta" tone="muted">
@@ -92,7 +92,7 @@ export function OnboardingIntakePreview({ source }: { source: OnboardingSource }
         <Txt variant="caption" className="mt-2">
           {example}
         </Txt>
-      </OnboardingAnnotation>
+      </div>
       <OnboardingAnnotation x={28} y={302} width={344}>
         <Txt variant="meta" tone="muted">
           Choose what to bring in after setup.

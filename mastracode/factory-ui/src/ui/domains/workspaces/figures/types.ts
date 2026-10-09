@@ -6,8 +6,14 @@ export interface FigureDefinition {
   rules: number[];
   range: [number, number, number];
   tour: ([number, number] | null)[];
+  ambient?: boolean;
   mount: (
-    elements: { stage: HTMLElement; svg: SVGSVGElement; read: { textContent: string } },
+    elements: {
+      stage: HTMLElement;
+      svg: SVGSVGElement;
+      read: { textContent: string };
+      onIntakeFrame?: (x: number, y: number, opacity: number) => void;
+    },
     intensity: number,
   ) => {
     set: (value: number) => void;

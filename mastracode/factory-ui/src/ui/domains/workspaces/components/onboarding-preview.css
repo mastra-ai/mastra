@@ -79,6 +79,12 @@
 .onboarding-diagram {
   aspect-ratio: 5 / 4;
 }
+.onboarding-intake-card {
+  left: var(--intake-card-x, 9%);
+  top: var(--intake-card-y, 61.25%);
+  width: 22%;
+  opacity: var(--intake-card-opacity, 1);
+}
 .onboarding-scene {
   opacity: 0;
   visibility: hidden;

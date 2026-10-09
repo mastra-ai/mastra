@@ -37,7 +37,7 @@ export function OnboardingPresetPreview({ preset }: { preset: ModelSetupPreset }
     <section aria-label="Model setup preview" className="relative h-full">
       <span className="sr-only">
         {individual
-          ? 'Each teammate connects their own account for their agent sessions.'
+          ? 'Factory work uses the run owner’s personal account. Each teammate connects their own account for their agent sessions.'
           : personal
             ? 'The company account supplies Factory work and team sessions. Your sessions can use your own account.'
             : 'One company account supplies Factory work and everyone’s agent sessions.'}
@@ -56,7 +56,7 @@ export function OnboardingPresetPreview({ preset }: { preset: ModelSetupPreset }
         <OnboardingAnnotation x={38} y={62} width={84}>
           <div className="flex items-center gap-2">
             <KeyRound className="text-muted-foreground size-3" />
-            <Txt variant="meta">Personal</Txt>
+            <Txt variant="meta">Run owner</Txt>
           </div>
         </OnboardingAnnotation>
       )}
@@ -68,15 +68,11 @@ export function OnboardingPresetPreview({ preset }: { preset: ModelSetupPreset }
           </div>
         </OnboardingAnnotation>
       )}
-      {individual ? (
-        <ConversationPreview x={28} person="Teammate" />
-      ) : (
-        <OnboardingAnnotation x={28} y={260} width={104}>
-          <Txt variant="meta" tone="muted">
-            Factory work
-          </Txt>
-        </OnboardingAnnotation>
-      )}
+      <OnboardingAnnotation x={28} y={260} width={104}>
+        <Txt variant="meta" tone="muted">
+          Factory work
+        </Txt>
+      </OnboardingAnnotation>
       <ConversationPreview x={148} person="Teammate" />
       <ConversationPreview x={268} person="You" />
     </section>

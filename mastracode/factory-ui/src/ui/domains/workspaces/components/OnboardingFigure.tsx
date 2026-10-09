@@ -38,17 +38,34 @@ export function OnboardingFigure({
           element.dataset.readout = value;
         },
       };
-      const drawing = figure.mount({ stage: element, svg, read }, figure.range[1]);
+      const diagram = element.closest<HTMLElement>('.onboarding-diagram');
+      const drawing = figure.mount(
+        {
+          stage: element,
+          svg,
+          read,
+          // Keep the HTML card crisp and on the same clock as its SVG surface.
+          onIntakeFrame: (x, y, opacity) => {
+            diagram?.style.setProperty('--intake-card-x', `${x / 4}%`);
+            diagram?.style.setProperty('--intake-card-y', `${y / 3.2}%`);
+            diagram?.style.setProperty('--intake-card-opacity', String(opacity));
+          },
+        },
+        figure.range[1],
+      );
       drawing.setMode?.(currentMode.current);
       drawing.setScene?.(currentScene.current, true);
       handle.current = drawing;
-      tour.current = HL.tour(element, figure.tour);
+      if (!figure.ambient) tour.current = HL.tour(element, figure.tour);
       stop = () => {
         tour.current?.stop();
         tour.current = undefined;
         drawing.destroy();
         svg.remove();
         handle.current = undefined;
+        diagram?.style.removeProperty('--intake-card-x');
+        diagram?.style.removeProperty('--intake-card-y');
+        diagram?.style.removeProperty('--intake-card-opacity');
       };
     }
     syncVisibility();

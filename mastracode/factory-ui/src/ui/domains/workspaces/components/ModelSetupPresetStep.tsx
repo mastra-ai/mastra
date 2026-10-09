@@ -76,7 +76,7 @@ export function ModelSetupPresetStep({
           </label>
         ) : (
           <Txt variant="meta" tone="muted">
-            Automatic work needs a shared account.
+            Factory work uses the run owner’s account.
           </Txt>
         )}
       </div>
