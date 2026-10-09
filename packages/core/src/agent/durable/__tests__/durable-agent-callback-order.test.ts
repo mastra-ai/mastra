@@ -10,10 +10,7 @@
  * Two shapes are ported:
  *   - `normal` — two tool steps (`STEP_COUNT`), then an answer: three step-finish chunks in all, the
  *     extra one closing the answering step.
- *   - `abort`  — aborted once the step tool reports it is parked, so no timer decides it. Plain's
- *     abort surface (the aborted step's `tool-result` delivered a second time, the finish reported as
- *     `tripwire`) differs from the wrapped engines' and is declared below against COR-1415; every
- *     other field of the stream is still compared exactly.
+ *   - `abort`  — aborted once the step tool reports it is parked, so no timer decides it.
  *
  *   - `error`  — one tool step, then the model call itself fails (`doStream` throws). The script model
  *     is what makes this shape inexpressible to the parity helper: its recording model always turns a
@@ -42,7 +39,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import type { Deferred } from './abort-parity-support';
-import { ABORT_ARTIFACT, aborted, deferred, toolResultCount } from './abort-parity-support';
+import { aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
   EngineHandle,
   EngineParityResults,
@@ -136,7 +133,6 @@ async function runT36(variant: StreamedVariant): Promise<{
 
   const scenario: EngineParityScenario = {
     model: script,
-    ...(variant === 'abort' ? { differences: { durable: ABORT_ARTIFACT, evented: ABORT_ARTIFACT } } : {}),
     buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV2 }) => {
       const parked = deferred<void>();
       const release = deferred<void>();
@@ -366,18 +362,13 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
   },
 };
 
-/**
- * The public stream plain produced for the `abort` shape: the abort lands while the step tool is
- * parked, and plain delivers that step's `tool-result` a second time before the `abort` chunk
- * (COR-1415). Pinned literally so a plain-side change — including the fix — fails here.
- */
+/** The public stream produced for the `abort` shape. */
 const PLAIN_ABORT_PUBLIC_CHUNK_TYPES = [
   'start',
   'step-start',
   'tool-call',
   'tool-result',
   'step-finish',
-  'tool-result',
   'abort',
   'finish',
 ];
@@ -650,14 +641,12 @@ describe('T36 callback order parity', () => {
       expect(state.payloadKeys, `${engine}: callback payload keys`).toEqual(contract.payloadKeys);
     }
 
-    // Plain's abort surface, pinned literally: the extra `tool-result` for the parked step and the
-    // `tripwire` finish reason are COR-1415, declared for the wrapped engines above.
     expect(results.plain!.turns.at(-1)!.chunkTypes, 'plain: public chunk types').toEqual(
       PLAIN_ABORT_PUBLIC_CHUNK_TYPES,
     );
     expect(results.plain!.turns.at(-1)!.finishReason, 'plain: finish reason').toBe('aborted');
-    expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('tripwire');
-    expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(2);
+    expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('abort');
+    expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(1);
   });
 
   it('reports a failed model call through onError, and never onFinish, without a throw', async () => {

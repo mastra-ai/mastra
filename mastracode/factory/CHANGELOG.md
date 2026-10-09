@@ -1,5 +1,45 @@
 # @mastra/factory
 
+## 0.21.0-alpha.5
+
+### Patch Changes
+
+- Fixed label routing reopening done or canceled cards when their board is not installed. For example, Work cards in an app that sets `includeDefaultBoards: false` were moved onto a custom board when a label route changed. Cards on an uninstalled board now stay where they are. ([#26351](https://github.com/mastra-ai/mastra/pull/26351))
+
+- Updated dependencies [[`908f923`](https://github.com/mastra-ai/mastra/commit/908f92340e14f776d7a69edab244d0ae3cefe057), [`2f0c604`](https://github.com/mastra-ai/mastra/commit/2f0c604b802068a063689fec4d0db91daa80d7c9), [`678e1c3`](https://github.com/mastra-ai/mastra/commit/678e1c36f9118165c3315c2fd739334d9138eff4), [`7c34315`](https://github.com/mastra-ai/mastra/commit/7c343153b26755a4cdcdd7897d2b4bd2758c29d4)]:
+  - @mastra/core@1.76.0-alpha.5
+  - @mastra/code-sdk@1.12.0-alpha.5
+
+## 0.21.0-alpha.4
+
+### Minor Changes
+
+- Rearchitected an experimental memory feature. ([#26024](https://github.com/mastra-ai/mastra/pull/26024))
+
+### Patch Changes
+
+- Fixed hosted Linear project filters hiding matching Factory cards. Preserve workspace-scoped project identity across issue reads and updates, and reconcile stored cards when project membership changes. ([#26427](https://github.com/mastra-ai/mastra/pull/26427))
+
+- Fixed session resume after a host restart failing with `Sandbox not found` on the platform sandbox provider. Factory no longer persists the session's own id as the sandbox's reattach id when the provider exposes no physical id; the provider resumes through its own recovery key instead. ([#26488](https://github.com/mastra-ai/mastra/pull/26488))
+
+- Factory observational memory now supports automatic model selection per role. `PUT /web/config/om/:role/model` accepts `modelId: 'auto'` to clear that role back to automatic selection, and any other value to pin it. Previously `'auto'` was stored as if it were a model name, which pinned the role to a model that does not exist; automatic roles are now stored as `null` and follow the active main model on every run. The request body is unchanged, so existing callers keep working. ([#24508](https://github.com/mastra-ai/mastra/pull/24508))
+
+  Connecting a model provider or signing in over ACP no longer writes observer or reflector selections, and the unused `POST /web/config/om/provider-defaults` route was removed. Stored settings are applied per run instead of being copied into session state. Settings responses now report each role's intent, its effective model, and whether that model's provider is currently available; `mastra/` models count as available when the Mastra gateway key is configured. If Factory cannot load the saved settings for a run, memory falls back to Auto models and default thresholds, and the thread shows an error explaining that saved choices were not applied.
+
+  `MastraCodeConfig.inputProcessors` also accepts a function of `{ requestContext }`, so hosts can choose input processors per request:
+
+  ```ts
+  await createMastraCodeAgentController({
+    inputProcessors: ({ requestContext }) => (requestContext.get('channel') ? [channelProcessor] : []),
+  });
+  ```
+
+  The server now prevents request payloads from overriding Factory's internal memory-settings context.
+
+- Updated dependencies [[`a22fc0d`](https://github.com/mastra-ai/mastra/commit/a22fc0d1029860531282aec80d17ac0b76c5884e), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`68fa51c`](https://github.com/mastra-ai/mastra/commit/68fa51cf57ee7a3b0914d5381870b60e81f0647e), [`297e55e`](https://github.com/mastra-ai/mastra/commit/297e55ea3d0eef280c3776bec401584ce3c2bff2), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`57c3117`](https://github.com/mastra-ai/mastra/commit/57c3117dd4d0dd0ad0835edb1bf410b6ec76fba0), [`7a96951`](https://github.com/mastra-ai/mastra/commit/7a96951771a6aab850ceafefc73afe684ef24b21), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`14f9341`](https://github.com/mastra-ai/mastra/commit/14f934145150a2531abfc1c36d03909fd05b5c56), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618), [`2558c00`](https://github.com/mastra-ai/mastra/commit/2558c00b338025de29f778ca72b6bd05e5726349), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618)]:
+  - @mastra/code-sdk@1.12.0-alpha.4
+  - @mastra/core@1.76.0-alpha.4
+
 ## 0.21.0-alpha.3
 
 ### Patch Changes
