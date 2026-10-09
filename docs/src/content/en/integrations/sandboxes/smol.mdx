@@ -1,0 +1,81 @@
+---
+title: "Smol | Sandbox"
+description: "Run Mastra workspace commands in local or cloud Smol microVMs, with optional shared local files and durable checkpoints."
+packages:
+  - "@mastra/smol"
+---
+
+# Smol
+
+Run Mastra workspace commands inside isolated [Smol](https://github.com/smol-machines/smol) microVMs. The provider supports local VMs and Smol Cloud, streamed command output, file uploads, pause and resume, and explicit checkpoints.
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/smol
+```
+
+Local use requires the Smol runtime on a supported virtualization host. For Smol Cloud, set `SMOL_CLOUD_TOKEN` or pass `cloud: { apiKey: '...' }` to the sandbox.
+
+## Share a local project with an agent
+
+Use the same host directory for `LocalFilesystem` and the Smol mount. Mastra file tools and VM commands then work on the same project files:
+
+```typescript
+import { resolve } from 'node:path'
+import { Agent } from '@mastra/core/agent'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+import { SmolSandbox } from '@mastra/smol'
+
+const project = resolve('./my-project')
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: project }),
+  sandbox: new SmolSandbox({
+    id: 'my-project',
+    image: 'node:22-slim',
+    workingDirectory: '/workspace',
+    mounts: [{ source: project, target: '/workspace' }],
+  }),
+})
+
+const agent = new Agent({
+  id: 'coding-agent',
+  name: 'Coding agent',
+  instructions: 'Inspect and edit the project in /workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate('Run the project tests and explain any failures.')
+console.log(response.text)
+```
+
+Choose an OCI image that has your project's runtime and tools. The default image is `node:22-slim`. A mounted VM stops with its disk and host files retained. On its next start, it boots again; a VM without host mounts pauses with memory intact and resumes from that point.
+
+## Use Smol Cloud
+
+Supply an image and select the cloud target. The host needs a Smol Cloud token:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { SmolSandbox } from '@mastra/smol'
+
+const sandbox = new SmolSandbox({
+  id: 'cloud-project',
+  target: 'cloud',
+  image: 'node:22-slim',
+  allowHosts: ['registry.npmjs.org'],
+})
+const workspace = new Workspace({ sandbox })
+await workspace.init()
+console.log((await sandbox.executeCommand('node', ['--version'])).stdout)
+await workspace.destroy()
+```
+
+A stable `id` reconnects to a machine with the same configuration after a process restart. Changing the image, resources, egress policy, ports, or mounts with that `id` reports a configuration mismatch; destroy the earlier VM or use a new `id`. Pass `machineId` to select an existing cloud VM explicitly when you have verified its configuration. `allowHosts` restricts guest outbound traffic. Without it, cloud egress follows the Smol Cloud default.
+
+Host mounts aren't available on cloud. `sandbox.writeFiles()` uploads files to the VM. Configure a filesystem that shares the VM's files if an agent also needs Mastra file tools; a host `LocalFilesystem` alone accesses different files. This package doesn't provide the optional Mastra process manager or public networking interface.
+
+## Capture a checkpoint
+
+On cloud, call `await sandbox.snapshot()` and read `sandbox.checkpointInfo` for the created checkpoint. For local VMs, supply `checkpointPath` and call the same method. Host mounts cannot be captured in portable checkpoints, so `checkpointPath` and `mounts` cannot be used together.
