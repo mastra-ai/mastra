@@ -372,6 +372,11 @@
     "qwen3-5-flash": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
       }
     ],
     "mimo-v2-6-pro-ultraspeed": [
@@ -538,6 +543,11 @@
     "qwen3-5-plus": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1,
+        "max": 81920
       }
     ],
     "muse-spark-1-3": [

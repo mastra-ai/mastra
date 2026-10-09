@@ -8,6 +8,7 @@ import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -156,6 +157,15 @@ export interface SerializableStructuredOutput {
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
   structuringModelConfig?: SerializableModelConfig;
+  /**
+   * Whether the caller set `structuredOutput.model`. The durable path has no structuring
+   * pass yet, so the finish step must not derive the object from the main model's text.
+   */
+  hasStructuringModel?: boolean;
+  /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
+  errorStrategy?: 'strict' | 'warn' | 'fallback';
+  /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
+  fallbackValue?: unknown;
 }
 
 /**
@@ -204,6 +214,12 @@ export interface SerializableClientTool {
 export interface SerializableDurableOptions {
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
+  /**
+   * Names of call-time `toolsets` tools. Their `execute` closures cannot cross
+   * a process boundary, so a worker rebuilding tools uses these names to fail
+   * loudly instead of silently dropping them.
+   */
+  toolsetToolNames?: string[];
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
@@ -720,6 +736,8 @@ export interface RunRegistryEntry {
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
   memory?: MastraMemory;
+  /** Successful in-flight memory authorization checks shared across this run. */
+  memoryAuthorizationChecks?: Map<MastraFGAPermissionInput, Promise<void>>;
   /** The language model instance (non-serializable, has doStream method) */
   model: MastraLanguageModel;
   /** Model list for fallback support (stores actual model instances) */

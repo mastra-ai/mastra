@@ -28,6 +28,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
+import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
@@ -1827,6 +1828,7 @@ export class ProcessorRunner {
     prompt: LanguageModelV2Prompt;
     model: unknown;
     messageList?: MessageList;
+    workspace?: AnyWorkspace;
     stepNumber: number;
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
@@ -1882,6 +1884,7 @@ export class ProcessorRunner {
           // (e.g. unresolved string ids or function-typed dynamic models).
           model: args.model as never,
           messageList: args.messageList,
+          workspace: args.workspace,
           stepNumber: args.stepNumber,
           steps: args.steps,
           state: processorState.customState,

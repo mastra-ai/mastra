@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
+import { DisclosureChevron } from '../DisclosureChevron';
 import { ScrollArea } from '../ScrollArea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 
@@ -22,7 +22,7 @@ export const Default: Story = {
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
           Click to expand
-          <ChevronDown className="size-4" />
+          <DisclosureChevron className="size-4" />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 rounded-md border border-border bg-background p-4">
@@ -38,7 +38,7 @@ export const DefaultOpen: Story = {
       <CollapsibleTrigger asChild>
         <Button className="w-full justify-between">
           Section Title
-          <ChevronDown className="size-4" />
+          <DisclosureChevron className="size-4" />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2 rounded-md border border-border bg-background p-4">
@@ -55,7 +55,7 @@ export const SettingsSection: Story = {
         <CollapsibleTrigger asChild>
           <button className="flex w-full items-center justify-between py-2 text-subheading text-foreground hover:text-white">
             Advanced Settings
-            <ChevronDown className="size-4" />
+            <DisclosureChevron className="size-4" />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-3 pt-2">
@@ -84,7 +84,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 1
-            <ChevronDown className="size-4" />
+            <DisclosureChevron className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -95,7 +95,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 2
-            <ChevronDown className="size-4" />
+            <DisclosureChevron className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -106,7 +106,7 @@ export const MultipleCollapsibles: Story = {
         <CollapsibleTrigger asChild>
           <Button variant="ghost" className="w-full justify-between">
             Section 3
-            <ChevronDown className="size-4" />
+            <DisclosureChevron className="size-4" />
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="p-2">
@@ -125,7 +125,7 @@ export const FillsConstrainedPanel: Story = {
     >
       <CollapsibleTrigger className="flex w-full shrink-0 items-center justify-between px-4 py-2 text-subheading text-foreground">
         Recent runs
-        <ChevronDown className="size-4" />
+        <DisclosureChevron className="size-4" />
       </CollapsibleTrigger>
       <CollapsibleContent fill className="flex min-h-0 flex-col">
         <ScrollArea className="min-h-0 flex-1 border-t border-border">

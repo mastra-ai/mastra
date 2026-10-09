@@ -47,6 +47,7 @@
     "bytedance/seedance-2.0",
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0-mini",
+    "callstack/apex",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
     "fireworks/ember-1",
@@ -1395,6 +1396,12 @@
         "max": 32768
       }
     ],
+    "callstack/apex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
     "fireworks/ember-1": [
       {
         "type": "toggle"
@@ -1634,7 +1641,7 @@
     "mistral/mistral-large-4": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ],
     "mistral/mistral-medium-3.5": [

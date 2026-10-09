@@ -126,7 +126,6 @@ async function run(argv: string[]): Promise<void> {
       model,
       observation: ['remind', 'curate'],
       defaultScope: 'resource',
-      maxScope: 'resource',
     }).resolved;
     const mainAgent = new Agent({
       id: 'simulate-direct-curation',

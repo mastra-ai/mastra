@@ -1,9 +1,9 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useAgents } from '@mastra/react/hooks/agents';
-import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
@@ -86,7 +86,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
                     <SectionTitle icon={<AgentIcon className="text-span-agent" />}>
                       Sub-Agents{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>

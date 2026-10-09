@@ -1,14 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { countLeafRules } from '@mastra/playground-ui/utils/rule-engine';
-import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
+import { Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export interface EntityAccordionItemProps {
@@ -73,11 +73,7 @@ export function EntityAccordionItem({
         <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border bg-background">
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2">
             <Icon>
-              <ChevronRight
-                className={cn('text-muted-foreground transition-transform', {
-                  'rotate-90': isRulesOpen,
-                })}
-              />
+              <DisclosureChevron direction="right" className="text-muted-foreground" />
             </Icon>
             <Icon>
               <Ruler className="text-warning-foreground" />

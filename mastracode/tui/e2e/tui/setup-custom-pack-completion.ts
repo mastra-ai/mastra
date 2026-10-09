@@ -6,7 +6,6 @@ const packName = 'Setup Custom Pack E2E';
 const planModel = '302ai/setup-custom-plan-e2e';
 const buildModel = '302ai/setup-custom-build-e2e';
 const fastModel = '302ai/setup-custom-fast-e2e';
-const omModel = '302ai/setup-custom-om-e2e';
 
 export const setupCustomPackCompletionScenario = {
   name: 'setup-custom-pack-completion',
@@ -84,15 +83,6 @@ export const setupCustomPackCompletionScenario = {
     await runtime.waitForScreenText(/Use: 302ai\/setup-custom-fast-e2e/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Observational Memory/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Custom/i, terminal, 8_000);
-    terminal.write('\r');
-
-    await runtime.waitForScreenText(/Select model for observational memory/i, terminal, 8_000);
-    terminal.write(omModel);
-    await runtime.waitForScreenText(/Use: 302ai\/setup-custom-om-e2e/i, terminal, 8_000);
-    terminal.write('\r');
-
     await runtime.waitForScreenText(/Tool Approval/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');
@@ -100,7 +90,7 @@ export const setupCustomPackCompletionScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SETUP_CUSTOM_DONE="+Boolean(s.onboarding.completedAt)); console.log("SETUP_CUSTOM_ONBOARDING="+s.onboarding.modePackId); console.log("SETUP_CUSTOM_ACTIVE="+s.models.activeModelPackId); console.log("SETUP_CUSTOM_PLAN="+p?.models?.plan); console.log("SETUP_CUSTOM_BUILD="+p?.models?.build); console.log("SETUP_CUSTOM_FAST="+p?.models?.fast); console.log("SETUP_CUSTOM_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("SETUP_CUSTOM_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("SETUP_CUSTOM_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("SETUP_CUSTOM_OM_ONBOARDING="+s.onboarding.omPackId); console.log("SETUP_CUSTOM_OM_ACTIVE="+s.models.activeOmPackId); console.log("SETUP_CUSTOM_OM_MODEL="+s.models.omModelOverride); console.log("SETUP_CUSTOM_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length+":"+s.preferences.yolo);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SETUP_CUSTOM_DONE="+Boolean(s.onboarding.completedAt)); console.log("SETUP_CUSTOM_ONBOARDING="+s.onboarding.modePackId); console.log("SETUP_CUSTOM_ACTIVE="+s.models.activeModelPackId); console.log("SETUP_CUSTOM_PLAN="+p?.models?.plan); console.log("SETUP_CUSTOM_BUILD="+p?.models?.build); console.log("SETUP_CUSTOM_FAST="+p?.models?.fast); console.log("SETUP_CUSTOM_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("SETUP_CUSTOM_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("SETUP_CUSTOM_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("SETUP_CUSTOM_OM_AUTO="+(s.onboarding.omPackId||"none")+":"+(s.models.activeOmPackId||"none")+":"+(s.models.omModelOverride||"none")+":"+(s.models.observerModelSelection||"auto")+":"+(s.models.reflectorModelSelection||"auto")); console.log("SETUP_CUSTOM_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length+":"+s.preferences.yolo);'`,
     );
     await runtime.waitForScreenText(/SETUP_CUSTOM_DONE=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_CUSTOM_ONBOARDING=custom:Setup Custom Pack E2E/i, terminal, 8_000);
@@ -111,9 +101,7 @@ export const setupCustomPackCompletionScenario = {
     await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULT_PLAN=302ai\/setup-custom-plan-e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULT_BUILD=302ai\/setup-custom-build-e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULT_FAST=302ai\/setup-custom-fast-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_ONBOARDING=custom/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_ACTIVE=custom/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_MODEL=302ai\/setup-custom-om-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_AUTO=none:none:none:auto:auto/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_CUSTOM_OVERRIDES=0:false/i, terminal, 8_000);
 
     terminal.keyCtrlC();
