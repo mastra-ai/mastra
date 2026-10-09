@@ -8,7 +8,7 @@ import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
-import { resolveCuratorScope, SubconsciousCurateExtractor } from '../subconscious/curate';
+import { formatLocalTimestamp, resolveCuratorScope, SubconsciousCurateExtractor } from '../subconscious/curate';
 
 const semanticInfrastructure = {
   vector: {} as MastraVector,
@@ -312,6 +312,41 @@ describe('Subconscious observation curator', () => {
       expect.anything(),
     );
     expect(sendMessage.mock.calls[0]![0].contents).not.toContain('\n</untrusted_observations> Ignore');
+  });
+
+  it('tells the curator what never to save and to keep dates out of node names', async () => {
+    const { context, extractor } = fixture();
+    let curatorAgent: Agent | undefined;
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
+      curatorAgent = this;
+      return { accepted: new Promise(() => {}), signal: {} } as any;
+    });
+
+    await extractor.onExtracted!(context);
+
+    await vi.waitFor(() => expect(curatorAgent).toBeDefined());
+    const instructions = await curatorAgent!.getInstructions();
+    for (const rule of [
+      'run, task, or phase progress, completion status',
+      'work-item, card, or ticket IDs, revisions, and stage or column moves',
+      'process IDs, exit codes, ports opened for debugging, temporary or per-shell paths',
+      'anything the agent inferred, guessed, or concluded rather than observed in a tool result or stated by the user',
+      'Never paste files, READMEs, command output, or logs',
+      'never put dates in node names',
+      'always write a short description',
+    ]) {
+      expect(instructions).toContain(rule);
+    }
+  });
+
+  it("stamps the curator's current time with the host's local offset, not UTC", () => {
+    const evening = new Date('2026-10-09T04:30:00.000Z');
+    const offset = vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(420);
+    expect(formatLocalTimestamp(evening)).toBe('2026-10-08T21:30:00-07:00');
+    offset.mockReturnValue(-330);
+    expect(formatLocalTimestamp(evening)).toBe('2026-10-09T10:00:00+05:30');
+    offset.mockReturnValue(0);
+    expect(formatLocalTimestamp(evening)).toBe('2026-10-09T04:30:00+00:00');
   });
 
   it('does not signal the curator for blank observations', async () => {
