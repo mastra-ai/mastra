@@ -10,7 +10,7 @@ packages:
 
 A `FactorySandbox` is the one object a host gives `MastraFactory` to describe where sessions run. It owns the session sandbox constructor, the repository template built for a session, the schema of settings a user can tune per project, and optionally the ability to build that template ahead of time.
 
-Factory passes the project's settings document to `create` on every session boot (empty until a settings surface stores one) and serves the schema as JSON Schema to clients. Factory never knows which provider is behind the object.
+Factory passes the project's stored settings to `create` on every session boot and serves the schema as JSON Schema to clients. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
 
 ## Usage
 
