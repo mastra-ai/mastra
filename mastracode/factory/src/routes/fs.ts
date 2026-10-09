@@ -10,7 +10,9 @@ import type { Context } from 'hono';
 
 import { requireExec } from '../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
+import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
+import { peekSessionEnvironment } from '../session/environment-state-processor.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
@@ -84,6 +86,12 @@ export interface WorkspaceFilesListing {
   /** The agent thread whose terminal file list was captured. */
   threadId: string;
   files: Array<{ path: string }>;
+  /**
+   * The environment repositories the paths are prefixed by, in position
+   * order. Present only when the session's environment holds two or more
+   * repositories; a one-repository session lists unprefixed paths.
+   */
+  repositories?: Array<{ slug: string; prefix: string }>;
 }
 
 export type WorkspaceChangeStatus =
@@ -104,12 +112,29 @@ export interface WorkspaceChange {
   binary?: boolean;
 }
 
-export interface WorkspaceChanges {
-  workspacePath: string;
+export interface WorkspaceChangesRepository {
+  slug: string;
+  /** The path prefix of this repository's changes in the flat list, e.g. `platform/`. */
+  prefix: string;
+  /** False when the checkout could not be inspected (not recorded by the boot, missing, or git failed). */
   available: boolean;
   changes: WorkspaceChange[];
   additions?: number;
   deletions?: number;
+}
+
+export interface WorkspaceChanges {
+  workspacePath: string;
+  available: boolean;
+  /** Every repository's changes, paths prefixed by the repository directory in a multi-repository session. */
+  changes: WorkspaceChange[];
+  additions?: number;
+  deletions?: number;
+  /**
+   * One group per environment repository, in position order. Present only
+   * when the session's environment holds two or more repositories.
+   */
+  repositories?: WorkspaceChangesRepository[];
 }
 
 export interface WorkspaceDiff {
@@ -466,38 +491,92 @@ export async function listSessionFilesystemFiles(
   // listing. Await the in-flight capture (bounded) before reading.
   await waitForPendingFilesystemCapture(session.sessionId);
 
+  const layout = sessionLayout(peekSessionSandbox(session.id));
   return {
     workspacePath: session.sessionId,
     threadId: safeThreadId,
     files: await filesystem.listFiles({ resourceId: session.sessionId, threadId: safeThreadId }),
+    ...(layout && layout.repos.length > 1
+      ? { repositories: layout.repos.map(repo => ({ slug: repo.slug, prefix: repo.prefix })) }
+      : {}),
   };
 }
 
 interface SessionSandboxHandle {
   sandbox: ExecutableSandbox;
   filesystem: SandboxFilesystem;
-  workdir: string;
+  layout: SessionLayout;
+  /** The branch each layout repository is compared against, by slug; absent for a repository the boot never recorded. */
+  baseBranches: Map<string, string | undefined>;
 }
 
 /**
- * Resolve the session's sandbox from the per-process memo and wrap its
- * workdir in a `SandboxFilesystem`. Returns `null` when the session has no
- * sandbox in this process (never opened here, or evicted by retirement).
- * This is a passive read path, so it never constructs or provisions: the
- * session's files come back the next time the workspace is actually opened
- * (e.g. by sending a message).
+ * Resolve the session's sandbox from the per-process memo and wrap the
+ * session layout's root in a `SandboxFilesystem`: the checkout for a
+ * one-repository session, the workspace root (one directory per repository)
+ * otherwise. Returns `null` when the session has no sandbox in this process
+ * (never opened here, or evicted by retirement). This is a passive read path,
+ * so it never constructs or provisions: the session's files come back the
+ * next time the workspace is actually opened (e.g. by sending a message).
  */
 async function sessionSandbox(session: SourceControlSession): Promise<SessionSandboxHandle | null> {
   const entry = peekSessionSandbox(session.id);
   // An unresolved workdir means the sandbox never started in this process —
   // nothing is materialized, so there are no files to browse.
-  if (!entry?.workdir) return null;
+  const layout = sessionLayout(entry);
+  if (!entry || !layout) return null;
   const sandbox = requireExec(entry.sandbox);
   return {
     sandbox,
-    filesystem: new SandboxFilesystem({ sandbox, workdir: entry.workdir }),
-    workdir: entry.workdir,
+    filesystem: new SandboxFilesystem({ sandbox, workdir: layout.root }),
+    layout,
+    baseBranches: repositoryBaseBranches(session, layout, entry.workdirRepo!),
   };
+}
+
+/**
+ * The branch each layout repository is compared against: the session base
+ * branch for the session's own repository (session branch vs base), the
+ * default branch the boot recorded for every other one. `undefined` marks a
+ * repository the boot never recorded: nothing to inspect there.
+ */
+function repositoryBaseBranches(
+  session: SourceControlSession,
+  layout: SessionLayout,
+  ownRepo: string,
+): Map<string, string | undefined> {
+  const environment = layout.repos.length > 1 ? peekSessionEnvironment(session.sessionId) : undefined;
+  const bases = new Map<string, string | undefined>();
+  for (const repo of layout.repos) {
+    if (layout.repos.length === 1 || repo.slug.toLowerCase() === ownRepo.toLowerCase()) {
+      bases.set(repo.slug, session.baseBranch);
+      continue;
+    }
+    const state = environment?.repositories.find(candidate => candidate.slug.toLowerCase() === repo.slug.toLowerCase());
+    bases.set(repo.slug, state?.defaultBranch);
+  }
+  return bases;
+}
+
+/**
+ * Split a client path into the layout repository it belongs to and the path
+ * inside that checkout. Longest prefix wins; the inside path is validated
+ * again so a prefix cannot smuggle a traversal. A path matching no repository
+ * (including a bare prefix) is not available: the file routes only serve the
+ * checkouts, never the workspace root itself.
+ */
+function resolveLayoutPath(
+  layout: SessionLayout,
+  path: string,
+  label: string,
+): { repo: SessionLayoutRepository; relative: string } {
+  const safePath = assertRelativePath(path, label);
+  if (layout.repos.length === 1) return { repo: layout.repos[0]!, relative: safePath };
+  const repo = layout.repos
+    .filter(candidate => safePath.startsWith(candidate.prefix) && safePath.length > candidate.prefix.length)
+    .toSorted((a, b) => b.prefix.length - a.prefix.length)[0];
+  if (!repo) throw new Error(`${label} is not available in this session's repositories`);
+  return { repo, relative: assertRelativePath(safePath.slice(repo.prefix.length), label) };
 }
 
 /** List an approved rendered root inside a Factory session's sandbox workdir. */
@@ -507,7 +586,7 @@ export async function listSessionRenderedPath(
 ): Promise<WorkspaceRenderedListing> {
   const safeRoot = assertApprovedRenderedRoot(renderedRoot);
   const handle = await sessionSandbox(session);
-  const rootPath = posixPath.join(handle?.workdir ?? '', safeRoot);
+  const rootPath = posixPath.join(handle?.layout.root ?? '', safeRoot);
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
   if (!handle) return empty;
 
@@ -666,42 +745,39 @@ function unavailableWorkspaceChanges(workspacePath: string): WorkspaceChanges {
 }
 
 async function resolveSessionComparisonBase(
-  session: SourceControlSession,
   sandbox: ExecutableSandbox,
   workdir: string,
+  baseBranch: string,
 ): Promise<string> {
-  const result = await sandbox.executeCommand(
-    'git',
-    ['-C', workdir, 'merge-base', 'HEAD', `origin/${session.baseBranch}`],
-    { timeout: 30_000 },
-  );
+  const result = await sandbox.executeCommand('git', ['-C', workdir, 'merge-base', 'HEAD', `origin/${baseBranch}`], {
+    timeout: 30_000,
+  });
   const sha = result.stdout.trim();
   return result.exitCode === 0 && /^[0-9a-f]{40,64}$/i.test(sha) ? sha : 'HEAD';
 }
 
-export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
-  const handle = await sessionSandbox(session);
-  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
-  const comparisonBase = await resolveSessionComparisonBase(session, handle.sandbox, handle.workdir);
+type RepositoryChanges = Pick<WorkspaceChangesRepository, 'available' | 'changes' | 'additions' | 'deletions'>;
+
+/** The changes of one checkout against its comparison base; `available: false` when git cannot inspect it. */
+async function listRepositoryChanges(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  baseBranch: string,
+): Promise<RepositoryChanges> {
+  const comparisonBase = await resolveSessionComparisonBase(sandbox, workdir, baseBranch);
 
   const [statusResult, trackedResult, statsResult] = await Promise.all([
-    handle.sandbox.executeCommand(
-      'git',
-      ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
-      { timeout: 30_000 },
-    ),
-    handle.sandbox.executeCommand(
-      'git',
-      ['-C', handle.workdir, 'diff', '--name-status', '-z', '--find-renames', comparisonBase],
-      { timeout: 30_000 },
-    ),
-    handle.sandbox.executeCommand(
-      'sh',
-      ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir, comparisonBase],
-      { timeout: 30_000 },
-    ),
+    sandbox.executeCommand('git', ['-C', workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+      timeout: 30_000,
+    }),
+    sandbox.executeCommand('git', ['-C', workdir, 'diff', '--name-status', '-z', '--find-renames', comparisonBase], {
+      timeout: 30_000,
+    }),
+    sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', workdir, comparisonBase], {
+      timeout: 30_000,
+    }),
   ]);
-  if (statusResult.exitCode !== 0) return unavailableWorkspaceChanges(session.sessionId);
+  if (statusResult.exitCode !== 0) return { available: false, changes: [] };
 
   const statusChanges = parseWorkspaceChanges(statusResult.stdout);
   const trackedChanges = trackedResult.exitCode === 0 ? parseWorkspaceTrackedChanges(trackedResult.stdout) : [];
@@ -712,9 +788,7 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
     }
   }
   const changes = [...changesByPath.values()].toSorted((a, b) => a.path.localeCompare(b.path));
-  if (statsResult.exitCode !== 0) {
-    return { workspacePath: session.sessionId, available: true, changes };
-  }
+  if (statsResult.exitCode !== 0) return { available: true, changes };
 
   const stats = parseWorkspaceChangeStats(statsResult.stdout);
   let additions = 0;
@@ -725,8 +799,66 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
     deletions += changeStats?.deletions ?? 0;
     return { ...change, ...changeStats };
   });
+  return { available: true, changes: changesWithStats, additions, deletions };
+}
 
-  return { workspacePath: session.sessionId, available: true, changes: changesWithStats, additions, deletions };
+function prefixChange(change: WorkspaceChange, prefix: string): WorkspaceChange {
+  if (!prefix) return change;
+  return {
+    ...change,
+    path: `${prefix}${change.path}`,
+    ...(change.previousPath ? { previousPath: `${prefix}${change.previousPath}` } : {}),
+  };
+}
+
+export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
+  const handle = await sessionSandbox(session);
+  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
+  const { layout, baseBranches: bases } = handle;
+
+  // One repository: the response is exactly what it was before layouts.
+  if (layout.repos.length === 1) {
+    const repo = layout.repos[0]!;
+    const result = await listRepositoryChanges(handle.sandbox, repo.dir, bases.get(repo.slug) ?? session.baseBranch);
+    if (!result.available) return unavailableWorkspaceChanges(session.sessionId);
+    return { workspacePath: session.sessionId, ...result };
+  }
+
+  // Several: inspect every checkout in parallel, one group each. A repository
+  // the boot never recorded has no checkout to inspect and stays unavailable
+  // without a git call; a failing one is unavailable on its own, the others
+  // still answer.
+  const groups: WorkspaceChangesRepository[] = await Promise.all(
+    layout.repos.map(async repo => {
+      const baseBranch = bases.get(repo.slug);
+      const result = baseBranch
+        ? await listRepositoryChanges(handle.sandbox, repo.dir, baseBranch)
+        : { available: false, changes: [] };
+      return {
+        slug: repo.slug,
+        prefix: repo.prefix,
+        ...result,
+        changes: result.changes.map(change => prefixChange(change, repo.prefix)),
+      };
+    }),
+  );
+  const available = groups.filter(group => group.available);
+  const changes = available.flatMap(group => group.changes).toSorted((a, b) => a.path.localeCompare(b.path));
+  const counted = available.filter(group => group.additions !== undefined);
+  const totals =
+    counted.length > 0
+      ? {
+          additions: counted.reduce((sum, group) => sum + (group.additions ?? 0), 0),
+          deletions: counted.reduce((sum, group) => sum + (group.deletions ?? 0), 0),
+        }
+      : {};
+  return {
+    workspacePath: session.sessionId,
+    available: available.length > 0,
+    changes,
+    ...totals,
+    repositories: groups,
+  };
 }
 
 async function executeBoundedGitDiff(sandbox: ExecutableSandbox, args: string[], allowExitOne = false) {
@@ -750,16 +882,27 @@ export async function readSessionWorkspaceDiff(
   previousPath?: string,
 ): Promise<WorkspaceDiff> {
   const safePath = assertRelativePath(path, 'path');
-  const safePreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
+  if (previousPath) assertRelativePath(previousPath, 'previousPath');
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
-  const comparisonBase = await resolveSessionComparisonBase(session, handle.sandbox, handle.workdir);
+  // The client sends the prefixed paths it was listed; git runs inside the
+  // checkout they belong to, on the paths relative to it. A rename never
+  // crosses checkouts, so both halves must resolve to the same repository.
+  const target = resolveLayoutPath(handle.layout, safePath, 'path');
+  const previous = previousPath ? resolveLayoutPath(handle.layout, previousPath, 'previousPath') : undefined;
+  if (previous && previous.repo !== target.repo) {
+    throw new Error('previousPath is not available in the repository of path');
+  }
+  const workdir = target.repo.dir;
+  const baseBranch = handle.baseBranches.get(target.repo.slug);
+  if (!baseBranch) throw new Error("path is not available in this session's repositories");
+  const comparisonBase = await resolveSessionComparisonBase(handle.sandbox, workdir, baseBranch);
 
-  const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
+  const pathspecs = previous ? [previous.relative, target.relative] : [target.relative];
   let result = await executeBoundedGitDiff(handle.sandbox, [
     '--literal-pathspecs',
     '-C',
-    handle.workdir,
+    workdir,
     'diff',
     '--find-renames',
     '--no-ext-diff',
@@ -774,7 +917,7 @@ export async function readSessionWorkspaceDiff(
   if (!result.stdout) {
     const untracked = await handle.sandbox.executeCommand(
       'git',
-      ['--literal-pathspecs', '-C', handle.workdir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
+      ['--literal-pathspecs', '-C', workdir, 'ls-files', '--others', '--exclude-standard', '--', target.relative],
       { timeout: 30_000 },
     );
     if (untracked.exitCode === 0 && untracked.stdout.trim()) {
@@ -782,7 +925,7 @@ export async function readSessionWorkspaceDiff(
         handle.sandbox,
         [
           '-C',
-          handle.workdir,
+          workdir,
           'diff',
           '--no-index',
           '--no-ext-diff',
@@ -790,7 +933,7 @@ export async function readSessionWorkspaceDiff(
           '--unified=3',
           '--',
           '/dev/null',
-          safePath,
+          target.relative,
         ],
         true,
       );
