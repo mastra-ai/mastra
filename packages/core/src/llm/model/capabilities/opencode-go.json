@@ -24,7 +24,8 @@
     "qwen3.8-flash",
     "qwen3.8-max",
     "space-bunny",
-    "space-bunny-free"
+    "space-bunny-free",
+    "step-5-preview-free"
   ],
   "temperature": [
     "deepseek-v4-flash",
@@ -75,7 +76,8 @@
     "muse-spark-1.2-contributor",
     "muse-spark-1.3-contributor",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "step-5-preview-free"
   ],
   "reasoning": {
     "qwen3.7-max": [
@@ -242,6 +244,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "step-5-preview-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "glm-5.3": [

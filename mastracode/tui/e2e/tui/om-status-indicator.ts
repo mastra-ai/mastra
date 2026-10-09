@@ -24,6 +24,7 @@ export const omStatusIndicatorScenario: McE2eScenario = {
   name: 'om-status-indicator',
   description: 'Verifies the OM context counter in the real TUI status line.',
   testName: 'renders combined OM usage as used/capacity with a percentage and sweeps the counter while buffering',
+  enableObservationalMemory: true,
   async inProcessApp({ startMastraCodeApp }) {
     const app = await startMastraCodeApp({
       onTuiCreated(tui: any) {

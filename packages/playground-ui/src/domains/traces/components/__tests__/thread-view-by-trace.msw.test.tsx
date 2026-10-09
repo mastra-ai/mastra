@@ -672,24 +672,11 @@ describe('ThreadViewByTrace', () => {
     });
 
     describe('given a scored trace', () => {
-      it('when scorerLink resolves, then "Open scorer run" links to the scorer run built by the link provider', async () => {
+      it('then the score card opens the score without an "Open scorer run" link', async () => {
         installHandlers();
         installFeedbackHandlers();
         installScore();
         renderView();
-
-        const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-        fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
-
-        const link = await row.findByRole('link', { name: /Open scorer run/ });
-        expect(link.getAttribute('href')).toBe('/scorers/scorer-1?scoreId=score-1');
-      });
-
-      it('when the app has no scorer route, then "Open scorer run" is hidden', async () => {
-        installHandlers();
-        installFeedbackHandlers();
-        installScore();
-        renderView({ paths: { scorerLink: () => '' } });
 
         const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
         fireEvent.click(row.getByRole('tab', { name: /Scores/ }));

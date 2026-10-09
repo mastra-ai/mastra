@@ -17,8 +17,6 @@ interface ModelPackContext {
 interface PackSelection {
   modelId: string;
   subagentModels: Record<string, string>;
-  observerModelId?: string;
-  reflectorModelId?: string;
   modelRoute: {
     entries: Array<{
       id: string;
@@ -134,13 +132,10 @@ function resolvePackSelection(settings: GlobalSettings, packId: string, modeId: 
     ];
   });
 
-  const memoryModelId = packModels.memory;
-  return {
-    modelId,
-    subagentModels,
-    ...(memoryModelId ? { observerModelId: memoryModelId, reflectorModelId: memoryModelId } : {}),
-    modelRoute: { entries },
-  };
+  // The pack's memory model rides on the route rather than pinning the OM
+  // roles, so it applies only while the pack is active and `/om` choices return
+  // when it is not.
+  return { modelId, subagentModels, modelRoute: { entries } };
 }
 
 export async function applyPackToSession(
@@ -182,14 +177,6 @@ export async function applyPackToSession(
       if (!application.isCurrent()) return cancelled();
       for (const [agentType, modelId] of Object.entries(selection.subagentModels)) {
         await ctx.state.session.subagents.model.set({ modelId, agentType });
-        if (!application.isCurrent()) return cancelled();
-      }
-      if (selection.observerModelId) {
-        await ctx.state.session.om.observer.switchModel({ modelId: selection.observerModelId });
-        if (!application.isCurrent()) return cancelled();
-      }
-      if (selection.reflectorModelId) {
-        await ctx.state.session.om.reflector.switchModel({ modelId: selection.reflectorModelId });
         if (!application.isCurrent()) return cancelled();
       }
       await ctx.state.session.state.set({

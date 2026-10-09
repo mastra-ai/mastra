@@ -10,7 +10,6 @@ import { LoginAccountManagerComponent } from '../components/login-account-manage
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import { promptAuthMode } from '../components/login-mode-selector.js';
 import { LoginSelectorComponent } from '../components/login-selector.js';
-import { seedOMDefaultAfterLogin } from '../om-defaults.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -143,7 +142,6 @@ async function performLogin(
             ctx.showInfo(`Successfully logged in to ${providerName}`);
           }
         }
-        await seedOMDefaultAfterLogin(ctx.state, providerId, message => ctx.showInfo(message));
 
         resolve();
       })

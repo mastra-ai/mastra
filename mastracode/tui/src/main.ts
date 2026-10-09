@@ -176,6 +176,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     storageMaintenance: result.storageMaintenance,
     processMemoryDiagnostics,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
     threadScheduler: result.threadScheduler,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
