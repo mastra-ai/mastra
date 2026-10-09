@@ -309,7 +309,15 @@ describe('MastraStorageExporter', () => {
         await Promise.all([firstExport, secondExport]);
 
         expect(mockStorage.getStore).toHaveBeenCalledTimes(2);
-        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
+        // Queued flushes can combine concurrent exports into a single batch.
+        const spans = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap(([batch]) => batch.records);
+        expect(spans).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ traceId: 'trace-1', spanId: 'span-1' }),
+            expect.objectContaining({ traceId: 'trace-2', spanId: 'span-2' }),
+          ]),
+        );
+        expect(spans).toHaveLength(2);
       });
     });
 
@@ -865,6 +873,44 @@ describe('MastraStorageExporter', () => {
     });
 
     describe('Flush', () => {
+      it.each(['flush', 'shutdown'] as const)('should join an in-flight batch during %s', async method => {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 1,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+        let releaseWrite!: () => void;
+        let reportStarted!: () => void;
+        const writing = new Promise<void>(resolve => {
+          reportStarted = resolve;
+        });
+        const gate = new Promise<void>(resolve => {
+          releaseWrite = resolve;
+        });
+        mockObservabilityStore.batchCreateSpans.mockImplementationOnce(async () => {
+          reportStarted();
+          await gate;
+        });
+        const producer = exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        await writing;
+        let finished = false;
+        const drain = exporter[method]().then(() => {
+          finished = true;
+        });
+        try {
+          // Cross a turn while the storage write is held, without a wall-clock sleep.
+          await new Promise<void>(resolve => setImmediate(resolve));
+          expect(finished).toBe(false);
+        } finally {
+          releaseWrite();
+          await Promise.all([producer, drain]);
+          await exporter.shutdown();
+        }
+        expect(finished).toBe(true);
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+      });
+
       it('should flush buffered events without shutting down', async () => {
         const exporter = new MastraStorageExporter({
           strategy: 'batch-with-updates',

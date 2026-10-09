@@ -86,6 +86,7 @@ export class MastraStorageExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  #flushTail: Promise<void> = Promise.resolve();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -423,7 +424,14 @@ export class MastraStorageExporter extends BaseExporter {
    * created yet are re-inserted into the live buffer for the next flush.
    * Completed spans (SPAN_ENDED) are cleaned up from allCreatedSpans after success.
    */
-  private async flushBuffer(): Promise<void> {
+  private flushBuffer(): Promise<void> {
+    const pending = this.#flushTail.then(() => this.flushBufferOnce());
+    // A failed batch must not prevent later flushes from running.
+    this.#flushTail = pending.catch(() => {});
+    return pending;
+  }
+
+  private async flushBufferOnce(): Promise<void> {
     if (!this.#observabilityStorage) {
       this.logger.debug('Cannot flush. Observability storage is not initialized');
       return;
@@ -615,8 +623,9 @@ export class MastraStorageExporter extends BaseExporter {
       this.logger.debug('Flushing buffered events', {
         bufferedEvents: this.#eventBuffer.totalSize,
       });
-      await this.flushBuffer();
     }
+    // The live buffer can be empty while a previously extracted batch is still writing.
+    await this.flushBuffer();
   }
 
   async shutdown(): Promise<void> {
