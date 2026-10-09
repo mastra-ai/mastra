@@ -19,7 +19,7 @@ export function OnboardingPersonalPreview({
   OnboardingPreviewProps,
   'model' | 'providerId' | 'personalProviderId' | 'personalConnectionMethod' | 'personalModel' | 'preset'
 >) {
-  const individual = preset?.kind === 'individual';
+  const individual = preset?.kind === 'individual' || (!preset && !model);
   const providers = useProvidersQuery();
   const personal = providers.data?.find(item => item.provider === personalProviderId);
   const auth = useFactoryAuth();

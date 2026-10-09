@@ -5,6 +5,7 @@ import { queryKeys } from '../../../../api/keys';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import { includesPersonalSetup } from '../services/modelSetupPreset';
+import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
 import type { SaveModelSetupPreset } from '../services/modelSetupPreset';
 import { readJsonOrThrow } from '../services/http';
 import {
@@ -37,6 +38,8 @@ export function useCompleteFactorySetup(savePreset?: SaveModelSetupPreset) {
         throw new Error('Choose a shared model before creating your factory.');
       if (draft.preset?.kind === 'individual' && !draft.personal?.modelId)
         throw new Error('Choose your personal model before creating your factory.');
+      const factoryModel = usesPersonalFactoryModel(draft) ? draft.personal?.modelId : draft.model?.modelId;
+      if (!factoryModel) throw new Error('Choose a model before creating your factory.');
       persistOnboardingStep('review');
       const pendingId = sessionStorage.getItem(ONBOARDING_FACTORY_KEY);
       const factories = await listFactoryProjects(baseUrl);
@@ -62,13 +65,8 @@ export function useCompleteFactorySetup(savePreset?: SaveModelSetupPreset) {
           await unlinkRepository(baseUrl, factory.id, previous.projectRepositoryId);
         }
       }
-      const factoryModel = draft.preset?.kind === 'individual' ? draft.personal?.modelId : draft.model?.modelId;
-      if (factoryModel) {
-        await updateFactoryDefaultModel(baseUrl, factory.id, factoryModel);
-        // Observer/Reflector remain Auto. Explicit existing role choices stay untouched.
-      } else if (existing?.defaultModelId) {
-        await updateFactoryDefaultModel(baseUrl, factory.id, null);
-      }
+      await updateFactoryDefaultModel(baseUrl, factory.id, factoryModel);
+      // Observer/Reflector remain Auto. Explicit existing role choices stay untouched.
       if (draft.personal?.modelId && (!draft.preset || includesPersonalSetup(draft.preset))) {
         await setPersonalDefault.mutateAsync(draft.personal.modelId);
       }

@@ -6,6 +6,7 @@ import { providerDisplayName } from '../../settings/components/provider-display-
 import { isGitLabRepository } from '../services/github';
 import type { OnboardingDraft, OnboardingStep } from '../services/onboardingFlow';
 import { includesPersonalSetup, modelSetupLabel } from '../services/modelSetupPreset';
+import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
 
@@ -28,6 +29,7 @@ export function OnboardingReviewStep({
     personal?.modelId ?? (personal ? providerDisplayName(personal.providerId) : 'No personal connection selected');
   const personalMethod = personal?.method === 'oauth' ? 'Provider sign-in' : 'API key';
   const personalScope = personal?.modelId ? 'your default' : 'only you';
+  const personalIsFactoryModel = usesPersonalFactoryModel(draft);
   return (
     <section aria-label="Review factory setup" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:gap-4">
@@ -49,7 +51,7 @@ export function OnboardingReviewStep({
             onEdit={() => onEdit('model-preset')}
           />
         )}
-        {draft.preset?.kind === 'individual' ? (
+        {personalIsFactoryModel ? (
           <OnboardingReviewRow
             icon={<Sparkles />}
             label="Model"
@@ -68,7 +70,7 @@ export function OnboardingReviewStep({
             onEdit={() => onEdit('model-provider')}
           />
         )}
-        {draft.preset?.kind !== 'individual' && (!draft.preset || includesPersonalSetup(draft.preset)) && (
+        {!personalIsFactoryModel && (!draft.preset || includesPersonalSetup(draft.preset)) && (
           <OnboardingReviewRow
             icon={<UserRound />}
             label="Access"

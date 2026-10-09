@@ -393,30 +393,57 @@ describe('Model setup presets', () => {
     });
   });
 
-  it('routes a member without shared access into personal setup and confirms a usable Factory model', async () => {
+  it.each([true, false])(
+    'confirms a personal Factory model for members without shared access (presets: %s)',
+    async withPresets => {
+      const writes = registerSetup();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+      );
+      persistOnboardingDraft({
+        repository: repo,
+        ...(withPresets ? { preset: { kind: 'company', setupPersonal: false } as const } : {}),
+      });
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+      const user = userEvent.setup();
+      renderOnboarding(withPresets);
+      await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
+      expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
+      await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+      expect(writes).toEqual([]);
+      const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
+      expect(review.getByText('anthropic/claude-fable-5')).toBeInTheDocument();
+      expect(review.getByText('API key · Factory + your default')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      await screen.findByRole('heading', { name: 'Factory ready' });
+      expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
+      expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({
+        modelId: 'anthropic/claude-fable-5',
+      });
+      expect(writes.find(item => item.path === 'preset')?.body).toEqual(
+        withPresets ? { kind: 'individual' } : undefined,
+      );
+    },
+  );
+
+  it('does not create a Factory from an old review draft without a model', async () => {
     const writes = registerSetup();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-        HttpResponse.json({
-          orgKeyAdmin: false,
-          providers: [{ provider: 'anthropic', source: 'stored-user', userCredential: 'api_key' }],
-        }),
-      ),
-    );
-    persistOnboardingDraft({ repository: repo, preset: { kind: 'company', setupPersonal: false } });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    persistOnboardingDraft({ repository: repo });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
     const user = userEvent.setup();
-    renderOnboarding(true);
-    await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
-    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-    expect(writes).toEqual([]);
+    renderOnboarding();
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
-    await screen.findByRole('heading', { name: 'Factory ready' });
-    expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
-    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'anthropic/claude-fable-5' });
-    expect(writes.find(item => item.path === 'preset')?.body).toEqual({ kind: 'individual' });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a model before creating your factory.');
+    expect(writes).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Edit model' }));
+    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
   });
 
   it('does not silently apply prototype presets on a deployment without the setup adapter', async () => {

@@ -48,18 +48,21 @@ export function onboardingSteps(preset?: ModelSetupPreset): Step[] {
   return [...start, 'model-preset', 'model-provider', 'review'];
 }
 
-export function onboardingStepMeta(step: Step, preset?: ModelSetupPreset) {
+export function onboardingStepMeta(step: Step, preset?: ModelSetupPreset, personalIsFactoryModel = false) {
+  if (step === 'personal-provider' && (preset?.kind === 'individual' || personalIsFactoryModel))
+    return { title: 'Choose your model.', description: 'Your default model, also used for this Factory.' };
   if (!preset) return STEP_META[step];
   if (step === 'model-provider')
     return { title: 'Choose the Factory model.', description: 'Shared credentials · default for Factory work.' };
   if (step !== 'personal-provider') return STEP_META[step];
-  if (preset.kind === 'individual')
-    return { title: 'Choose your model.', description: 'Your default model, also used for this Factory.' };
   return { title: 'Your personal model.', description: 'Optional · for your personal sessions.' };
 }
 
-export function personalModelChoice(preset?: ModelSetupPreset): 'required' | 'optional' | undefined {
-  if (!preset) return undefined;
+export function personalModelChoice(
+  preset?: ModelSetupPreset,
+  personalIsFactoryModel = false,
+): 'required' | 'optional' | undefined {
+  if (!preset) return personalIsFactoryModel ? 'required' : undefined;
   return preset.kind === 'individual' ? 'required' : 'optional';
 }
 

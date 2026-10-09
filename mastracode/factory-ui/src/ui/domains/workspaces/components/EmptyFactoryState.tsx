@@ -1,4 +1,5 @@
 import { OnboardingProgress } from './OnboardingProgress';
+import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
 import { onboardingSteps, onboardingStepMeta, personalModelChoice } from '../services/onboardingSteps';
 import { useIsMutating } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -97,7 +98,8 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
   const repository = previewRepository ?? draft.repository;
   const model = previewModel ?? (previewProvider ? undefined : draft.model?.modelId);
   const personalModel = previewPersonalModel ?? (previewPersonalProvider ? undefined : draft.personal?.modelId);
-  const meta = onboardingStepMeta(step, preset);
+  const personalIsFactoryModel = usesPersonalFactoryModel(draft);
+  const meta = onboardingStepMeta(step, preset, personalIsFactoryModel);
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
@@ -214,7 +216,7 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
               {step === 'personal-provider' && (
                 <PersonalProviderFactoryStep
                   initialChoice={draft.personal}
-                  modelChoice={personalModelChoice(preset)}
+                  modelChoice={personalModelChoice(preset, personalIsFactoryModel)}
                   onPreviewModel={setPreviewPersonalModel}
                   onContinue={personal => {
                     updateDraft({ ...draft, personal });
