@@ -214,13 +214,13 @@ export class ObservationTurn {
    * proactively while the agent is idle, rather than waiting for the next turn.
    * The returned record does not wait for that background buffering pass to finish.
    */
-  async end(): Promise<TurnResult> {
+  async end(messageList: MessageList = this.messageList): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
     this._ended = true;
 
     // Save any unsaved messages from the last step
-    const unsavedInput = this.messageList.get.input.db();
-    const unsavedOutput = this.messageList.get.response.db();
+    const unsavedInput = messageList.get.input.db();
+    const unsavedOutput = messageList.get.response.db();
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
@@ -232,7 +232,7 @@ export class ObservationTurn {
     const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
     const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
     if (asyncObservationEnabled && bufferOnIdle) {
-      const allMessages = getObservableMessages(this.messageList);
+      const allMessages = getObservableMessages(messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
       // Buffer only the safe prefix before a tool call still pending on the newest
