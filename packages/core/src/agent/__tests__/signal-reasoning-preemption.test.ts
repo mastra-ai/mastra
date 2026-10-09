@@ -238,6 +238,7 @@ describe('queued signals preempt default-loop reasoning', () => {
         reasoningTokens: 2,
       };
       const onStepFinish = vi.fn();
+      const onIterationComplete = vi.fn();
       const doStream = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
         modelCalls++;
         if (prior && modelCalls === 1)
@@ -272,6 +273,7 @@ describe('queued signals preempt default-loop reasoning', () => {
             { id: 'cancel', model: new AISDKV5LanguageModel(new MockLanguageModelV2({ doStream })), maxRetries: 0 },
           ],
           maxSteps: 3,
+          onIterationComplete,
           tools: {
             prior: createTool({
               id: 'prior',
@@ -341,6 +343,9 @@ describe('queued signals preempt default-loop reasoning', () => {
           expect(chunks).not.toContain('error');
           expect(onAbort).toHaveBeenCalledTimes(1);
           expect(onError).not.toHaveBeenCalled();
+          expect(onIterationComplete).toHaveBeenLastCalledWith(
+            expect.objectContaining({ isFinal: true, finishReason: 'abort', iteration: prior ? 2 : 1 }),
+          );
         } else {
           expect(chunks.filter(type => type === 'error')).toHaveLength(1);
           expect(chunks).not.toContain('abort');

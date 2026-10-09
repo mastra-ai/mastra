@@ -496,7 +496,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       // A signal replaces the physical request, not the logical step or its budget.
-      if (typedInputData.stepResult?.signalPreempted) return typedInputData.stepResult.isContinued;
+      if (typedInputData.stepResult?.signalPreempted && typedInputData.stepResult.reason !== 'abort') {
+        return typedInputData.stepResult.isContinued;
+      }
 
       const responseMessages = typedInputData.messages.nonUser;
       const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
