@@ -195,7 +195,7 @@ class StorageBackendSubmenu extends Container {
 // Helpers
 // =============================================================================
 
-function quietPreviewLinesLabel(lines: number): string {
+function previewLinesLabel(lines: number): string {
   return lines === 0 ? 'None' : `${lines} line${lines === 1 ? '' : 's'}`;
 }
 
@@ -358,20 +358,22 @@ export class SettingsComponent extends Box implements Focusable {
         id: 'previewLines',
         label: 'Preview lines',
         description: 'Preview lines shown under each tool, including shell output. Set to None to hide previews.',
-        currentValue: quietPreviewLinesLabel(config.previewLines),
+        currentValue: previewLinesLabel(config.previewLines),
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
             [0, 1, 2, 4, 8].map(lines => ({
               value: String(lines),
-              label: `  ${quietPreviewLinesLabel(lines)}`,
+              label: `  ${previewLinesLabel(lines)}`,
               description:
-                lines === 0 ? 'Hide tool previews and shell output' : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
+                lines === 0
+                  ? 'Hide tool previews and shell output'
+                  : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
             })),
             String(config.previewLines),
             value => {
               config.previewLines = Number(value);
               callbacks.onPreviewLinesChange(config.previewLines);
-              done(quietPreviewLinesLabel(config.previewLines));
+              done(previewLinesLabel(config.previewLines));
             },
             () => done(),
           ),

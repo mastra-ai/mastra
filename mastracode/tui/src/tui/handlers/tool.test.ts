@@ -176,7 +176,7 @@ describe('task tool rendering', () => {
     handleToolEnd(ctx, 'call-1', { content: 'Task not found: missing', isError: true }, true);
 
     const component = ctx.state.allToolComponents[0] as any;
-    expect(component.getChatSpacingKind()).toBe('normal-tool');
+    expect(component.getChatSpacingKind()).toBe('full-tool');
     const lines = component.render(100).map((line: string) => stripAnsi(line).trimEnd());
     expect(lines).toEqual(['task_update id="missing", status="completed" ✗', '▎ Error', '▎ Task not found: missing']);
   });
@@ -195,7 +195,7 @@ describe('task tool rendering', () => {
     expect(ctx.state.chatContainer.children).toHaveLength(childCount);
   });
 
-  it('renders regular tools in quiet mode without demoting previous tools', () => {
+  it('renders regular tools without demoting previous tools', () => {
     const ctx = createToolHandlerContext();
 
     handleToolInputStart(ctx, 'call-1', 'view');
@@ -210,7 +210,7 @@ describe('task tool rendering', () => {
   });
 
   it.each([false, true])(
-    'preserves quiet error paths before the render timer (parser advanced: %s)',
+    'preserves compact error paths before the render timer (parser advanced: %s)',
     async advanceParser => {
       const ctx = createToolHandlerContext();
       const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
@@ -234,7 +234,7 @@ describe('task tool rendering', () => {
     },
   );
 
-  it('regroups quiet tools as streamed args arrive', async () => {
+  it('regroups compact tools as streamed args arrive', async () => {
     const ctx = createToolHandlerContext();
     const buffers = new Map([
       ['call-1', { toolName: 'view', text: '' }],
@@ -274,7 +274,7 @@ describe('task tool rendering', () => {
   });
 });
 
-describe('quiet shell description streaming', () => {
+describe('compact shell description streaming', () => {
   it('never shows the streamed command before the description arrives', async () => {
     const ctx = createToolHandlerContext();
     const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
@@ -340,7 +340,7 @@ describe('quiet shell description streaming', () => {
     ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
 
-  it('only ever adds lines as quiet shell calls stream in, run, and finish', async () => {
+  it('only ever adds lines as compact shell calls stream in, run, and finish', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.previewLines = 2;
     const buffers = new Map<string, { toolName: string; text: string }>();
@@ -397,7 +397,7 @@ describe('quiet shell description streaming', () => {
     expect(output).toContain('└▸ Error: Sandbox failed to start');
   });
 
-  it('labels quiet shell boxes with the project root commands run in', () => {
+  it('labels compact shell boxes with the project root commands run in', () => {
     const ctx = createToolHandlerContext();
     ctx.state.projectInfo = { rootPath: '/work/repo' } as typeof ctx.state.projectInfo;
     handleToolStart(ctx, 'call-1', 'execute_command', {
@@ -475,7 +475,7 @@ describe('inline tool approval', () => {
     expect(output).toContain('path: src/auth.ts');
   });
 
-  it('names the command in quiet mode, where the row shows a description instead', () => {
+  it('names the command, where the row shows a description instead', () => {
     const ctx = createToolHandlerContext();
     (ctx.state.session as any).respondToToolApproval = vi.fn();
     const args = { command: 'rm -rf build', description: 'Cleaning the build output' };

@@ -10,11 +10,11 @@
       "response": {
         "toolCalls": [
           {
-            "id": "call_quiet_shell_description",
+            "id": "call_shell_description",
             "name": "execute_command",
             "arguments": {
-              "command": "printf 'quiet-description-output\\n'",
-              "description": "Printing the quiet description marker",
+              "command": "printf 'compact-description-output\\n'",
+              "description": "Printing the compact description marker",
               "timeout": 10,
               "cwd": null,
               "tail": 40,
@@ -29,10 +29,10 @@
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
         "hasToolResult": true,
-        "toolCallId": "call_quiet_shell_description"
+        "toolCallId": "call_shell_description"
       },
       "response": {
-        "content": "Quiet shell description complete."
+        "content": "Compact shell description complete."
       }
     }
   ]

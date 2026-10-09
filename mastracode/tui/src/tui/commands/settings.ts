@@ -11,7 +11,7 @@ import { SettingsComponent } from '../components/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
-import { applyPreviewLinesToRenderedComponents } from '../quiet-mode.js';
+import { applyPreviewLinesToRenderedComponents } from '../preview-lines.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 

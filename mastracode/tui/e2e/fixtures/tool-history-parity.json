@@ -4,29 +4,29 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "userMessage": "Render quiet mode live tool output."
+        "userMessage": "Render live tool output."
       },
       "response": {
         "toolCalls": [
           {
-            "id": "call_quiet_live_view",
+            "id": "call_live_view",
             "name": "view",
             "arguments": {
-              "path": "src/quiet-mode-e2e.ts",
+              "path": "src/compact-e2e.ts",
               "offset": 1,
               "limit": 4
             }
           },
           {
-            "id": "call_quiet_live_task",
+            "id": "call_live_task",
             "name": "task_write",
             "arguments": {
               "tasks": [
                 {
-                  "id": "quiet-live-task",
-                  "content": "Verify quiet live task summary",
+                  "id": "compact-live-task",
+                  "content": "Verify compact live task summary",
                   "status": "pending",
-                  "activeForm": "Verifying quiet live task summary"
+                  "activeForm": "Verifying compact live task summary"
                 }
               ]
             }
@@ -41,7 +41,7 @@
         "hasToolResult": true
       },
       "response": {
-        "content": "Quiet live tool output complete."
+        "content": "Compact live tool output complete."
       }
     }
   ]

@@ -11,7 +11,7 @@ export interface NotificationOptions {
   kind?: string;
   priority?: string;
   status?: string;
-  quietPreviewLineLimit?: number;
+  previewLineLimit?: number;
   backgroundCompletion?: {
     taskId: string;
     toolName?: string;
@@ -20,7 +20,7 @@ export interface NotificationOptions {
   };
 }
 
-function normalizeQuietPreviewLineLimit(limit: number | undefined): number {
+function normalizePreviewLineLimit(limit: number | undefined): number {
   const normalized = Number.isFinite(limit) ? (limit as number) : 2;
   return Math.min(8, Math.max(0, Math.floor(normalized)));
 }
@@ -83,19 +83,19 @@ function wrapText(value: string, maxWidth: number): string[] {
 
 export class NotificationComponent extends WidthAwareContainer {
   private readonly options: NotificationOptions;
-  private quietPreviewLineLimit: number;
+  private previewLineLimit: number;
   private expanded = false;
 
   constructor(options: NotificationOptions) {
     super();
     this.options = options;
-    this.quietPreviewLineLimit = normalizeQuietPreviewLineLimit(options.quietPreviewLineLimit);
+    this.previewLineLimit = normalizePreviewLineLimit(options.previewLineLimit);
   }
 
-  setQuietPreviewLineLimit(limit: number): void {
-    const normalized = normalizeQuietPreviewLineLimit(limit);
-    if (this.quietPreviewLineLimit === normalized) return;
-    this.quietPreviewLineLimit = normalized;
+  setPreviewLineLimit(limit: number): void {
+    const normalized = normalizePreviewLineLimit(limit);
+    if (this.previewLineLimit === normalized) return;
+    this.previewLineLimit = normalized;
     this.rebuild();
   }
 
@@ -108,10 +108,10 @@ export class NotificationComponent extends WidthAwareContainer {
     this.clear();
 
     const options = this.options;
-    // Expanding (ctrl+e) is a request to see everything, so it overrides quiet
+    // Expanding (ctrl+e) is a request to see everything, so it overrides compact
     // trimming. Collapsed background completions are already a single line —
-    // that is their quiet form — and their detail rows only exist once expanded.
-    const quiet = !this.expanded;
+    // that is their compact form — and their detail rows only exist once expanded.
+    const compact = !this.expanded;
     if (options.backgroundCompletion && !this.expanded) {
       const completion = options.backgroundCompletion;
       const failed = options.status === 'failed';
@@ -128,8 +128,8 @@ export class NotificationComponent extends WidthAwareContainer {
       return;
     }
     const titleText = options.source ? `notification from ${options.source}` : 'notification';
-    // Quiet mode keeps the card but only the essentials: who it's from and what it says.
-    const details = quiet ? '' : [options.priority, options.kind, options.status].filter(Boolean).join(' · ');
+    // The compact card keeps only the essentials: who it's from and what it says.
+    const details = compact ? '' : [options.priority, options.kind, options.status].filter(Boolean).join(' · ');
     const message = options.message.trim();
     const maxContentWidth = Math.max(
       MIN_NOTIFICATION_CONTENT_WIDTH,
@@ -138,7 +138,7 @@ export class NotificationComponent extends WidthAwareContainer {
     const titleLines = wrapText(titleText, maxContentWidth);
     const detailLines = details ? wrapText(details, maxContentWidth) : [];
     const messageLines = message
-      ? this.limitMessageLines(wrapText(message, maxContentWidth), quiet, maxContentWidth)
+      ? this.limitMessageLines(wrapText(message, maxContentWidth), compact, maxContentWidth)
       : [];
     const backgroundDetailLines = options.backgroundCompletion
       ? [
@@ -164,9 +164,9 @@ export class NotificationComponent extends WidthAwareContainer {
     this.addChild(new Text(card(mastra.blue, lines).join('\n'), BOX_INDENT, 0));
   }
 
-  private limitMessageLines(lines: string[], quiet: boolean, maxWidth: number): string[] {
-    if (!quiet || lines.length <= this.quietPreviewLineLimit) return lines;
-    const shown = lines.slice(0, this.quietPreviewLineLimit);
+  private limitMessageLines(lines: string[], compact: boolean, maxWidth: number): string[] {
+    if (!compact || lines.length <= this.previewLineLimit) return lines;
+    const shown = lines.slice(0, this.previewLineLimit);
     if (shown.length === 0) return shown;
     // The ellipsis must fit inside the content width.
     const last = shown[shown.length - 1]!;

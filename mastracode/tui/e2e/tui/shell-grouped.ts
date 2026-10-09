@@ -17,14 +17,14 @@ function lineIndex(lines: string[], text: string): number {
   return index;
 }
 
-export const quietShellGroupedScenario: McE2eScenario = {
-  name: 'quiet-shell-grouped',
+export const shellGroupedScenario: McE2eScenario = {
+  name: 'shell-grouped',
   description:
-    'Verify quiet mode with no preview lines groups described shell calls into one box per directory, marks failures by exit code, and keeps run times when history reloads.',
-  testName: 'groups quiet shell calls per directory and restores their run time from history',
+    'Verify that with no preview lines the TUI groups described shell calls into one box per directory, marks failures by exit code, and keeps run times when history reloads.',
+  testName: 'groups compact shell calls per directory and restores their run time from history',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
-  aimockFixture: 'quiet-shell-grouped.json',
+  aimockFixture: 'shell-grouped.json',
   prepare({ appDataDir, dbPath, projectDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -81,7 +81,7 @@ values
     terminal.submit('Run the grouped shell commands.');
     await runtime.waitForScreenText(/Grouped shell commands complete\./i, terminal, 30_000);
     await runtime.waitForScreenText(/\$ \.\/packages\/core/, terminal, 5_000);
-    runtime.printScreen('grouped quiet shell boxes', terminal);
+    runtime.printScreen('grouped compact shell boxes', terminal);
 
     const lines = terminal.serialize().view.split('\n');
     // Output mentioning "error:" from a command that exited 0 is still a success.
@@ -110,7 +110,7 @@ values
     await runtime.waitForScreenText(/Grouped shell history loaded\./i, terminal, 8_000);
     // The sandbox's recorded run time wins over the 3.1s between the surrounding parts.
     await runtime.waitForScreenText(/✓ Sleeping through the loaded history run +2\.9s/, terminal, 5_000);
-    runtime.printScreen('grouped quiet shell history', terminal);
+    runtime.printScreen('grouped compact shell history', terminal);
 
     terminal.keyCtrlC();
   },

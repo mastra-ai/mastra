@@ -314,7 +314,7 @@ describe('SubagentExecutionComponent', () => {
       const comp = new SubagentExecutionComponent('explore', 'List files', mockTui, 'openai/gpt-5.5', {
         expandOnComplete: true,
       });
-      comp.addToolStart('find_files', { path: '/tmp/quiet-tool-demo' });
+      comp.addToolStart('find_files', { path: '/tmp/compact-tool-demo' });
       comp.addToolEnd('find_files', 'browser-demo.html', false);
 
       comp.finish(false, 10, 'nested\nbrowser-demo.html');

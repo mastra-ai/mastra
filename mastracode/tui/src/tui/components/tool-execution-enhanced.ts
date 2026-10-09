@@ -42,16 +42,16 @@ const TERMINAL_SEQUENCE_RE =
 
 const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#141414';
-const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
-const QUIET_CODE_PREVIEW_MAX_CHARS = 2_000;
-const QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
+const TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
+const CODE_PREVIEW_MAX_CHARS = 2_000;
+const SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
 
 function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
   return color;
 }
 
-const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
+const CODE_HIGHLIGHT_THEME: HighlightTheme = {
   default: chalk.hex('#b4b4bd'),
   keyword: chalk.hex('#c4b5fd'),
   built_in: chalk.hex('#93c5fd'),
@@ -92,8 +92,8 @@ const LIGHT_CODE_HIGHLIGHT_THEME: HighlightTheme = {
   name: chalk.hex('#7e22ce'),
 };
 
-const quietCodeHighlightTheme = (): HighlightTheme =>
-  getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : QUIET_CODE_HIGHLIGHT_THEME;
+const codeHighlightTheme = (): HighlightTheme =>
+  getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : CODE_HIGHLIGHT_THEME;
 
 const SHELL_CONTROL_WORDS = new Set([
   'if',
@@ -118,7 +118,7 @@ export interface ToolExecutionOptions {
   collapsedByDefault?: boolean;
   /** Render the full bordered box instead of a compact row. Only live task-mutation tools use this. */
   fullRender?: boolean;
-  quietPreviewLineLimit?: number;
+  previewLineLimit?: number;
   compactToolModeColor?: string;
   /** Where shell commands run (the git root, not necessarily where the TUI was launched). */
   projectRoot?: string;
@@ -127,8 +127,8 @@ export interface ToolExecutionOptions {
  * Convert absolute path to tilde notation if it's in home directory
  */
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-/** Grouped quiet shell boxes start this narrow and widen, up to the full width, for longer rows. */
-const QUIET_SHELL_MIN_CONTENT_WIDTH = 76;
+/** Grouped compact shell boxes start this narrow and widen, up to the full width, for longer rows. */
+const SHELL_MIN_CONTENT_WIDTH = 76;
 
 /** First line of `message` when a failed result is a JSON error object, e.g. a rejected tool input. */
 function parseErrorMessage(output: string): string | undefined {
@@ -148,7 +148,7 @@ function parseErrorMessage(output: string): string | undefined {
 }
 
 /** Room kept for the right-aligned time so a ticking counter never changes the box width. */
-const QUIET_SHELL_TIME_WIDTH = 'started'.length;
+const SHELL_TIME_WIDTH = 'started'.length;
 
 function shortenPath(path: string): string {
   const home = os.homedir();
@@ -234,15 +234,15 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   /** The sandbox's exit record for a shell call; more reliable than parsing the result text. */
   private commandExit?: CommandExitRecord;
   private liveUpdatesStopped = false;
-  private quietShellTicker?: ReturnType<typeof setInterval>;
-  private quietShellGroupWidth?: number;
-  private quietShellGroupPreview?: string[];
-  private quietShellHeld = false;
+  private shellTicker?: ReturnType<typeof setInterval>;
+  private shellGroupWidth?: number;
+  private shellGroupPreview?: string[];
+  private shellHeld = false;
   /** Rows the shell box preview has used so far; it never shrinks, so rows below don't jump. */
-  private quietShellPreviewRowFloor = 0;
+  private shellPreviewRowFloor = 0;
   private readonly fullRender: boolean;
-  private quietPreviewLineLimit: number;
-  private quietPreviewRowFloor = 0;
+  private previewLineLimit: number;
+  private previewRowFloor = 0;
   private compactToolContinuation = false;
   private compactToolHasFollowingContinuation = false;
   private compactToolPreviousSummary: string | undefined;
@@ -261,7 +261,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     };
     this.expanded = !this.options.collapsedByDefault;
     this.fullRender = this.options.fullRender ?? false;
-    this.quietPreviewLineLimit = this.options.quietPreviewLineLimit ?? 2;
+    this.previewLineLimit = this.options.previewLineLimit ?? 2;
     this.compactToolModeColor = normalizeHexColor(this.options.compactToolModeColor);
 
     // Content box - left indent for chat history alignment, no background
@@ -348,11 +348,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     this.rebuild();
   }
 
-  setQuietPreviewLineLimit(limit: number): void {
+  setPreviewLineLimit(limit: number): void {
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
-    this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
-    this.quietPreviewRowFloor = Math.min(this.quietPreviewRowFloor, this.quietPreviewLineLimit);
-    this.quietShellPreviewRowFloor = Math.min(this.quietShellPreviewRowFloor, this.quietPreviewLineLimit);
+    this.previewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
+    this.previewRowFloor = Math.min(this.previewRowFloor, this.previewLineLimit);
+    this.shellPreviewRowFloor = Math.min(this.shellPreviewRowFloor, this.previewLineLimit);
     this.rebuild();
   }
 
@@ -368,23 +368,23 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   getChatSpacingKind(): ChatSpacingKind | undefined {
-    if (this.fullRender) return 'normal-tool';
-    if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'quiet-compact-tool';
-    if (this.isQuietCompactShell()) return this.quietShellHeld ? undefined : 'quiet-compact-tool';
-    return 'quiet-shell-tool';
+    if (this.fullRender) return 'full-tool';
+    if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'compact-tool';
+    if (this.isCompactShell()) return this.shellHeld ? undefined : 'compact-tool';
+    return 'shell-tool';
   }
 
   getCompactToolGroupKey(): string | undefined {
     // Shell calls only share a box when they run in the same directory, so each box has one header.
-    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND && this.isQuietCompactShell()) {
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND && this.isCompactShell()) {
       return this.isShellDirectoryPending() ? PENDING_SHELL_GROUP_KEY : `$ ${this.getShellHeaderPath()}`;
     }
-    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    if (this.getChatSpacingKind() !== 'compact-tool') return undefined;
     return this.getCompactToolLabel();
   }
 
   getCompactToolGroupSummary(): string | undefined {
-    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    if (this.getChatSpacingKind() !== 'compact-tool') return undefined;
     if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) return undefined;
     return this.getCompactToolSummary();
   }
@@ -417,7 +417,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return joinPath(expandedCwd, cdPath);
   }
 
-  /** The directory a quiet shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
+  /** The directory a compact shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
   private getShellHeaderPath(): string {
     const raw = this.getShellDirectory();
     const expanded = raw === '~' || raw.startsWith('~/') ? os.homedir() + raw.slice(1) : raw;
@@ -449,10 +449,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
    * that box, then moving it to its own directory's box, would make the chat jump. Rendered once
    * the directory is known, the row only ever adds lines.
    */
-  setQuietShellHeld(held: boolean): void {
-    if (this.quietShellHeld === held) return;
-    this.quietShellHeld = held;
-    if (this.isQuietCompactShell()) this.rebuild();
+  setShellHeld(held: boolean): void {
+    if (this.shellHeld === held) return;
+    this.shellHeld = held;
+    if (this.isCompactShell()) this.rebuild();
   }
 
   private getShellDescription(): string {
@@ -461,41 +461,41 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * In quiet mode, consecutive shell calls in one directory share a box: an optional preview of the
+   * Consecutive shell calls in one directory share a box: an optional preview of the
    * latest output, a `$ <path>` header, then one status row per call. Expanding shows the full box.
    */
-  private isQuietCompactShell(): boolean {
+  private isCompactShell(): boolean {
     return !this.fullRender && this.toolName === MC_TOOLS.EXECUTE_COMMAND && !this.expanded;
   }
 
   /**
-   * The last `quietPreviewLineLimit` lines this call printed, for its box's shared preview; `[]` when
+   * The last `previewLineLimit` lines this call printed, for its box's shared preview; `[]` when
    * it printed nothing and `undefined` when previews are off.
    */
-  getQuietShellPreviewLines(): string[] | undefined {
-    if (!this.isQuietCompactShell() || this.quietShellHeld || this.quietPreviewLineLimit <= 0) return undefined;
+  getShellPreviewLines(): string[] | undefined {
+    if (!this.isCompactShell() || this.shellHeld || this.previewLineLimit <= 0) return undefined;
     const output = this.streamingOutput.trim() ? this.streamingOutput : this.getFormattedOutput();
     const lines = output.split('\n').filter(line => !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line.trim()));
     while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
     while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
-    return lines.slice(-this.quietPreviewLineLimit);
+    return lines.slice(-this.previewLineLimit);
   }
 
   /** Set on the first call of a shell box, which draws the box's preview above its header. */
-  setQuietShellGroupPreview(lines: string[] | undefined): void {
-    const current = this.quietShellGroupPreview;
+  setShellGroupPreview(lines: string[] | undefined): void {
+    const current = this.shellGroupPreview;
     if (current === lines || (current && lines && current.join('\n') === lines.join('\n'))) return;
-    this.quietShellGroupPreview = lines;
-    if (this.isQuietCompactShell()) this.rebuild();
+    this.shellGroupPreview = lines;
+    if (this.isCompactShell()) this.rebuild();
   }
 
   /**
-   * Text for a grouped quiet shell row: the description; while it may still stream in, `...` or how
+   * Text for a grouped compact shell row: the description; while it may still stream in, `...` or how
    * much of the command has arrived (some models write a long command first); or the command's
    * first line when the call has none (e.g. it was rejected for a missing description).
    * Muted text is not the description, and truncates rather than widening the box.
    */
-  private getQuietShellRowText(): { text: string; muted: boolean } {
+  private getShellRowText(): { text: string; muted: boolean } {
     const description = this.getShellDescription();
     if (description) return { text: description, muted: false };
     const command = (this.args as Record<string, unknown> | undefined)?.command;
@@ -511,12 +511,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { text: firstLine.trim(), muted: true };
   }
 
-  hasQuietStreamingPreview(): boolean {
+  hasStreamingPreview(): boolean {
     return (
       !this.fullRender &&
       this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
-      this.quietPreviewLineLimit > 0 &&
-      (this.quietPreviewRowFloor > 0 || this.getQuietActivePreview() !== '')
+      this.previewLineLimit > 0 &&
+      (this.previewRowFloor > 0 || this.getActivePreview() !== '')
     );
   }
 
@@ -577,7 +577,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   protected rebuildForWidth(_width: number): void {
     this.updateBgColor();
     this.contentBox.clear();
-    if (!this.isQuietCompactShell()) this.syncQuietShellTicker(false);
+    if (!this.isCompactShell()) this.syncShellTicker(false);
 
     if (this.fullRender) {
       if (this.toolName === 'task_write') this.renderTaskWriteEnhanced();
@@ -603,51 +603,48 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  private getQuietPreviewLines(maxLineWidth: number): string[] {
-    if (this.fullRender || this.toolName === MC_TOOLS.EXECUTE_COMMAND || this.quietPreviewLineLimit <= 0) return [];
+  private getPreviewLines(maxLineWidth: number): string[] {
+    if (this.fullRender || this.toolName === MC_TOOLS.EXECUTE_COMMAND || this.previewLineLimit <= 0) return [];
 
-    const preview = this.getQuietActivePreview();
+    const preview = this.getActivePreview();
     let lines: string[] = [];
 
     if (preview) {
-      if (this.isQuietCodePreviewTool()) {
-        lines = this.getQuietCodePreviewLines(preview, maxLineWidth);
+      if (this.isCodePreviewTool()) {
+        lines = this.getCodePreviewLines(preview, maxLineWidth);
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
         // Signal messages lead with the request, so show their opening lines instead of the latest output.
         const wrapped =
           this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND
-            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2)).slice(
-                0,
-                this.quietPreviewLineLimit,
-              )
-            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.quietPreviewLineLimit);
+            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2)).slice(0, this.previewLineLimit)
+            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.previewLineLimit);
 
         lines = wrapped.map(line => {
-          const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
-          return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+          const linePrefix = `  ${chalk.hex(this.getToolRailColor())('│')} `;
+          return truncateAnsi(`${linePrefix}${this.formatActivePreview(line)}`, maxLineWidth);
         });
       }
     }
 
-    this.quietPreviewRowFloor = Math.min(this.quietPreviewLineLimit, Math.max(this.quietPreviewRowFloor, lines.length));
-    const padding = Array.from({ length: this.quietPreviewRowFloor - lines.length }, () => {
-      const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
+    this.previewRowFloor = Math.min(this.previewLineLimit, Math.max(this.previewRowFloor, lines.length));
+    const padding = Array.from({ length: this.previewRowFloor - lines.length }, () => {
+      const linePrefix = `  ${chalk.hex(this.getToolRailColor())('│')} `;
       return truncateAnsi(linePrefix, maxLineWidth);
     });
     return [...padding, ...lines];
   }
 
-  private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {
-    const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
-    return this.highlightQuietCodePreview(preview)
+  private getCodePreviewLines(preview: string, maxLineWidth: number): string[] {
+    const linePrefix = `  ${chalk.hex(this.getToolRailColor())('│')} `;
+    return this.highlightCodePreview(preview)
       .split('\n')
-      .slice(-this.quietPreviewLineLimit)
+      .slice(-this.previewLineLimit)
       .map(line => truncateAnsi(`${linePrefix}${line}`, maxLineWidth));
   }
 
-  private isQuietCodePreviewTool(): boolean {
+  private isCodePreviewTool(): boolean {
     return (
       this.toolName === MC_TOOLS.VIEW ||
       this.toolName === MC_TOOLS.WRITE_FILE ||
@@ -655,19 +652,19 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     );
   }
 
-  private getQuietPreviewCapLine(): string {
-    return `  ${chalk.hex(this.getQuietToolRailColor())('╰──')}`;
+  private getPreviewCapLine(): string {
+    return `  ${chalk.hex(this.getToolRailColor())('╰──')}`;
   }
 
-  private getQuietPreviewSpacerLine(): string {
-    return `  ${chalk.hex(this.getQuietToolRailColor())('│')}`;
+  private getPreviewSpacerLine(): string {
+    return `  ${chalk.hex(this.getToolRailColor())('│')}`;
   }
 
-  private shouldCloseQuietPreview(): boolean {
+  private shouldClosePreview(): boolean {
     return !this.compactToolHasFollowingContinuation;
   }
 
-  private formatQuietActivePreview(preview: string): string {
+  private formatActivePreview(preview: string): string {
     if (this.toolName === MC_TOOLS.FIND_FILES || this.toolName === MC_TOOLS.SEARCH_CONTENT) {
       return theme.fg('toolOutput', preview);
     }
@@ -675,20 +672,20 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return theme.fg('text', preview);
   }
 
-  private highlightQuietCodePreview(preview: string): string {
+  private highlightCodePreview(preview: string): string {
     const path = this.getFirstStringArg('path');
     try {
       return highlight(preview, {
         language: getLanguageFromPath(path),
         ignoreIllegals: true,
-        theme: quietCodeHighlightTheme(),
+        theme: codeHighlightTheme(),
       });
     } catch {
       return theme.fg('toolArgs', preview);
     }
   }
 
-  private highlightQuietShellCommandToken(token: string): string {
+  private highlightShellCommandToken(token: string): string {
     if (token === '&&' || token === '||' || token === '|' || token === ';' || token === '&') {
       return theme.fg('muted', token);
     }
@@ -700,7 +697,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return theme.fg('toolArgs', token);
   }
 
-  private highlightQuietShellCommandLine(
+  private highlightShellCommandLine(
     line: string,
     quote: 'single' | 'double' | undefined,
   ): { line: string; quote: 'single' | 'double' | undefined } {
@@ -713,7 +710,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (!plain) return;
       highlighted += plain.replace(
         /&&|\|\||[|;&()<>]|-{1,2}[a-zA-Z0-9_.=/-]+|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_][a-zA-Z0-9_]*\b/g,
-        token => this.highlightQuietShellCommandToken(token),
+        token => this.highlightShellCommandToken(token),
       );
       plain = '';
     };
@@ -757,7 +754,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { line: highlighted, quote: activeQuote };
   }
 
-  private wrapQuietShellCommand(command: string, width: number): string[] {
+  private wrapShellCommand(command: string, width: number): string[] {
     const lines: string[] = [];
     let current = '';
     let currentWidth = 0;
@@ -765,8 +762,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     let quote: 'single' | 'double' | undefined;
 
     const pushCurrent = () => {
-      const highlightLength = Math.min(current.length, QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
-      const highlighted = this.highlightQuietShellCommandLine(current.slice(0, highlightLength), quote);
+      const highlightLength = Math.min(current.length, SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
+      const highlighted = this.highlightShellCommandLine(current.slice(0, highlightLength), quote);
       lines.push(highlighted.line + current.slice(highlightLength));
       highlightedChars += highlightLength;
       quote = highlighted.quote;
@@ -827,7 +824,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const toolLabel = this.getCompactToolLabel();
     const toolLabelColor = this.getCompactToolLabelColor();
     const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
-    const detailLines = this.getQuietPreviewLines(this.renderWidth - BOX_INDENT * 2 - 2);
+    const detailLines = this.getPreviewLines(this.renderWidth - BOX_INDENT * 2 - 2);
     const firstLine = this.compactToolContinuation
       ? summary
         ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
@@ -837,8 +834,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       : `${this.formatCompactToolHeader(toolLabel, toolLabelColor, summary)}${status}`;
 
     if (detailLines.length === 0) return [firstLine];
-    const previewLines = this.shouldCloseQuietPreview() ? [...detailLines, this.getQuietPreviewCapLine()] : detailLines;
-    if (this.compactToolHasFollowingContinuation) previewLines.push(this.getQuietPreviewSpacerLine());
+    const previewLines = this.shouldClosePreview() ? [...detailLines, this.getPreviewCapLine()] : detailLines;
+    if (this.compactToolHasFollowingContinuation) previewLines.push(this.getPreviewSpacerLine());
     return [firstLine, ...previewLines];
   }
 
@@ -875,16 +872,16 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return this.compactToolModeColor ?? COMPACT_TOOL_COLOR;
   }
 
-  private getQuietToolRailColor(): string {
+  private getToolRailColor(): string {
     const color = this.isErrorResult()
       ? tintHex(mastra.red, 0.35)
       : this.compactToolModeColor
         ? tintHex(this.compactToolModeColor, 0.35)
-        : QUIET_TOOL_RAIL;
+        : TOOL_RAIL;
     return ensureTerminalGlyphContrast(color);
   }
 
-  private getQuietToolCircleColor(color: string): string {
+  private getToolCircleColor(color: string): string {
     return ensureTerminalGlyphContrast(color);
   }
 
@@ -912,23 +909,23 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return false;
   }
 
-  private getQuietActivePreview(): string {
-    if (this.isErrorResult()) return this.formatQuietErrorPreview();
-    if (isWebSearchTool(this.toolName)) return this.formatQuietWebSearchPreview();
-    if (isBrowserTool(this.toolName)) return this.formatQuietBrowserPreview();
-    if (isSkillTool(this.toolName)) return this.formatQuietSkillPreview();
-    if (this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT) return this.formatQuietProcessOutputPreview();
-    if (this.toolName === MC_TOOLS.FILE_STAT) return this.formatQuietFileStatPreview();
+  private getActivePreview(): string {
+    if (this.isErrorResult()) return this.formatErrorPreview();
+    if (isWebSearchTool(this.toolName)) return this.formatWebSearchPreview();
+    if (isBrowserTool(this.toolName)) return this.formatBrowserPreview();
+    if (isSkillTool(this.toolName)) return this.formatSkillPreview();
+    if (this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT) return this.formatProcessOutputPreview();
+    if (this.toolName === MC_TOOLS.FILE_STAT) return this.formatFileStatPreview();
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
-        return this.formatQuietViewPreview();
+        return this.formatViewPreview();
       case MC_TOOLS.FIND_FILES:
-        return this.formatQuietListPreview();
+        return this.formatListPreview();
       case 'skill':
         return '';
       case MC_TOOLS.STRING_REPLACE_LSP:
-        return this.formatQuietEditPreview();
+        return this.formatEditPreview();
       case MC_TOOLS.WRITE_FILE:
         return this.getLatestCodePreview('content');
       case MC_TOOLS.SEARCH_CONTENT:
@@ -938,11 +935,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.AGENT_SIGNAL_SEND:
         return this.formatAgentSignalSendPreview();
       default:
-        return this.formatQuietGenericResultPreview();
+        return this.formatGenericResultPreview();
     }
   }
 
-  private formatQuietEditPreview(): string {
+  private formatEditPreview(): string {
     return (
       this.getLatestCodePreview('new_str') ||
       this.getLatestCodePreview('new_string') ||
@@ -957,15 +954,15 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const normalized = value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
     if (!normalized) return '';
     const lines = normalized.split('\n');
-    const latestLines = lines.slice(-Math.max(1, this.quietPreviewLineLimit)).join('\n');
+    const latestLines = lines.slice(-Math.max(1, this.previewLineLimit)).join('\n');
     if (this.isPartial && (this.toolName === MC_TOOLS.WRITE_FILE || this.toolName === MC_TOOLS.STRING_REPLACE_LSP)) {
       return latestLines;
     }
-    if (latestLines.length <= QUIET_CODE_PREVIEW_MAX_CHARS) return latestLines;
-    return latestLines.slice(-QUIET_CODE_PREVIEW_MAX_CHARS);
+    if (latestLines.length <= CODE_PREVIEW_MAX_CHARS) return latestLines;
+    return latestLines.slice(-CODE_PREVIEW_MAX_CHARS);
   }
 
-  private formatQuietErrorPreview(): string {
+  private formatErrorPreview(): string {
     const outputLines = this.stripAnsi(this.getFormattedOutput())
       .split('\n')
       .map(line => line.trim())
@@ -976,7 +973,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return outputLines.slice(0, 2).join('\n');
   }
 
-  private formatQuietViewPreview(): string {
+  private formatViewPreview(): string {
     if (!this.result) return '';
 
     const output = this.getFormattedOutput();
@@ -988,7 +985,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return getPlainCodeFromViewOutput(output, startLine);
   }
 
-  private formatQuietListPreview(): string {
+  private formatListPreview(): string {
     if (!this.result) return '';
 
     const entries = this.getListResultEntries();
@@ -997,7 +994,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return entries.slice(0, 2).join('\n');
   }
 
-  private formatQuietWebSearchPreview(): string {
+  private formatWebSearchPreview(): string {
     if (!this.result) return '';
 
     return this.stripAnsi(this.formatWebSearchResults())
@@ -1008,7 +1005,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       .join('\n');
   }
 
-  private formatQuietBrowserPreview(): string {
+  private formatBrowserPreview(): string {
     if (!this.result || !['browser_snapshot', 'browser_evaluate'].includes(this.toolName)) return '';
     const output = this.unwrapBrowserToolOutput(this.getFormattedOutput());
     return this.stripAnsi(output)
@@ -1055,7 +1052,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return String(value);
   }
 
-  private formatQuietProcessOutputPreview(): string {
+  private formatProcessOutputPreview(): string {
     if (!this.result) return '';
     return this.stripAnsi(this.getFormattedOutput())
       .split('\n')
@@ -1065,13 +1062,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       .join('\n');
   }
 
-  private formatQuietFileStatPreview(): string {
+  private formatFileStatPreview(): string {
     if (!this.result) return '';
     const output = this.stripAnsi(this.getFormattedOutput()).trim();
     return output.replace(/^\S+\s+/, '').replace(/\s+/g, ' ');
   }
 
-  private formatQuietGenericResultPreview(): string {
+  private formatGenericResultPreview(): string {
     if (!this.result) return '';
     const output = this.stripAnsi(this.getFormattedOutput()).trim();
     if (!output) return '';
@@ -1086,7 +1083,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       .map(line => line.trimEnd())
       .filter(Boolean);
 
-    return (this.isPartial ? lines : lines.slice(0, this.quietPreviewLineLimit)).join('\n');
+    return (this.isPartial ? lines : lines.slice(0, this.previewLineLimit)).join('\n');
   }
 
   private formatCompactJsonResult(output: string): string {
@@ -1103,7 +1100,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  private formatQuietSkillPreview(): string {
+  private formatSkillPreview(): string {
     if (!this.result || this.toolName !== 'skill_search') return '';
     return this.stripAnsi(this.getFormattedOutput())
       .split('\n')
@@ -1133,10 +1130,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private formatEmptyCompactContinuationLine(): string {
-    const railColor = this.getQuietToolRailColor();
-    const isStreamingContinuation = !this.isComplete() && this.quietPreviewLineLimit > 0;
+    const railColor = this.getToolRailColor();
+    const isStreamingContinuation = !this.isComplete() && this.previewLineLimit > 0;
     if (isStreamingContinuation) {
-      const circleColor = this.getQuietToolCircleColor(this.getCompactToolAccentColor(this.getCompactToolLabelColor()));
+      const circleColor = this.getToolCircleColor(this.getCompactToolAccentColor(this.getCompactToolLabelColor()));
       return `${chalk.hex(circleColor)('●')}${chalk.hex(railColor)('─')}`;
     }
     return chalk.hex(railColor)(this.compactToolHasFollowingContinuation ? '├─' : '╰─');
@@ -1146,16 +1143,15 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const lineMatch = summary.match(/^─+/);
     const linePrefix = lineMatch?.[0] ?? '';
     const separator = linePrefix ? '' : ' ';
-    const hasFollowing = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview();
-    const hasPreview = this.hasQuietStreamingPreview();
+    const hasFollowing = this.compactToolHasFollowingContinuation || this.hasStreamingPreview();
+    const hasPreview = this.hasStreamingPreview();
     const toolLabelColor = this.getCompactToolLabelColor();
     const color = this.getCompactToolAccentColor(toolLabelColor);
     const argsBg = this.getCompactToolArgsBg(toolLabelColor);
     const argsColor = this.getCompactToolArgsColor(toolLabelColor);
-    const railColor = this.getQuietToolRailColor();
-    const circleColor = this.getQuietToolCircleColor(color);
-    const isStreamingContinuation =
-      this.compactToolContinuation && !this.isComplete() && this.quietPreviewLineLimit > 0;
+    const railColor = this.getToolRailColor();
+    const circleColor = this.getToolCircleColor(color);
+    const isStreamingContinuation = this.compactToolContinuation && !this.isComplete() && this.previewLineLimit > 0;
     const branch =
       hasFollowing || isStreamingContinuation
         ? `${hasPreview || isStreamingContinuation ? chalk.hex(circleColor)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
@@ -1491,9 +1487,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const { command } = this.parseShellCommand();
     const timeout = argsObj?.timeout as number | undefined;
 
-    if (this.isQuietCompactShell()) {
-      if (this.quietShellHeld) this.syncQuietShellTicker(false);
-      else this.renderQuietShellGroupRow();
+    if (this.isCompactShell()) {
+      if (this.shellHeld) this.syncShellTicker(false);
+      else this.renderShellGroupRow();
       return;
     }
 
@@ -1516,7 +1512,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       const prompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
       const suffix = `${cwdSuffix}${timeSuffix}${status}`;
       const titleWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2 - 2 - visibleWidth(prompt));
-      const commandLines = this.wrapQuietShellCommand(command, titleWidth);
+      const commandLines = this.wrapShellCommand(command, titleWidth);
       const title = commandLines.map((line, i) => (i === 0 ? prompt : ' '.repeat(visibleWidth(prompt))) + line);
       const last = title.length - 1;
       if (visibleWidth(commandLines[last] ?? '') + visibleWidth(suffix) <= titleWidth) title[last] += suffix;
@@ -1569,13 +1565,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * One call's slice of a shared quiet shell box. The first call in a run opens the box with a
+   * One call's slice of a shared compact shell box. The first call in a run opens the box with a
    * `$ <path>` header, a call in a new directory adds another header, and the last call closes it.
    */
-  private renderQuietShellGroupRow(): void {
+  private renderShellGroupRow(): void {
     const fullWidth = Math.max(20, this.renderWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
-    const naturalWidth = this.quietShellGroupWidth ?? this.getQuietShellNaturalWidth() ?? 0;
-    const contentWidth = Math.min(fullWidth, Math.max(QUIET_SHELL_MIN_CONTENT_WIDTH, naturalWidth));
+    const naturalWidth = this.shellGroupWidth ?? this.getShellNaturalWidth() ?? 0;
+    const contentWidth = Math.min(fullWidth, Math.max(SHELL_MIN_CONTENT_WIDTH, naturalWidth));
     // A bordered box rather than a shaded panel: the frame keeps grouped calls readable at a glance.
     const border = (char: string) =>
       theme.bold(chalk.hex(ensureTerminalGlyphContrast(theme.getTheme().toolBorderSuccess))(char));
@@ -1603,13 +1599,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const lines: string[] = [];
     if (!this.compactToolContinuation) {
       lines.push(rule('╭', '╮'));
-      const preview = this.quietShellGroupPreview ?? [];
-      this.quietShellPreviewRowFloor = Math.min(
-        this.quietPreviewLineLimit,
-        Math.max(this.quietShellPreviewRowFloor, preview.length),
-      );
-      if (this.quietShellPreviewRowFloor > 0) {
-        for (let i = 0; i < this.quietShellPreviewRowFloor; i++) {
+      const preview = this.shellGroupPreview ?? [];
+      this.shellPreviewRowFloor = Math.min(this.previewLineLimit, Math.max(this.shellPreviewRowFloor, preview.length));
+      if (this.shellPreviewRowFloor > 0) {
+        for (let i = 0; i < this.shellPreviewRowFloor; i++) {
           lines.push(row(theme.fg('toolOutput', singleLine(preview[i] ?? ''))));
         }
         lines.push(rule('├', '┤'));
@@ -1617,7 +1610,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       lines.push(header, rule('├', '┤'));
     }
 
-    const rowText = this.getQuietShellRowText();
+    const rowText = this.getShellRowText();
     const description = rowText.muted ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);
     const isBackground =
       !!this.backgroundTaskId || (this.args as Record<string, unknown> | undefined)?.background === true;
@@ -1649,7 +1642,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Last guard for terminals too narrow for the minimum box: clip rather than wrap.
     const maxLineWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2);
     this.contentBox.addChild(new Text(lines.map(line => truncateAnsi(line, maxLineWidth)).join('\n'), 0, 0));
-    this.syncQuietShellTicker(running && !isBackground && !this.liveUpdatesStopped);
+    this.syncShellTicker(running && !isBackground && !this.liveUpdatesStopped);
   }
 
   /**
@@ -1691,41 +1684,41 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /** Keeps a running grouped row's spinner and seconds counter moving between output events. */
-  private syncQuietShellTicker(active: boolean): void {
+  private syncShellTicker(active: boolean): void {
     if (!active) {
-      if (this.quietShellTicker) clearInterval(this.quietShellTicker);
-      this.quietShellTicker = undefined;
+      if (this.shellTicker) clearInterval(this.shellTicker);
+      this.shellTicker = undefined;
       return;
     }
-    if (this.quietShellTicker) return;
-    this.quietShellTicker = setInterval(() => {
+    if (this.shellTicker) return;
+    this.shellTicker = setInterval(() => {
       this.rebuild();
       this.ui.requestRender();
     }, 100);
-    this.quietShellTicker.unref?.();
+    this.shellTicker.unref?.();
   }
 
   /** Content width this call's rows need; reconciliation gives the whole group the widest one. */
-  getQuietShellNaturalWidth(): number | undefined {
-    if (!this.isQuietCompactShell() || this.quietShellHeld) return undefined;
+  getShellNaturalWidth(): number | undefined {
+    if (!this.isCompactShell() || this.shellHeld) return undefined;
     const header = 2 + visibleWidth(this.getShellHeaderPath());
-    const rowText = this.getQuietShellRowText();
+    const rowText = this.getShellRowText();
     const textWidth = rowText.muted ? 0 : visibleWidth(rowText.text);
-    const row = 2 + textWidth + 1 + QUIET_SHELL_TIME_WIDTH;
+    const row = 2 + textWidth + 1 + SHELL_TIME_WIDTH;
     return Math.max(header, row);
   }
 
-  setQuietShellGroupWidth(width: number | undefined): void {
-    if (this.quietShellGroupWidth === width) return;
-    this.quietShellGroupWidth = width;
-    if (this.isQuietCompactShell()) this.rebuild();
+  setShellGroupWidth(width: number | undefined): void {
+    if (this.shellGroupWidth === width) return;
+    this.shellGroupWidth = width;
+    if (this.isCompactShell()) this.rebuild();
   }
 
   /** Called when the agent run ends without this tool finishing, so nothing keeps animating. */
   stopLiveUpdates(): void {
     if (this.liveUpdatesStopped) return;
     this.liveUpdatesStopped = true;
-    this.syncQuietShellTicker(false);
+    this.syncShellTicker(false);
     this.rebuild();
   }
 

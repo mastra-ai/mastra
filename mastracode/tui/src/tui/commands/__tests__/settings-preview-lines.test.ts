@@ -47,14 +47,14 @@ function createSettings() {
 }
 
 function createCtx() {
-  const tool = { setQuietPreviewLineLimit: vi.fn(), setCompactToolModeColor: vi.fn() };
+  const tool = { setPreviewLineLimit: vi.fn(), setCompactToolModeColor: vi.fn() };
   const notification = new NotificationComponent({
     message: ['line one', 'line two', 'line three', 'line four'].join('\n'),
     source: 'github',
     priority: 'high',
     kind: 'ci-status',
     status: 'delivered',
-    quietPreviewLineLimit: 2,
+    previewLineLimit: 2,
   });
   const summary = new NotificationSummaryComponent({
     message: '2 pending notifications',
@@ -123,7 +123,7 @@ describe('/settings preview lines callbacks', () => {
       expect.objectContaining({ preferences: expect.objectContaining({ previewLines: 3 }) }),
     );
     expect(ctx.state.previewLines).toBe(3);
-    expect(tool.setQuietPreviewLineLimit).toHaveBeenLastCalledWith(3);
+    expect(tool.setPreviewLineLimit).toHaveBeenLastCalledWith(3);
     const rendered = stripAnsi(notification.render(80).join('\n'));
     expect(rendered).toContain('line three…');
     expect(rendered).not.toContain('line four');

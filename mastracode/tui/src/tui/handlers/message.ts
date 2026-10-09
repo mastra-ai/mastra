@@ -52,10 +52,10 @@ function getRawParts(message: MastraDBMessage): MessagePart[] {
 }
 
 /**
- * Quiet mode keeps "Thinking..." out of the chat and shows it in the status line above the input
+ * "Thinking..." stays out of the chat and shows in the status line above the input
  * while the streaming message's latest content is reasoning.
  */
-function syncQuietThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMessage): void {
+function syncThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMessage): void {
   const { state } = ctx;
   const latest = message
     ? getRawParts(message).findLast(
@@ -154,7 +154,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: MastraDBMe
   }
 
   if (message.role === 'assistant') {
-    syncQuietThinkingStatus(ctx, message);
+    syncThinkingStatus(ctx, message);
     // Clear tool component references when starting a new assistant message
     state.lastAskUserComponent = undefined;
     state.lastSubmitPlanComponent = undefined;
@@ -181,7 +181,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
   }
 
   if (message.role !== 'assistant') return;
-  syncQuietThinkingStatus(ctx, message);
+  syncThinkingStatus(ctx, message);
 
   const renderParts = getAssistantRenderParts(message);
   const toolParts = renderParts.filter((part): part is ToolRenderPart => part.kind === 'tool');
@@ -231,7 +231,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       );
       component.setExpanded(state.toolOutputExpanded);
       component.setCompactToolModeColor(getCurrentModeColor(ctx));
-      component.setQuietPreviewLineLimit(state.previewLines);
+      component.setPreviewLineLimit(state.previewLines);
       ctx.addChildBeforeFollowUps(component);
       state.pendingTools.set(tool.toolCallId, component);
       state.allToolComponents.push(component);
@@ -261,7 +261,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
 export function handleMessageEnd(ctx: EventHandlerContext, message: MastraDBMessage): void {
   const { state } = ctx;
   if (message.role === 'signal' || message.role === 'user') return;
-  syncQuietThinkingStatus(ctx);
+  syncThinkingStatus(ctx);
 
   if (state.streamingComponent && message.role === 'assistant') {
     state.streamingMessage = message;
@@ -363,8 +363,7 @@ export async function handlePackFallbackState(
         if (!isOriginThreadActive()) return;
 
         const sessionOverride = (ectx.state.session.state.get() as Record<string, unknown>)?.thinkingLevel as
-          | string
-          | undefined;
+          string | undefined;
         const currentModeId = ectx.state.session.mode.get();
         const runtimeSettings = {
           ...settings,

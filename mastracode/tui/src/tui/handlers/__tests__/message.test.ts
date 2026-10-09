@@ -644,7 +644,7 @@ describe('handleMessageUpdate assistant streaming', () => {
     } as EventHandlerContext;
   });
 
-  it('flags quiet-mode thinking for the Working row while reasoning streams, and shows nothing in the chat', () => {
+  it('flags thinking for the Working row while reasoning streams, and shows nothing in the chat', () => {
     const idleCounter = new IdleCounterComponent();
     Object.assign(state, { hideThinkingBlock: true, idleCounter });
     const updateStatusLine = vi.fn();
@@ -712,13 +712,8 @@ describe('handleMessageUpdate assistant streaming', () => {
     expect(state.streamingComponent).toBe(children[2]);
   });
 
-  it('adds boundary spacing between a quiet tool preview and assistant text', () => {
-    const tool = new ToolExecutionComponentEnhanced(
-      'write_file',
-      {},
-      { collapsedByDefault: true },
-      state.ui,
-    );
+  it('adds boundary spacing between a compact tool preview and assistant text', () => {
+    const tool = new ToolExecutionComponentEnhanced('write_file', {}, { collapsedByDefault: true }, state.ui);
     tool.updateArgs({ path: 'src/example.ts', content: 'first line\nsecond line' });
     tool.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
 
@@ -871,7 +866,7 @@ describe('handleMessageUpdate assistant streaming', () => {
     expect(stripAnsi(component.render(80).join('\n'))).toContain(terminal.errorMessage);
   });
 
-  it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {
+  it('surfaces failed pending tools when the assistant run errors', () => {
     state.previewLines = 2;
 
     handleMessageUpdate(

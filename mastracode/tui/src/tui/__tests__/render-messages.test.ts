@@ -420,7 +420,7 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
-  it('truncates notifications in quiet mode to the tool preview line limit', () => {
+  it('truncates notifications to the tool preview line limit', () => {
     const state = createState();
     state.previewLines = 2;
     const longMessage = Array.from({ length: 6 }, (_, i) => `detail line ${i + 1}`).join('\n');
@@ -429,7 +429,7 @@ describe('addUserMessage', () => {
       state,
       createNotificationMessage(
         { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
-        'notification-quiet',
+        'notification-compact',
       ),
     );
     addUserMessage(
@@ -442,11 +442,11 @@ describe('addUserMessage', () => {
           byPriority: { high: 3 },
           notificationIds: ['a', 'b', 'c'],
         },
-        'notification-summary-quiet',
+        'notification-summary-compact',
       ),
     );
 
-    const notification = state.messageComponentsById.get('notification-quiet') as NotificationComponent;
+    const notification = state.messageComponentsById.get('notification-compact') as NotificationComponent;
     const rendered = notification.render(100).map(line => stripAnsi(line));
     // Same left-bar card: title and 2 message lines, no details row.
     expect(rendered).toHaveLength(3);
@@ -457,16 +457,15 @@ describe('addUserMessage', () => {
     expect(rendered[2]).toContain('detail line 2…');
     expect(rendered.join('\n')).not.toContain('detail line 3');
 
-    const summary = state.messageComponentsById.get('notification-summary-quiet') as NotificationSummaryComponent;
+    const summary = state.messageComponentsById.get('notification-summary-compact') as NotificationSummaryComponent;
     const summaryLines = summary.render(100).map(line => stripAnsi(line));
     expect(summaryLines).toHaveLength(2);
     expect(summaryLines[0]).toContain('Notification summary: 3 pending');
     expect(summaryLines[1]).toContain('github: 2, goal-judge: 1');
     expect(summaryLines.join('\n')).not.toContain('notification_inbox');
-
   });
 
-  it('keeps the quiet notification ellipsis inside the terminal width', () => {
+  it('keeps the compact notification ellipsis inside the terminal width', () => {
     const state = createState();
     state.previewLines = 1;
     // A single long word wraps into lines that fill the content width exactly.
@@ -539,7 +538,7 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.at(-1)).toBe(completionComponents[0]);
   });
 
-  it('keeps background completions to one line in quiet mode and expands them in full', () => {
+  it('keeps background completions to one line and expands them in full', () => {
     const state = createState();
     state.previewLines = 1;
     const longMessage = Array.from({ length: 4 }, (_, i) => `result line ${i + 1}`).join('\n');
@@ -547,7 +546,7 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createSignal({
-        id: 'completion-quiet',
+        id: 'completion-compact',
         type: 'notification',
         tagName: 'notification',
         contents: longMessage,
@@ -567,7 +566,7 @@ describe('addUserMessage', () => {
       }).toDBMessage(),
     );
 
-    const component = state.messageComponentsById.get('completion-quiet') as NotificationComponent;
+    const component = state.messageComponentsById.get('completion-compact') as NotificationComponent;
     const collapsed = component.render(100).map(line => stripAnsi(line));
     expect(collapsed).toHaveLength(1);
     expect(collapsed[0]).toContain('mastra_expert failed in background');
@@ -1058,7 +1057,7 @@ describe('addUserMessage', () => {
     expect(expanded).not.toContain('more line');
   });
 
-  it('trims schedule fire prompts to the quiet preview limit in quiet mode', () => {
+  it('trims schedule fire prompts to the compact preview limit', () => {
     const state = createState();
     state.previewLines = 1;
     addUserMessage(
@@ -1444,9 +1443,8 @@ describe('renderExistingMessages subagents', () => {
     const message = legacyAssistantToolMessage('assistant-legacy-tool', {
       id: 'tool-legacy-1',
       name: 'view',
-      args: { path: 'src/quiet-mode-e2e.ts', offset: 1, limit: 3 },
-      result:
-        'src/quiet-mode-e2e.ts:1-3\n     1→export const QUIET_MODE_LOADED_PREVIEW = "loaded quiet compact preview";',
+      args: { path: 'src/compact-e2e.ts', offset: 1, limit: 3 },
+      result: 'src/compact-e2e.ts:1-3\n     1→export const LOADED_PREVIEW = "loaded compact preview";',
       isError: false,
     });
     const state = createState();
@@ -1461,8 +1459,8 @@ describe('renderExistingMessages subagents', () => {
       .render(100)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('▐view▌src/quiet-mode-e2e.ts');
-    expect(rendered).toContain('QUIET_MODE_LOADED_PREVIEW');
+    expect(rendered).toContain('▐view▌src/compact-e2e.ts');
+    expect(rendered).toContain('LOADED_PREVIEW');
   });
 
   it.each([undefined, false, true])('gates pending plugin placeholder replay when enabled is %s', async enabled => {

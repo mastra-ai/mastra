@@ -66,12 +66,12 @@ export class TaskProgressComponent extends WidthAwareContainer {
 
     this.addChild(new Spacer(1));
 
-    for (const line of this.formatQuietTaskLines(completed, total, width)) {
+    for (const line of this.formatTaskLines(completed, total, width)) {
       this.addChild(new Text(line, 0, 0));
     }
   }
 
-  private formatQuietTaskLines(completed: number, total: number, width: number): string[] {
+  private formatTaskLines(completed: number, total: number, width: number): string[] {
     const prefix = '  ' + theme.fg('muted', `${completed}/${total}`);
     const prefixWidth = visibleWidth(prefix);
     const continuationPrefix = ' '.repeat(prefixWidth);
@@ -81,7 +81,7 @@ export class TaskProgressComponent extends WidthAwareContainer {
     const lines: string[] = [prefix];
 
     for (const task of this.tasks) {
-      const item = this.formatQuietTaskItem(task);
+      const item = this.formatTaskItem(task);
       const currentLine = lines[lines.length - 1]!;
       const currentWidth = visibleWidth(currentLine);
       const separator = currentWidth === 0 ? '' : itemSeparator;
@@ -100,7 +100,7 @@ export class TaskProgressComponent extends WidthAwareContainer {
     return lines;
   }
 
-  private formatQuietTaskItem(task: TaskItemInput): string {
+  private formatTaskItem(task: TaskItemInput): string {
     switch (task.status) {
       case 'completed': {
         const icon = theme.fg('dim', '✓');

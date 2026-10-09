@@ -3,14 +3,14 @@ import { join } from 'node:path';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
-export const quietShellDescriptionScenario: McE2eScenario = {
-  name: 'quiet-shell-description',
+export const shellDescriptionScenario: McE2eScenario = {
+  name: 'shell-description',
   description:
-    'Verify quiet mode shows the execute_command description in place of the raw command, and Ctrl+E reveals the command.',
-  testName: 'shows the shell command description in quiet mode and the command when expanded',
+    'Verify the TUI shows the execute_command description in place of the raw command, and Ctrl+E reveals the command.',
+  testName: 'shows the shell command description and the command when expanded',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
-  aimockFixture: 'quiet-shell-description.json',
+  aimockFixture: 'shell-description.json',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -22,23 +22,23 @@ export const quietShellDescriptionScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Project:/i, terminal);
 
     terminal.submit('Run the described shell command.');
-    await runtime.waitForScreenText(/Quiet shell description complete\./i, terminal, 20_000);
-    await runtime.waitForScreenText(/✓ Printing the quiet description marker/i, terminal, 5_000);
-    await runtime.waitForScreenText(/quiet-description-output/i, terminal, 5_000);
+    await runtime.waitForScreenText(/Compact shell description complete\./i, terminal, 20_000);
+    await runtime.waitForScreenText(/✓ Printing the compact description marker/i, terminal, 5_000);
+    await runtime.waitForScreenText(/compact-description-output/i, terminal, 5_000);
     const view = terminal.serialize().view;
     expect(view).not.toMatch(/\$ printf/);
     // The output preview sits above the box's `$ <path>` header, which sits above the row
-    const previewAt = view.search(/│ quiet-description-output/);
+    const previewAt = view.search(/│ compact-description-output/);
     const headerAt = view.search(/│ \$ /);
-    const rowAt = view.search(/✓ Printing the quiet description marker/);
+    const rowAt = view.search(/✓ Printing the compact description marker/);
     if (!(previewAt >= 0 && previewAt < headerAt && headerAt < rowAt)) {
       throw new Error(`Expected preview, then $ header, then row; got ${previewAt}, ${headerAt}, ${rowAt}\n\n${view}`);
     }
-    runtime.printScreen('quiet shell description', terminal);
+    runtime.printScreen('compact shell description', terminal);
 
     terminal.write('\x05');
-    await runtime.waitForScreenText(/\$ printf 'quiet-description-output/, terminal, 8_000);
-    expect(terminal.serialize().view).not.toMatch(/Printing the quiet description marker/i);
+    await runtime.waitForScreenText(/\$ printf 'compact-description-output/, terminal, 8_000);
+    expect(terminal.serialize().view).not.toMatch(/Printing the compact description marker/i);
     runtime.printScreen('expanded shell command', terminal);
 
     terminal.keyCtrlC();

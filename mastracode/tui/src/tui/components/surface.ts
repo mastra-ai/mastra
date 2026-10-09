@@ -139,7 +139,7 @@ export function statusDot(status: 'running' | 'done' | 'error'): string {
 /**
  * Tool-style block: a "• title" row (further title rows indented under it). With output, the title rows sit
  * on a lighter band directly above the output panel, the output lined up under the title text. Without output
- * it's just the title rows, so runs of quiet calls stay one row each.
+ * it's just the title rows, so runs of compact calls stay one row each.
  */
 export function toolBlock(dot: string, title: string | string[], output: string[], width: number): string[] {
   const [first = '', ...rest] = Array.isArray(title) ? title : [title];

@@ -616,7 +616,7 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
-      quietPreviewLineLimit: state.previewLines,
+      previewLineLimit: state.previewLines,
       backgroundCompletion,
     });
     if (backgroundCompletion) {
@@ -678,10 +678,10 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     const component = new ScheduleFireComponent({
       prompt: exactDisplayText,
       attributes: signalAttributes,
-      quietPreviewLineLimit: state.previewLines,
+      previewLineLimit: state.previewLines,
     });
     component.setExpanded(state.toolOutputExpanded);
-    // Registered with the tool components so ctrl+e and quiet-mode changes reach it.
+    // Registered with the tool components so ctrl+e and preview-line changes reach it.
     state.allToolComponents.push(component as any);
     state.messageComponentsById.set(message.id, component);
     if (state.streamingComponent && state.session.displayState.get().isRunning) {
@@ -1058,8 +1058,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
           // Render ask_user with the proper question component
           if (toolName === 'ask_user' && hasResult) {
             const askArgs = toolArgs as
-              | { question?: string; options?: Array<{ label: string; description?: string }> }
-              | undefined;
+              { question?: string; options?: Array<{ label: string; description?: string }> } | undefined;
             const answer = typeof resultValue === 'string' ? resultValue : formatToolResult(resultValue);
             const cancelled = answer === '(skipped)';
             if (askArgs?.question) {
@@ -1252,7 +1251,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
           if (!replacedWithInline) {
             toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
-            toolComponent.setQuietPreviewLineLimit(state.previewLines);
+            toolComponent.setPreviewLineLimit(state.previewLines);
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
           }

@@ -144,7 +144,7 @@ export function setupKeyboardShortcuts(
     for (const shell of state.allShellComponents) {
       shell.setExpanded(state.toolOutputExpanded);
     }
-    // Expanded quiet shell calls leave their shared box, so re-measure chat spacing.
+    // Expanded compact shell calls leave their shared box, so re-measure chat spacing.
     reconcileChatBoundarySpacers(state.chatContainer);
     state.ui.requestRender();
   });

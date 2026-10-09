@@ -171,10 +171,6 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
-import { quietShellDescriptionScenario } from './quiet-shell-description.js';
-import { quietShellGroupedScenario } from './quiet-shell-grouped.js';
-import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
-import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
@@ -188,6 +184,8 @@ import { setupCompletionPersistenceScenario } from './setup-completion-persisten
 import { setupCustomPackCompletionScenario } from './setup-custom-pack-completion.js';
 import { setupLoginRefreshScenario } from './setup-login-refresh.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
+import { shellDescriptionScenario } from './shell-description.js';
+import { shellGroupedScenario } from './shell-grouped.js';
 import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-configured-settings.js';
 import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-run.js';
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
@@ -208,6 +206,7 @@ import { storageFallbackHistoryReloadScenario } from './storage-fallback-history
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
+import { streamingPreviewHeightScenario } from './streaming-preview-height.js';
 import { streamingRenderStabilityScenario } from './streaming-render-stability.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
@@ -222,6 +221,7 @@ import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-tu
 import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
 import { thinkPickerPerModelScenario } from './think-picker-per-model.js';
 import { threadHistoryScenario } from './thread-history.js';
+import { toolHistoryParityScenario } from './tool-history-parity.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import { toolSuspensionSameRunResumeScenario } from './tool-suspension-same-run-resume.js';
@@ -409,11 +409,11 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'legacy-settings-no-prompt': legacySettingsNoPromptScenario,
   'legacy-settings-upgrade': legacySettingsUpgradeScenario,
   'preview-lines-settings': previewLinesSettingsScenario,
-  'quiet-shell-description': quietShellDescriptionScenario,
-  'quiet-shell-grouped': quietShellGroupedScenario,
+  'shell-description': shellDescriptionScenario,
+  'shell-grouped': shellGroupedScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
-  'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
-  'quiet-tool-history-parity': quietToolHistoryParityScenario,
+  'streaming-preview-height': streamingPreviewHeightScenario,
+  'tool-history-parity': toolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
   'state-commands': stateCommandsScenario,

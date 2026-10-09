@@ -51,9 +51,9 @@ export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
 
-function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
+function applyDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
   component.setCompactToolModeColor(getCurrentModeColor(ctx));
-  component.setQuietPreviewLineLimit(ctx.state.previewLines);
+  component.setPreviewLineLimit(ctx.state.previewLines);
 }
 
 function reconcileToolBoundaries(ctx: EventHandlerContext): void {
@@ -491,7 +491,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
-    applyQuietDisplayForNewTool(ctx, component);
+    applyDisplayForNewTool(ctx, component);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
     state.allToolComponents.push(component);
@@ -655,9 +655,9 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);
-    applyQuietDisplayForNewTool(ctx, component);
+    applyDisplayForNewTool(ctx, component);
     // Its args are about to stream in; until they do it has none, so it must not render as if complete
-    // (a quiet shell call would open a box for the project directory, then leave it).
+    // (a compact shell call would open a box for the project directory, then leave it).
     component.setArgsStreaming(true);
     ctx.addChildBeforeFollowUps(component);
     state.pendingTools.set(toolCallId, component);
@@ -811,7 +811,7 @@ export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string)
   const component = ctx.state.pendingTools.get(toolCallId);
   if (!component?.setArgsStreaming) return;
   component.setArgsStreaming(false);
-  // An undescribed quiet shell call leaves its bare streaming line for a box, so re-measure spacing.
+  // An undescribed compact shell call leaves its bare streaming line for a box, so re-measure spacing.
   reconcileToolBoundaries(ctx);
 }
 

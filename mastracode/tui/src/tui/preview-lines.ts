@@ -14,10 +14,10 @@ export function applyPreviewLinesToRenderedComponents(
 ): void {
   for (const tool of state.allToolComponents) {
     tool.setCompactToolModeColor?.(modeColor);
-    tool.setQuietPreviewLineLimit?.(previewLineLimit);
+    tool.setPreviewLineLimit?.(previewLineLimit);
   }
   for (const component of state.messageComponentsById?.values() ?? []) {
-    if (component instanceof NotificationComponent) component.setQuietPreviewLineLimit(previewLineLimit);
+    if (component instanceof NotificationComponent) component.setPreviewLineLimit(previewLineLimit);
   }
   if (!state.chatContainer) return;
   // Preview height changes can change chat spacing, so re-measure it.
