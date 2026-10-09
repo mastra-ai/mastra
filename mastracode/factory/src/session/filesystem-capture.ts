@@ -1,15 +1,20 @@
 import type { AgentControllerEvent, SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
+import type { SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 
 import type { FilesystemFile, FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { peekSessionEnvironment } from './environment-state-processor.js';
 import { isMeaningfulToolName } from './first-exec-capture.js';
 
+/** Exit code of `GIT_CHANGED_FILES_SCRIPT` when the checkout is not there: the repository is skipped, not failed. */
+const CHECKOUT_MISSING_EXIT_CODE = 3;
 const GIT_CHANGED_FILES_SCRIPT = `
 set -e
 workdir=$1
 base_branch=$2
+test -d "$workdir" || exit ${CHECKOUT_MISSING_EXIT_CODE}
 base=HEAD
 if merge_base=$(git -C "$workdir" merge-base HEAD "origin/$base_branch" 2>/dev/null); then
   base=$merge_base
@@ -18,6 +23,29 @@ git -C "$workdir" diff --name-only -z --find-renames --diff-filter=ACMRTUXB "$ba
 git -C "$workdir" ls-files --others --exclude-standard -z
 `;
 const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
+/**
+ * Regular files directly under the workspace root written since the session
+ * was created ($2 is a UTC `touch -t` stamp, `YYYYMMDDhhmm.SS`): the agent's
+ * notes, setup markers. Files the template shipped with (shell dotfiles, a
+ * build's setup markers) predate the session and stay out; the checkouts are
+ * covered by git. Credential stores are never listed, a listed path becomes
+ * readable through the thread's file route. `touch -t` plus `-newer` works on
+ * GNU and BSD find alike; `-newermt "@epoch"` is GNU only.
+ */
+const ROOT_FILES_LIST_COMMAND = [
+  'cd "$1" && ref=$(mktemp) && TZ=UTC touch -t "$2" "$ref"',
+  '&& find . -mindepth 1 -maxdepth 1 -type f ! -name .netrc ! -name .git-credentials ! -name .npmrc ! -name .pypirc -newer "$ref" -print0',
+  '; status=$?; rm -f "$ref"; exit $status',
+].join(' ');
+
+/** `touch -t` stamp of a moment, in UTC. */
+export function touchStamp(date: Date): string {
+  const two = (value: number) => String(value).padStart(2, '0');
+  return (
+    `${date.getUTCFullYear()}${two(date.getUTCMonth() + 1)}${two(date.getUTCDate())}` +
+    `${two(date.getUTCHours())}${two(date.getUTCMinutes())}.${two(date.getUTCSeconds())}`
+  );
+}
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -74,33 +102,84 @@ export async function captureSessionFilesystem(
     // running sandbox.
     if (entry.sandbox.status !== 'running') return;
     // Running-but-unresolved should not happen (the start hook resolves the
-    // workdir), but capture is best-effort — skip rather than guess.
-    const workdir = entry.workdir;
-    if (!workdir) return;
+    // workdir), but capture is best-effort: skip rather than guess.
+    const layout = sessionLayout(entry);
+    if (!layout) return;
 
-    const result = await sandbox.executeCommand(
-      'sh',
-      ['-c', GIT_CHANGED_FILES_SCRIPT, 'mastracode-changed-files', workdir, sourceSession.baseBranch],
-      { timeout: 30_000 },
+    // One git pass per checkout, in parallel so three repositories stay well
+    // inside the 10 s readers wait for a pending capture. The session's own
+    // repository compares against the session base branch; the others sit on
+    // their default branch and compare against that. A repository whose
+    // checkout is missing (exit 3) is skipped: it has nothing to list and
+    // must not block the others. Any other failure is treated as transient
+    // and leaves the previous listing in place.
+    const multiRepo = layout.repos.length > 1;
+    const environment = multiRepo ? peekSessionEnvironment(sourceSession.sessionId) : undefined;
+    const ownRepo = entry.workdirRepo!.toLowerCase();
+    // The boot records the state at its end, after every setup command; until
+    // then a secondary checkout compares against its own `origin/HEAD`.
+    const baseBranchFor = (repo: SessionLayoutRepository): string => {
+      if (repo.slug.toLowerCase() === ownRepo) return sourceSession.baseBranch;
+      const state = environment?.repositories.find(
+        candidate => candidate.slug.toLowerCase() === repo.slug.toLowerCase(),
+      );
+      return state?.defaultBranch ?? 'HEAD';
+    };
+    const targets = layout.repos.map(repo => ({ repo, baseBranch: baseBranchFor(repo) }));
+    const executeCommand = sandbox.executeCommand.bind(sandbox);
+    const results = await Promise.all(
+      targets.map(({ repo, baseBranch }) =>
+        executeCommand('sh', ['-c', GIT_CHANGED_FILES_SCRIPT, 'mastracode-changed-files', repo.dir, baseBranch], {
+          timeout: 30_000,
+        }),
+      ),
     );
-    if (result.exitCode !== 0) {
-      console.warn('[Factory filesystem capture] Unable to inspect Git changes.', result.stderr);
-      return;
+    const files = new Map<string, FilesystemFile>();
+    let captured = 0;
+    for (const [index, result] of results.entries()) {
+      if (result.exitCode === CHECKOUT_MISSING_EXIT_CODE) continue;
+      if (result.exitCode !== 0) {
+        console.warn('[Factory filesystem capture] Unable to inspect Git changes.', result.stderr);
+        return;
+      }
+      captured += 1;
+      const prefix = targets[index]!.repo.prefix;
+      for (const file of parseFilesystemCaptureFiles(result.stdout)) {
+        files.set(`${prefix}${file.path}`, { path: `${prefix}${file.path}` });
+      }
     }
+    if (captured === 0) return;
 
-    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workdir], {
+    const artifacts = await executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', layout.root], {
       timeout: 30_000,
     });
     if (artifacts.exitCode !== 0) {
       console.warn('[Factory filesystem capture] Unable to list workspace artifacts.', artifacts.stderr);
       return;
     }
-
-    const files = new Map(parseFilesystemCaptureFiles(result.stdout).map(file => [file.path, file]));
     for (const path of artifacts.stdout.split('\0')) {
       const normalizedPath = path.replace(/^\.\//, '');
       if (normalizedPath) {
         files.set(normalizedPath, { path: normalizedPath });
+      }
+    }
+
+    // With several checkouts the root is a plain directory nothing else lists.
+    // A failed listing is logged and the git and artifact results still land.
+    if (multiRepo) {
+      const since = touchStamp(sourceSession.createdAt);
+      const rootFiles = await executeCommand('sh', ['-c', ROOT_FILES_LIST_COMMAND, 'sh', layout.root, since], {
+        timeout: 30_000,
+      });
+      if (rootFiles.exitCode !== 0) {
+        console.warn('[Factory filesystem capture] Unable to list workspace root files.', rootFiles.stderr);
+      } else {
+        for (const path of rootFiles.stdout.split('\0')) {
+          const normalizedPath = path.replace(/^\.\//, '');
+          if (normalizedPath) {
+            files.set(normalizedPath, { path: normalizedPath });
+          }
+        }
       }
     }
 

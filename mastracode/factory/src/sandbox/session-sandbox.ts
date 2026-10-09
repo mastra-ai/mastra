@@ -131,9 +131,48 @@ interface SessionSandboxEntry {
   workdir?: string;
   /** The repository `workdir` was derived for: the memo answers only that repository. */
   workdirRepo?: string;
+  /** Environment repositories in position order; the session's own repository is among them. */
+  repos?: string[];
 }
 
 const sessionSandboxes = new Map<string, SessionSandboxEntry>();
+
+/** One environment repository as the file readers see it. */
+export interface SessionLayoutRepository {
+  slug: string;
+  /** Absolute checkout directory. */
+  dir: string;
+  /** Path prefix of this checkout under the layout root: empty for a single-repository session, `<dir>/` otherwise. */
+  prefix: string;
+}
+
+/**
+ * Where a session's files are read from. A session with one repository is
+ * rooted at that checkout, as before environments existed; a session with
+ * several is rooted at the workspace root with each checkout as a directory
+ * beneath it.
+ */
+export interface SessionLayout {
+  root: string;
+  repos: SessionLayoutRepository[];
+}
+
+/** The layout of a memoized session, `undefined` until its workdir resolved. */
+export function sessionLayout(entry: SessionSandboxEntry | undefined): SessionLayout | undefined {
+  if (!entry?.workdir || !entry.workdirRepo) return undefined;
+  const slugs = entry.repos?.length ? entry.repos : [entry.workdirRepo];
+  if (slugs.length === 1) {
+    return { root: entry.workdir, repos: [{ slug: slugs[0]!, dir: entry.workdir, prefix: '' }] };
+  }
+  const root = path.posix.dirname(entry.workdir);
+  return {
+    root,
+    repos: slugs.map(slug => {
+      const dir = slug.toLowerCase() === entry.workdirRepo!.toLowerCase() ? entry.workdir! : repoDirUnder(root, slug);
+      return { slug, dir, prefix: `${path.posix.basename(dir)}/` };
+    }),
+  };
+}
 
 /**
  * Get the session's memoized sandbox entry, constructing (and memoizing) it on
@@ -145,12 +184,21 @@ export function getSessionSandbox(
   sessionId: string,
   repoFullName: string,
   construct: () => WorkspaceSandbox,
+  repos?: string[],
 ): SessionSandboxEntry {
   const existing = sessionSandboxes.get(sessionId);
-  if (existing) return existing;
+  if (existing) {
+    // The environment can change between boots; the layout follows the latest.
+    if (repos) existing.repos = repos;
+    return existing;
+  }
   const sandbox = construct();
   const local = deriveLocalWorkdir(sandbox, repoFullName);
-  const entry: SessionSandboxEntry = { sandbox, ...(local ? { workdir: local, workdirRepo: repoFullName } : {}) };
+  const entry: SessionSandboxEntry = {
+    sandbox,
+    ...(local ? { workdir: local, workdirRepo: repoFullName } : {}),
+    ...(repos ? { repos } : {}),
+  };
   sessionSandboxes.set(sessionId, entry);
   return entry;
 }

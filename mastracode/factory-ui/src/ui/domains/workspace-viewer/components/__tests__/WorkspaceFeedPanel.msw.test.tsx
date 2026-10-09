@@ -118,7 +118,7 @@ describe('workspace panel comment feed', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /Comments None yet/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Comments\s?None yet/ })).toBeInTheDocument();
   });
 
   it('offers no comments row when the thread has no work item', async () => {

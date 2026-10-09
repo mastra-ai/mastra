@@ -3422,6 +3422,48 @@ describe('factory environment sandbox context', () => {
       });
     });
 
+    it('roots the agent at the workspace root with its skill roots under its own checkout when the environment holds several repositories', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      // The remote workdir is unknown at construction: the skill roots must not depend on it.
+      const { workspace } = await boot(resolver);
+      expect((workspace as any)._config.skills).toEqual(
+        expect.arrayContaining(['hello/.mastracode/skills', 'hello/.claude/skills', 'hello/.agents/skills']),
+      );
+      expect((workspace as any)._config.skills).not.toContain('.claude/skills');
+      await (workspace as any).filesystem.exists('.').catch(() => {});
+      expect((workspace as any).filesystem.basePath).toBe('/home/user');
+
+      // The pin self-heals on the next resolution once the VM resolved its workdir.
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+      await resolver({ requestContext });
+      const ctx = requestContext.get('controller') as { getState: () => { projectPath?: string } };
+      expect(ctx.getState().projectPath).toBe('/home/user');
+    });
+
+    it('keeps the agent rooted at its checkout with unprefixed skill roots when the environment holds one repository', async () => {
+      const { resolver } = environmentFixture({
+        links: twoLinks.map(link => (link.id === 'project-1' ? link : { ...link, inEnvironment: false })),
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      const { workspace } = await boot(resolver);
+      expect((workspace as any)._config.skills).toEqual(
+        expect.arrayContaining(['.mastracode/skills', '.claude/skills', '.agents/skills']),
+      );
+      expect((workspace as any)._config.skills.some((skillPath: string) => skillPath.startsWith('hello/'))).toBe(false);
+      await (workspace as any).filesystem.exists('.').catch(() => {});
+      expect((workspace as any).filesystem.basePath).toBe('/home/user/hello');
+
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+      await resolver({ requestContext });
+      const ctx = requestContext.get('controller') as { getState: () => { projectPath?: string } };
+      expect(ctx.getState().projectPath).toBe('/home/user/hello');
+    });
+
     it('installs one GH_TOKEN covering every environment repository and re-mints it the same way on refresh', async () => {
       const { resolver, github } = environmentFixture({ links: twoLinks });
       addProject({ setupCommand: 'pnpm i' });

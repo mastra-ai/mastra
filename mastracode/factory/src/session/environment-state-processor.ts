@@ -141,10 +141,13 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
         `${repo.position}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +
         (repo.changeRequestUrl ? `, change request ${escapeText(repo.changeRequestUrl)}` : ''),
     );
+    const only = state.repositories.length === 1 ? state.repositories[0] : undefined;
     const contents =
-      `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n` +
+      (only
+        ? `Factory environment: 1 repository, ${escapeText(only.slug)} at ${escapeText(only.dir)}, your working directory.\n`
+        : `Factory environment: ${state.repositories.length} repositories under ${escapeText(state.workingDirectory)}, your working directory.\n`) +
       lines.join('\n') +
-      '\nRun git and project commands inside the repository directory they belong to.' +
+      (only ? '' : '\nRun git and project commands inside the repository directory they belong to.') +
       (state.note ? `\n${escapeText(state.note)}` : '');
     return {
       id: STATE_ID,
@@ -153,7 +156,7 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
       tagName: 'factory-environment',
       contents,
       value: { environment: state },
-      attributes: { workingDirectory: state.workingDirectory, repositories: state.repositories.length },
+      attributes: { workingDirectory: only?.dir ?? state.workingDirectory, repositories: state.repositories.length },
       metadata: { value: { environment: state } },
     };
   }

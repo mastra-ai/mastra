@@ -136,7 +136,7 @@ describe('WorkspaceFiles', () => {
       await user.click(toggle);
 
       expect(card).not.toHaveAttribute('inert');
-      expect(await screen.findByRole('button', { name: /^Files No files/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Files\s?No files/ })).toBeInTheDocument();
       await waitForMutationsIdle(client);
       expect(listRequests).toEqual([{ workspacePath: WORKSPACE, threadId: 'thread-1' }]);
     });
@@ -165,7 +165,7 @@ describe('WorkspaceFiles', () => {
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 
-      expect(await screen.findByRole('button', { name: /^Changes No changes/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
       expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
     });
   });
@@ -181,7 +181,7 @@ describe('WorkspaceFiles', () => {
 
       await user.click(screen.getByRole('button', { name: 'Workspace files' }));
 
-      expect(await screen.findByRole('button', { name: /^Files No files/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Files\s?No files/ })).toBeInTheDocument();
     });
   });
 });

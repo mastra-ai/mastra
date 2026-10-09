@@ -1,7 +1,9 @@
 import type { SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '../sandbox/session-sandbox.js';
+import { __clearSessionEnvironmentsForTests, recordSessionEnvironment } from './environment-state-processor.js';
+import type { SessionEnvironmentRepositoryState } from './environment-state-processor.js';
 import {
   captureSessionFilesystem,
   observeSessionFilesystem,
@@ -98,13 +100,15 @@ function createDependencies(): FilesystemCaptureDependencies {
           sandboxId: 'sandbox-1',
           sandboxWorkdir: '/sessions/s1/worktree',
           materializedAt: new Date(),
-          createdAt: new Date(),
+          createdAt: SESSION_CREATED_AT,
           updatedAt: new Date(),
         }),
       },
     },
   };
 }
+
+const SESSION_CREATED_AT = new Date('2026-10-09T17:00:00.000Z');
 
 describe('parseFilesystemCaptureFiles', () => {
   it('treats command output as plain paths and normalizes a leading dot segment', () => {
@@ -183,6 +187,8 @@ describe('captureSessionFilesystem', () => {
       threadId: 'thread-1',
       files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
     });
+    // One checkout: git and artifacts only, the root is the checkout itself.
+    expect(executeCommand).toHaveBeenCalledTimes(2);
   });
 
   it('clears persisted files after successful empty Git and artifact listings', async () => {
@@ -219,6 +225,186 @@ describe('captureSessionFilesystem', () => {
       'not a repository',
     );
     error.mockRestore();
+  });
+});
+
+describe('captureSessionFilesystem across environment repositories', () => {
+  const slugs = ['acme/api', 'acme/docs', 'acme/site'];
+  const dirs: Record<string, string> = {
+    'acme/api': '/sessions/s1/api',
+    'acme/docs': '/sessions/s1/docs',
+    'acme/site': '/sessions/s1/site',
+  };
+  const state = (slug: string): SessionEnvironmentRepositoryState => ({
+    slug,
+    dir: dirs[slug]!,
+    branch: slug === 'acme/api' ? 'session-branch' : 'develop',
+    defaultBranch: 'develop',
+    position: slugs.indexOf(slug) + 1,
+    setupStatus: 'ok',
+  });
+
+  /** Seed the memo with a three-repository layout rooted at `/sessions/s1`, own repository `acme/api`. */
+  function seedEnvironment(recorded = slugs) {
+    __clearSessionSandboxesForTests();
+    __clearSessionEnvironmentsForTests();
+    getSessionSandbox(
+      'source-session-1',
+      'acme/api',
+      () => ({ id: 'sb-live', provider: 'local', status: 'running', workingDirectory: '/sessions/s1' }) as never,
+      slugs,
+    );
+    recordSessionEnvironment('resource-1', { workingDirectory: '/sessions/s1', repositories: recorded.map(state) }, []);
+  }
+
+  /** A session whose executeCommand answers by the checkout directory it was asked about. */
+  function createEnvironmentSession(
+    answers: Record<string, ReturnType<typeof commandResult>>,
+    artifacts = commandResult(),
+    rootFiles = commandResult(),
+  ) {
+    const executeCommand = vi.fn(async (_command: string, args: string[]) => {
+      if (args[1] === 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true') return artifacts;
+      if (args[1].includes('-newer "$ref"')) return rootFiles;
+      return answers[args[3]!] ?? commandResult();
+    });
+    const base = createSession([]);
+    const session: FilesystemCaptureSession = {
+      ...base.session,
+      getWorkspace: () => ({ sandbox: { id: 'sandbox-1', name: 'Test sandbox', provider: 'test', executeCommand } }),
+    };
+    return { session, executeCommand };
+  }
+
+  afterEach(() => {
+    __clearSessionEnvironmentsForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('runs one git pass per checkout against its own base branch and prefixes the paths', async () => {
+    seedEnvironment();
+    const { session, executeCommand } = createEnvironmentSession(
+      {
+        '/sessions/s1/api': commandResult({ stdout: 'src/app.ts\0' }),
+        '/sessions/s1/docs': commandResult({ stdout: 'README.md\0' }),
+        '/sessions/s1/site': commandResult({ stdout: 'index.html\0' }),
+      },
+      commandResult({ stdout: './.artifacts/report.md\0' }),
+      commandResult({ stdout: './poem.txt\0./.setup-ran-workdir\0' }),
+    );
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    const gitCalls = executeCommand.mock.calls.filter(call => call[1][2] === 'mastracode-changed-files');
+    expect(gitCalls.map(call => [call[1][3], call[1][4]])).toEqual([
+      ['/sessions/s1/api', 'main'],
+      ['/sessions/s1/docs', 'develop'],
+      ['/sessions/s1/site', 'develop'],
+    ]);
+    // Artifacts, then the root-level files written since the session was created, both at the root.
+    const rootCalls = executeCommand.mock.calls.filter(call => call[1][2] === 'sh');
+    expect(rootCalls.map(call => call[1][3])).toEqual(['/sessions/s1', '/sessions/s1']);
+    expect(rootCalls[1]![1][4]).toBe('202610091700.00');
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [
+        { path: '.artifacts/report.md' },
+        { path: '.setup-ran-workdir' },
+        { path: 'api/src/app.ts' },
+        { path: 'docs/README.md' },
+        { path: 'poem.txt' },
+        { path: 'site/index.html' },
+      ],
+    });
+  });
+
+  it('keeps the git and artifact results when the root listing fails', async () => {
+    seedEnvironment();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { session } = createEnvironmentSession(
+      { '/sessions/s1/api': commandResult({ stdout: 'src/app.ts\0' }) },
+      commandResult({ stdout: './.artifacts/report.md\0' }),
+      commandResult({ exitCode: 1, stderr: 'find: not permitted' }),
+    );
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory filesystem capture] Unable to list workspace root files.',
+      'find: not permitted',
+    );
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [{ path: '.artifacts/report.md' }, { path: 'api/src/app.ts' }],
+    });
+  });
+
+  it('compares a repository the boot has not recorded yet against its own HEAD', async () => {
+    seedEnvironment(['acme/api', 'acme/site']);
+    const { session, executeCommand } = createEnvironmentSession({
+      '/sessions/s1/api': commandResult({ stdout: 'a.ts\0' }),
+      '/sessions/s1/docs': commandResult({ stdout: 'c.ts\0' }),
+      '/sessions/s1/site': commandResult({ stdout: 'b.ts\0' }),
+    });
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    const gitTargets = executeCommand.mock.calls
+      .filter(call => call[1][2] === 'mastracode-changed-files')
+      .map(call => [call[1][3], call[1][4]]);
+    expect(gitTargets).toEqual([
+      ['/sessions/s1/api', 'main'],
+      ['/sessions/s1/docs', 'HEAD'],
+      ['/sessions/s1/site', 'develop'],
+    ]);
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [{ path: 'api/a.ts' }, { path: 'docs/c.ts' }, { path: 'site/b.ts' }],
+    });
+  });
+
+  it('skips a repository whose checkout is missing (exit 3) and writes the others', async () => {
+    seedEnvironment();
+    const { session } = createEnvironmentSession({
+      '/sessions/s1/api': commandResult({ stdout: 'a.ts\0' }),
+      '/sessions/s1/docs': commandResult({ exitCode: 3 }),
+      '/sessions/s1/site': commandResult({ stdout: 'b.ts\0' }),
+    });
+    const dependencies = createDependencies();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [{ path: 'api/a.ts' }, { path: 'site/b.ts' }],
+    });
+  });
+
+  it('a transient failure in any repository leaves the previous listing in place', async () => {
+    seedEnvironment();
+    const { session } = createEnvironmentSession({
+      '/sessions/s1/api': commandResult({ stdout: 'a.ts\0' }),
+      '/sessions/s1/docs': commandResult({ exitCode: 1, stderr: 'fatal: index locked' }),
+    });
+    const dependencies = createDependencies();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(dependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory filesystem capture] Unable to inspect Git changes.',
+      'fatal: index locked',
+    );
   });
 });
 
