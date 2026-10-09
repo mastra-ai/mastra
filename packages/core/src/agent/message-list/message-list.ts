@@ -786,6 +786,62 @@ export class MessageList {
   }
 
   /**
+   * Split an accumulated response message so result processors can transform the current loop iteration independently.
+   * The original id stays with the current iteration because callers use it to detect removal by a processor.
+   * @internal
+   */
+  public splitResponseMessageAtPartOffset(
+    messageId: string,
+    partOffset: number,
+  ): { earlierMessageId: string; currentMessageId: string } | undefined {
+    const messageIndex = this.messages.findIndex(message => message.id === messageId);
+    const message = this.messages[messageIndex];
+    const parts = message?.content.parts;
+    if (
+      !message ||
+      !this.stateManager.isResponseMessage(message) ||
+      !parts ||
+      partOffset <= 0 ||
+      partOffset >= parts.length
+    ) {
+      return undefined;
+    }
+
+    const contentForParts = (selectedParts: MastraMessagePart[]): MastraDBMessage['content'] => {
+      const content = { ...message.content, parts: selectedParts };
+      if (typeof content.content === 'string') {
+        content.content = selectedParts.reduce((text, part) => (part.type === 'text' ? part.text : text), '');
+      }
+      if (Array.isArray(content.toolInvocations)) {
+        const toolCallIds = new Set(
+          selectedParts.flatMap(part =>
+            part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+          ),
+        );
+        content.toolInvocations = content.toolInvocations.filter(invocation => toolCallIds.has(invocation.toolCallId));
+      }
+      return content;
+    };
+
+    const earlierMessageId = this.newMessageId(message.role);
+    const earlierMessage: MastraDBMessage = {
+      ...message,
+      id: earlierMessageId,
+      content: contentForParts(parts.slice(0, partOffset)),
+    };
+    message.content = contentForParts(parts.slice(partOffset));
+    this.messages.splice(messageIndex, 1, earlierMessage, message);
+
+    const state = this.serialize();
+    for (const key of ['newResponseMessages', 'newResponseMessagesPersisted'] as const) {
+      state[key] = state[key].flatMap(id => (id === messageId ? [earlierMessageId, messageId] : [id]));
+    }
+    this.deserialize(state);
+
+    return { earlierMessageId, currentMessageId: messageId };
+  }
+
+  /**
    * Roll a response message back to the boundary the caller's loop iteration opened, discarding
    * the parts produced by that step while keeping every earlier, completed step intact.
    *

@@ -262,24 +262,10 @@ function findIterationPartOffset(
   return undefined;
 }
 
-function resolveProcessedIterationText(
-  textBeforeProcessing: string,
-  textAfterProcessing: string | undefined,
-  stepText: string,
-): string {
-  if (textAfterProcessing === undefined) return '';
-
-  const iterationOffset = textBeforeProcessing.endsWith(stepText)
-    ? textBeforeProcessing.length - stepText.length
-    : undefined;
-  if (iterationOffset === undefined || iterationOffset === 0) return textAfterProcessing;
-
-  const earlierText = textBeforeProcessing.slice(0, iterationOffset);
-  if (textAfterProcessing.startsWith(earlierText)) return textAfterProcessing.slice(earlierText.length);
-  if (stepText && textAfterProcessing.endsWith(stepText)) return stepText;
-  if (textAfterProcessing.length === textBeforeProcessing.length) return textAfterProcessing.slice(iterationOffset);
-
-  return '';
+function resolveMessageText(message: MastraDBMessage): string {
+  const converted = convertMessages([message]).to('AIV4.Core');
+  const convertedMessage = converted[converted.length - 1];
+  return convertedMessage ? coreContentToString(convertedMessage.content) : '';
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -1229,6 +1215,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const iterationPartOffset = stepMessage
                     ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
                     : undefined;
+                  const separatedIteration =
+                    stepMessage && iterationPartOffset
+                      ? self.messageList.splitResponseMessageAtPartOffset(stepMessage.id, iterationPartOffset)
+                      : undefined;
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
@@ -1239,14 +1229,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     outputResult,
                   );
 
-                  // Get text from the latest response message (the last assistant message)
-                  const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
-                  const processedStepMessage = stepMessage
-                    ? self.messageList.get.response.db().find(message => message.id === stepMessage.id)
+                  const responseMessages = self.messageList.get.response.db();
+                  const processedStepMessageId = separatedIteration?.currentMessageId ?? stepMessage?.id;
+                  const processedStepMessage = processedStepMessageId
+                    ? responseMessages.find(message => message.id === processedStepMessageId)
                     : undefined;
+                  const processedEarlierMessage = separatedIteration
+                    ? responseMessages.find(message => message.id === separatedIteration.earlierMessageId)
+                    : undefined;
+                  const outputText =
+                    separatedIteration && processedStepMessage
+                      ? `${processedEarlierMessage ? resolveMessageText(processedEarlierMessage) : ''}${resolveMessageText(processedStepMessage)}`
+                      : resolveOutputTextSkippingCompletionChecks(self.messageList);
                   const processedStepParts = processedStepMessage?.content?.parts;
-                  const stepText =
-                    outputText !== outputTextBeforeProcessing
+                  const stepText = separatedIteration
+                    ? processedStepMessage
+                      ? resolveMessageText(processedStepMessage)
+                      : ''
+                    : outputText !== outputTextBeforeProcessing
                       ? processedStepMessage &&
                         processedStepParts &&
                         stepMessageParts &&
@@ -1256,17 +1256,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                             .slice(iterationPartOffset)
                             .map(part => (part.type === 'text' ? part.text : ''))
                             .join('')
-                        : outputTextBeforeProcessing === undefined
-                          ? (outputText ?? '')
-                          : resolveProcessedIterationText(outputTextBeforeProcessing, outputText, lastStepText)
+                        : (outputText ?? '')
                       : undefined;
 
-                  // Only reconcile the final step when result processing changed the run-level response. Earlier
-                  // steps retain their model text. Preserve the final iteration slice when its message and part
-                  // structure remain stable. If a processor replaces or removes that structure, locate the processed
-                  // iteration by an unchanged earlier prefix, an unchanged final-step suffix, or a length-preserving
-                  // rewrite. Clear the step when no safe boundary remains so removed text cannot leak through the raw
-                  // step. Compare against undefined, not truthiness, so clearing to '' applies.
+                  // Earlier buffered steps retain their model text. When multiple iterations share one response
+                  // message, separate the current iteration before result processing so its reconciled step text comes
+                  // directly from the processor's output. Compare against undefined, not truthiness, so clearing to ''
+                  // applies when the processor removes that iteration's response.
                   if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }

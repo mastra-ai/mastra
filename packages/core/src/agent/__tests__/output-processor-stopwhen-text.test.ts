@@ -304,6 +304,51 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('token:abc123 MORE');
   });
 
+  it('uses processor output when collapsing rewrites in both iterations', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'SECRET '), finish('stop')],
+      [...textPart('t2', 'SECRET'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'collapse-and-redact-both-iterations',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => {
+              if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
+
+              const text = message.content.parts
+                ?.map(part => (part.type === 'text' ? part.text.replace('SECRET', '[redacted]') : ''))
+                .join('');
+              return {
+                ...message,
+                content: {
+                  ...message.content,
+                  content: text,
+                  parts: [{ type: 'text', text }],
+                },
+              };
+            }),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Continue.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('[redacted] [redacted]');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['SECRET ', '[redacted]']);
+    expect(fullOutput.text).toBe('SECRET [redacted]');
+  });
+
   it('keeps feedback continuation steps iteration-local with an output processor', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
