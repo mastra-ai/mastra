@@ -7,6 +7,7 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { textFieldAutofillProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -158,6 +159,7 @@ export function ToolsPage() {
           <EntityDescription>
             <input
               type="text"
+              {...textFieldAutofillProps(undefined)}
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(

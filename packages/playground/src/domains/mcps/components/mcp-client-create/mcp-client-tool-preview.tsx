@@ -12,6 +12,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { textFieldAutofillProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { TryConnectMcpMutation } from '@mastra/react/hooks/mcps';
 
@@ -132,6 +133,7 @@ function ToolList({
                 <EntityDescription>
                   <input
                     type="text"
+                    {...textFieldAutofillProps(undefined)}
                     disabled={isDisabled}
                     className={cn(
                       'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
