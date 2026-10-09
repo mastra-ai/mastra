@@ -235,6 +235,11 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
    * Merge a settings patch onto the stored document (null removes a key) and
    * validate the result through the sandbox's schema. Returns the issues when
    * the merged document is rejected.
+   *
+   * A stored key the current schema does not declare is left over from another
+   * provider or an older schema. When the merged document fails validation, the
+   * merge retries without those keys so one stale value cannot lock every later
+   * update; keys the patch itself sets are never pruned.
    */
   async #mergeSettings(
     stored: Record<string, unknown>,
@@ -249,8 +254,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     }
     this.#settingsSchema ??= normalizeFactorySandboxSettings(this.deps.sandbox!);
     const result = await this.#settingsSchema['~standard'].validate(merged);
-    if (result.issues) return { issues: result.issues };
-    return { merged: Object.keys(merged).length > 0 ? merged : null };
+    if (!result.issues) return { merged: Object.keys(merged).length > 0 ? merged : null };
+
+    const declared = this.#describeSandbox().settingsSchema.properties ?? {};
+    const pruned = Object.fromEntries(
+      Object.entries(merged).filter(([key]) => key in patch || Object.hasOwn(declared, key)),
+    );
+    if (Object.keys(pruned).length === Object.keys(merged).length) return { issues: result.issues };
+    const retried = await this.#settingsSchema['~standard'].validate(pruned);
+    if (retried.issues) return { issues: result.issues };
+    return { merged: Object.keys(pruned).length > 0 ? pruned : null };
   }
 
   async #projects(): Promise<FactoryProjectsStorage> {
