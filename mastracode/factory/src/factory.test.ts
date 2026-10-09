@@ -715,7 +715,7 @@ describe('MastraFactory.prepare', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toMatch(/FactorySandbox instance/);
     // No retired option was passed, so no migration lines.
-    expect(error.message).not.toMatch(/retired sandbox fleet/);
+    expect(error.message).not.toMatch(/retired alpha sandbox config/);
   });
 
   it('rejects a sandbox config that is neither a callback nor an object', async () => {

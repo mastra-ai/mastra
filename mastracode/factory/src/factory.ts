@@ -405,7 +405,7 @@ function invalidSandboxOptionMessage(option: unknown): string {
   if (typeof option === 'object' && option !== null) {
     const retired = Object.keys(RETIRED_SANDBOX_OPTIONS).filter(key => key in option);
     if (retired.length > 0) {
-      lines.push(`The options object you passed is the retired sandbox fleet config. Its options map as follows:`);
+      lines.push(`The object you passed is the retired alpha sandbox config. Its options map as follows:`);
       for (const key of retired) lines.push(`  ${RETIRED_SANDBOX_OPTIONS[key]}.`);
     }
   }
