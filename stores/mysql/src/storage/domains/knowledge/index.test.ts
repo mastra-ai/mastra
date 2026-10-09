@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
@@ -34,6 +34,19 @@ function createStore() {
 }
 
 createKnowledgeStorageTests(createStore);
+
+createKnowledgeSchemaLatchTests(async () => {
+  await createStore().init();
+  await pool.query(`DELETE FROM \`${TABLE_KNOWLEDGE_SCHEMA}\``);
+  return {
+    store: createStore(),
+    repair: async () => {
+      await pool.query(`INSERT INTO \`${TABLE_KNOWLEDGE_SCHEMA}\` (id, version) VALUES ('canonical', ?)`, [
+        KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      ]);
+    },
+  };
+});
 
 describe('MySQL canonical Knowledge support', () => {
   it('normalizes canonical SQL without rewriting string literals', () => {

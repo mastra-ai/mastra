@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -249,13 +250,15 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   ] as const;
 
-  readonly #connector: MongoDBConnector;
+  readonly #rawConnector: MongoDBConnector;
+  #initError?: Error;
+  readonly #schemaAccess = new AsyncLocalStorage<true>();
   readonly #skipDefaultIndexes?: boolean;
   readonly #indexes?: MongoDBIndexConfig[];
 
   constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = resolveMongoDBConfig(config);
+    this.#rawConnector = resolveMongoDBConfig(config);
     this.#skipDefaultIndexes = config.skipDefaultIndexes;
     this.#indexes = config.indexes?.filter(index =>
       (KnowledgeMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(index.collection),
@@ -270,11 +273,29 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     } as const;
   }
 
+  // A failed schema check latches: every operation rethrows it until init() or dangerouslyReset() succeeds.
+  get #connector(): MongoDBConnector {
+    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
+    return this.#rawConnector;
+  }
+
   async #collection(name: string): Promise<Collection<Document>> {
     return this.#connector.getCollection(name);
   }
 
   async init(): Promise<void> {
+    try {
+      // The retry runs with schema access; concurrent callers stay latched until it succeeds.
+      await this.#schemaAccess.run(true, () => this.#init());
+      this.#initError = undefined;
+    } catch (error) {
+      const { KnowledgeSchemaError } = await loadKnowledgeCore();
+      if (error instanceof KnowledgeSchemaError) this.#initError = error;
+      throw error;
+    }
+  }
+
+  async #init(): Promise<void> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
     if (!(await this.#connector.supportsTransactions())) {
       throw new KnowledgeSchemaError(
@@ -373,9 +394,10 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
+    // The latch clears only when the follow-up init() succeeds, so a failed reset stays latched.
     for (const name of [RETIRED_KNOWLEDGE_CURSOR_COLLECTION, ...KnowledgeMongoDB.MANAGED_COLLECTIONS]) {
       try {
-        await (await this.#collection(name)).drop();
+        await (await this.#rawConnector.getCollection(name)).drop();
       } catch (error) {
         if (!(error instanceof MongoServerError && error.codeName === 'NamespaceNotFound')) throw error;
       }

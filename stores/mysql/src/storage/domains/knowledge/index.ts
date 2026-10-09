@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { KnowledgeCore } from '@internal/core/knowledge-compat';
@@ -346,14 +347,26 @@ const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
 
 export class KnowledgeMySQL extends KnowledgeStorage {
   readonly #pool: Pool;
-  readonly #operations: StoreOperationsMySQL;
-  readonly #executor: Executor;
+  readonly #rawOperations: StoreOperationsMySQL;
+  readonly #rawExecutor: Executor;
+  #initError?: Error;
+  readonly #schemaAccess = new AsyncLocalStorage<true>();
 
   constructor(config: { pool: Pool; operations: StoreOperationsMySQL }) {
     super({ storageIsolationKey: config.pool });
     this.#pool = config.pool;
-    this.#operations = config.operations;
-    this.#executor = createExecutor(config.pool);
+    this.#rawOperations = config.operations;
+    this.#rawExecutor = createExecutor(config.pool);
+  }
+
+  // A failed schema check latches: every operation rethrows it until init() or dangerouslyReset() succeeds.
+  get #operations(): StoreOperationsMySQL {
+    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
+    return this.#rawOperations;
+  }
+  get #executor(): Executor {
+    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
+    return this.#rawExecutor;
   }
 
   override getCapabilities() {
@@ -409,6 +422,18 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
+    try {
+      // The retry runs with schema access; concurrent callers stay latched until it succeeds.
+      await this.#schemaAccess.run(true, () => this.#init());
+      this.#initError = undefined;
+    } catch (error) {
+      const { KnowledgeSchemaError } = await loadKnowledgeCore();
+      if (error instanceof KnowledgeSchemaError) this.#initError = error;
+      throw error;
+    }
+  }
+
+  async #init(): Promise<void> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
     const tables = [
       [TABLE_KNOWLEDGE_NODES, KNOWLEDGE_NODES_SCHEMA],
@@ -493,7 +518,8 @@ export class KnowledgeMySQL extends KnowledgeStorage {
 
   override async dangerouslyReset(): Promise<void> {
     const tables = [RETIRED_KNOWLEDGE_CURSOR_TABLE, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
-    await this.#executor.execute(`DROP TABLE IF EXISTS ${tables.map(table => `"${table}"`).join(', ')}`);
+    // The latch clears only when the follow-up init() succeeds, so a failed reset stays latched.
+    await this.#rawExecutor.execute(`DROP TABLE IF EXISTS ${tables.map(table => `"${table}"`).join(', ')}`);
     await this.init();
   }
 
