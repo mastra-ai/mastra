@@ -262,6 +262,26 @@ function findIterationPartOffset(
   return undefined;
 }
 
+function resolveProcessedIterationText(
+  textBeforeProcessing: string,
+  textAfterProcessing: string | undefined,
+  stepText: string,
+): string {
+  if (textAfterProcessing === undefined) return '';
+
+  const iterationOffset = textBeforeProcessing.endsWith(stepText)
+    ? textBeforeProcessing.length - stepText.length
+    : undefined;
+  if (iterationOffset === undefined || iterationOffset === 0) return textAfterProcessing;
+
+  const earlierText = textBeforeProcessing.slice(0, iterationOffset);
+  if (textAfterProcessing.startsWith(earlierText)) return textAfterProcessing.slice(earlierText.length);
+  if (stepText && textAfterProcessing.endsWith(stepText)) return stepText;
+  if (textAfterProcessing.length === textBeforeProcessing.length) return textAfterProcessing.slice(iterationOffset);
+
+  return '';
+}
+
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #error: Error | undefined;
@@ -1204,9 +1224,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   }
 
                   const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
-                  const iterationTextOffset = outputTextBeforeProcessing?.endsWith(lastStepText)
-                    ? outputTextBeforeProcessing.length - lastStepText.length
-                    : undefined;
                   const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
                   const stepMessageParts = stepMessage?.content?.parts;
                   const iterationPartOffset = stepMessage
@@ -1239,16 +1256,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                             .slice(iterationPartOffset)
                             .map(part => (part.type === 'text' ? part.text : ''))
                             .join('')
-                        : self.#bufferedSteps.length === 1 || iterationTextOffset === undefined
+                        : outputTextBeforeProcessing === undefined
                           ? (outputText ?? '')
-                          : (outputText?.slice(iterationTextOffset) ?? '')
+                          : resolveProcessedIterationText(outputTextBeforeProcessing, outputText, lastStepText)
                       : undefined;
 
                   // Only reconcile the final step when result processing changed the run-level response. Earlier
                   // steps retain their model text. Preserve the final iteration slice when its message and part
-                  // structure remain stable. If a processor replaces or removes that message, derive the processed
-                  // final-step text from the run-level text at the pre-processing iteration boundary so removed text
-                  // cannot leak through the raw step. Compare against undefined, not truthiness, so clearing to '' applies.
+                  // structure remain stable. If a processor replaces or removes that structure, locate the processed
+                  // iteration by an unchanged earlier prefix, an unchanged final-step suffix, or a length-preserving
+                  // rewrite. Clear the step when no safe boundary remains so removed text cannot leak through the raw
+                  // step. Compare against undefined, not truthiness, so clearing to '' applies.
                   if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }
