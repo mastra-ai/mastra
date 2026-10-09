@@ -422,7 +422,9 @@ async function main() {
   const updateArgs = getUpdateCommandArgs(process.argv);
   if (updateArgs) {
     const code = await runUpdateCommand({ args: updateArgs, currentVersion: getCurrentVersion() });
-    await new Promise(resolve => process.stdout.write('', resolve));
+    await Promise.all(
+      [process.stdout, process.stderr].map(stream => new Promise(resolve => stream.write('', resolve))),
+    );
     return process.exit(code);
   }
 

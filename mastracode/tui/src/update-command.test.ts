@@ -11,16 +11,22 @@ vi.mock('@mastra/code-sdk/utils/update-check', async importOriginal => ({
   performUpdate: vi.fn(),
 }));
 
-async function run(args: string[] = [], currentVersion = '1.0.0') {
-  let text = '';
-  const output = new Writable({
+function capture() {
+  const stream = { text: '' };
+  const writable = new Writable({
     write(chunk, _encoding, callback) {
-      text += chunk.toString();
+      stream.text += chunk.toString();
       callback();
     },
   });
-  const code = await runUpdateCommand({ args, output, currentVersion });
-  return { code, text };
+  return { stream, writable };
+}
+
+async function run(args: string[] = [], currentVersion = '1.0.0') {
+  const out = capture();
+  const err = capture();
+  const code = await runUpdateCommand({ args, output: out.writable, errorOutput: err.writable, currentVersion });
+  return { code, text: out.stream.text, errorText: err.stream.text };
 }
 
 describe('getUpdateCommandArgs', () => {
@@ -67,9 +73,10 @@ describe('runUpdateCommand', () => {
   it('exits 1 when the registry is unreachable', async () => {
     vi.mocked(fetchLatestVersion).mockResolvedValue(null);
 
-    const { code, text } = await run();
+    const { code, text, errorText } = await run();
 
-    expect(text).toContain('Could not reach the npm registry');
+    expect(errorText).toContain('Could not reach the npm registry');
+    expect(text).not.toContain('Could not reach the npm registry');
     expect(code).toBe(1);
   });
 
@@ -77,25 +84,28 @@ describe('runUpdateCommand', () => {
     vi.mocked(fetchLatestVersion).mockResolvedValue('1.2.0');
     vi.mocked(performUpdate).mockResolvedValue({ status, message: 'Run `pnpm add -g mastracode@1.2.0` manually.' });
 
-    const { code, text } = await run();
+    const { code, text, errorText } = await run();
 
-    expect(text).toContain('Run `pnpm add -g mastracode@1.2.0` manually.');
+    expect(errorText).toContain('Run `pnpm add -g mastracode@1.2.0` manually.');
+    expect(text).not.toContain('manually');
     expect(code).toBe(1);
   });
 
   it('prints usage for --help without checking for updates', async () => {
-    const { code, text } = await run(['--help']);
+    const { code, text, errorText } = await run(['--help']);
 
     expect(fetchLatestVersion).not.toHaveBeenCalled();
     expect(text).toContain('Usage: mastracode update');
+    expect(errorText).toBe('');
     expect(code).toBe(0);
   });
 
   it('rejects unexpected arguments', async () => {
-    const { code, text } = await run(['now']);
+    const { code, text, errorText } = await run(['now']);
 
     expect(fetchLatestVersion).not.toHaveBeenCalled();
-    expect(text).toContain('Usage: mastracode update');
+    expect(errorText).toContain('Usage: mastracode update');
+    expect(text).toBe('');
     expect(code).toBe(1);
   });
 

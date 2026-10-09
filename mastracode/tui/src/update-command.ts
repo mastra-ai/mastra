@@ -17,6 +17,8 @@ export function getUpdateCommandArgs(argv: string[]): string[] | undefined {
 interface UpdateCommandOptions {
   args?: string[];
   output?: NodeJS.WritableStream;
+  /** Failures go here, so `mastracode update >/dev/null` still shows them. */
+  errorOutput?: NodeJS.WritableStream;
   currentVersion: string;
 }
 
@@ -28,25 +30,24 @@ interface UpdateCommandOptions {
 export async function runUpdateCommand({
   args = [],
   output = process.stdout,
+  errorOutput = process.stderr,
   currentVersion,
 }: UpdateCommandOptions): Promise<number> {
   const say = (line: string) => output.write(`${line}\n`);
+  const fail = (line: string) => {
+    errorOutput.write(`${line}\n`);
+    return 1;
+  };
 
   if (args.includes('--help') || args.includes('-h')) {
     say(USAGE);
     return 0;
   }
-  if (args.length > 0) {
-    say(USAGE);
-    return 1;
-  }
+  if (args.length > 0) return fail(USAGE);
 
   say('Checking for updates…');
   const latestVersion = await fetchLatestVersion();
-  if (!latestVersion) {
-    say('Could not reach the npm registry. Check your network connection.');
-    return 1;
-  }
+  if (!latestVersion) return fail('Could not reach the npm registry. Check your network connection.');
   if (!isNewerVersion(currentVersion, latestVersion)) {
     say(`You are already on the latest version (v${currentVersion}).`);
     return 0;
@@ -58,6 +59,5 @@ export async function runUpdateCommand({
     say(`Updated Mastra Code to v${latestVersion}.`);
     return 0;
   }
-  say(outcome.message);
-  return 1;
+  return fail(outcome.message);
 }
