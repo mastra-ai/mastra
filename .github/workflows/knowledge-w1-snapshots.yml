@@ -1,0 +1,55 @@
+name: Knowledge W1 snapshot layouts
+on:
+  push:
+    branches: [ci/knowledge-v21-w1-dump]
+permissions:
+  contents: read
+jobs:
+  dump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - 0.0.0-knowledge-w1-20261006001735
+          - 0.0.0-knowledge-w1-20261007232522
+          - 0.0.0-knowledge-w1-20261008204450
+          - 0.0.0-knowledge-w1-20261008225219
+          - 0.0.0-knowledge-w1-20261009033246
+          - 0.0.0-knowledge-w1-20261009040610
+          - 0.0.0-knowledge-w1-20261009044833
+          - 0.0.0-knowledge-w1-20261009054256
+          - main-alpha
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
+        with:
+          node-version: 22
+      - name: Start services
+        run: |
+          (cd stores/pg && docker compose up -d --wait)
+          (cd stores/mysql && docker compose up -d --wait)
+          (cd stores/mongodb && docker compose up -d --wait mongodb-storage)
+      - name: Install snapshot
+        run: |
+          mkdir -p /tmp/proj out && cp .github/knowledge-w1-snapshots/dump.mjs /tmp/proj/
+          cd /tmp/proj && npm init -y >/dev/null
+          V='${{ matrix.version }}'
+          if [ "$V" = main-alpha ]; then
+            for p in core libsql pg mysql mongodb; do echo "@mastra/$p@$(npm view @mastra/$p dist-tags.alpha)"; done > specs
+          else
+            for p in core libsql pg mysql mongodb; do echo "@mastra/$p@$V"; done > specs
+          fi
+          cat specs
+          npm install --no-audit --no-fund $(cat specs) @libsql/client pg mysql2 mongodb
+          npm ls @mastra/core @mastra/libsql @mastra/pg @mastra/mysql @mastra/mongodb > "$GITHUB_WORKSPACE/out/${{ matrix.version }}.versions.txt" || true
+      - name: Dump
+        run: cd /tmp/proj && node dump.mjs "$GITHUB_WORKSPACE/out" '${{ matrix.version }}'
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: layout-${{ matrix.version }}
+          path: out/
