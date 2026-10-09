@@ -1,8 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -25,8 +23,9 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * The Factory's environment: what every session's sandbox boots from. The
- * Template section holds the ordered repositories and the workspace setup, the
- * Advanced section the sandbox provider's own settings.
+ * Template subsection holds the ordered repositories and the workspace setup,
+ * Builds the image built ahead of sessions, Advanced the build triggers and
+ * the sandbox provider's own settings.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -42,29 +41,16 @@ export function EnvironmentSection() {
     return <Notice variant="info">Select a factory to manage its environment.</Notice>;
   }
 
-  return (
-    <div className="flex min-w-0 flex-col gap-8">
-      <SettingsSubsection
-        scope="factory"
-        title="Environment"
-        description={
-          factory
-            ? `What every ${factory.name} session boots from: the sandbox, its repositories and their setup.`
-            : undefined
-        }
-      >
-        {environmentQuery.isError ? (
-          <Notice variant="destructive">
-            {environmentQuery.error instanceof Error ? environmentQuery.error.message : 'Failed to load environment'}
-          </Notice>
-        ) : environmentQuery.data ? (
-          <EnvironmentBlocks factoryId={factoryId} environment={environmentQuery.data} providers={providers} />
-        ) : (
-          <Skeleton className="h-24 w-full" />
-        )}
-      </SettingsSubsection>
-    </div>
-  );
+  if (environmentQuery.isError) {
+    return (
+      <Notice variant="destructive">
+        {environmentQuery.error instanceof Error ? environmentQuery.error.message : 'Failed to load environment'}
+      </Notice>
+    );
+  }
+  if (!environmentQuery.data) return <Skeleton className="h-24 w-full" />;
+
+  return <EnvironmentBlocks factoryId={factoryId} environment={environmentQuery.data} providers={providers} />;
 }
 
 function EnvironmentBlocks({
@@ -107,11 +93,12 @@ function EnvironmentBlocks({
   const disabled = saveMutation.isPending;
   const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
   return (
-    <div className="flex flex-col gap-10">
-      <EnvironmentPart title="Template">
-        <Txt as="p" variant="meta" tone="faint">
-          {providerLine(environment.sandbox.provider)}
-        </Txt>
+    <div className="flex min-w-0 flex-col gap-8">
+      <SettingsSubsection
+        scope="factory"
+        title="Template"
+        description={`What every session boots from. ${providerLine(environment.sandbox.provider)}`}
+      >
         <RepositoriesBlock
           repositories={environment.repositories}
           providers={providers}
@@ -124,16 +111,28 @@ function EnvironmentBlocks({
           disabled={disabled}
           onSave={save}
         />
-      </EnvironmentPart>
+      </SettingsSubsection>
       {canBuild && (
-        <EnvironmentPart title="Builds">
+        <SettingsSubsection
+          scope="factory"
+          title="Builds"
+          description="The template image built ahead of sessions from the repositories above."
+        >
           <BuildBlocks factoryId={factoryId} environment={environment} />
-        </EnvironmentPart>
+        </SettingsSubsection>
       )}
-      <EnvironmentPart title="Advanced">
+      <SettingsSubsection
+        scope="factory"
+        title="Advanced"
+        description={
+          canBuild
+            ? "When the template rebuilds, and the sandbox provider's own settings."
+            : "The sandbox provider's own settings."
+        }
+      >
         {canBuild && <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />}
         <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
-      </EnvironmentPart>
+      </SettingsSubsection>
     </div>
   );
 }
@@ -179,17 +178,5 @@ function BuildBlocks({ factoryId, environment }: { factoryId: string; environmen
         />
       )}
     </>
-  );
-}
-
-/** One titled part of the page: Template, Builds, Advanced. */
-export function EnvironmentPart({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-6">
-      <Txt as="h2" variant="subheading">
-        {title}
-      </Txt>
-      {children}
-    </section>
   );
 }
