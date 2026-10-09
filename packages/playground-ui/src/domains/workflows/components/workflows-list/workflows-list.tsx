@@ -1,6 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflowsRunCounts } from '@mastra/react/hooks/workflows';
-import { ChevronRightIcon, PauseIcon, WorkflowIcon } from 'lucide-react';
+import { PauseIcon, WorkflowIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { SyntheticEvent } from 'react';
 import { sortWorkflows } from './workflows-sort';
@@ -10,6 +10,7 @@ import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows
 import { Badge } from '@/ds/components/Badge';
 import type { DataListSort } from '@/ds/components/DataList';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing } from '@/ds/primitives/transitions';
@@ -88,7 +89,7 @@ function TreeToggleCell({
             onToggle();
           }}
         >
-          <ChevronRightIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-90')} />
+          <DisclosureChevron direction="right" className="size-4" />
         </button>
       ) : (
         <span className="size-5 shrink-0" aria-hidden />

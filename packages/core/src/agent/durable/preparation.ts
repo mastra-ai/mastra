@@ -491,29 +491,24 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
   let hasConfiguredErrorProcessors = false;
 
-  try {
-    inputProcessors = await typedAgent.listInputProcessors(requestContext);
-    // Call-time outputProcessors replace constructor-level ones (parity with
-    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
-    outputProcessors = execOptions?.outputProcessors
-      ? execOptions.outputProcessors
-      : await typedAgent.listOutputProcessors(requestContext);
-    // Error processors resolve after output processors so a failing error
-    // resolver can't leave the run without its configured output processors.
-    // They resolve once: call-time errorProcessors replace the resolved list,
-    // including the defaults, and the request lane below reuses the result.
-    // `hasConfiguredErrorProcessors` excludes framework defaults and gates the
-    // implicit retry-cap warning, since the defaults self-limit.
-    ({ errorProcessors, hasConfiguredErrorProcessors } = await typedAgent.__resolveRunErrorProcessors(
-      requestContext,
-      execOptions?.errorProcessors,
-    ));
-    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
-    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
-    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext, errorProcessors);
-  } catch (error) {
-    logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
-  }
+  inputProcessors = await typedAgent.listInputProcessors(requestContext);
+  // Call-time outputProcessors replace constructor-level ones (parity with
+  // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+  outputProcessors = execOptions?.outputProcessors
+    ? execOptions.outputProcessors
+    : await typedAgent.listOutputProcessors(requestContext);
+  // Error processors resolve after output processors. They resolve once:
+  // call-time errorProcessors replace the resolved list, including the defaults,
+  // and the request lane below reuses the result. `hasConfiguredErrorProcessors`
+  // excludes framework defaults and gates the implicit retry-cap warning, since
+  // the defaults self-limit.
+  ({ errorProcessors, hasConfiguredErrorProcessors } = await typedAgent.__resolveRunErrorProcessors(
+    requestContext,
+    execOptions?.errorProcessors,
+  ));
+  // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+  // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+  llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext, errorProcessors);
 
   // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
   // children) parent to it. MODEL_GENERATION is opened later under it.
@@ -590,7 +585,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+        const inputProcessorError = new MastraError(
+          {
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `[Agent:${publicAgentName}] - Input processor error`,
+          },
+          error,
+        );
+        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        throw inputProcessorError;
       }
     }
   }
