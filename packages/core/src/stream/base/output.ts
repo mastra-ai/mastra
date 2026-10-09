@@ -261,8 +261,10 @@ type StepMessagePart = MastraDBMessage['content']['parts'][number];
  * processing must not be transplanted onto a message a processor produced. Resolve the boundary in
  * this order:
  *   1. the message's own `step-start` marker, when it has one;
- *   2. for the same message, the pre-processing offset, which still applies when an in-place rewrite
- *      keeps the part count (redaction changes text, not positions);
+ *   2. for the same message, the pre-processing step text where it survives (an unchanged in-place
+ *      rewrite, or a split of the current iteration's text), the pre-processing offset while the
+ *      parts before it are unchanged, then the offset while the part count and part kinds are
+ *      unchanged (redaction or other rewrites that keep positions), then the unchanged prefix;
  *   3. for a different message, the trailing text matching the pre-processing step text, which finds
  *      the boundary when a processor replaced the id of the accumulated response;
  *   4. otherwise the whole message, which then holds only this iteration.
@@ -273,6 +275,7 @@ function resolveProcessedStepText({
   originalMessageId,
   originalIterationPartOffset,
   originalPartCount,
+  originalParts,
   originalStepText,
   outputText,
 }: {
@@ -281,6 +284,7 @@ function resolveProcessedStepText({
   originalMessageId: string | undefined;
   originalIterationPartOffset: number | undefined;
   originalPartCount: number | undefined;
+  originalParts: StepMessagePart[] | undefined;
   originalStepText: string | undefined;
   outputText: string | undefined;
 }): string {
@@ -294,24 +298,66 @@ function resolveProcessedStepText({
     return textWithin(processedStepParts.slice(boundaryIndex + 1));
   }
 
-  // No marker to anchor on: an in-place rewrite keeps part positions, so the offset measured before
-  // processing still applies when the same message survives with the same part count.
-  if (processedStepMessage.id === originalMessageId) {
+  if (processedStepMessage.id === originalMessageId && originalParts) {
+    const sliceFrom = (index: number) => textWithin(processedStepParts.slice(index));
+    const offset = originalIterationPartOffset;
+
+    // The pre-processing step text still ends the current iteration when its text positions survived
+    // processing — an in-place rewrite, or a split that left the earlier parts untouched.
+    const textOffset = findIterationOffsetInParts(processedStepParts, originalStepText);
+    if (textOffset !== undefined) return sliceFrom(textOffset);
+
+    // The measured offset still applies while the parts before it are unchanged.
     if (
+      offset !== undefined &&
+      offset > 0 &&
+      processedStepParts.length >= offset &&
+      originalParts.slice(0, offset).every((part, index) => partMatches(part, processedStepParts[index]))
+    ) {
+      return sliceFrom(offset);
+    }
+
+    // A rewrite that keeps the part count and each part's kind preserves positions even when the text
+    // changed (redaction), so the measured offset still applies.
+    if (
+      offset !== undefined &&
       originalPartCount !== undefined &&
       processedStepParts.length === originalPartCount &&
-      originalIterationPartOffset !== undefined
+      originalParts.slice(0, offset).every((part, index) => part?.type === processedStepParts[index]?.type)
     ) {
-      return textWithin(processedStepParts.slice(originalIterationPartOffset));
+      return sliceFrom(offset);
     }
+
+    // A changed part count or kind means positions moved; the unchanged prefix still marks the boundary.
+    let common = 0;
+    while (
+      common < originalParts.length &&
+      common < processedStepParts.length &&
+      partMatches(originalParts[common], processedStepParts[common])
+    ) {
+      common++;
+    }
+    if (common > 0) return sliceFrom(common);
+
     return textWithin(processedStepParts);
   }
 
-  // A different message: it may still carry earlier iterations (a processor that replaced the id of
-  // the accumulated response), so locate the boundary the pre-processing step text ends at. When the
-  // text is not found the message holds only this iteration.
+  // A message the processor produced may still carry earlier iterations (its id was replaced), so find
+  // where the pre-processing step text ends. When it is not found the message holds only this iteration.
   const offset = findIterationOffsetInParts(processedStepParts, originalStepText);
   return offset !== undefined ? textWithin(processedStepParts.slice(offset)) : textWithin(processedStepParts);
+}
+
+/** Whether two parts carry the same content, for matching an unchanged prefix across processing. */
+function partMatches(a: StepMessagePart | undefined, b: StepMessagePart | undefined): boolean {
+  if (!a || !b || a.type !== b.type) return false;
+  if (a.type === 'text') return a.text === (b as typeof a).text;
+  if (a.type === 'reasoning') return a.reasoning === (b as typeof a).reasoning;
+  if (a.type === 'tool-invocation') {
+    return a.toolInvocation?.toolCallId === (b as typeof a).toolInvocation?.toolCallId;
+  }
+  if (a.type === 'step-start') return Number(a.createdAt) === Number((b as typeof a).createdAt);
+  return true;
 }
 
 /** Index in `parts` where the trailing text that equals `stepText` begins, or undefined. */
@@ -1343,6 +1389,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const iterationPartOffset = stepMessage
                     ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
                     : undefined;
+                  // Snapshot the parts before processing so the reconciliation can tell whether the
+                  // prefix of the response survived unchanged (a processor may rewrite the array in place).
+                  const originalStepMessageParts = stepMessageParts ? [...stepMessageParts] : undefined;
 
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
@@ -1373,6 +1422,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                           originalMessageId: stepMessage?.id,
                           originalIterationPartOffset: iterationPartOffset,
                           originalPartCount: stepMessageParts?.length,
+                          originalParts: originalStepMessageParts,
                           originalStepText: lastStepText,
                           outputText,
                         })

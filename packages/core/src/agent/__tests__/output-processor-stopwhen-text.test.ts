@@ -491,4 +491,61 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('abcdefREVISED');
     expect(await stream.text).toBe('REVISED');
   });
+
+  it('keeps the current iteration when a processor splits its text into more parts', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'more'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'split-final-text',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            const parts = [...(response.content?.parts ?? [])].filter(part => part.type !== 'step-start');
+            const lastTextIndex = parts.findLastIndex(part => part.type === 'text');
+            if (lastTextIndex === -1) return messages;
+            // Split the current iteration's text into more parts, keeping earlier iterations and the
+            // message id. The rewrite changes the resolved text and rebuilding the parts drops the
+            // boundary marker, matching a processor that rebuilds the response.
+            const text = parts[lastTextIndex]!.type === 'text' ? parts[lastTextIndex]!.text : '';
+            const midpoint = Math.ceil(text.length / 2);
+            const nextParts = [
+              ...parts.slice(0, lastTextIndex),
+              { type: 'text' as const, text: text.slice(0, midpoint).toUpperCase() },
+              { type: 'text' as const, text: text.slice(midpoint).toUpperCase() },
+              ...parts.slice(lastTextIndex + 1),
+            ];
+            const nextContent = nextParts.map(part => (part.type === 'text' ? part.text : '')).join('');
+            return messages.map(message =>
+              message.id === response.id
+                ? { ...message, content: { ...message.content, content: nextContent, parts: nextParts } }
+                : message,
+            );
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The response keeps its id but now has more parts than before processing. The earlier iteration's
+    // text must stay out of the final step, so full output does not duplicate the `first` prefix.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
+    expect(fullOutput.text).toBe('firstMORE');
+    expect(await stream.text).toBe('firstMORE');
+  });
 });
