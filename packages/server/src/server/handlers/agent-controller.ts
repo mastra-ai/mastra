@@ -51,6 +51,8 @@ const RESERVED_THREAD_METADATA_KEYS = {
   currentModeId: true,
   observerModelId: true,
   reflectorModelId: true,
+  observerModelSelection: true,
+  reflectorModelSelection: true,
   observationThreshold: true,
   reflectionThreshold: true,
   tokenUsage: true,

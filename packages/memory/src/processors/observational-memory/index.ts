@@ -138,3 +138,4 @@ export {
   combineObservationGroupRanges,
   type ObservationGroup,
 } from './observation-groups';
+export { AUTO_MODEL_BY_PROVIDER, resolveAutoModelId, type ResolveAutoModelIdOptions } from './auto-model';

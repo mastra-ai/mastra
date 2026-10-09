@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
@@ -219,6 +219,7 @@ export class ObservationStep {
               sendSignal: this.turn.sendSignal,
               sendStateSignal: this.turn.sendStateSignal,
               requestContext: this.turn.requestContext,
+              currentModel: this.turn.actorModelContext,
               observabilityContext: this.turn.observabilityContext,
             })
             .catch((err: Error) => {
@@ -240,14 +241,22 @@ export class ObservationStep {
     let step0PreserveIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
       if (this.stepNumber > 0) {
-        // Save messages from previous step
+        // Save messages from previous step. Drain the buckets synchronously so nothing that lands
+        // in the run's MessageList during the save (e.g. a background tool result) is cleared with
+        // them. If the save fails, return the messages to their buckets for the end-of-turn save.
         const newInput = messageList.clear.input.db();
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
         if (messagesToSave.length > 0) {
-          await om.persistMessages(messagesToSave, threadId, resourceId);
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
+          }
+          try {
+            await om.persistMessages(messagesToSave, threadId, resourceId);
+          } catch (error) {
+            restoreDrainedMessages(messageList, newInput, 'input');
+            restoreDrainedMessages(messageList, newOutput, 'response');
+            throw error;
           }
         }
       } else {
@@ -591,5 +600,20 @@ export class ObservationStep {
       ],
       observerExchange: om.observer.lastExchange,
     };
+  }
+}
+
+/**
+ * Move messages drained into the memory bucket back to `source` after a failed save. Messages that
+ * have already left the memory bucket (a background tool result moves its message to `response`)
+ * are left where they are. The list's current copy is re-added so changes made during the save
+ * are kept.
+ */
+function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessage[], source: 'input' | 'response') {
+  if (drained.length === 0) return;
+  const stillQueued = new Set([...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id));
+  const ids = drained.map(msg => msg.id).filter(id => !stillQueued.has(id));
+  for (const msg of messageList.removeByIds(ids)) {
+    messageList.add(msg, source, { merge: false });
   }
 }

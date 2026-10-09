@@ -51,7 +51,7 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
       observationalMemory: {
         ...(options?.omModel === false ? {} : { model: options?.omModel ?? 'openai/om-model' }),
         observation: { messageTokens: 1, bufferTokens: false },
-        experimental_subconscious: new Subconscious({ defaultScope: 'resource', maxScope: 'resource' }),
+        experimental_subconscious: new Subconscious({ defaultScope: 'resource' }),
       },
     },
   });

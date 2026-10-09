@@ -25,6 +25,7 @@ import type {
   SerializableDurableState,
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable LLM mapping step.
@@ -43,7 +44,8 @@ const durableLLMMappingInputSchema = z.object({
  * Output schema for the durable LLM mapping step
  */
 const durableLLMMappingOutputSchema = z.object({
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
   messageId: z.string(),
   stepResult: z.any(),
   toolResults: z.array(z.any()),
@@ -106,7 +108,7 @@ export function createDurableLLMMappingStep() {
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(llmOutput.messageListState);
+      ).deserialize(readMessageListState(params.state, llmOutput));
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on
@@ -340,7 +342,7 @@ export function createDurableLLMMappingStep() {
 
       // 4. Build the output
       const output: DurableAgenticExecutionOutput = {
-        messageListState: messageList.serialize(),
+        ...(await storeMessageListState(params, messageList.serialize())),
         messageId,
         stepResult: {
           ...llmOutput.stepResult,

@@ -8,6 +8,7 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
+import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
@@ -138,6 +139,39 @@ export async function runDurableFinishSideEffects({
   ).deserialize(messageListState);
   if (registryEntry) {
     registryEntry.messageList = messageList;
+  }
+
+  // The caller-side MastraModelOutput only sees the finish event after this step has
+  // persisted messages, and remote/recovered runs have no caller at all. Attach the
+  // validated object here so the saved assistant message matches plain Agent output.
+  // Like Agent, this runs before output processors so processors that persist the turn
+  // themselves (observational memory) save the object too.
+  // This mirrors createObjectStreamTransformer's finalize: truncated finishes never validate,
+  // and failures follow errorStrategy. Prefer the live config (keeps Zod refinements/transforms
+  // and non-JSON fallback values). Remote and recovered runs only have the persisted config,
+  // which is what cross-process observers use too.
+  const structuredOutput = initData.options?.structuredOutput;
+  const structuredOutputText = resolveOutputText(messageList);
+  const liveStructuredOutput = registryEntry?.structuredOutput;
+  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  if (structuredOutputSchema && !structuredOutput?.hasStructuringModel && structuredOutputText.trim()) {
+    const finishReason = outputResult?.finishReason;
+    const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const result = truncated
+      ? undefined
+      : await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(structuredOutputText);
+    const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
+    const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
+    const value = result?.success ? result.value : errorStrategy === 'fallback' ? fallbackValue : undefined;
+    const lastAssistantMessage = messageList.get.response
+      .db()
+      .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    if (value !== undefined && lastAssistantMessage) {
+      lastAssistantMessage.content.metadata = {
+        ...lastAssistantMessage.content.metadata,
+        structuredOutput: value,
+      };
+    }
   }
 
   // Keep this MessageList for every later phase. ProcessorRunner applies
