@@ -35,7 +35,11 @@ export interface RunningContextValue {
 }
 
 export interface SendContextValue {
-  send: (args: ChatSendArgs) => void;
+  /**
+   * Resolves to `false` when the server can't have stored the message (no response, or a refusal such
+   * as a body too large), so the composer can put it back.
+   */
+  send: (args: ChatSendArgs) => void | Promise<boolean>;
 }
 
 export interface TasksContextValue {

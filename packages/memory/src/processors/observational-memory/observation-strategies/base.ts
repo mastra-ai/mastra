@@ -70,6 +70,9 @@ export abstract class ObservationStrategy {
   protected readonly reflectionConfig: ResolvedReflectionConfig;
   protected readonly scope: 'thread' | 'resource';
   protected readonly retrieval: boolean;
+  /** Settles `true` once this cycle commits its observations, `false` if it fails or skips the commit. Never rejects. */
+  protected readonly observationCommitted: Promise<boolean>;
+  private settleObservationCommit!: (committed: boolean) => void;
 
   /** Select the right strategy based on scope and mode. Wired up by index.ts. */
   static create: (om: unknown, opts: ObservationRunOpts) => ObservationStrategy;
@@ -85,6 +88,9 @@ export abstract class ObservationStrategy {
     this.reflectionConfig = deps.reflectionConfig;
     this.scope = deps.scope;
     this.retrieval = deps.retrieval;
+    this.observationCommitted = new Promise(resolve => {
+      this.settleObservationCommit = resolve;
+    });
   }
 
   /**
@@ -109,7 +115,7 @@ export abstract class ObservationStrategy {
       await this.emitStartMarkers(cycleId);
       const output = await this.observe(existingObservations, observationMessages);
       const processed = await this.process(output, existingObservations);
-      await this.persist(processed);
+      this.settleObservationCommit(await this.persist(processed));
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
@@ -123,6 +129,7 @@ export abstract class ObservationStrategy {
           mainAgent: this.opts.agent,
           sendSignal: this.opts.sendSignal,
           sendStateSignal: this.opts.sendStateSignal,
+          currentModel: this.opts.currentModel,
           reflectionHooks,
           trigger: this.opts.trigger,
           requestContext,
@@ -162,6 +169,8 @@ export abstract class ObservationStrategy {
         return { observed: false, error };
       }
       throw error;
+    } finally {
+      this.settleObservationCommit(false);
     }
   }
 
@@ -449,7 +458,8 @@ export abstract class ObservationStrategy {
   abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
   abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;
-  abstract persist(processed: ProcessedObservation): Promise<void>;
+  /** Commit the processed observations. Resolves `false` when the cycle intentionally skips the commit. */
+  abstract persist(processed: ProcessedObservation): Promise<boolean>;
   abstract emitStartMarkers(cycleId: string): Promise<void>;
   abstract emitEndMarkers(cycleId: string, processed: ProcessedObservation): Promise<void>;
   abstract emitFailedMarkers(cycleId: string, error: unknown): Promise<void>;

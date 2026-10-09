@@ -17,8 +17,13 @@ interface KnowledgeNodeStyle extends CSSProperties {
   '--knowledge-color': string;
 }
 
+/** Structural scopes and boundaries carry no identity rung, so they render neutral. */
+function knowledgeNodeColor(rung: NodeFlowNode['data']['node']['rung']): string {
+  return rung ? knowledgeScopes[rung].color : 'var(--muted-foreground)';
+}
+
 export function getKnowledgeNodeStyle(rung: NodeFlowNode['data']['node']['rung']): KnowledgeNodeStyle {
-  return { '--knowledge-color': knowledgeScopes[rung].color };
+  return { '--knowledge-color': knowledgeNodeColor(rung) };
 }
 
 interface KnowledgeEdgeStyle extends CSSProperties {
@@ -53,7 +58,8 @@ export function getMiniMapNodeColor(node: KnowledgeFlowNode): string {
   if ('record' in node.data) {
     return node.data.record.pinned ? 'var(--chart-amber)' : 'var(--muted-foreground)';
   }
-  return knowledgeScopes[node.data.node.rung].color;
+  const { node: graphNode } = node.data;
+  return knowledgeNodeColor(graphNode.isBoundary ? null : graphNode.rung);
 }
 
 export function getRecordRingClass(pinned: boolean): string {

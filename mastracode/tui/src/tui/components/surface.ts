@@ -138,16 +138,22 @@ export function statusDot(status: 'running' | 'done' | 'error'): string {
 
 /**
  * Tool-style block: a "• title" row (further title rows indented under it). With output, the title rows sit
- * on a lighter band directly above the output panel, the output lined up under the title text. Without output
- * it's just the title rows, so runs of quiet calls stay one row each.
+ * on a lighter band by default; uniform blocks use the output shade throughout. Output lines align under
+ * the title text. Without output it's just the title rows, so runs of quiet calls stay one row each.
  */
-export function toolBlock(dot: string, title: string | string[], output: string[], width: number): string[] {
+export function toolBlock(
+  dot: string,
+  title: string | string[],
+  output: string[],
+  width: number,
+  surface: 'split' | 'uniform' = 'split',
+): string[] {
   const [first = '', ...rest] = Array.isArray(title) ? title : [title];
   const titleRows = [`${dot} ${first}`, ...rest.map(line => `  ${line}`)];
   if (output.length === 0) return titleRows;
   const contentWidth = Math.max(1, width - 3);
-  const titleBg = toolTitleSurface();
   const outputBg = toolOutputSurface();
+  const titleBg = surface === 'uniform' ? outputBg : toolTitleSurface();
   return [
     panelEdge('▄', width, titleBg),
     ...titleRows.map(line => fillBg(line, width, titleBg)),
