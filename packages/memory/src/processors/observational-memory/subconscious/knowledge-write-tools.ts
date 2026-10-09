@@ -8,6 +8,7 @@ type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
+export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
 const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
 const nodePlacementSchema: JSONSchema7 = {
@@ -15,6 +16,21 @@ const nodePlacementSchema: JSONSchema7 = {
   description:
     "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
 };
+const recordTextSchema: JSONSchema7 = {
+  type: 'string',
+  minLength: 1,
+  maxLength: MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+  description: `One durable fact, or a few closely related facts, in your own words. Hard limit ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code units. Never paste files, command output, or logs.`,
+};
+
+/** Schema maxLength counts code points; this UTF-16 check runs before any write. */
+function requireRecordTextWithinBound(text: string): void {
+  if (text.length > MAX_KNOWLEDGE_RECORD_TEXT_LENGTH) {
+    throw new Error(
+      `Knowledge records are limited to ${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code units. Split this into separate records, one fact each, or summarize it, then retry.`,
+    );
+  }
+}
 const dateTimeSchema: JSONSchema7 = {
   type: 'string',
   format: 'date-time',
@@ -112,7 +128,7 @@ export function createKnowledgeWriteTools(
         properties: {
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
-          text: { type: 'string', minLength: 1 },
+          text: recordTextSchema,
           nodeScope: nodePlacementSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
@@ -129,6 +145,7 @@ export function createKnowledgeWriteTools(
           scope?: SubconsciousScopeSelection;
           when?: string;
         };
+        requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const nodeScope = await resolveNodePlacement(memory, store, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScopeIds(options, value.scope);
@@ -153,7 +170,7 @@ export function createKnowledgeWriteTools(
         type: 'object',
         properties: {
           node: { type: 'string', minLength: 1 },
-          text: { type: 'string', minLength: 1 },
+          text: recordTextSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
         },
@@ -162,6 +179,7 @@ export function createKnowledgeWriteTools(
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as { node: string; text: string; scope?: SubconsciousScopeSelection; when?: string };
+        requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
         if (!parent) throw new Error(`Knowledge node not found: ${value.node}`);

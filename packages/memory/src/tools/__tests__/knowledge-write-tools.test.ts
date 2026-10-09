@@ -9,6 +9,7 @@ import type { SubconsciousConfig } from '../..';
 import {
   createKnowledgeWriteTools,
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
 } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
 
 const scopeIds = [
@@ -382,6 +383,32 @@ describe('Subconscious knowledge write tools', () => {
     )) as any;
     expect(ok.metadata.when).toEqual('2026-09-15T08:00:00.000Z');
     expect(append).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects over-long record text on create and append before writing a node or record', async () => {
+    const { store, source, tools } = await fixture();
+    const createNodeWithRecord = vi.spyOn(store, 'createNodeWithRecord');
+    const createRecord = vi.spyOn(store, 'createRecord');
+
+    const pasted = 'x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH + 1);
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Pasted README', kind: 'doc', text: pasted },
+      {} as any,
+    )) as any;
+    expect(created?.error).toBe(true);
+    expect(created?.message).toContain('text');
+
+    // Astral characters pass the code-point schema check but exceed the UTF-16 bound.
+    const astral = '😀'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH / 2 + 1);
+    await expect(
+      tools.knowledge_create!.execute?.({ name: 'Astral', kind: 'doc', text: astral }, {} as any),
+    ).rejects.toThrow('Split this into separate records, one fact each, or summarize it');
+    await expect(tools.knowledge_append!.execute?.({ node: source.id, text: astral }, {} as any)).rejects.toThrow(
+      'Split this into separate records',
+    );
+    expect(createNodeWithRecord).not.toHaveBeenCalled();
+    expect(createRecord).not.toHaveBeenCalled();
+    expect(await store.resolveNode({ name: 'Astral', scopeIds })).toBeNull();
   });
 
   it('ignores forged scope, provenance, timestamp, and version arguments at the tool boundary', async () => {
