@@ -1,6 +1,8 @@
 import type { ComponentPropsWithoutRef, DragEvent, ElementType, KeyboardEvent, ReactNode } from 'react';
 import { forwardRef, useState } from 'react';
+import { DataListColumnResizeHandle } from './data-list-column-resize-handle';
 import { useDataListReorder } from './data-list-reorder-context';
+import { useDataListResize } from './data-list-resize-context';
 import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -25,6 +27,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
     const Component = as || 'span';
     const isText = typeof children === 'string' || typeof children === 'number';
     const { reorderable, order, move } = useDataListReorder();
+    const { resizable } = useDataListResize();
     const [isDropTarget, setIsDropTarget] = useState(false);
     const canReorder = reorderable && !sticky;
 
@@ -35,6 +38,9 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
           'aria-roledescription': 'draggable column',
           'data-drop-target': isDropTarget || undefined,
           onDragStart: (event: DragEvent<HTMLElement>) => {
+            if (event.target instanceof Element && event.target.closest('[data-data-list-resize-handle]')) {
+              return event.preventDefault();
+            }
             const from = getVisualPosition(event.currentTarget, order);
             if (from === null) return event.preventDefault();
             event.dataTransfer.effectAllowed = 'move';
@@ -75,6 +81,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
           sticky === 'start' && dataListStickyStartStyles,
           sticky === 'start' && '-mx-3 w-auto max-w-none px-3',
           sticky === 'start' && 'z-20',
+          resizable && !sticky && 'relative',
           canReorder &&
             'cursor-grab active:cursor-grabbing data-drop-target:shadow-[inset_2px_0_0_var(--border-focus)]',
           canReorder && focusRingInset,
@@ -86,6 +93,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
         {/* Plain string/number titles truncate with an ellipsis; element children
             (icons, smart long/short labels, checkboxes) render as-is. */}
         {isText ? <span className="min-w-0 truncate">{children}</span> : children}
+        {resizable && <DataListColumnResizeHandle />}
       </Component>
     );
   },

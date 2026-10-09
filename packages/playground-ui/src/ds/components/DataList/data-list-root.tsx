@@ -11,8 +11,17 @@ import {
   resolveKeyedOrder,
   splitGridTracks,
 } from './data-list-column-order';
+import {
+  applyColumnWidths,
+  columnWidthsSchema,
+  getColumnWidthKey,
+  getColumnWidthsStorageKey,
+  MIN_COLUMN_WIDTH,
+} from './data-list-column-widths';
 import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
+import { DataListResizeContext } from './data-list-resize-context';
+import type { DataListResizeContextValue } from './data-list-resize-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
@@ -65,12 +74,22 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
    * header and rows span the full grid; `repeat()` templates are not supported.
    */
   reorderable?: boolean;
-  /** Stable identifier of the list, used to persist the column order when `reorderable`. */
+  /**
+   * Lets users resize columns by dragging the handle at the end of a header cell
+   * (or pressing Arrow keys on it); double-click resets a column. Requires `id`:
+   * widths are persisted in localStorage under that id, keyed by `columnKeys`
+   * when provided. Resized columns get a fixed pixel width. Supported for flat
+   * lists whose header and rows span the full grid; `repeat()` templates are not
+   * supported. Works together with `reorderable`.
+   */
+  resizable?: boolean;
+  /** Stable identifier of the list, used to persist the column order and widths when `reorderable` / `resizable`. */
   id?: string;
   /**
-   * Stable key per column, in `columns` order. With `reorderable`, the order is
-   * persisted by key, so it survives columns being shown, hidden or added.
-   * Without it, the order is persisted by index and resets when the column count changes.
+   * Stable key per column, in `columns` order. With `reorderable` or `resizable`,
+   * the order and widths are persisted by key, so they survive columns being
+   * shown, hidden or added. Without it, they are persisted by index and the
+   * order resets when the column count changes.
    */
   columnKeys?: string[];
 };
@@ -142,14 +161,15 @@ const dataListFitClasses: Record<DataListFit, string> = {
 
 const disabledReorder: DataListReorderContextValue = { reorderable: false, order: [], move: () => {} };
 
-export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }: DataListRootProps) {
-  const tracks = reorderable && id ? splitGridTracks(columns) : null;
-  if (id && tracks && columnKeys && columnKeys.length === tracks.length) {
+export function DataListRoot({ reorderable, resizable, id, columns, columnKeys, ...props }: DataListRootProps) {
+  const tracks = (reorderable || resizable) && id ? splitGridTracks(columns) : null;
+  if (id && tracks && resizable) {
     return (
-      <DataListKeyedReorderableRoot
+      <DataListResizableRoot
         key={id}
         storageId={id}
         tracks={tracks}
+        reorderable={reorderable}
         columnKeys={columnKeys}
         id={id}
         columns={columns}
@@ -157,10 +177,86 @@ export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }:
       />
     );
   }
-  if (id && tracks) {
-    return <DataListReorderableRoot key={id} storageId={id} tracks={tracks} id={id} columns={columns} {...props} />;
+  return (
+    <DataListOrderedRoot
+      tracks={tracks}
+      reorderable={reorderable}
+      columnKeys={columnKeys}
+      id={id}
+      columns={columns}
+      {...props}
+    />
+  );
+}
+
+type DataListOrderedRootProps = Omit<DataListRootProps, 'resizable'> & {
+  tracks: string[] | null;
+};
+
+function DataListOrderedRoot({ tracks, reorderable, id, columns, columnKeys, ...props }: DataListOrderedRootProps) {
+  const orderedTracks = reorderable ? tracks : null;
+  if (id && orderedTracks && columnKeys && columnKeys.length === orderedTracks.length) {
+    return (
+      <DataListKeyedReorderableRoot
+        key={id}
+        storageId={id}
+        tracks={orderedTracks}
+        columnKeys={columnKeys}
+        id={id}
+        columns={columns}
+        {...props}
+      />
+    );
   }
-  return <DataListBase id={id} columns={columns} reorder={disabledReorder} {...props} />;
+  if (id && orderedTracks) {
+    return (
+      <DataListReorderableRoot key={id} storageId={id} tracks={orderedTracks} id={id} columns={columns} {...props} />
+    );
+  }
+  // Without reordering, resized widths (if any) are already folded into `tracks`.
+  return <DataListBase id={id} columns={tracks ? tracks.join(' ') : columns} reorder={disabledReorder} {...props} />;
+}
+
+type DataListResizableRootProps = Omit<DataListRootProps, 'resizable'> & {
+  storageId: string;
+  tracks: string[];
+};
+
+function DataListResizableRoot({ storageId, tracks, columnKeys, ...props }: DataListResizableRootProps) {
+  const [widths, setWidths] = useLocalStorageState({
+    initialKey: getColumnWidthsStorageKey(storageId),
+    defaultValue: {},
+    schema: columnWidthsSchema,
+  });
+  // Stored widths are only meaningful for a matching key list; ignore mismatched keys.
+  const keys = columnKeys && columnKeys.length === tracks.length ? columnKeys : undefined;
+  const keysSignature = keys?.join('\u0000');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not array identity
+  const sizedTracks = useMemo(() => applyColumnWidths(tracks, widths, keys), [tracks.join(' '), widths, keysSignature]);
+
+  const resize = useMemo<DataListResizeContextValue>(
+    () => ({
+      resizable: true,
+      setWidth: (index, px) =>
+        setWidths(current => ({
+          ...current,
+          [getColumnWidthKey(index, keys)]: Math.max(MIN_COLUMN_WIDTH, Math.round(px)),
+        })),
+      resetWidth: index =>
+        setWidths(current => {
+          const { [getColumnWidthKey(index, keys)]: _removed, ...rest } = current;
+          return rest;
+        }),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not array identity
+    [keysSignature, setWidths],
+  );
+
+  return (
+    <DataListResizeContext.Provider value={resize}>
+      <DataListOrderedRoot tracks={sizedTracks} columnKeys={columnKeys} {...props} />
+    </DataListResizeContext.Provider>
+  );
 }
 
 function DataListKeyedReorderableRoot({
@@ -191,7 +287,7 @@ function DataListKeyedReorderableRoot({
   return <DataListBase {...props} columns={order.map(i => tracks[i]).join(' ')} reorder={reorder} />;
 }
 
-type DataListReorderableRootProps = Omit<DataListRootProps, 'reorderable' | 'columnKeys'> & {
+type DataListReorderableRootProps = Omit<DataListRootProps, 'reorderable' | 'resizable' | 'columnKeys'> & {
   storageId: string;
   tracks: string[];
 };
@@ -217,7 +313,7 @@ function DataListReorderableRoot({ storageId, tracks, ...props }: DataListReorde
   return <DataListBase {...props} columns={order.map(i => tracks[i]).join(' ')} reorder={reorder} />;
 }
 
-type DataListBaseProps = Omit<DataListRootProps, 'reorderable' | 'columnKeys'> & {
+type DataListBaseProps = Omit<DataListRootProps, 'reorderable' | 'resizable' | 'columnKeys'> & {
   reorder: DataListReorderContextValue;
 };
 
@@ -255,7 +351,12 @@ function DataListBase({
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
       // It is also the offsetParent rows are measured against and the highlight is positioned in.
-      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
+      className={cn(
+        'data-list-grid grid content-start',
+        ...dataListGridStyles,
+        dataListFitClasses[fit],
+        menu.containerClassName,
+      )}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
       {...menu.getContainerProps({})}
