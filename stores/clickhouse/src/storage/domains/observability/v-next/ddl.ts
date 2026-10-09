@@ -183,7 +183,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Trace-list preview of \`input\`, written on root spans only ('' when there is
+  -- nothing to preview). NULL on rows written before the column existed.
+  inputPreview       Nullable(String)
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -255,6 +259,10 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   error              Nullable(String),
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
+
+  -- Trace-list preview of \`input\`, written on root spans only ('' when there is
+  -- nothing to preview). NULL on rows written before the column existed.
+  inputPreview       Nullable(String),
 
   -- traceId is second in the sort key, behind startedAt, so point lookups by
   -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
@@ -352,6 +360,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   error              Nullable(String),
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
+  inputPreview       Nullable(String),
 
   INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
@@ -1257,6 +1266,11 @@ const LOG_SKIP_INDEX_COLUMNS = [
 ] as const;
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
+  // Root input preview. The view targets first, so the roots view has somewhere to put the value
+  // once span_events carries it.
+  addColumn(TABLE_TRACE_ROOTS, 'inputPreview', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'inputPreview', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

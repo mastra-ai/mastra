@@ -913,7 +913,15 @@ describe('ClickHouse advanced trace query', () => {
   it('returns null for absent optional root span details', async () => {
     const query = mockTraceStatements({
       traces: 1,
-      rows: [{ ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'), entityId: null, metadata: null, input: null }],
+      rows: [
+        {
+          ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
+          entityId: null,
+          metadata: null,
+          input: null,
+          inputPreview: '',
+        },
+      ],
     });
     const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
 
@@ -925,6 +933,26 @@ describe('ClickHouse advanced trace query', () => {
       inputPreview: null,
     });
     expect(response.page.next).toBeNull();
+  });
+
+  it('builds the preview from input only for rows stored without one', async () => {
+    const query = mockTraceStatements({
+      traces: 2,
+      rows: [
+        { ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'), inputPreview: 'Stored preview' },
+        { ...traceRow('trace-b', '2026-01-01T11:00:00.000Z'), inputPreview: null },
+      ],
+    });
+    const response = await queryTraces({ query } as unknown as ClickHouseClient, plan(), 15_000);
+
+    // Keys, rows by key, then `input` for the row without a stored preview.
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[1]![0].query).toContain('r.inputPreview AS inputPreview');
+    expect(query.mock.calls[1]![0].query).not.toMatch(/\binput\b/);
+    expect(query.mock.calls[2]![0].query).toMatch(/^SELECT traceId, spanId AS rootSpanId, input\n/);
+    expect(Object.values(query.mock.calls[2]![0].query_params)).toContain('trace-b');
+    expect(Object.values(query.mock.calls[2]![0].query_params)).not.toContain('trace-a');
+    expect(response.traces.map(trace => trace.inputPreview)).toEqual(['Stored preview', 'Help with my order']);
   });
 
   it('returns exact list-compatible pagination metadata and fetches payloads for the page only', async () => {
@@ -1041,12 +1069,25 @@ function mockTraceStatements({
       }
       if (query.includes('uniqExact(traceId) AS traces')) return [{ traces: String(traces) }];
       const requested = new Set(Object.values(query_params));
-      if (query.includes('r.metadataRaw AS metadata')) return rows.filter(row => requested.has(row.traceId));
+      // Rows written before the stored preview existed: `input` for those rows only.
+      if (query.includes('spanId AS rootSpanId, input\n')) {
+        return rows
+          .filter(row => requested.has(row.traceId))
+          .map(({ traceId, rootSpanId, input }) => ({ traceId, rootSpanId, input }));
+      }
+      if (query.includes('r.metadataRaw AS metadata')) {
+        return rows.filter(row => requested.has(row.traceId)).map(({ input: _input, ...row }) => row);
+      }
       // Delta: the narrow list, then the payloads of its visible rows.
       if (query.includes('metadataRaw AS metadata')) {
-        return rows.map(({ traceId, rootSpanId, metadata, input }) => ({ traceId, rootSpanId, metadata, input }));
+        return rows.map(({ traceId, rootSpanId, metadata, inputPreview }) => ({
+          traceId,
+          rootSpanId,
+          metadata,
+          inputPreview,
+        }));
       }
-      return rows.map(({ metadata: _metadata, input: _input, ...row }) => row);
+      return rows.map(({ metadata: _metadata, input: _input, inputPreview: _inputPreview, ...row }) => row);
     },
   }));
 }
@@ -1060,6 +1101,7 @@ function traceRow(traceId: string, startedAt: string) {
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
     input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    inputPreview: 'Help with my order' as string | null,
     threadId: null,
     resourceId: null,
     startedAt,

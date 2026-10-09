@@ -235,6 +235,7 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
+  const input = jsonEncode(span.input);
 
   return {
     dedupeKey: buildDedupeKey(span.traceId, span.spanId),
@@ -275,10 +276,12 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     scope: jsonEncode(span.scope),
     attributes: jsonEncode(span.attributes),
     links: jsonEncode(span.links),
-    input: jsonEncode(span.input),
+    input,
     output: jsonEncode(span.output),
     error: jsonEncode(span.error),
     requestContext: jsonEncode(span.requestContext),
+    // Built from the stored text, so it matches a preview built from `input` at read time.
+    inputPreview: span.parentSpanId == null ? (buildInputPreview(input) ?? '') : null,
   };
 }
 
