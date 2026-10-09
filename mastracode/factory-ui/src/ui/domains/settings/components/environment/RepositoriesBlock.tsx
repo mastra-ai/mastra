@@ -177,7 +177,7 @@ function RepositoryRow({
         )}
         <span className="flex items-center gap-2" onClick={stop}>
           <Txt as="span" variant="caption" tone="muted">
-            {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
+            {repository.inEnvironment ? 'Included' : 'Skipped'}
           </Txt>
           <Tooltip disableHoverablePopup>
             <TooltipTrigger
