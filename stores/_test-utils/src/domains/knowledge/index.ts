@@ -726,6 +726,32 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
     });
 
+    it('leaves existing scopes untouched when a plan does not retrofit', async () => {
+      const created = await store.reconcileStructure({
+        retrofit: false,
+        scopes: [
+          { address: 'org:retrofit', name: 'Retrofit org' },
+          { address: 'project:retrofit', name: 'Retrofit project' },
+        ],
+      });
+      const projectId = created.scopes['project:retrofit']!;
+
+      const replayed = await store.reconcileStructure({
+        retrofit: false,
+        scopes: [
+          {
+            address: 'project:retrofit',
+            name: 'Retrofit project',
+            parentAddresses: ['org:retrofit'],
+            grants: [{ scopeRefAddress: 'org:retrofit', role: 'readonly' }],
+          },
+        ],
+      });
+
+      expect(replayed).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
+      expect(await store.getNodeScopeIds(projectId)).toEqual([]);
+    });
+
     it('rolls back failed structure reconciliation', async () => {
       await expect(
         store.reconcileStructure({
