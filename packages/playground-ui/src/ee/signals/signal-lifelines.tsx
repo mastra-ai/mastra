@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { LifelineRow } from './lifeline-row';
@@ -8,6 +7,7 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import { buildThemeLifelines } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 
@@ -45,10 +45,7 @@ export function SignalLifelines({
               />
             }
           >
-            <ChevronDown
-              aria-hidden="true"
-              className={`size-3.5 transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
-            />
+            <DisclosureChevron direction="right" className="size-3.5" />
             <Txt as="span" variant="eyebrow">
               {label}
             </Txt>

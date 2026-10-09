@@ -1,5 +1,46 @@
 # @mastra/memory
 
+## 1.37.0-alpha.2
+
+### Minor Changes
+
+- Added native `model: 'auto'` support for Observational Memory. Observer and Reflector models resolve independently from the agent's main model on every call, while explicit model IDs and advanced model configurations stay pinned. ([#24508](https://github.com/mastra-ai/mastra/pull/24508))
+
+  `'auto'` is also the **new default** for `model`, `observation.model`, and `reflection.model`, which previously defaulted to `google/gemini-2.5-flash`. Auto picks `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is set, otherwise the low-cost model for the main model's provider (for example `anthropic/claude-sonnet-4-6` → `anthropic/claude-haiku-4-5`, keeping a `mastra/` gateway route), otherwise the main model itself. Set a concrete model ID to keep a fixed model; note that auto can fail where the old default worked if the chosen provider has no reachable credential.
+
+  Applications can shape auto without reimplementing it:
+
+  - `autoModels` overrides the model picked for a provider, for example `{ openai: 'openai/gpt-5-nano' }`.
+  - `resolveModel(modelId, { requestContext })` turns the picked ID into a model, so auto can reuse your own credentials and routing.
+  - `resolveAutoModelId(mainModelId, { autoModels })` previews the model auto would pick, for display in settings UIs.
+
+  ```ts
+  new Memory({
+    options: {
+      observationalMemory: {
+        autoModels: { openai: 'openai/gpt-5-nano' },
+        resolveModel: (modelId, { requestContext }) => myRouter(modelId, requestContext),
+      },
+    },
+  });
+  ```
+
+- Rearchitected an experimental memory feature. ([#26024](https://github.com/mastra-ai/mastra/pull/26024))
+
+### Patch Changes
+
+- Updated dependencies [[`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`68fa51c`](https://github.com/mastra-ai/mastra/commit/68fa51cf57ee7a3b0914d5381870b60e81f0647e), [`297e55e`](https://github.com/mastra-ai/mastra/commit/297e55ea3d0eef280c3776bec401584ce3c2bff2), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`57c3117`](https://github.com/mastra-ai/mastra/commit/57c3117dd4d0dd0ad0835edb1bf410b6ec76fba0), [`7a96951`](https://github.com/mastra-ai/mastra/commit/7a96951771a6aab850ceafefc73afe684ef24b21), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`14f9341`](https://github.com/mastra-ai/mastra/commit/14f934145150a2531abfc1c36d03909fd05b5c56), [`2558c00`](https://github.com/mastra-ai/mastra/commit/2558c00b338025de29f778ca72b6bd05e5726349), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618)]:
+  - @mastra/core@1.76.0-alpha.4
+
+## 1.37.0-alpha.1
+
+### Patch Changes
+
+- Improved observational memory finalization defensively: persistence and idle buffering use the terminal message list accepted by the processor pipeline rather than the list captured by the observation turn. Invariant tests cover distinct-list ownership and removed output. This is hardening, not a confirmed fix for #25023; the reported message loss remains unreproduced and the issue stays open. ([#26362](https://github.com/mastra-ai/mastra/pull/26362))
+
+- Updated dependencies [[`9a511a4`](https://github.com/mastra-ai/mastra/commit/9a511a4ff5ac8349f4d4b64b0f432576fa3c8656), [`ed0e355`](https://github.com/mastra-ai/mastra/commit/ed0e355205da51bac4d11b7a9553c95ef1f505f4), [`b93ce2e`](https://github.com/mastra-ai/mastra/commit/b93ce2ee034c6a0be511b717e1e043e875dca677), [`21eaa20`](https://github.com/mastra-ai/mastra/commit/21eaa208834ae36721324700023f88cec7cf5c01), [`4580309`](https://github.com/mastra-ai/mastra/commit/45803095e2aed7bf58d878eb206a767b9b0e2489), [`dc28dbd`](https://github.com/mastra-ai/mastra/commit/dc28dbd89f7afa455a1985c7909adf42ddd6bd48), [`a3f884c`](https://github.com/mastra-ai/mastra/commit/a3f884c6fa230f9c75049f7105df5f1429fa406e), [`a7a34bf`](https://github.com/mastra-ai/mastra/commit/a7a34bfcc2235daa6229d6783b3ad1a2eaa25c56), [`70d59a9`](https://github.com/mastra-ai/mastra/commit/70d59a97fb2a5953c5853bf5f5fdfdc02d2337e7), [`f431c23`](https://github.com/mastra-ai/mastra/commit/f431c2321cf186f09565c42ddba33ee40cb96b6d), [`70d59a9`](https://github.com/mastra-ai/mastra/commit/70d59a97fb2a5953c5853bf5f5fdfdc02d2337e7), [`33a206d`](https://github.com/mastra-ai/mastra/commit/33a206d7d0a52d17ebab8db5224c5091c086c86d)]:
+  - @mastra/core@1.76.0-alpha.3
+
 ## 1.37.0-alpha.0
 
 ### Minor Changes

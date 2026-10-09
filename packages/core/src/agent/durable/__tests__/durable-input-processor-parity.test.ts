@@ -12,18 +12,13 @@
  *     chunk. Plain emits the `tripwire` chunk alone while durable and evented emit `start` before it,
  *     declared below against COR-1390 (the widened chunk-sequence ticket); the tripwire chunk's own
  *     content is compared exactly.
- *   - `throws`   — `processInput` throws. The harness records this as a FAIL in its own engine
- *     comparison: plain fails CLOSED (the run rejects `[Agent:script] - Input processor error` with no
- *     model call and nothing persisted) while durable and evented fail OPEN, swallow the throw and run
- *     to completion. That fail-open is COR-1413.
+ *   - `throws`   — `processInput` throws. All three engines fail closed: the run rejects
+ *     `[Agent:script] - Input processor error` with no model call, finish chunk, completed step, or
+ *     persisted mutation. This is the COR-1413 regression contract.
  *
- * The `throws` shape is checked per engine (`runT44ThrowsDirect`) rather than through the parity
- * helper, as the task's known limit requires. There is no comparable pair to compare: the failing
- * engine has no chunks, no finish chunk, no text, no steps and no requests while the running engines
- * have all of them, so any declaration would have to ignore nearly every compared field — a vacuous
- * comparison. (COR-1429 covers letting a scenario run past a built-in difference that does not
- * apply.) Both engines' recorded values are pinned literally below, so when COR-1413 lands and the
- * wrapped engines also fail closed, this test goes stale rather than passing over the change.
+ * The `throws` shape uses `runT44ThrowsDirect` to pin the rejection message and the absence of model,
+ * stream, tool, and memory side effects explicitly. The resulting contract is identical across plain,
+ * durable, and evented engines.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -203,41 +198,24 @@ async function runT44(mode: Mode) {
   return { results, memories, inputs };
 }
 
-/**
- * The recorded contract of the `throws` shape, per engine. The harness's own comparison records
- * plain as a FAIL and durable/evented as passing cells, so both sides are pinned here: the engine
- * split is COR-1413 (a throwing input processor fails open on the wrapped engines), and pinning the
- * wrapped values too means the test flags itself the moment that is fixed.
- */
-const THROWS_CONTRACTS: Record<ParityEngine, Record<string, unknown>> = {
-  // COR-1413: plain fails CLOSED — the throw rejects the run before any model call.
-  plain: { modelCalls: 0, finishes: 0, errors: 0, tripwire: false, steps: 0, text: null, thrown: true },
-  // COR-1413: durable and evented fail OPEN — the throw is swallowed and the run completes.
-  durable: {
-    modelCalls: 2,
-    finishes: 1,
-    errors: 0,
-    tripwire: false,
-    steps: 1,
-    text: 'finished 1 steps',
-    thrown: false,
-  },
-  evented: {
-    modelCalls: 2,
-    finishes: 1,
-    errors: 0,
-    tripwire: false,
-    steps: 1,
-    text: 'finished 1 steps',
-    thrown: false,
-  },
+/** COR-1413: every engine rejects before the model, stream completion, or tool execution. */
+const THROWS_CONTRACT: Record<string, unknown> = {
+  modelCalls: 0,
+  finishes: 0,
+  errors: 0,
+  tripwire: false,
+  steps: 0,
+  text: null,
+  thrown: true,
 };
 
-/**
- * What a direct run of the `throws` shape recorded on one engine — the harness's `throws` contract
- * fields, read without the parity helper (see the file header: the shapes differ in nearly every
- * field, so no tight declaration can express them).
- */
+const THROWS_CONTRACTS: Record<ParityEngine, Record<string, unknown>> = {
+  plain: THROWS_CONTRACT,
+  durable: THROWS_CONTRACT,
+  evented: THROWS_CONTRACT,
+};
+
+/** What a direct run of the `throws` shape recorded on one engine. */
 interface ThrowCaseState {
   /** Model calls the run made. */
   requests: number;
@@ -262,9 +240,8 @@ interface ThrowCaseState {
 }
 
 /**
- * Drives one engine through the `throws` shape, mirroring what the parity helper does per engine
- * (wrapper, host, one streamed turn), because the plain engine fails the run where the wrapped ones
- * run to completion, so there is no comparable pair for the helper to check (COR-1429).
+ * Drives one engine through the `throws` shape so the test can pin rejection text and side effects
+ * that sit outside the parity snapshot, including memory and completed tool executions.
  */
 async function runT44ThrowsDirect(engine: ParityEngine): Promise<ThrowCaseState> {
   const requests: Array<{ prompt?: unknown }> = [];
@@ -489,7 +466,7 @@ describe('T44 input processors (plain, durable, evented)', () => {
     }
   });
 
-  it('fails the run on a throwing input processor, and lets the wrapped engines run on', async () => {
+  it('fails closed on a throwing input processor for every engine', async () => {
     const states = new Map<ParityEngine, ThrowCaseState>();
     for (const engine of ENGINES) {
       states.set(engine, await runT44ThrowsDirect(engine));
@@ -501,11 +478,8 @@ describe('T44 input processors (plain, durable, evented)', () => {
       // harness: `run settled` — a hung run would time out here — and `processInput ran exactly once`.
       expect(state.inputs, `${engine}: processInput runs`).toBe(1);
 
-      // harness: the failure is visible somewhere, or the run completed.
-      expect(
-        Boolean(state.failurePayload) || state.thrown !== undefined || state.finishes === 1,
-        `${engine}: the run surfaced its failure or completed`,
-      ).toBe(true);
+      // harness: every engine rejects and names the input-processor failure.
+      expect(state.thrown, `${engine}: rejects`).toContain('Input processor error');
 
       // harness: the `throw` mode never mutates, so no mutation reaches the request or memory.
       expect(state.requestUser, `${engine}: no mutation reached the model request`).not.toContain(MUTATION);
@@ -514,8 +488,5 @@ describe('T44 input processors (plain, durable, evented)', () => {
 
       expect(throwsContract(state), `${engine} contract`).toEqual(THROWS_CONTRACTS[engine]);
     }
-
-    // harness: plain rejects, and the rejection names the processor failure.
-    expect(states.get('plain')!.thrown, 'plain rejects').toContain('Input processor error');
   });
 });

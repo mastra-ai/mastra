@@ -14,6 +14,7 @@ import {
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -59,15 +60,27 @@ export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
     testId?: string;
     /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
+    /**
+     * Leave unset (or `"off"`) for app data: the field renders `autocomplete="off"` plus the
+     * ignore attributes of the common password managers, so a "Name" field doesn't get an
+     * identity popup. Pass a real autofill token (`email`, `username`, `current-password`,
+     * `new-password`, `one-time-code`, ...) on credential and account forms to opt back in.
+     */
+    autoComplete?: React.HTMLInputAutoCompleteAttribute;
   };
 
-function Input({ className, size, testId, variant, error, ...props }: InputProps) {
+/**
+ * Single-line text field. Opts out of password manager autofill unless `autoComplete`
+ * names a real autofill token; see `textFieldAutofillProps`.
+ */
+function Input({ className, size, testId, variant, error, autoComplete, ...props }: InputProps) {
   return (
     <InputPrimitive
       className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
       {...deprecatedErrorAria(error)}
       {...props}
+      {...textFieldAutofillProps(autoComplete)}
       {...keepOwnAccessibleName(props)}
     />
   );

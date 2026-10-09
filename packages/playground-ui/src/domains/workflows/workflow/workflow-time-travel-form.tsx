@@ -1,4 +1,4 @@
-import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
+import { Braces, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { useContext, useMemo, useState } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -6,6 +6,7 @@ import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowInputData } from './workflow-input-data';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Notice } from '@/ds/components/Notice';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -166,8 +167,8 @@ const JsonField = ({
                   className={buttonClass}
                   aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
                 >
-                  <Icon className={cn('transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}>
-                    <ChevronDown />
+                  <Icon>
+                    <DisclosureChevron direction="right" />
                   </Icon>
                 </button>
               </CollapsibleTrigger>

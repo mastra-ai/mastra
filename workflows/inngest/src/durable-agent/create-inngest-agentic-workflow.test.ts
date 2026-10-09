@@ -459,6 +459,49 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
   );
 });
 
+describe('Inngest prepareStep system-message baseline', () => {
+  it('forwards the original system messages after a one-step override mutates the transcript', async () => {
+    const inngest = new Inngest({ id: 'inngest-prepare-step-system-message-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const steps = (workflow as any).executionGraph.steps;
+    const initEntry = findEntry(
+      steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'init-iteration-state',
+    );
+    const llmInputEntry = findEntry(
+      steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'map-to-llm-input',
+    );
+
+    const initialMessageList = new MessageList();
+    initialMessageList.addSystem('original system message');
+    const iterationState = await initEntry.mapConfig({
+      inputData: {
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        messageListState: initialMessageList.serialize(),
+        toolsMetadata: [],
+        modelConfig: {},
+        options: {},
+        state: {},
+      },
+    });
+
+    const overriddenMessageList = new MessageList().deserialize(iterationState.messageListState);
+    overriddenMessageList.replaceAllSystemMessages([{ role: 'system', content: 'step-two-only override' }]);
+    iterationState.messageListState = overriddenMessageList.serialize();
+    iterationState.iterationCount = 2;
+    iterationState.stepIndex = 2;
+
+    const mapped = await llmInputEntry.mapConfig({ inputData: iterationState });
+    expect(new MessageList().deserialize(mapped.messageListState).getSystemMessages()).toEqual([
+      { role: 'system', content: 'step-two-only override' },
+    ]);
+    expect(mapped.initialUntaggedSystemMessages).toEqual([{ role: 'system', content: 'original system message' }]);
+  });
+});
+
 describe('Inngest per-step processor history (#25193)', () => {
   it('forwards accumulated steps to the LLM execution step on later iterations', async () => {
     const inngest = new Inngest({ id: 'inngest-processor-history-tests' });

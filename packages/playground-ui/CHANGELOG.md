@@ -1,5 +1,88 @@
 # @mastra/playground-ui
 
+## 62.0.0-alpha.4
+
+### Minor Changes
+
+- Added a `reorderable` prop to `DataList`. Users can drag header cells, or press Alt+Arrow on a focused header, to move columns. The column order is saved in localStorage under the list's `id`, so you must also pass `id`. Pass `columnKeys` (one stable key per column) when columns can be shown or hidden, so the saved order survives those changes. ([#26497](https://github.com/mastra-ai/mastra/pull/26497))
+
+  ```tsx
+  <DataList columns="10rem 1fr auto" columnKeys={['name', 'input', 'status']} reorderable id="runs">
+    ...
+  </DataList>
+  ```
+
+  The traces list (Traces page and agent/workflow Traces tabs) now supports reordering every column, including optional, custom and metadata columns.
+
+- Added `DisclosureChevron`, the chevron for a trigger that opens something: a menu, select, collapsible section or "show more". It turns while the trigger is open, read from the trigger's `aria-expanded`, so it needs no open state of its own: ([#26515](https://github.com/mastra-ai/mastra/pull/26515))
+
+  ```tsx
+  import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
+
+  <DropdownMenu.Trigger render={<Button />}>
+    Options
+    <DisclosureChevron />
+  </DropdownMenu.Trigger>;
+  ```
+
+  `direction` sets where it points while closed: `down` (default) and `up` flip 180°, `right` turns 90°. Pass `open` to drive it from your own state instead.
+
+  `CollapsibleTrigger` no longer rotates icons placed directly inside it. Use `DisclosureChevron` for the chevron, so other icons in the trigger stay still.
+
+  Chevrons across Studio and Factory now turn the same way when a section opens. Downward chevrons, such as the ones in Factory's knowledge panel, flip to point up instead of turning sideways.
+
+### Patch Changes
+
+- Fixed the time range picker's "← Presets" button jumping to Last 24 hours. It now returns to the preset you had before opening the custom range, and the preset list marks the current selection. ([#26408](https://github.com/mastra-ai/mastra/pull/26408))
+
+- Metrics charts now show their Y axis, so values can be read straight from the chart: Token usage, Agent runs, Failure rate, Latency and Scores. With no failed runs, Failure rate's axis runs from 0% to 100% instead of an automatic 0 to 400%. ([#26500](https://github.com/mastra-ai/mastra/pull/26500))
+
+- The score panel close button now matches the trace panel: an X on the right, after the previous/next arrows. Score cards in the trace Scores tab no longer have an "Open scorer run" button; the whole card is clickable and opens the score. ([#26507](https://github.com/mastra-ai/mastra/pull/26507))
+
+- The chat `send` function from `useChatSend` can now return a promise. It resolves to `false` when the server can't have stored the message, for example when it refused a request that was too large, so a composer can restore the text and attachments it had cleared: ([#25814](https://github.com/mastra-ai/mastra/pull/25814))
+
+  ```tsx
+  const send = useChatSend();
+
+  const submit = async () => {
+    const draft = { message: text, attachments };
+    clearComposer();
+    const delivered = await send(draft);
+    if (delivered === false) restoreComposer(draft);
+  };
+  ```
+
+- Fixed password managers (1Password, LastPass, Dashlane, Proton Pass) popping up their autofill on ordinary text fields, such as the dataset Name field. Text fields now opt out of password manager autofill by default. Bitwarden skips these fields only when its "Allow websites to exclude fields to autofill" setting is on. Pass an autofill token to opt back in on sign-in and account forms: ([#26512](https://github.com/mastra-ai/mastra/pull/26512))
+
+  ```tsx
+  <Input type="email" autoComplete="email" />
+  <Input type="password" autoComplete="current-password" />
+  ```
+
+- Trace panel column sizes are now remembered per entity type (agent, workflow, scorer, …), so resizing the messages, trace tree, or span columns persists the next time you open a trace of the same kind. ([#26499](https://github.com/mastra-ai/mastra/pull/26499))
+
+- Fixed the whole app bouncing when scrolling past the top or bottom over the sidebar or other areas that don't scroll. Scrollable page content still bounces as before. ([#26511](https://github.com/mastra-ai/mastra/pull/26511))
+
+- Updated dependencies [[`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`68fa51c`](https://github.com/mastra-ai/mastra/commit/68fa51cf57ee7a3b0914d5381870b60e81f0647e), [`297e55e`](https://github.com/mastra-ai/mastra/commit/297e55ea3d0eef280c3776bec401584ce3c2bff2), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`57c3117`](https://github.com/mastra-ai/mastra/commit/57c3117dd4d0dd0ad0835edb1bf410b6ec76fba0), [`7a96951`](https://github.com/mastra-ai/mastra/commit/7a96951771a6aab850ceafefc73afe684ef24b21), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`14f9341`](https://github.com/mastra-ai/mastra/commit/14f934145150a2531abfc1c36d03909fd05b5c56), [`2558c00`](https://github.com/mastra-ai/mastra/commit/2558c00b338025de29f778ca72b6bd05e5726349), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618)]:
+  - @mastra/core@1.76.0-alpha.4
+  - @mastra/memory@1.37.0-alpha.2
+  - @mastra/client-js@1.53.0-alpha.4
+  - @mastra/ai-sdk@1.11.0-alpha.0
+  - @mastra/react@1.9.0-alpha.4
+
+## 62.0.0-alpha.3
+
+### Patch Changes
+
+- Fixed the sidebar header sitting higher than the page header in `AppShell`. The sidebar now pads its top and bottom evenly, so its header lines up with the page header and its footer keeps the same gap from the bottom edge, inside or outside `AppShell`. ([#25943](https://github.com/mastra-ai/mastra/pull/25943))
+
+- Updated dependencies [[`9a511a4`](https://github.com/mastra-ai/mastra/commit/9a511a4ff5ac8349f4d4b64b0f432576fa3c8656), [`ed0e355`](https://github.com/mastra-ai/mastra/commit/ed0e355205da51bac4d11b7a9553c95ef1f505f4), [`b93ce2e`](https://github.com/mastra-ai/mastra/commit/b93ce2ee034c6a0be511b717e1e043e875dca677), [`21eaa20`](https://github.com/mastra-ai/mastra/commit/21eaa208834ae36721324700023f88cec7cf5c01), [`4580309`](https://github.com/mastra-ai/mastra/commit/45803095e2aed7bf58d878eb206a767b9b0e2489), [`dc28dbd`](https://github.com/mastra-ai/mastra/commit/dc28dbd89f7afa455a1985c7909adf42ddd6bd48), [`f83023e`](https://github.com/mastra-ai/mastra/commit/f83023e66dc6cf50ffd3fe4007bb8945ec9b2826), [`a3f884c`](https://github.com/mastra-ai/mastra/commit/a3f884c6fa230f9c75049f7105df5f1429fa406e), [`a7a34bf`](https://github.com/mastra-ai/mastra/commit/a7a34bfcc2235daa6229d6783b3ad1a2eaa25c56), [`70d59a9`](https://github.com/mastra-ai/mastra/commit/70d59a97fb2a5953c5853bf5f5fdfdc02d2337e7), [`f431c23`](https://github.com/mastra-ai/mastra/commit/f431c2321cf186f09565c42ddba33ee40cb96b6d), [`70d59a9`](https://github.com/mastra-ai/mastra/commit/70d59a97fb2a5953c5853bf5f5fdfdc02d2337e7), [`33a206d`](https://github.com/mastra-ai/mastra/commit/33a206d7d0a52d17ebab8db5224c5091c086c86d)]:
+  - @mastra/core@1.76.0-alpha.3
+  - @mastra/memory@1.37.0-alpha.1
+  - @mastra/client-js@1.53.0-alpha.3
+  - @mastra/ai-sdk@1.11.0-alpha.0
+  - @mastra/react@1.9.0-alpha.3
+
 ## 62.0.0-alpha.2
 
 ### Minor Changes

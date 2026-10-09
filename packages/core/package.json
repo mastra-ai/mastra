@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.76.0-alpha.2",
+  "version": "1.76.0-alpha.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -329,6 +329,16 @@
       "require": {
         "types": "./dist/llm/index.d.ts",
         "default": "./dist/llm/index.cjs"
+      }
+    },
+    "./knowledge": {
+      "import": {
+        "types": "./dist/knowledge/index.d.ts",
+        "default": "./dist/knowledge/index.js"
+      },
+      "require": {
+        "types": "./dist/knowledge/index.d.ts",
+        "default": "./dist/knowledge/index.cjs"
       }
     },
     "./logger": {
