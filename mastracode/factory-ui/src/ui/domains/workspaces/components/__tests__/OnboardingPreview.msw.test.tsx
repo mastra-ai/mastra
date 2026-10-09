@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
-import { OnboardingPreview } from '../OnboardingPreview';
+import { OnboardingPreview } from '../onboarding/preview/OnboardingPreview';
 
 describe('contextual onboarding previews', () => {
   it('shows the personal Factory model in review when shared access is absent', async () => {
@@ -53,11 +53,6 @@ describe('contextual onboarding previews', () => {
     expect(screen.getByText('INC-124 · Follow-up')).toBeInTheDocument();
     expect(screen.getAllByText('Add a health check')).toHaveLength(2);
     expect(screen.queryByText('ENG-124 · Issue')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('img', {
-        name: 'Your Factory: ideas become reviewed code, with repository context and connected work',
-      }),
-    ).toBeInTheDocument();
   });
 
   it('keeps the shared model while personal access changes from a proposed connection to a saved credential', async () => {

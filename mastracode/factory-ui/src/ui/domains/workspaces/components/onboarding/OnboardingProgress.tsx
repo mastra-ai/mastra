@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { OnboardingStep } from '../services/onboardingFlow';
-import { onboardingProgress } from '../services/onboardingSteps';
+import type { OnboardingStep } from '../../services/onboardingFlow';
+import { onboardingProgress } from '../../services/onboardingSteps';
 
 export function OnboardingProgress({ step, editingReview }: { step: OnboardingStep; editingReview: boolean }) {
   const progressSteps = onboardingProgress();

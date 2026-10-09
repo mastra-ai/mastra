@@ -18,7 +18,46 @@ import type { SourceControlRepository } from '../services/github';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { OnboardingConnectionRow } from './OnboardingConnectionRow';
+import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
+
+type SourceControlView = 'github' | 'gitlab' | 'providers';
+
+type GitLabUnavailableReason = 'missing_config' | 'organization_required';
+
+const HOST_NAMES = { github: 'GitHub', gitlab: 'GitLab' } as const;
+
+const GITLAB_UNAVAILABLE_DESCRIPTIONS: Record<GitLabUnavailableReason, string> = {
+  missing_config: 'Unavailable for this deployment.',
+  organization_required: 'Join an organization to connect GitLab.',
+};
+
+function gitLabUnavailableReason(status?: { enabled: boolean; reason?: string }): GitLabUnavailableReason | undefined {
+  if (!status?.enabled) return 'missing_config';
+  if (status.reason === 'organization_required') return 'organization_required';
+  return undefined;
+}
+
+function repositoryHost(repository: SourceControlRepository) {
+  return isGitLabRepository(repository) ? 'gitlab' : 'github';
+}
+
+/** A draft can outlive its connection; a pin to a disconnected provider would wait on a disabled query forever. */
+function sourceControlView({
+  pinned,
+  githubConnected,
+  gitlabConfigured,
+}: {
+  pinned?: SourceControlView;
+  githubConnected: boolean;
+  gitlabConfigured: boolean;
+}): SourceControlView {
+  const pinIsReachable =
+    (pinned === 'github' && githubConnected) || (pinned === 'gitlab' && gitlabConfigured) || pinned === 'providers';
+  if (pinned && pinIsReachable) return pinned;
+  if (githubConnected) return 'github';
+  if (gitlabConfigured) return 'gitlab';
+  return 'providers';
+}
 
 export interface VcsFactoryStepProps {
   initialRepository?: SourceControlRepository;
@@ -39,8 +78,8 @@ export function VcsFactoryStep({
 }: VcsFactoryStepProps) {
   // Undefined follows the connection status, including a return from OAuth.
   // The provider list remains available through Change provider.
-  const [providerChoice, setProviderChoice] = useState<'github' | 'gitlab' | 'providers' | undefined>(
-    initialRepository ? (isGitLabRepository(initialRepository) ? 'gitlab' : 'github') : undefined,
+  const [providerChoice, setProviderChoice] = useState<SourceControlView | undefined>(
+    initialRepository && repositoryHost(initialRepository),
   );
   const [chosenRepository, setChosenRepository] = useState(initialRepository);
   const [query, setQuery] = useState('');
@@ -49,17 +88,9 @@ export function VcsFactoryStep({
   const connected = githubStatus.data?.connected === true;
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
-  // A draft can outlive its connection; a pin to a disconnected provider would wait on a disabled query forever.
-  const pinnedProvider =
-    (providerChoice === 'github' && !connected) || (providerChoice === 'gitlab' && !gitlabConfigured)
-      ? undefined
-      : providerChoice;
-  const selectedProvider =
-    pinnedProvider === undefined ? (connected ? 'github' : gitlabConfigured ? 'gitlab' : 'providers') : pinnedProvider;
+  const selectedProvider = sourceControlView({ pinned: providerChoice, githubConnected: connected, gitlabConfigured });
   const repositoryForProvider =
-    chosenRepository && (isGitLabRepository(chosenRepository) ? 'gitlab' : 'github') === selectedProvider
-      ? chosenRepository
-      : undefined;
+    chosenRepository && repositoryHost(chosenRepository) === selectedProvider ? chosenRepository : undefined;
   const repos = useGithubReposQuery(debouncedQuery || undefined, connected && selectedProvider === 'github');
   const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured && selectedProvider === 'gitlab');
   const gitlabRepos = (gitlabProjects.data ?? []).flatMap(project => {
@@ -67,6 +98,7 @@ export function VcsFactoryStep({
     return repository ? [repository] : [];
   });
   const repositoryQuery = selectedProvider === 'gitlab' ? gitlabProjects : repos;
+  const statusPending = githubStatus.isPending || gitlabStatus.isPending;
   const chooseRepository = (repository: SourceControlRepository) => {
     setChosenRepository(repository);
     onPreviewRepository?.(repository);
@@ -74,9 +106,8 @@ export function VcsFactoryStep({
 
   return (
     <section aria-label="Source control repository" className="w-full text-left">
-      {githubStatus.isPending || gitlabStatus.isPending ? (
-        <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-16 w-full" />
-      ) : selectedProvider === 'providers' ? (
+      {statusPending && <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-16 w-full" />}
+      {!statusPending && selectedProvider === 'providers' && (
         <ProviderChoice
           githubConnected={connected}
           githubRedirecting={githubRedirecting}
@@ -84,14 +115,7 @@ export function VcsFactoryStep({
             githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config'
           }
           gitlabConnected={gitlabConfigured}
-          gitlabUnavailable={!gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required'}
-          gitlabUnavailableReason={
-            !gitlabStatus.data?.enabled
-              ? 'missing_config'
-              : gitlabStatus.data.reason === 'organization_required'
-                ? 'organization_required'
-                : undefined
-          }
+          gitlabUnavailableReason={gitLabUnavailableReason(gitlabStatus.data)}
           onChooseGithub={() => {
             if (connected) setProviderChoice('github');
             else onConnect();
@@ -103,14 +127,13 @@ export function VcsFactoryStep({
           }}
           onChooseGitlab={() => setProviderChoice('gitlab')}
         />
-      ) : (
+      )}
+      {!statusPending && selectedProvider !== 'providers' && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Check className="text-muted-foreground size-3.5" aria-hidden="true" />
-              <ProviderHeading>
-                {selectedProvider === 'github' ? 'GitHub connected' : 'GitLab connected'}
-              </ProviderHeading>
+              <ProviderHeading>{`${HOST_NAMES[selectedProvider]} connected`}</ProviderHeading>
             </div>
             <Button
               variant="ghost"
@@ -186,7 +209,6 @@ function ProviderChoice({
   githubRedirecting,
   githubUnavailable,
   gitlabConnected,
-  gitlabUnavailable,
   gitlabUnavailableReason,
   onChooseGithub,
   onChooseGitlab,
@@ -196,8 +218,7 @@ function ProviderChoice({
   githubRedirecting: boolean;
   githubUnavailable: boolean;
   gitlabConnected: boolean;
-  gitlabUnavailable: boolean;
-  gitlabUnavailableReason?: 'missing_config' | 'organization_required';
+  gitlabUnavailableReason?: GitLabUnavailableReason;
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
   onGitlabConnected: () => void;
@@ -222,34 +243,57 @@ function ProviderChoice({
         name="GitLab"
         icon={<GitLabIcon />}
         description={
-          gitlabUnavailable
-            ? gitlabUnavailableReason === 'organization_required'
-              ? 'Join an organization to connect GitLab.'
-              : 'Unavailable for this deployment.'
+          gitlabUnavailableReason
+            ? GITLAB_UNAVAILABLE_DESCRIPTIONS[gitlabUnavailableReason]
             : 'Projects, branches, and merge requests.'
         }
         connected={gitlabConnected}
         action={
-          gitlabUnavailable ? (
-            <Button variant="default" disabled>
-              Connect GitLab
-            </Button>
-          ) : gitlabConnected ? (
-            <Button variant="default" onClick={onChooseGitlab}>
-              Continue with GitLab
-            </Button>
-          ) : (
-            <ProviderConnectControl
-              provider="gitlab"
-              label="Connect GitLab"
-              variant="default"
-              size="md"
-              onCompleted={onGitlabConnected}
-            />
-          )
+          <GitLabAction
+            unavailable={gitlabUnavailableReason !== undefined}
+            connected={gitlabConnected}
+            onChoose={onChooseGitlab}
+            onConnected={onGitlabConnected}
+          />
         }
       />
     </div>
+  );
+}
+
+function GitLabAction({
+  unavailable,
+  connected,
+  onChoose,
+  onConnected,
+}: {
+  unavailable: boolean;
+  connected: boolean;
+  onChoose: () => void;
+  onConnected: () => void;
+}) {
+  if (unavailable) {
+    return (
+      <Button variant="default" disabled>
+        Connect GitLab
+      </Button>
+    );
+  }
+  if (connected) {
+    return (
+      <Button variant="default" onClick={onChoose}>
+        Continue with GitLab
+      </Button>
+    );
+  }
+  return (
+    <ProviderConnectControl
+      provider="gitlab"
+      label="Connect GitLab"
+      variant="default"
+      size="md"
+      onCompleted={onConnected}
+    />
   );
 }
 
@@ -294,7 +338,7 @@ function RepositoryRows({
   if (visible.length === 0) {
     return (
       <Txt tone="muted" as="p" variant="caption" className="m-0 py-4">
-        {query ? 'No matching repositories.' : `No ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} repositories found.`}
+        {query ? 'No matching repositories.' : `No ${HOST_NAMES[provider]} repositories found.`}
       </Txt>
     );
   }

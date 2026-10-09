@@ -1,15 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
-import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
-import { IncidentIoIcon, JiraIcon } from '../../../ui/icons';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { usePlatformConnectionsQuery } from '../../../../../hooks/usePlatformConnections';
+import { isPlatformConnectUnavailableError } from '../../../factory/services/platformConnect';
+import { ProviderConnectControl } from '../../../settings/components/PlatformProviderConnections';
+import { IncidentIoIcon, JiraIcon } from '../../../../ui/icons';
+import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { OnboardingConnectionRow } from './OnboardingConnectionRow';
+
+const PLATFORMS = {
+  jira: { name: 'Jira', Icon: JiraIcon, purpose: 'Issues and priorities for your work board.' },
+  'incident-io': {
+    name: 'incident.io',
+    Icon: IncidentIoIcon,
+    purpose: 'Bring incident follow-ups into your work board.',
+  },
+};
 
 export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 'incident-io' }) {
   const query = usePlatformConnectionsQuery(provider);
-  const name = provider === 'jira' ? 'Jira' : 'incident.io';
-  const Icon = provider === 'jira' ? JiraIcon : IncidentIoIcon;
+  const { name, Icon, purpose } = PLATFORMS[provider];
   if (query.isPending)
     return <SkeletonRows label={`Loading ${name} connections`} rows={1} rowClassName="h-22 w-full" />;
   if (isPlatformConnectUnavailableError(query.error)) return null;
@@ -38,10 +46,6 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
   }
   const reconnect = query.data?.find(connection => connection.status === 'needs_reauth');
   const action = reconnect ? 'Reconnect' : 'Connect';
-  const purpose =
-    provider === 'jira'
-      ? 'Issues and priorities for your work board.'
-      : 'Bring incident follow-ups into your work board.';
   const description = reconnect ? 'Reconnect to restore access.' : purpose;
   return (
     <OnboardingConnectionRow

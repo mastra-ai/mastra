@@ -28,10 +28,11 @@ export function ModelProviderFactoryStep({
     connection.authEnabled &&
     !connection.orgKeyAdmin &&
     !connection.hasConfiguredProvider;
+  const connectedProvider = connection.connected ? connection.provider : undefined;
 
   return (
     <section aria-label="Model provider setup" className="flex max-w-xl flex-col gap-5">
-      {needsAdmin ? (
+      {needsAdmin && (
         <div className="flex flex-col gap-3">
           <Txt variant="caption" tone="muted">
             An admin connects organization access. You can set up your personal access next.
@@ -42,16 +43,15 @@ export function ModelProviderFactoryStep({
             </Button>
           </div>
         </div>
-      ) : connection.connected && connection.provider ? (
+      )}
+      {!needsAdmin && connectedProvider && (
         <FactoryDefaultModelForm
-          key={connection.provider.provider}
-          initialModelId={
-            initialChoice?.providerId === connection.provider.provider ? initialChoice.modelId : undefined
-          }
-          provider={connection.provider}
+          key={connectedProvider.provider}
+          initialModelId={initialChoice?.providerId === connectedProvider.provider ? initialChoice.modelId : undefined}
+          provider={connectedProvider}
           onContinue={modelId => {
-            if (connection.provider && connection.method)
-              onComplete({ providerId: connection.provider.provider, modelId, method: connection.method });
+            if (connection.method)
+              onComplete({ providerId: connectedProvider.provider, modelId, method: connection.method });
           }}
           onPreviewModel={onPreviewModel}
           submitLabel="Continue"
@@ -61,7 +61,8 @@ export function ModelProviderFactoryStep({
             onPreviewProvider?.(undefined);
           }}
         />
-      ) : (
+      )}
+      {!needsAdmin && !connectedProvider && (
         <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />
       )}
 

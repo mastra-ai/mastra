@@ -6,7 +6,7 @@ import type { PreviewProvider } from '../hooks/useProviderConnection';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
 import { ModelProviderPicker } from './ModelProviderPicker';
-import { OnboardingConnectionRow } from './OnboardingConnectionRow';
+import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 
@@ -26,16 +26,20 @@ export function PersonalProviderFactoryStep({
   onPreviewModel,
 }: PersonalProviderFactoryStepProps) {
   const connection = useProviderConnection({ scope: 'user', initialSelection: initialChoice });
+  const connectedProvider = connection.connected ? connection.provider : undefined;
+  const connectedChoice =
+    connectedProvider && connection.method
+      ? { providerId: connectedProvider.provider, method: connection.method }
+      : undefined;
+  const canSkipModel = !modelChoice || (modelChoice === 'optional' && !connection.connected);
   return (
     <section aria-label="Personal provider setup" className="flex max-w-xl flex-col gap-6">
-      {connection.connected && connection.provider && modelChoice ? (
+      {connectedProvider && modelChoice && (
         <FactoryDefaultModelForm
-          key={connection.provider.provider}
+          key={connectedProvider.provider}
           scope="user"
-          provider={connection.provider}
-          initialModelId={
-            initialChoice?.providerId === connection.provider.provider ? initialChoice.modelId : undefined
-          }
+          provider={connectedProvider}
+          initialModelId={initialChoice?.providerId === connectedProvider.provider ? initialChoice.modelId : undefined}
           onPreviewModel={onPreviewModel}
           submitLabel="Review setup"
           onChangeProvider={() => {
@@ -44,14 +48,14 @@ export function PersonalProviderFactoryStep({
             onPreviewModel?.(undefined);
           }}
           onContinue={modelId => {
-            if (connection.provider && connection.method)
-              onContinue({ providerId: connection.provider.provider, method: connection.method, modelId });
+            if (connectedChoice) onContinue({ ...connectedChoice, modelId });
           }}
         />
-      ) : connection.connected && connection.provider ? (
+      )}
+      {connectedProvider && !modelChoice && (
         <OnboardingConnectionRow
-          icon={<ProviderBrandIcon provider={connection.provider.provider} />}
-          name={providerDisplayName(connection.provider.provider)}
+          icon={<ProviderBrandIcon provider={connectedProvider.provider} />}
+          name={providerDisplayName(connectedProvider.provider)}
           description={connection.method === 'oauth' ? 'Provider sign-in · only you.' : 'API key · only you.'}
           connected
           action={
@@ -66,27 +70,16 @@ export function PersonalProviderFactoryStep({
             </Button>
           }
         />
-      ) : (
-        <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />
       )}
+      {!connectedProvider && <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />}
       {connection.error && (
         <Txt role="alert" variant="caption" className="text-destructive-foreground">
           {connection.error}
         </Txt>
       )}
-      {(!modelChoice || (modelChoice === 'optional' && !connection.connected)) && (
+      {canSkipModel && (
         <div>
-          <Button
-            variant={modelChoice ? 'ghost' : 'primary'}
-            size="lg"
-            onClick={() =>
-              onContinue(
-                connection.connected && connection.provider && connection.method
-                  ? { providerId: connection.provider.provider, method: connection.method }
-                  : undefined,
-              )
-            }
-          >
+          <Button variant={modelChoice ? 'ghost' : 'primary'} size="lg" onClick={() => onContinue(connectedChoice)}>
             {modelChoice ? 'Skip for now' : 'Review setup'}
           </Button>
         </div>

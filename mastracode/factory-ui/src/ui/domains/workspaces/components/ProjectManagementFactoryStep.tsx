@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import type { OnboardingSource } from './OnboardingPreview';
-import { OnboardingLinearConnection } from './OnboardingLinearConnection';
-import { OnboardingPlatformConnection } from './OnboardingPlatformConnection';
+import type { OnboardingSource } from './onboarding/preview/OnboardingPreview';
+import { OnboardingLinearConnection } from './onboarding/OnboardingLinearConnection';
+import { OnboardingPlatformConnection } from './onboarding/OnboardingPlatformConnection';
 
 export interface ProjectManagementFactoryStepProps {
   onConnect: () => void;

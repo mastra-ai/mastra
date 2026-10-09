@@ -18,6 +18,17 @@ import type { ProviderInfo } from '../../../../api/types';
 import { useOrgKeyAdminQuery, useSaveProviderKey } from '../../../../hooks/use-providers';
 import { providerDisplayName } from './provider-display-name';
 
+type KeyScope = 'user' | 'org';
+
+const SCOPED_KEY_ACCESS: Record<KeyScope, string> = {
+  org: 'Everyone in your organization can use this key.',
+  user: 'Only you can use this key. Shared organization access stays unchanged.',
+};
+
+function credentialAtScope(provider: ProviderInfo, scope: KeyScope) {
+  return scope === 'org' ? provider.orgCredential : provider.userCredential;
+}
+
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
   authEnabled: boolean;
@@ -27,8 +38,8 @@ interface AddApiKeyDialogProps {
    * `'user'` default. An existing org key always wins so edits don't silently
    * narrow a shared key.
    */
-  defaultScope?: 'user' | 'org';
-  fixedScope?: 'user' | 'org';
+  defaultScope?: KeyScope;
+  fixedScope?: KeyScope;
   onClose: () => void;
 }
 
@@ -46,16 +57,13 @@ export function AddApiKeyDialog({
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const preferredScope = provider.source === 'stored-org' ? 'org' : defaultScope;
   const [keyDraft, setKeyDraft] = useState('');
-  const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
+  const writableScope = canWriteOrgKey ? preferredScope : 'user';
+  const [scope, setScope] = useState<KeyScope>(fixedScope ?? writableScope);
 
-  const scopedCredential =
-    fixedScope === 'org' ? provider.orgCredential : fixedScope === 'user' ? provider.userCredential : undefined;
-  const description =
-    fixedScope === 'org'
-      ? 'Everyone in your organization can use this key.'
-      : fixedScope === 'user'
-        ? 'Only you can use this key. Shared organization access stays unchanged.'
-        : 'The key is stored securely and never displayed again.';
+  const replacesSignIn = fixedScope !== undefined && credentialAtScope(provider, fixedScope) === 'oauth';
+  const description = fixedScope
+    ? SCOPED_KEY_ACCESS[fixedScope]
+    : 'The key is stored securely and never displayed again.';
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
@@ -84,7 +92,7 @@ export function AddApiKeyDialog({
           <DialogTitle>API key for {displayName}</DialogTitle>
           <DialogDescription>
             {description}
-            {scopedCredential === 'oauth' && ' Saving replaces the provider sign-in at this scope.'}
+            {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>

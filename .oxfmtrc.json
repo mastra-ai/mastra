@@ -12,8 +12,6 @@
   "sortPackageJson": false,
   "sortTailwindcss": true,
   "ignorePatterns": [
-    "mastracode/factory-ui/src/ui/domains/workspaces/figures/hairline-kernel.js",
-    "mastracode/factory-ui/src/ui/domains/workspaces/figures/journey.js",
     "CLAUDE.md",
     ".history/",
     "**/.next",

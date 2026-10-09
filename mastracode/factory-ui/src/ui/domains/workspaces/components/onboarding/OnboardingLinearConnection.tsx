@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useLinearStatusQuery } from '../../../../../hooks/useLinearData';
+import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
 export function OnboardingLinearConnection({ onConnect }: { onConnect: () => void }) {

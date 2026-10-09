@@ -1,4 +1,4 @@
-import { OnboardingProgress } from './OnboardingProgress';
+import { OnboardingProgress } from './onboarding/OnboardingProgress';
 import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
 import { onboardingSteps, onboardingStepMeta } from '../services/onboardingSteps';
 import { useIsMutating } from '@tanstack/react-query';
@@ -22,15 +22,33 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft } from 'lucide-react';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { OnboardingPreview } from './OnboardingPreview';
+import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
-import type { OnboardingSource } from './OnboardingPreview';
+import type { OnboardingSource } from './onboarding/preview/OnboardingPreview';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
-import { OnboardingReviewStep } from './OnboardingReviewStep';
+import { OnboardingReviewStep } from './onboarding/OnboardingReviewStep';
+
+/** What the user hovers or focuses before choosing; cleared on every step change. */
+interface StepPreview {
+  repository?: SourceControlRepository;
+  providerId?: string;
+  method?: ProviderConnectionMethod;
+  model?: string;
+  personalProviderId?: string;
+  personalMethod?: ProviderConnectionMethod;
+  personalModel?: string;
+}
+
+/** Hovering another provider hides the saved model: it belongs to the saved provider. */
+function shownModel(previewedModel?: string, previewedProvider?: string, savedModel?: string) {
+  if (previewedModel) return previewedModel;
+  if (previewedProvider) return undefined;
+  return savedModel;
+}
 
 export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
@@ -52,14 +70,9 @@ export function EmptyFactoryState() {
     setReviewReturn(value);
   };
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [previewRepository, setPreviewRepository] = useState<SourceControlRepository>();
   const [previewSource, setPreviewSource] = useState<OnboardingSource>();
-  const [previewProvider, setPreviewProvider] = useState<string>();
-  const [previewModel, setPreviewModel] = useState<string>();
-  const [previewPersonalProvider, setPreviewPersonalProvider] = useState<string>();
-  const [previewPersonalModel, setPreviewPersonalModel] = useState<string>();
-  const [previewMethod, setPreviewMethod] = useState<ProviderConnectionMethod>();
-  const [previewPersonalMethod, setPreviewPersonalMethod] = useState<ProviderConnectionMethod>();
+  const [preview, setPreview] = useState<StepPreview>({});
+  const previewWith = (patch: StepPreview) => setPreview(current => ({ ...current, ...patch }));
 
   const updateDraft = (next: OnboardingDraft) => {
     persistOnboardingDraft(next);
@@ -68,13 +81,7 @@ export function EmptyFactoryState() {
   const goTo = (next: Step) => {
     persistOnboardingStep(next);
     setStep(next);
-    setPreviewRepository(undefined);
-    setPreviewProvider(undefined);
-    setPreviewModel(undefined);
-    setPreviewPersonalProvider(undefined);
-    setPreviewPersonalModel(undefined);
-    setPreviewMethod(undefined);
-    setPreviewPersonalMethod(undefined);
+    setPreview({});
     complete.reset();
   };
   const advance = (next: Step) => {
@@ -88,9 +95,9 @@ export function EmptyFactoryState() {
   const steps = onboardingSteps();
   const stepIndex = steps.indexOf(step);
   const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
-  const repository = previewRepository ?? draft.repository;
-  const model = previewModel ?? (previewProvider ? undefined : draft.model?.modelId);
-  const personalModel = previewPersonalModel ?? (previewPersonalProvider ? undefined : draft.personal?.modelId);
+  const repository = preview.repository ?? draft.repository;
+  const model = shownModel(preview.model, preview.providerId, draft.model?.modelId);
+  const personalModel = shownModel(preview.personalModel, preview.personalProviderId, draft.personal?.modelId);
   const personalIsFactoryModel = usesPersonalFactoryModel(draft);
   const meta = onboardingStepMeta(step, personalIsFactoryModel);
 
@@ -152,7 +159,7 @@ export function EmptyFactoryState() {
                     persistBeforeRedirect('vcs');
                     manageGithubConnection(baseUrl);
                   }}
-                  onPreviewRepository={setPreviewRepository}
+                  onPreviewRepository={previewed => previewWith({ repository: previewed })}
                   onSelectRepository={repo => {
                     updateDraft({ ...draft, repository: repo });
                     advance('project-management');
@@ -172,12 +179,8 @@ export function EmptyFactoryState() {
               {step === 'model-provider' && (
                 <ModelProviderFactoryStep
                   initialChoice={draft.model}
-                  onPreviewModel={setPreviewModel}
-                  onPreviewProvider={(providerId, method) => {
-                    setPreviewMethod(method);
-                    setPreviewProvider(providerId);
-                    setPreviewModel(undefined);
-                  }}
+                  onPreviewModel={previewed => previewWith({ model: previewed })}
+                  onPreviewProvider={(providerId, method) => previewWith({ providerId, method, model: undefined })}
                   onComplete={model => {
                     updateDraft({ ...draft, model });
                     if (!model) {
@@ -193,16 +196,14 @@ export function EmptyFactoryState() {
                 <PersonalProviderFactoryStep
                   initialChoice={draft.personal}
                   modelChoice={personalIsFactoryModel ? 'required' : undefined}
-                  onPreviewModel={setPreviewPersonalModel}
+                  onPreviewModel={previewed => previewWith({ personalModel: previewed })}
                   onContinue={personal => {
                     updateDraft({ ...draft, personal });
                     advance('review');
                   }}
-                  onPreviewProvider={(providerId, method) => {
-                    setPreviewPersonalProvider(providerId);
-                    setPreviewPersonalMethod(method);
-                    setPreviewPersonalModel(undefined);
-                  }}
+                  onPreviewProvider={(providerId, method) =>
+                    previewWith({ personalProviderId: providerId, personalMethod: method, personalModel: undefined })
+                  }
                 />
               )}
               {step === 'review' && (
@@ -226,13 +227,12 @@ export function EmptyFactoryState() {
         <OnboardingPreview
           step={step}
           repository={repository}
-          factoryName={draft.repository?.name}
           source={previewSource}
           model={model}
-          providerId={previewProvider ?? draft.model?.providerId}
-          personalProviderId={previewPersonalProvider ?? draft.personal?.providerId}
-          connectionMethod={previewMethod ?? draft.model?.method}
-          personalConnectionMethod={previewPersonalMethod ?? draft.personal?.method}
+          providerId={preview.providerId ?? draft.model?.providerId}
+          personalProviderId={preview.personalProviderId ?? draft.personal?.providerId}
+          connectionMethod={preview.method ?? draft.model?.method}
+          personalConnectionMethod={preview.personalMethod ?? draft.personal?.method}
           personalModel={personalModel}
         />
       </div>

@@ -1,4 +1,3 @@
-/* Form entrances and progress stay separate from the SVG figure's clock. */
 @keyframes onboarding-reveal {
   from {
     opacity: 0;
@@ -48,29 +47,40 @@
   }
 }
 
-/* The figures use Hairline's unmodified skill kernel, with the app's palette.
-   The scene is transparent; only solid paper faces occlude geometry behind them. */
-.onboarding-figure {
-  width: 100%;
-  --hairline-plate: var(--color-card, var(--color-background));
-  --hairline-hi: color-mix(in oklab, var(--color-foreground) 60%, var(--color-background));
-  --hairline-edge: color-mix(in oklab, var(--color-muted-foreground) 65%, var(--color-background));
-  --hairline-mid: var(--color-border);
-  --hairline-lo: var(--color-border);
+/* Panels and links take the Factory UI’s quiet border hierarchy, one device pixel wide at any size. */
+.onboarding-sketch {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 1px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-/* Product cards share the Factory UI’s quiet border hierarchy. */
-.onboarding-figure[data-scene='intake'],
-.onboarding-figure[data-scene='accounts'] {
-  --hairline-edge: var(--color-border);
-  --hairline-hi: color-mix(in oklab, var(--color-muted-foreground) 35%, var(--color-background));
+.onboarding-sketch * {
+  vector-effect: non-scaling-stroke;
 }
-@media (prefers-reduced-motion: reduce) {
-  .onboarding-figure svg * {
-    transition: none;
+.onboarding-sketch-surface {
+  fill: var(--color-card, var(--color-background));
+}
+.onboarding-sketch-surface[data-highlighted='true'] {
+  stroke: color-mix(in oklab, var(--color-muted-foreground) 45%, var(--color-background));
+}
+.onboarding-sketch-mark {
+  stroke: var(--color-muted-foreground);
+}
+.onboarding-sketch-link {
+  stroke-dasharray: 3 4;
+}
+@keyframes onboarding-flow {
+  to {
+    stroke-dashoffset: -7;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-sketch-link {
+    animation: onboarding-flow 900ms linear infinite;
   }
 }
 
-/* A single SVG persists through every step. Only its HTML annotations fade. */
 .onboarding-preview {
   display: grid;
   align-content: center;
@@ -80,12 +90,6 @@
 .onboarding-diagram {
   aspect-ratio: 5 / 4;
   width: min(100%, calc((100dvh - 7rem) * 1.25));
-}
-.onboarding-intake-card {
-  left: var(--intake-1-x, 9%);
-  top: var(--intake-1-y, 60.625%);
-  width: 22%;
-  opacity: var(--intake-1-opacity, 1);
 }
 .onboarding-scene {
   opacity: 0;
@@ -104,16 +108,11 @@
   }
   .onboarding-scene[data-active='true'] {
     transition:
-      opacity 200ms ease-out 480ms,
+      opacity 200ms ease-out 100ms,
       visibility 0s;
   }
 }
 
-.onboarding-intake-card[data-card='2'] {
-  left: var(--intake-2-x, 39%);
-  top: var(--intake-2-y, 60.625%);
-  opacity: var(--intake-2-opacity, 1);
-}
 /* A visual earns its space; the form stays reachable on short screens. */
 @media (max-width: 899px) {
   .onboarding-page {
