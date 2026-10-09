@@ -57,6 +57,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
@@ -972,13 +973,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      // Resolve defaults once so callbacks and execution options come from the
+      // same `getDefaultOptions` result, even when defaults are dynamic.
       const callbackOptions = await withDefaultOptions(agent, streamOptions);
 
       // 1. Prepare for durable execution
       const preparation = await prepareForDurableExecution<TOutput>({
         agent: agent as Agent<string, any, TOutput>,
         messages,
-        options: streamOptions as AgentExecutionOptions<TOutput>,
+        options: callbackOptions as AgentExecutionOptions<TOutput>,
+        optionsAreResolved: true,
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
@@ -1171,8 +1175,29 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
-      const callbackOptions = await withDefaultOptions(agent, resumeOptions);
       const existingRegistryEntry = globalRunRegistry.get(runId);
+
+      // Resolve defaults against the run's saved request context with the
+      // caller's values on top, matching core `DurableAgent.resume`, so dynamic
+      // defaults pick the same callbacks they did for the original run. A resume
+      // in a fresh process has no registry entry, so fall back to the snapshot.
+      let savedRequestContext: Iterable<readonly [string, unknown]> | undefined =
+        existingRegistryEntry?.requestContext?.entries();
+      if (!savedRequestContext) {
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+          runId,
+        });
+        savedRequestContext = Object.entries(snapshot?.requestContext ?? {});
+      }
+      const callbackOptions = await withDefaultOptions(agent, {
+        ...resumeOptions,
+        requestContext: new RequestContext([
+          ...savedRequestContext,
+          ...(resumeOptions?.requestContext?.entries() ?? []),
+        ]),
+      });
       const priorExecution = existingRegistryEntry?.workflowExecution;
 
       // Settle the prior segment before taking its event offset. Otherwise a late

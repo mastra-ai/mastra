@@ -7,6 +7,7 @@
  */
 
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import {
   AGENT_CONTROL_TOPIC,
   AGENT_STREAM_TOPIC,
@@ -832,6 +833,78 @@ describe('InngestAgent parity surface', () => {
       try {
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['default:onStepFinish', 'default:onFinish']));
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    function makeAgentWithDynamicDefaults(id: string, defaultOptions: AgentConfig['defaultOptions']) {
+      const durableAgent = createInngestAgent({
+        agent: new Agent({ id, name: id, instructions: 'Test', model: createMockModel() as any, defaultOptions }),
+        inngest,
+      });
+      (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+      return durableAgent;
+    }
+
+    it('takes stream() callbacks and execution options from the same defaultOptions resolution', async () => {
+      const fired: number[] = [];
+      let resolutions = 0;
+      const durableAgent = makeAgentWithDynamicDefaults('default-callbacks-single-resolution', () => {
+        const resolution = ++resolutions;
+        return {
+          maxSteps: resolution,
+          onFinish: () => {
+            fired.push(resolution);
+          },
+        };
+      });
+      const sendSpy = stubInngestSend();
+
+      const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+      try {
+        await publishStepAndFinish(durableAgent, result.runId);
+        await vi.waitFor(() => expect(fired).toHaveLength(1));
+        const dispatchedMaxSteps = (sendSpy.mock.calls[0]![0] as any).data.inputData.options.maxSteps;
+        expect(dispatchedMaxSteps).toBe(fired[0]);
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('resolves resume() defaultOptions against the run snapshot request context', async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDynamicDefaults('default-callbacks-resume-context', ({ requestContext }) => ({
+        onFinish: () => {
+          fired.push(`onFinish:${requestContext.get('tenant')}:${requestContext.get('locale')}`);
+        },
+      }));
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+              value: {},
+              context: {},
+              status: 'suspended',
+              suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+              requestContext: { tenant: 'acme', locale: 'en' },
+            }),
+          }),
+        }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-context-run';
+
+      const result = await durableAgent.resume(
+        runId,
+        { approved: true },
+        { requestContext: new RequestContext([['locale', 'fr']]) },
+      );
+      try {
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme:fr']));
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
