@@ -342,7 +342,7 @@ interface WorkspaceChangesPanelProps {
   workspacePath: string;
   visible: boolean;
   changes?: WorkspaceChanges;
-  /** Provider per repository slug for the group icons; a slug without one gets the GitHub icon. */
+  /** Provider per repository slug for the group icons; absent while the factory loads (no icon), a slug without one gets the GitHub icon. */
   repositoryProviders?: RepositoryProviders;
   isLoading: boolean;
   isRefreshing: boolean;
@@ -465,7 +465,9 @@ export function WorkspaceChangesPanel({
               <RepositoryChangesGroup
                 key={repository.prefix}
                 repository={repository}
-                provider={repositoryProviders?.[repository.slug.toLowerCase()] ?? 'github'}
+                provider={
+                  repositoryProviders ? (repositoryProviders[repository.slug.toLowerCase()] ?? 'github') : undefined
+                }
                 open={openFolders[repository.prefix] ?? true}
                 onOpenChange={open => onFolderOpenChange(repository.prefix, open)}
                 openFolders={openFolders}
@@ -483,7 +485,7 @@ export function WorkspaceChangesPanel({
 
 interface RepositoryChangesGroupProps {
   repository: WorkspaceChangesRepository;
-  provider: RepositoryProvider;
+  provider?: RepositoryProvider;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   openFolders: Record<string, boolean>;

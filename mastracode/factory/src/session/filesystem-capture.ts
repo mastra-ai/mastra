@@ -25,11 +25,27 @@ git -C "$workdir" ls-files --others --exclude-standard -z
 const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
 /**
  * Regular files directly under the workspace root written since the session
- * was created (epoch seconds in $2): the agent's notes, setup markers. Files
- * the template shipped with (shell dotfiles) predate the session and stay out;
- * the checkouts are covered by git.
+ * was created ($2 is a UTC `touch -t` stamp, `YYYYMMDDhhmm.SS`): the agent's
+ * notes, setup markers. Files the template shipped with (shell dotfiles, a
+ * build's setup markers) predate the session and stay out; the checkouts are
+ * covered by git. Credential stores are never listed, a listed path becomes
+ * readable through the thread's file route. `touch -t` plus `-newer` works on
+ * GNU and BSD find alike; `-newermt "@epoch"` is GNU only.
  */
-const ROOT_FILES_LIST_COMMAND = 'cd "$1" && find . -mindepth 1 -maxdepth 1 -type f -newermt "@$2" -print0 || true';
+const ROOT_FILES_LIST_COMMAND = [
+  'cd "$1" && ref=$(mktemp) && TZ=UTC touch -t "$2" "$ref"',
+  '&& find . -mindepth 1 -maxdepth 1 -type f ! -name .netrc ! -name .git-credentials ! -name .npmrc ! -name .pypirc -newer "$ref" -print0',
+  '; status=$?; rm -f "$ref"; exit $status',
+].join(' ');
+
+/** `touch -t` stamp of a moment, in UTC. */
+export function touchStamp(date: Date): string {
+  const two = (value: number) => String(value).padStart(2, '0');
+  return (
+    `${date.getUTCFullYear()}${two(date.getUTCMonth() + 1)}${two(date.getUTCDate())}` +
+    `${two(date.getUTCHours())}${two(date.getUTCMinutes())}.${two(date.getUTCSeconds())}`
+  );
+}
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -149,19 +165,20 @@ export async function captureSessionFilesystem(
     }
 
     // With several checkouts the root is a plain directory nothing else lists.
+    // A failed listing is logged and the git and artifact results still land.
     if (multiRepo) {
-      const since = Math.floor(sourceSession.createdAt.getTime() / 1000);
-      const rootFiles = await executeCommand('sh', ['-c', ROOT_FILES_LIST_COMMAND, 'sh', layout.root, String(since)], {
+      const since = touchStamp(sourceSession.createdAt);
+      const rootFiles = await executeCommand('sh', ['-c', ROOT_FILES_LIST_COMMAND, 'sh', layout.root, since], {
         timeout: 30_000,
       });
       if (rootFiles.exitCode !== 0) {
         console.warn('[Factory filesystem capture] Unable to list workspace root files.', rootFiles.stderr);
-        return;
-      }
-      for (const path of rootFiles.stdout.split('\0')) {
-        const normalizedPath = path.replace(/^\.\//, '');
-        if (normalizedPath) {
-          files.set(normalizedPath, { path: normalizedPath });
+      } else {
+        for (const path of rootFiles.stdout.split('\0')) {
+          const normalizedPath = path.replace(/^\.\//, '');
+          if (normalizedPath) {
+            files.set(normalizedPath, { path: normalizedPath });
+          }
         }
       }
     }

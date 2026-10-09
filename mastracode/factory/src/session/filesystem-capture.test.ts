@@ -187,6 +187,8 @@ describe('captureSessionFilesystem', () => {
       threadId: 'thread-1',
       files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
     });
+    // One checkout: git and artifacts only, the root is the checkout itself.
+    expect(executeCommand).toHaveBeenCalledTimes(2);
   });
 
   it('clears persisted files after successful empty Git and artifact listings', async () => {
@@ -263,7 +265,7 @@ describe('captureSessionFilesystem across environment repositories', () => {
   ) {
     const executeCommand = vi.fn(async (_command: string, args: string[]) => {
       if (args[1] === 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true') return artifacts;
-      if (args[1].includes('-newermt')) return rootFiles;
+      if (args[1].includes('-newer "$ref"')) return rootFiles;
       return answers[args[3]!] ?? commandResult();
     });
     const base = createSession([]);
@@ -303,7 +305,7 @@ describe('captureSessionFilesystem across environment repositories', () => {
     // Artifacts, then the root-level files written since the session was created, both at the root.
     const rootCalls = executeCommand.mock.calls.filter(call => call[1][2] === 'sh');
     expect(rootCalls.map(call => call[1][3])).toEqual(['/sessions/s1', '/sessions/s1']);
-    expect(rootCalls[1]![1][4]).toBe(String(Math.floor(SESSION_CREATED_AT.getTime() / 1000)));
+    expect(rootCalls[1]![1][4]).toBe('202610091700.00');
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
@@ -315,6 +317,29 @@ describe('captureSessionFilesystem across environment repositories', () => {
         { path: 'poem.txt' },
         { path: 'site/index.html' },
       ],
+    });
+  });
+
+  it('keeps the git and artifact results when the root listing fails', async () => {
+    seedEnvironment();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { session } = createEnvironmentSession(
+      { '/sessions/s1/api': commandResult({ stdout: 'src/app.ts\0' }) },
+      commandResult({ stdout: './.artifacts/report.md\0' }),
+      commandResult({ exitCode: 1, stderr: 'find: not permitted' }),
+    );
+    const dependencies = createDependencies();
+
+    await captureSessionFilesystem(session, dependencies);
+
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory filesystem capture] Unable to list workspace root files.',
+      'find: not permitted',
+    );
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      files: [{ path: '.artifacts/report.md' }, { path: 'api/src/app.ts' }],
     });
   });
 
