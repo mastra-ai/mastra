@@ -265,4 +265,27 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
       expect(text).toBe(expected);
     });
   }
+
+  it('keeps the resolved text consistent when a processor removes the response', async () => {
+    const model = scriptedModel([[...textPart('t1', 'Hello there.'), finish('stop')]]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'remove-response',
+          processOutputResult: async ({ messages }) => messages.filter(message => message.role !== 'assistant'),
+        },
+      ],
+    });
+
+    const stream = await agent.stream('hi', { maxSteps: 1 });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['']);
+    expect(fullOutput.text).toBe('');
+    expect(await stream.text).toBe('');
+  });
 });

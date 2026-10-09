@@ -1247,10 +1247,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   }
 
                   // Use the processed text when a response message exists, even if the
-                  // processor intentionally emptied it. Only fall back to the raw model
-                  // text when there is no processed message at all.
+                  // processor intentionally emptied it. When the processor removed that
+                  // iteration's response entirely, resolve to '' so the text promise stays
+                  // consistent with the cleared step text. Only fall back to the raw model
+                  // text when there was no response message to process at all.
                   this.resolvePromises({
-                    text: outputText ?? lastStepText,
+                    text: outputText ?? (stepMessage ? '' : lastStepText),
                     finishReason: self.#finishReason,
                   });
 
