@@ -25,7 +25,7 @@ const dateTimeSchema: JSONSchema7 = {
 type KnowledgeWriteToolsMemory = {
   getKnowledgeStore?: () => Promise<KnowledgeStorage>;
   getKnowledgeInstance?: () =>
-    | { __getVisibleStructureScopes(heldAddresses: string[]): Array<{ address: string }> }
+    | { __getVisibleStructureScopes(heldAddresses: string[]): Promise<Array<{ address: string }>> }
     | undefined;
   storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
@@ -71,7 +71,8 @@ async function resolveNodePlacement(
   if ((SCOPE_RUNGS as readonly string[]).includes(placement)) {
     return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection);
   }
-  const frontier = memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? []) ?? [];
+  const frontier =
+    (await memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? [])) ?? [];
   const scope = frontier.some(visible => visible.address === placement) ? await store.getScopeAddress(placement) : null;
   if (!scope) throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
   return [...resolveWriteScopeIds(options, recordScope), scope.scopeNodeId];
