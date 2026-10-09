@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 36cd8a2a5759 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ a1c184894481 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 

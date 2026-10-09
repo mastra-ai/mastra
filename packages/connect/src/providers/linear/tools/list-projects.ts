@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 36cd8a2a5759 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ a1c184894481 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -50,7 +50,9 @@ export const listProjectsOutputSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
-const RawLeadSchema = LeadSchema.nullable();
+const RawLeadSchema = LeadSchema.extend({
+  email: z.string().nullable().optional(),
+}).nullable();
 
 const RawProjectSchema = z.object({
   id: z.string(),
@@ -192,7 +194,13 @@ export function listProjectsTool(proxy: PlatformProxy) {
           ...(raw.createdAt !== null && { createdAt: raw.createdAt }),
           ...(raw.updatedAt !== null && { updatedAt: raw.updatedAt }),
           ...(raw.url !== null && { url: raw.url }),
-          ...(raw.lead !== null && { lead: raw.lead }),
+          ...(raw.lead !== null && {
+            lead: {
+              id: raw.lead.id,
+              ...(raw.lead.name !== undefined && { name: raw.lead.name }),
+              ...(raw.lead.email != null && { email: raw.lead.email }),
+            },
+          }),
           ...(raw.teams !== null && { teams: raw.teams }),
         };
         projects.push(project);
