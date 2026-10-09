@@ -499,16 +499,13 @@ function pruneRunningHistory(
  * authoritative. `pruneRunningHistory` therefore keeps exactly what a restart
  * reads (`getRestartReads`), including the declared `stepResultReads`.
  *
- * `retainRunningHistory` disables that strip altogether. It predates the
- * `stepResultReads` mechanism: the **evented** engine re-loads the
- * storage-merged context at every step boundary, so persisted step results are
- * live data during normal execution, not just on restart, and it originally
- * retained every terminal step to be safe. The only same-iteration step-result
- * reads are declared reader→source pairs, so `stepResultReads` already keeps
- * exactly what evented reads back and core's durable loop relies on that strip
- * instead — retaining all terminal history copied every completed step's
- * payload/output and let long evented runs balloon into a heap OOM (COR-1431).
- * The option is kept for callers that know they read undeclared results back.
+ * `retainRunningHistory` disables that strip. It predates `stepResultReads`:
+ * the **evented** engine reads persisted step results during normal execution
+ * (not just on restart), so it originally retained every terminal step to be
+ * safe. Declared `stepResultReads` already keep the only same-iteration reads,
+ * so this is needed only by callers that read undeclared results back.
+ * Retaining all terminal history copied every completed step and ballooned
+ * evented snapshots into a heap OOM (COR-1431).
  */
 export function pruneAgentLoopSnapshot({
   snapshot,

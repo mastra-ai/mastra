@@ -1,21 +1,16 @@
 /**
  * Evented durable snapshot retention (COR-1431).
  *
- * Mastra Code on the evented experimental agent OOMs inside `JSON.parse` on
- * load and string flattening on write of the persisted durable-loop snapshot.
- * The evented engine re-persists the whole `stepResults` map as a full
- * `running` snapshot on every step boundary
- * (`workflows/evented/workflow-event-processor/index.ts`), and unlike the
- * default engine it does NOT strip terminal-step history: the durable loop sets
- * `retainRunningHistory = engine === 'evented'`
- * (`agent/durable/workflows/durable-loop-builder.ts`), which skips
- * `pruneRunningHistory` (`loop/workflows/prune-snapshot.ts`) — the strip that
- * removes `accumulatedSteps` / `messageListState` from the payload/output of
- * every completed step.
+ * The evented engine persists step results with `updateWorkflowResults`, a merge
+ * write that bypasses the workflow's `pruneSnapshot` hook, so a completed step
+ * keeps its full `payload`/`output`. For the durable loop that means each step
+ * re-embeds the whole iteration state (`accumulatedSteps`, `messageListState`),
+ * and since every merge re-reads and re-serializes the stored row, the row — and
+ * the heap cost of each write — grows with run length until the process OOMs.
  *
- * This suite runs the SAME durable loop on both engines and pins the delta, so
- * a regression in evented retention shows up as a size/duplication change
- * rather than a production OOM.
+ * This suite runs the SAME durable loop on both engines and pins how much
+ * completed-step history a single running write retains, so a regression shows
+ * up as a size/duplication change rather than a production OOM.
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -147,18 +142,14 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
     byWorkflow: {},
   };
   const marker = `result 1: ${filler}`;
-  // Retained-history signals: the durable loop's growing per-step state is
-  // `accumulatedSteps` (with `messageListState` the conversation copy). A
-  // completed step must not keep them in its persisted payload/output.
+  // The durable loop's per-step state is `accumulatedSteps` (plus the
+  // `messageListState` conversation copy); a completed step must not keep them.
   let maxRunningAccumulatedSteps = 0;
   let maxRunningMessageListState = 0;
 
-  // Every mutating write path re-serializes the whole snapshot: the evented
-  // engine merges suspensions via `updateWorkflowResults` / `updateWorkflowState`
-  // (libsql rewrites the whole `snapshot` column), and the default engine goes
-  // through `persistWorkflowSnapshot`. Measuring only `persistWorkflowSnapshot`
-  // badly undercounts evented — we wrap all three and record the size of the
-  // row after each write.
+  // Every mutating path re-serializes the whole snapshot (libsql rewrites the
+  // whole `snapshot` column), so wrapping only `persistWorkflowSnapshot` would
+  // badly undercount evented; wrap all three and record the row size after each.
   for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
     const original = workflowsStore[method].bind(workflowsStore);
     workflowsStore[method] = async (args: any) => {
@@ -169,10 +160,9 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
       const serialized = typeof snap === 'string' ? snap : JSON.stringify(snap ?? {});
       const status = (typeof snap === 'string' ? undefined : snap?.status) ?? '?';
       records.push({ method, workflowName, status, bytes: serialized.length });
-      // Retention is measured on the full-row `persistWorkflowSnapshot` write —
-      // the default engine's per-step write and the evented prune's re-persist
-      // — so both engines are compared on what is actually left in storage
-      // after a step, not the evented merge's pre-prune transient row.
+      // Measured across all `running` writes: with the prune removed the
+      // evented merge keeps the full completed-step history and this count
+      // rises (9 vs 4), so the check fails rather than passing vacuously.
       if (status === 'running') {
         stats.maxDuplicatesPerWrite = Math.max(stats.maxDuplicatesPerWrite, serialized.split(marker).length - 1);
         maxRunningAccumulatedSteps = Math.max(
@@ -253,18 +243,14 @@ describe('evented durable snapshot retention (COR-1431)', () => {
     expect(defaultSmall.runningWrites).toBeGreaterThan(2);
     expect(eventedSmall.runningWrites).toBeGreaterThan(2);
 
-    // Regression: the evented engine must not accumulate per-completed-step
-    // history in the running snapshot. Before the fix a single running write
-    // retained one `accumulatedSteps` copy per completed step (9 copies for an
-    // 8-step run, 9 already at 4 steps) because the merge write bypassed the
-    // `pruneSnapshot` hook; after the fix only the active step's transient
-    // copies remain — a small constant close to the default engine's — so the
-    // persisted row no longer grows with the run (#COR-1431 heap OOM).
+    // Regression: evented must not accumulate per-completed-step history in the
+    // running write. Pre-fix it held one `accumulatedSteps` copy per completed
+    // step (9 at both 4 and 8 iterations); post-fix only the active step's
+    // transient copies remain, matching the default engine's order (COR-1431).
     expect(eventedLarge.maxRunningAccumulatedSteps).toBeLessThanOrEqual(defaultLarge.maxRunningAccumulatedSteps + 3);
     expect(eventedLarge.maxDuplicatesPerWrite).toBeLessThanOrEqual(defaultLarge.maxDuplicatesPerWrite + 2);
 
-    // That constant must not grow with the number of iterations — the essence
-    // of the unbounded-growth bug.
+    // ...and that constant must not grow with the number of iterations.
     expect(eventedLarge.maxRunningAccumulatedSteps).toBeLessThanOrEqual(eventedSmall.maxRunningAccumulatedSteps + 1);
     expect(eventedLarge.maxDuplicatesPerWrite).toBeLessThanOrEqual(eventedSmall.maxDuplicatesPerWrite + 2);
   }, 240000);

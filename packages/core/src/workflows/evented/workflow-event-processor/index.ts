@@ -3030,16 +3030,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults = newStepResults;
       }
 
-      // The merge write above bypasses the workflow's `pruneSnapshot` hook (the
-      // evented engine persists step results with `updateWorkflowResults`, which
-      // only merges the new record into the stored row). Without re-applying the
-      // hook a completed step keeps its full `payload` and `output` — including
-      // the durable loop's `accumulatedSteps`/`messageListState` — so the stored
-      // row grows with every step and, since each merge re-reads and re-serializes
-      // the whole row, so does the heap cost of the next one. Prune after each
-      // step so terminal history is stripped here exactly as the default engine
-      // does on every `persistStepUpdate` (COR-1431). Parallel branches are
-      // pruned once, by `aggregateBranchResults`, when all siblings finish.
+      // This merge write bypasses the workflow's `pruneSnapshot` hook, so a
+      // completed step would keep its full `payload`/`output` — for the durable
+      // loop, `accumulatedSteps`/`messageListState` — and the stored row (which
+      // every merge re-reads and re-serializes) would grow with each step until
+      // the process OOMs (COR-1431). Prune here as the default engine does on
+      // each `persistStepUpdate`; parallel branches are pruned once instead, by
+      // `aggregateBranchResults`.
       if (!isParallelBranch) {
         await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
       }
