@@ -118,7 +118,7 @@ describe('Environment settings', () => {
     expect(screen.queryByText('Configured')).not.toBeInTheDocument();
     expect(screen.getByText('Last build failed')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Clone acme/link-web into every session' })).toBeChecked();
-    expect(screen.getAllByText('Included in environment')).toHaveLength(2);
+    expect(screen.getAllByText('Included')).toHaveLength(2);
 
     // The card header opens its commands and the last failure; the switch inside it does not.
     const user = userEvent.setup();
