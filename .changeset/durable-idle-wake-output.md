@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed `sendSignal(..., { ifIdle: { behavior: 'wake' } })` on a DurableAgent so `accepted.output` is a `MastraModelOutput`, matching its type and the regular Agent. Previously it returned the durable stream wrapper, so `await accepted.output.text` was `undefined`.
+Fixed `sendSignal(..., { ifIdle: { behavior: 'wake' } })` on a DurableAgent so the accepted result's `output.text` now resolves to the generated text, the same as with a regular Agent. Previously it resolved to `undefined`.
 
 ```ts
 const { accepted } = durableAgent.sendSignal(signal, { resourceId, threadId, ifIdle: { behavior: 'wake' } });
