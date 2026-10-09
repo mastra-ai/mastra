@@ -64,9 +64,40 @@ export const TABLE_THREAD_STATE = 'mastra_thread_state';
 export const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 export const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
 export const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
+/**
+ * @deprecated Curation cursors were removed and Knowledge no longer creates this table. Kept so adapters built
+ * against earlier Core versions still resolve the export.
+ */
 export const TABLE_KNOWLEDGE_CURSORS = 'mastra_knowledge_cursors';
 export const TABLE_KNOWLEDGE_ACTIVITY = 'mastra_knowledge_activity';
 export const TABLE_KNOWLEDGE_SEMANTIC_OUTBOX = 'mastra_knowledge_semantic_outbox';
+export const TABLE_KNOWLEDGE_NODE_SCOPES = 'mastra_knowledge_node_scopes';
+export const TABLE_KNOWLEDGE_RECORD_SCOPES = 'mastra_knowledge_record_scopes';
+export const TABLE_KNOWLEDGE_SCOPE_GRANTS = 'mastra_knowledge_scope_grants';
+export const TABLE_KNOWLEDGE_ACCESS_STATE = 'mastra_knowledge_access_state';
+export const TABLE_KNOWLEDGE_SCOPE_ADDRESSES = 'mastra_knowledge_scope_addresses';
+export const TABLE_KNOWLEDGE_NODE_ADDRESSES = 'mastra_knowledge_node_addresses';
+export const TABLE_KNOWLEDGE_IMPORT_STATE = 'mastra_knowledge_import_state';
+export const TABLE_KNOWLEDGE_IMPORT_RUNS = 'mastra_knowledge_import_runs';
+export const TABLE_KNOWLEDGE_PROPOSALS = 'mastra_knowledge_proposals';
+
+/** Physical tables owned by one Knowledge domain. Explicit reset may target only this list. */
+export const KNOWLEDGE_TABLE_NAMES = [
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_PROPOSALS,
+] as const;
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -111,7 +142,6 @@ export type TABLE_NAMES =
   | typeof TABLE_KNOWLEDGE_NODES
   | typeof TABLE_KNOWLEDGE_RECORDS
   | typeof TABLE_KNOWLEDGE_MENTIONS
-  | typeof TABLE_KNOWLEDGE_CURSORS
   | typeof TABLE_KNOWLEDGE_ACTIVITY
   | typeof TABLE_KNOWLEDGE_SEMANTIC_OUTBOX;
 
@@ -700,6 +730,10 @@ export const KNOWLEDGE_MENTIONS_SCHEMA: Record<string, StorageColumn> = {
   recordId: { type: 'text', nullable: false },
 };
 
+/**
+ * @deprecated Curation cursors were removed and Knowledge no longer creates this table. Kept so adapters built
+ * against earlier Core versions still resolve the export.
+ */
 export const KNOWLEDGE_CURSORS_SCHEMA: Record<string, StorageColumn> = {
   sourceThreadId: { type: 'text', nullable: false },
   agent: { type: 'text', nullable: false },
@@ -895,7 +929,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
   [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
   [TABLE_KNOWLEDGE_MENTIONS]: KNOWLEDGE_MENTIONS_SCHEMA,
-  [TABLE_KNOWLEDGE_CURSORS]: KNOWLEDGE_CURSORS_SCHEMA,
   [TABLE_KNOWLEDGE_ACTIVITY]: KNOWLEDGE_ACTIVITY_SCHEMA,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
 };
@@ -916,10 +949,6 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_KNOWLEDGE_MENTIONS]: {
     columns: KNOWLEDGE_MENTIONS_SCHEMA,
     compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
-  },
-  [TABLE_KNOWLEDGE_CURSORS]: {
-    columns: KNOWLEDGE_CURSORS_SCHEMA,
-    compositePrimaryKey: ['sourceThreadId', 'agent'],
   },
 };
 

@@ -86,7 +86,7 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
-  it('queues curation cursor writes behind a locked transaction on the same client', async () => {
+  it('queues Knowledge writes behind a locked transaction on the same client', async () => {
     const client = createClient({ url: 'file::memory:?cache=shared' });
     try {
       const store = new KnowledgeLibSQL({ client });
@@ -104,20 +104,17 @@ describe('KnowledgeLibSQL initialization', () => {
         await transaction.commit();
       });
 
-      let cursorAdvanced = false;
-      const advance = store
-        .advanceCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture', lastKnowledgeId: 'knowledge-1' })
-        .then(() => {
-          cursorAdvanced = true;
-        });
+      let nodeCreated = false;
+      const create = store.createNode({ name: 'Queued write', kind: 'task', scope: ['org:acme'] }).then(node => {
+        nodeCreated = true;
+        return node;
+      });
       await new Promise(resolve => setTimeout(resolve, 10));
-      expect(cursorAdvanced).toBe(false);
+      expect(nodeCreated).toBe(false);
 
       releaseLock();
-      await Promise.all([lockedWrite, advance]);
-      expect(await store.getCurationCursor({ sourceThreadId: 'thread-1', agent: 'capture' })).toEqual(
-        expect.objectContaining({ lastKnowledgeId: 'knowledge-1' }),
-      );
+      const [, node] = await Promise.all([lockedWrite, create]);
+      expect(await store.getNode(node.id)).toEqual(expect.objectContaining({ name: 'Queued write' }));
     } finally {
       client.close();
     }

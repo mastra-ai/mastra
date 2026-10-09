@@ -13,7 +13,6 @@ import {
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_NODES,
@@ -32,10 +31,10 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeNodesInput,
   QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
-  ListKnowledgeNodesInput,
   SearchKnowledgeInput,
   SearchKnowledgeResult,
   UpdateKnowledgeNodeInput,
@@ -141,12 +140,15 @@ function outboxFromDocument(row: Document): KnowledgeSemanticOutboxEntry {
   };
 }
 
+// Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
+const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
+  'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
+
 export class KnowledgeMongoDB extends KnowledgeStorage {
   static readonly MANAGED_COLLECTIONS = [
     TABLE_KNOWLEDGE_NODES,
     TABLE_KNOWLEDGE_RECORDS,
     TABLE_KNOWLEDGE_MENTIONS,
-    TABLE_KNOWLEDGE_CURSORS,
     TABLE_KNOWLEDGE_ACTIVITY,
     TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
   ] as const;
@@ -162,7 +164,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     const nodes = await this.#collection(TABLE_KNOWLEDGE_NODES);
     const knowledge = await this.#collection(TABLE_KNOWLEDGE_RECORDS);
     const mentions = await this.#collection(TABLE_KNOWLEDGE_MENTIONS);
-    const cursors = await this.#collection(TABLE_KNOWLEDGE_CURSORS);
     const activity = await this.#collection(TABLE_KNOWLEDGE_ACTIVITY);
     const outbox = await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX);
     await Promise.all([
@@ -172,7 +173,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       knowledge.createIndex({ sourceThreadId: 1, id: -1 }),
       mentions.createIndex({ sourceType: 1, sourceId: 1, recordId: 1 }, { unique: true }),
       mentions.createIndex({ recordId: 1, sourceType: 1, sourceId: 1 }),
-      cursors.createIndex({ sourceThreadId: 1, agent: 1 }, { unique: true }),
       activity.createIndex({ id: -1 }),
       outbox.createIndex({ idempotencyKey: 1 }, { unique: true }),
       outbox.createIndex({ status: 1, availableAt: 1, createdAt: 1 }),
@@ -600,40 +600,24 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return results.slice(0, limit);
   }
 
-  async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
-    const row = await (await this.#cursors()).findOne(input);
-    return row
-      ? {
-          sourceThreadId: row.sourceThreadId,
-          agent: row.agent,
-          lastKnowledgeId: row.lastKnowledgeId,
-          updatedAt: new Date(row.updatedAt),
-        }
-      : null;
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async getCurationCursor(_input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
-  async advanceCurationCursor(input: {
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async advanceCurationCursor(_input: {
     sourceThreadId: string;
     agent: string;
     lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor> {
-    const row = await (
-      await this.#cursors()
-    ).findOneAndUpdate(
-      { sourceThreadId: input.sourceThreadId, agent: input.agent },
-      {
-        $max: { lastKnowledgeId: input.lastKnowledgeId },
-        $set: { updatedAt: new Date() },
-        $setOnInsert: { sourceThreadId: input.sourceThreadId, agent: input.agent },
-      },
-      { upsert: true, returnDocument: 'after' },
-    );
-    return {
-      sourceThreadId: row!.sourceThreadId,
-      agent: row!.agent,
-      lastKnowledgeId: row!.lastKnowledgeId,
-      updatedAt: new Date(row!.updatedAt),
-    };
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
   async listActivity(input: {
@@ -758,9 +742,6 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
   #mentions() {
     return this.#collection(TABLE_KNOWLEDGE_MENTIONS);
-  }
-  #cursors() {
-    return this.#collection(TABLE_KNOWLEDGE_CURSORS);
   }
   #activityCollection() {
     return this.#collection(TABLE_KNOWLEDGE_ACTIVITY);

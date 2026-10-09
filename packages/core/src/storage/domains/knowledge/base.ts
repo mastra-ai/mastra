@@ -9,6 +9,138 @@ export type KnowledgeSemanticDocumentType = 'node' | 'record';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStorageCapabilities {
+  contractVersion: typeof KNOWLEDGE_STORAGE_CONTRACT_VERSION;
+  schemaVersion: 1 | typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION;
+  supportsV2: boolean;
+  supportsSchemaInspection: boolean;
+  supportsExplicitReset: boolean;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeSchemaInspection =
+  | { status: 'compatible'; schemaVersion: typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION }
+  | { status: 'uninitialized'; schemaVersion: null }
+  | { status: 'incompatible-reset-required'; schemaVersion: number | null; reason: string }
+  | { status: 'unavailable'; schemaVersion: null; reason: string };
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeSchemaSnapshot {
+  available: boolean;
+  tableNames: readonly string[];
+  schemaVersion?: number;
+  reason?: string;
+}
+
+/**
+ * Classifies an adapter-provided, read-only schema snapshot. Adapters own the physical probe; this
+ * helper owns version negotiation and never mutates the snapshot or backing store.
+ *
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export function inspectKnowledgeSchema(snapshot: KnowledgeSchemaSnapshot): KnowledgeSchemaInspection {
+  if (!snapshot.available) {
+    return {
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: snapshot.reason ?? 'The Knowledge storage adapter is unavailable.',
+    };
+  }
+  if (snapshot.tableNames.length === 0) return { status: 'uninitialized', schemaVersion: null };
+  if (snapshot.schemaVersion === KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+    return { status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION };
+  }
+  return {
+    status: 'incompatible-reset-required',
+    schemaVersion: snapshot.schemaVersion ?? null,
+    reason: snapshot.reason ?? 'Existing experimental Knowledge tables are not compatible with schema version 2.',
+  };
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeConcreteRole = 'readonly' | 'append' | 'edit' | 'owner';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeGrantRole = KnowledgeConcreteRole | 'mirror';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeScopeGrant {
+  scopeNodeId: string;
+  scopeRefId: string;
+  role: KnowledgeGrantRole;
+  canSuggest?: boolean;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeNodeScope {
+  nodeId: string;
+  scopeNodeId: string;
+  addedAt: Date;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeRecordScope {
+  recordId: string;
+  scopeNodeId: string;
+  addedAt: Date;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeScopeAddress {
+  address: string;
+  scopeNodeId: string;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeNodeAddress {
+  source: string;
+  address: string;
+  nodeId: string;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeImportState {
+  importerId: string;
+  binding: string;
+  key: string;
+  value: string;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeImportKind = 'static' | 'agentic';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeImportTriggerKind = 'cron' | 'webhook' | 'programmatic';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeImportRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeImportRun {
+  id: string;
+  importerId: string;
+  binding: string;
+  importKind: KnowledgeImportKind;
+  triggerKind: KnowledgeImportTriggerKind;
+  status: KnowledgeImportRunStatus;
+  error?: string;
+  transcriptThreadId?: string;
+  traceId?: string;
+  queuedAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export type KnowledgeProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflicted';
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeProposal {
+  id: string;
+  targetType: 'node' | 'record';
+  targetId: string;
+  expectedVersion: number;
+  operation: string;
+  payload: Record<string, unknown>;
+  scopes: string[];
+  status: KnowledgeProposalStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export type KnowledgeActivityAction =
   | 'node-created'
   | 'node-updated'
@@ -65,7 +197,9 @@ export interface KnowledgeMention {
   node: string;
 }
 
-/** @experimental Knowledge APIs are experimental and may change without notice. */
+/**
+ * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no cursor.
+ */
 export interface KnowledgeCurationCursor {
   sourceThreadId: string;
   agent: string;
@@ -81,6 +215,7 @@ export interface KnowledgeActivityEvent {
   recordId: string;
   scope: KnowledgeScope;
   sourceThreadId?: string;
+  importRunId?: string;
   createdAt: Date;
 }
 
@@ -266,6 +401,24 @@ export class KnowledgeNotFoundError extends Error {
   }
 }
 
+export class KnowledgeSchemaResetRequiredError extends Error {
+  readonly inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>;
+
+  constructor(inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>) {
+    super(`Knowledge schema reset required: ${inspection.reason}`);
+    this.name = 'KnowledgeSchemaResetRequiredError';
+    this.inspection = inspection;
+  }
+}
+
+export function assertKnowledgeSchemaCompatible(inspection: KnowledgeSchemaInspection): void {
+  if (inspection.status === 'compatible' || inspection.status === 'uninitialized') return;
+  if (inspection.status === 'incompatible-reset-required') {
+    throw new KnowledgeSchemaResetRequiredError(inspection);
+  }
+  throw new Error(`Knowledge schema inspection unavailable: ${inspection.reason}`);
+}
+
 const SCOPE_ORDER: Record<KnowledgeScopeLevel, number> = { org: 0, resource: 1, thread: 2 };
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 let lastUlidTime = -1;
@@ -436,10 +589,35 @@ export function knowledgeSemanticIdempotencyKey(
   return `${documentId}:${operation}:${version}`;
 }
 
+const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
+  'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
+
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export abstract class KnowledgeStorage extends StorageDomain {
   constructor() {
     super({ component: 'STORAGE', name: 'KNOWLEDGE' });
+  }
+
+  getCapabilities(): KnowledgeStorageCapabilities {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: 1,
+      supportsV2: false,
+      supportsSchemaInspection: false,
+      supportsExplicitReset: false,
+    };
+  }
+
+  async inspectSchema(): Promise<KnowledgeSchemaInspection> {
+    return {
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: 'This Knowledge storage adapter does not support v2 schema inspection.',
+    };
+  }
+
+  async dangerouslyReset(): Promise<void> {
+    throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
@@ -462,17 +640,31 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeRecord>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
-  abstract getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null>;
-  abstract advanceCurationCursor(input: {
-    sourceThreadId: string;
-    agent: string;
-    lastKnowledgeId: string;
-  }): Promise<KnowledgeCurationCursor>;
   abstract listActivity(input: {
     scope: KnowledgeScope;
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]>;
+
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async getCurationCursor(_input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
+  }
+
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async advanceCurationCursor(_input: {
+    sourceThreadId: string;
+    agent: string;
+    lastKnowledgeId: string;
+  }): Promise<KnowledgeCurationCursor> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
+  }
 
   abstract listSemanticOutbox(input?: {
     status?: KnowledgeSemanticOutboxEntry['status'];
