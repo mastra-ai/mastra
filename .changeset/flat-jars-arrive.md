@@ -2,4 +2,8 @@
 '@mastra/core': patch
 ---
 
-Fixed experimental durable and evented agents to interrupt reasoning-only requests when new messages or signals arrive, without cancelling the run or retaining discarded reasoning in history. Cancelled requests retry the same logical step without consuming maxSteps, advancing stepNumber, or contributing token usage. No separate interruption cap is imposed. Input processors finish instead of being cancelled, signals batch into the first request as before, and the cancelled attempt's model step and inference spans end with finish reason `interrupted`.
+Experimental durable and evented agents now restart a model request that has only produced reasoning when a new message or signal arrives, so the agent answers with the new input instead of finishing a stale response. This matches the default agent.
+
+- The restarted request keeps the same step: it doesn't use up `maxSteps` or add token usage, and the discarded reasoning stays out of history.
+- Input processors always finish; only the model request is cancelled.
+- In traces, the cancelled request's step and inference spans end with finish reason `interrupted`.

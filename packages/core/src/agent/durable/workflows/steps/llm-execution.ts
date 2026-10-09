@@ -474,11 +474,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const signalRegistry = globalRunRegistry.get(runId);
       const interruption = new AbortController();
       let interruptible = false;
+      signalRegistry?.stopStepSignalListener?.();
       const stopListening = signalRegistry?.subscribePendingSignals?.(() => {
         if (interruptible && !executionAbortSignalEarly?.aborted) {
           interruption.abort(new Error('Interrupted by a queued signal'));
         }
       });
+      if (signalRegistry) signalRegistry.stopStepSignalListener = stopListening;
       const throwIfInterrupted = () => {
         if (interruption.signal.aborted) throw interruption.signal.reason;
       };

@@ -1106,7 +1106,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       const queued = await agent.sendSignal({ type: 'user', contents: 'QUEUED_TIMEOUT_SIGNAL' }, scope);
       queuedSignalId = queued.signal.id;
       await queued.accepted;
-      expect(requestSignal?.aborted).toBe(true);
+      await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true));
       const drain = vi.fn(entry.drainPendingSignals);
       entry.drainPendingSignals = drain;
       await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2500 });
