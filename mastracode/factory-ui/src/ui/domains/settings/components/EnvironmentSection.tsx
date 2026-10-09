@@ -86,7 +86,7 @@ function EnvironmentBlocks({
       <SettingsSubsection
         scope="factory"
         title="Template"
-        description={`What every session boots from. ${providerLine(environment.sandbox.provider)}`}
+        description={`The template every session's sandbox starts from. ${providerLine(environment.sandbox.provider)}`}
       >
         <RepositoriesBlock
           repositories={environment.repositories}

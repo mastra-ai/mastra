@@ -113,16 +113,27 @@ describe('Environment settings', () => {
     const names = screen.getAllByText(/^acme\//).map(node => node.textContent);
     expect(names).toEqual(['acme/link-web', 'acme/link-api']);
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
-    expect(screen.getAllByRole('switch', { name: /Include .* in the environment/ })).toHaveLength(2);
-    expect(screen.getByText('Configured')).toBeInTheDocument();
-    expect(screen.getByText('Last build failed')).toBeInTheDocument();
-    expect(screen.queryByText('Unbuilt')).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Include acme/link-web in the environment' })).toBeChecked();
+    expect(screen.getAllByRole('switch', { name: /Clone .* into every session/ })).toHaveLength(2);
+    expect(screen.getByText('Setup OK')).toBeInTheDocument();
+    expect(screen.getByText('Setup failed')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Clone acme/link-web into every session' })).toBeChecked();
+    expect(screen.getAllByText('Cloned')).toHaveLength(2);
 
+    // The whole row toggles its details; the switch inside it does not.
+    const user = userEvent.setup();
     expect(screen.queryByText('pnpm build exited with 1')).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Show details for acme/link-api' }));
+    await user.click(screen.getByText('acme/link-api'));
     expect(screen.getByText('pnpm build exited with 1')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
+    expect(screen.getByRole('button', { name: 'Hide details for acme/link-api' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await user.click(screen.getByRole('switch', { name: 'Clone acme/link-api into every session' }));
+    expect(screen.getByRole('button', { name: 'Hide details for acme/link-api' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   });
 
   it('offers a drag handle per live repository and none for a dead link', async () => {
@@ -154,7 +165,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    await userEvent.setup().click(await screen.findByRole('switch', { name: 'Include acme/api in the environment' }));
+    await userEvent.setup().click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
 
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]?.repositories).toEqual([
@@ -190,9 +201,9 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    await user.click(await screen.findByRole('switch', { name: 'Include acme/api in the environment' }));
+    await user.click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
     expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Include acme/api in the environment' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Clone acme/api into every session' })).toBeChecked();
 
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     await user.clear(workdir);
@@ -207,7 +218,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText(/Sessions run on the Mastra platform\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Sandboxes run on the Mastra platform\./)).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2);
     expect(screen.getByText('vCPUs of the sandbox.')).toBeInTheDocument();
     const memory = screen.getByRole('spinbutton', { name: 'Memory (MB)' });
@@ -280,7 +291,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText(/Sessions run on a custom sandbox\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Sandboxes run on a custom sandbox\./)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
     expect(screen.getByText('This sandbox has no settings to tune.')).toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
@@ -308,7 +319,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText(/Sessions run on Docker\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Sandboxes run on Docker\./)).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Region' })).toHaveTextContent('eu');
     expect(screen.getByText('Mounts')).toBeInTheDocument();
     expect(screen.getByText('Unsupported setting type')).toBeInTheDocument();

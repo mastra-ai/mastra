@@ -28,9 +28,9 @@ const PROVIDER_LABELS: Record<string, string> = {
   none: 'no sandbox',
 };
 
-/** "Sessions run on E2B" for a known provider id, the raw id otherwise. */
+/** "Sandboxes run on E2B" for a known provider id, the raw id otherwise. */
 export function providerLine(provider: string): string {
-  return `Sessions run on ${PROVIDER_LABELS[provider] ?? provider}.`;
+  return `Sandboxes run on ${PROVIDER_LABELS[provider] ?? provider}.`;
 }
 
 function schemaProperties(schema: Record<string, unknown>): Array<[string, SettingSchema]> {
