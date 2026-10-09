@@ -2,6 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -23,9 +24,9 @@ import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from. The sandbox settings,
- * the ordered repositories with their setup and the workspace setup command
- * all live here.
+ * The Factory's environment: what every session's sandbox boots from. The
+ * Template section holds the ordered repositories and the workspace setup, the
+ * Advanced section the sandbox provider's own settings.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -103,38 +104,42 @@ function EnvironmentBlocks({
         () => false,
       );
 
+  const disabled = saveMutation.isPending;
+  const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
   return (
-    <div className="flex flex-col gap-8">
-      <Txt as="p" variant="meta" tone="faint">
-        {providerLine(environment.sandbox.provider)}
-      </Txt>
-      <SandboxBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
-      <RepositoriesBlock
-        repositories={environment.repositories}
-        providers={providers}
-        disabled={saveMutation.isPending}
-        onSave={save}
-      />
-      <WorkspaceSetupBlock value={environment.workspaceSetupCommand} disabled={saveMutation.isPending} onSave={save} />
-      {environment.sandbox.capabilities.builds.available && environment.buildTriggers && (
-        <BuildBlocks factoryId={factoryId} environment={environment} disabled={saveMutation.isPending} onSave={save} />
+    <div className="flex flex-col gap-10">
+      <EnvironmentPart title="Template">
+        <Txt as="p" variant="meta" tone="faint">
+          {providerLine(environment.sandbox.provider)}
+        </Txt>
+        <RepositoriesBlock
+          repositories={environment.repositories}
+          providers={providers}
+          disabled={disabled}
+          onSave={save}
+        />
+        <WorkspaceSetupBlock
+          workdir={environment.sandboxWorkdir}
+          command={environment.workspaceSetupCommand}
+          disabled={disabled}
+          onSave={save}
+        />
+      </EnvironmentPart>
+      {canBuild && (
+        <EnvironmentPart title="Builds">
+          <BuildBlocks factoryId={factoryId} environment={environment} />
+        </EnvironmentPart>
       )}
+      <EnvironmentPart title="Advanced">
+        {canBuild && <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />}
+        <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+      </EnvironmentPart>
     </div>
   );
 }
 
-/** Build status, triggers and history; mounted only when the sandbox can build. */
-function BuildBlocks({
-  factoryId,
-  environment,
-  disabled,
-  onSave,
-}: {
-  factoryId: string;
-  environment: FactoryEnvironmentPayload;
-  disabled: boolean;
-  onSave: (input: FactoryEnvironmentPatch) => Promise<boolean>;
-}) {
+/** Build status, Build now and history; mounted only when the sandbox can build. */
+function BuildBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
   const requestBuild = useRequestEnvironmentBuildMutation();
   const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);
   const history = environment.sandbox.capabilities.builds.history;
@@ -161,7 +166,6 @@ function BuildBlocks({
         requesting={requestBuild.isPending}
         onBuildNow={buildNow}
       />
-      <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={onSave} />
       {history && (
         <BuildHistoryBlock
           builds={buildsQuery.data}
@@ -175,5 +179,17 @@ function BuildBlocks({
         />
       )}
     </>
+  );
+}
+
+/** One titled part of the page: Template, Builds, Advanced. */
+export function EnvironmentPart({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-6">
+      <Txt as="h2" variant="subheading">
+        {title}
+      </Txt>
+      {children}
+    </section>
   );
 }

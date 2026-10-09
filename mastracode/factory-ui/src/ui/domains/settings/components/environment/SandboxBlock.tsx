@@ -40,10 +40,10 @@ function schemaProperties(schema: Record<string, unknown>): Array<[string, Setti
 }
 
 /**
- * The sandbox every session boots: its working directory plus the provider's
- * own settings, one row per property of the schema the route serves. Each row
- * commits its own PATCH; an empty field means the provider default (the
- * placeholder), never a value factory stores on the user's behalf.
+ * The provider's own sandbox settings, one row per property of the schema the
+ * route serves. Each row commits its own PATCH; an empty field means the
+ * provider default (the placeholder), never a value factory stores on the
+ * user's behalf. A provider with nothing to tune says so.
  */
 export function SandboxBlock({
   environment,
@@ -55,34 +55,30 @@ export function SandboxBlock({
   onSave: SaveEnvironment;
 }) {
   const saveSetting = (key: string, value: unknown | null) => onSave({ settings: { [key]: value } });
+  const properties = schemaProperties(environment.sandbox.settingsSchema);
   return (
     <div className="flex flex-col gap-2">
       <Txt as="h3" variant="label">
         Sandbox
       </Txt>
-      <SettingsContainer>
-        <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
-          <div className="w-full lg:max-w-96">
-            <CommittedInput
-              label="Working directory"
-              placeholder="/workspace"
-              value={environment.sandboxWorkdir ?? ''}
+      {properties.length === 0 ? (
+        <Txt as="p" variant="meta" tone="faint">
+          This sandbox has no settings to tune.
+        </Txt>
+      ) : (
+        <SettingsContainer>
+          {properties.map(([key, schema]) => (
+            <SettingRow
+              key={key}
+              name={key}
+              schema={schema}
+              value={environment.settings[key]}
               disabled={disabled}
-              onCommit={raw => onSave({ sandboxWorkdir: raw || null })}
+              onCommit={value => saveSetting(key, value)}
             />
-          </div>
-        </SettingsRow>
-        {schemaProperties(environment.sandbox.settingsSchema).map(([key, schema]) => (
-          <SettingRow
-            key={key}
-            name={key}
-            schema={schema}
-            value={environment.settings[key]}
-            disabled={disabled}
-            onCommit={value => saveSetting(key, value)}
-          />
-        ))}
-      </SettingsContainer>
+          ))}
+        </SettingsContainer>
+      )}
     </div>
   );
 }

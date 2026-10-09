@@ -3,13 +3,18 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
-/** One command that runs in the working directory after every repository is cloned and set up. */
+/**
+ * Where the repositories are cloned and the one command that runs there after
+ * every repository is cloned and set up.
+ */
 export function WorkspaceSetupBlock({
-  value,
+  workdir,
+  command,
   disabled,
   onSave,
 }: {
-  value: string | null;
+  workdir: string | null;
+  command: string | null;
   disabled: boolean;
   onSave: SaveEnvironment;
 }) {
@@ -19,6 +24,17 @@ export function WorkspaceSetupBlock({
         Workspace setup
       </Txt>
       <SettingsContainer>
+        <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
+          <div className="w-full lg:max-w-96">
+            <CommittedInput
+              label="Working directory"
+              placeholder="/workspace"
+              value={workdir ?? ''}
+              disabled={disabled}
+              onCommit={raw => onSave({ sandboxWorkdir: raw || null })}
+            />
+          </div>
+        </SettingsRow>
         <SettingsRow
           label="Command"
           description="Runs in the working directory after every repository's setup, while the template builds."
@@ -26,7 +42,7 @@ export function WorkspaceSetupBlock({
           <div className="w-full lg:max-w-96">
             <CommittedInput
               label="Workspace setup command"
-              value={value ?? ''}
+              value={command ?? ''}
               placeholder="e.g. pnpm install"
               disabled={disabled}
               onCommit={next => onSave({ workspaceSetupCommand: next || null })}

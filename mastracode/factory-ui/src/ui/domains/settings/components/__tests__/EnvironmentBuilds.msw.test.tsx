@@ -68,6 +68,7 @@ describe('Environment builds', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sandbox' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /build now/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Build triggers' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Build history' })).toBeNull();
   });
