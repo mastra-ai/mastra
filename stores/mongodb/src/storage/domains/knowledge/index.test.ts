@@ -294,6 +294,144 @@ describe('MongoDB canonical Knowledge support', () => {
   });
 });
 
+describe('KnowledgeMongoDB published v1 layout', () => {
+  const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+  // Index sets captured from published @mastra/mongodb v1 and from builds of main (ecdc523f008).
+  const mainIndexes: Record<string, [Record<string, 1 | -1>, boolean?][]> = {
+    mastra_knowledge_activity: [[{ id: -1 }], [{ scopeKey: 1, id: -1 }]],
+    mastra_knowledge_mentions: [
+      [{ sourceType: 1, sourceId: 1, recordId: 1 }, true],
+      [{ recordId: 1, sourceType: 1, sourceId: 1 }],
+    ],
+    mastra_knowledge_nodes: [
+      [{ type: 1, scopeKey: 1, canonicalName: 1 }, true],
+      [{ scopeKey: 1, type: 1 }],
+      [{ type: 1, canonicalName: 1 }],
+    ],
+    mastra_knowledge_records: [[{ node: 1, id: -1 }], [{ sourceThreadId: 1, id: -1 }], [{ scopeKey: 1, id: -1 }]],
+    mastra_knowledge_semantic_outbox: [[{ idempotencyKey: 1 }, true], [{ status: 1, availableAt: 1, createdAt: 1 }]],
+  };
+  const publishedIndexes: typeof mainIndexes = {
+    ...Object.fromEntries(
+      Object.entries(mainIndexes).map(([name, indexes]) => [
+        name,
+        indexes.filter(
+          ([key]) =>
+            !(
+              JSON.stringify(key) === '{"scopeKey":1,"id":-1}' || JSON.stringify(key) === '{"type":1,"canonicalName":1}'
+            ),
+        ),
+      ]),
+    ),
+    mastra_knowledge_cursors: [[{ sourceThreadId: 1, agent: 1 }, true]],
+  };
+
+  async function withV1Database(
+    indexes: typeof mainIndexes,
+    run: (context: {
+      client: MongoClient;
+      dbName: string;
+      isolated: ReturnType<typeof resolveMongoDBConfig>;
+    }) => Promise<void>,
+  ): Promise<void> {
+    const dbName = `knowledge-v1-${randomUUID()}`;
+    const isolated = resolveMongoDBConfig({ uri, dbName });
+    const client = new MongoClient(uri);
+    try {
+      const db = client.db(dbName);
+      for (const [name, specs] of Object.entries(indexes)) {
+        await db.createCollection(name);
+        for (const [key, unique] of specs) await db.collection(name).createIndex(key, unique ? { unique } : {});
+      }
+      await db
+        .collection(TABLE_KNOWLEDGE_NODES)
+        .insertOne({ id: 'legacy', type: 'node', scopeKey: 'legacy', canonicalName: 'legacy' });
+      await db.collection('mastra_threads').insertOne({ id: 'kept' });
+      await run({ client, dbName, isolated });
+    } finally {
+      await client.db(dbName).dropDatabase();
+      await client.close();
+      await isolated.close();
+    }
+  }
+
+  async function layout(client: MongoClient, dbName: string): Promise<string[]> {
+    const db = client.db(dbName);
+    const objects: string[] = [];
+    for (const info of await db.listCollections().toArray()) {
+      objects.push(`${info.type}:${info.name}`);
+      if (info.type === 'collection') {
+        for (const index of await db.collection(info.name).indexes())
+          objects.push(`${info.name}#${JSON.stringify(index.key)}`);
+      }
+    }
+    return objects.sort();
+  }
+
+  async function expectUntouched(
+    client: MongoClient,
+    dbName: string,
+    isolated: ReturnType<typeof resolveMongoDBConfig>,
+  ) {
+    const before = await layout(client, dbName);
+    await expect(new KnowledgeMongoDB({ connector: isolated }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+    expect(await layout(client, dbName)).toEqual(before);
+    expect(await client.db(dbName).collection(TABLE_KNOWLEDGE_NODES).countDocuments({ id: 'legacy' })).toBe(1);
+  }
+
+  it.each([
+    ['the layout releases built from main created', mainIndexes],
+    ['the published v1 layout', publishedIndexes],
+  ])('replaces %s, discarding its documents and keeping other storage', async (_name, indexes) => {
+    await withV1Database(indexes, async ({ client, dbName, isolated }) => {
+      await new KnowledgeMongoDB({ connector: isolated }).init();
+      await new KnowledgeMongoDB({ connector: isolated }).init();
+
+      const db = client.db(dbName);
+      expect(await db.collection(TABLE_KNOWLEDGE_SCHEMA).findOne({ id: 'canonical' })).toMatchObject({
+        version: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      });
+      expect(await db.collection(TABLE_KNOWLEDGE_NODES).countDocuments()).toBe(0);
+      const objects = await layout(client, dbName);
+      expect(objects).not.toContain('collection:mastra_knowledge_cursors');
+      expect(objects).not.toContain('mastra_knowledge_nodes#{"type":1,"scopeKey":1,"canonicalName":1}');
+      expect(await db.collection('mastra_threads').countDocuments({ id: 'kept' })).toBe(1);
+    });
+  });
+
+  it('finishes a replacement interrupted after dropping some v1 collections', async () => {
+    const { mastra_knowledge_records, mastra_knowledge_semantic_outbox } = mainIndexes;
+    await withV1Database(
+      { mastra_knowledge_records, mastra_knowledge_semantic_outbox },
+      async ({ client, dbName, isolated }) => {
+        await new KnowledgeMongoDB({ connector: isolated }).init();
+        expect(await client.db(dbName).collection(TABLE_KNOWLEDGE_SCHEMA).countDocuments({ id: 'canonical' })).toBe(1);
+      },
+    );
+  });
+
+  it('leaves a v1 layout with an unfamiliar index untouched', async () => {
+    await withV1Database(mainIndexes, async ({ client, dbName, isolated }) => {
+      await client.db(dbName).collection(TABLE_KNOWLEDGE_NODES).createIndex({ version: 1 });
+      await expectUntouched(client, dbName, isolated);
+    });
+  });
+
+  it('leaves a v1 layout beside a canonical collection untouched', async () => {
+    await withV1Database(mainIndexes, async ({ client, dbName, isolated }) => {
+      await client.db(dbName).collection(TABLE_KNOWLEDGE_RECORD_SCOPES).insertOne({ recordId: 'r', scopeNodeId: 's' });
+      await expectUntouched(client, dbName, isolated);
+    });
+  });
+
+  it('leaves a v1 layout that a view depends on untouched', async () => {
+    await withV1Database(mainIndexes, async ({ client, dbName, isolated }) => {
+      await client.db(dbName).createCollection('host_report', { viewOn: TABLE_KNOWLEDGE_NODES, pipeline: [] });
+      await expectUntouched(client, dbName, isolated);
+    });
+  });
+});
+
 afterAll(async () => {
   const client = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0');
   try {
