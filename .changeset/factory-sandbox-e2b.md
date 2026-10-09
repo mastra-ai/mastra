@@ -5,6 +5,7 @@
 Added `E2BFactorySandbox`, which plugs E2B into Mastra Factory as the sandbox provider. Factory gets one sandbox per session, a repository template it can build ahead of the first session, and user-tunable settings.
 
 ```ts
+import { MastraFactory } from '@mastra/factory';
 import { E2BFactorySandbox } from '@mastra/e2b';
 
 new MastraFactory({
