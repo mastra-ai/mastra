@@ -3908,7 +3908,14 @@ export class DurableAgent<
             await workflowExecution;
           }
         } finally {
-          cleanup();
+          // Keep the run's pubsub topic for `cleanupTimeoutMs` so callers can
+          // replay the recovered run with `observe(runId)`, matching the
+          // auto-cleanup window of `stream()` and `recover()`.
+          if (this.#cleanupTimeoutMs === 0) {
+            cleanup();
+          } else {
+            setTimeout(cleanup, this.#cleanupTimeoutMs).unref?.();
+          }
         }
         if (runError) throw runError;
         recovered.push({ runId: targetRunId, status: 'success' });

@@ -267,6 +267,39 @@ describe('DurableAgent.recoverActiveRuns', () => {
     expect(bad?.error?.message).toBe('boom-run-bad');
   });
 
+  it('defers cleanup of a recovered run by cleanupTimeoutMs so observe() can replay it', async () => {
+    await seed(store, makeSnapshot('run-1', 'running', { agentId: 'agent-A', threadId: 't', resourceId: 'r' }), 'r');
+    const cleanup = vi.fn();
+    vi.spyOn(agent, 'recover').mockResolvedValue({ cleanup } as any);
+    vi.useFakeTimers();
+    try {
+      const { succeeded } = await agent.recoverActiveRuns();
+      expect(succeeded).toBe(1);
+      expect(cleanup).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(agent.cleanupTimeoutMs);
+      expect(cleanup).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cleans up a recovered run immediately when cleanupTimeoutMs is 0', async () => {
+    const baseAgent = new Agent({ id: 'agent-Z', name: 'agent-Z', instructions: 'x', model: makeMockModel() });
+    const zeroStore = new InMemoryStore();
+    const zeroAgent = createDurableAgent({ agent: baseAgent, cleanupTimeoutMs: 0 });
+    void new Mastra({ agents: { 'agent-Z': zeroAgent as any }, storage: zeroStore });
+    await seed(
+      zeroStore,
+      makeSnapshot('run-z', 'running', { agentId: 'agent-Z', threadId: 't', resourceId: 'r' }),
+      'r',
+    );
+    const cleanup = vi.fn();
+    vi.spyOn(zeroAgent, 'recover').mockResolvedValue({ cleanup } as any);
+
+    await zeroAgent.recoverActiveRuns();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
   it('restarts a specific run when `runId` is given and skips discovery', async () => {
     // Both snapshots are seeded so `recover()` can load the input for either
     // run, but the explicit runId option must prevent `discovered` from being
