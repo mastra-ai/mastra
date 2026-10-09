@@ -779,7 +779,7 @@ describe('ProjectRoutes', () => {
           capabilities: { template: false, builds: { available: false, history: false } },
         },
         settings: {},
-        sandboxWorkdir: null,
+        sandboxWorkingDirectory: null,
         workspaceSetupCommand: null,
         activeTemplateId: null,
         activeTemplateHeads: null,
@@ -805,7 +805,7 @@ describe('ProjectRoutes', () => {
       ]);
 
       const updated = await patch(app, project.id, {
-        sandboxWorkdir: '/home/user',
+        sandboxWorkingDirectory: '/home/user',
         settings: { cpuCount: 8 },
         workspaceSetupCommand: 'pnpm -r build',
         repositories: [
@@ -817,7 +817,7 @@ describe('ProjectRoutes', () => {
       expect(updated.status).toBe(200);
       const after = (await updated.json()) as { environment: Record<string, unknown> };
       expect(after.environment).toMatchObject({
-        sandboxWorkdir: '/home/user',
+        sandboxWorkingDirectory: '/home/user',
         settings: { cpuCount: 8 },
         workspaceSetupCommand: 'pnpm -r build',
       });
@@ -972,7 +972,7 @@ describe('ProjectRoutes', () => {
       const refused = await patch(app, project.id, { settings: { cpuCount: 2 } });
       expect(refused.status).toBe(400);
       expect(await refused.json()).toEqual({ error: 'no_sandbox' });
-      expect((await patch(app, project.id, { sandboxWorkdir: '/home/user' })).status).toBe(200);
+      expect((await patch(app, project.id, { sandboxWorkingDirectory: '/home/user' })).status).toBe(200);
     });
 
     it('rejects invalid payloads without writing anything', async () => {
@@ -983,7 +983,7 @@ describe('ProjectRoutes', () => {
         {},
         { settings: 'cpu' },
         { settings: { cpuCount: 'two' } },
-        { sandboxWorkdir: 'relative/path' },
+        { sandboxWorkingDirectory: 'relative/path' },
         { repositories: [{ projectRepositoryId: links[0]!.id, position: 2 }] },
         // A reorder that lists only some of the project's links.
         {

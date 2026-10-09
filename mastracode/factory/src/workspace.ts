@@ -490,7 +490,7 @@ export async function resolveProjectEnvironment(
       teardownCommand: link.teardownCommand ?? undefined,
     });
   }
-  const workdir = project.sandboxWorkdir?.trim();
+  const workdir = project.sandboxWorkingDirectory?.trim();
   return {
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
