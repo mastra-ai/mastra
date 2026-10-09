@@ -100,26 +100,24 @@ describe('PricingRegistry.getGlobal refresh', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('refreshes once per missing model, and at most once an hour', async () => {
+  it('refreshes on a missing model at most once an hour, even if the last refresh failed', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     writeCache(modelsDevToPricingRows(catalog()), 'W/"v1"', 0);
+    fetchMock.mockImplementationOnce(() => Promise.reject(new TypeError('fetch failed')));
     const Registry = await loadRegistry();
     const registry = Registry.getGlobal()!;
 
     registry.get({ provider: 'openai', model: 'missing-a' });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(Registry.getGlobal()).not.toBe(registry));
-
-    const refreshed = Registry.getGlobal()!;
-    refreshed.get({ provider: 'openai', model: 'missing-a' });
-    refreshed.get({ provider: 'openai', model: 'missing-b' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    registry.get({ provider: 'openai', model: 'missing-a' });
+    registry.get({ provider: 'openai', model: 'missing-b' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     vi.setSystemTime(Date.now() + 61 * 60 * 1000);
-    refreshed.get({ provider: 'openai', model: 'missing-a' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    refreshed.get({ provider: 'openai', model: 'missing-b' });
+    registry.get({ provider: 'openai', model: 'missing-a' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(Registry.getGlobal()).not.toBe(registry));
   });
 
   it.each([

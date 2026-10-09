@@ -73,7 +73,6 @@ let refreshedAt = 0;
 let lastRefreshAttemptAt = 0;
 let refreshEtag: string | undefined;
 let refreshInFlight = false;
-const refreshedMissKeys = new Set<string>();
 
 export class PricingRegistry {
   constructor(private readonly pricingModels: Map<string, PricingModel>) {}
@@ -112,10 +111,9 @@ export class PricingRegistry {
       }
     }
 
-    // A model with no price may be newer than the pricing in use. One refresh per missing model.
-    const missKey = makePricingKey(args);
-    if (this === globalRegistry && !refreshedMissKeys.has(missKey) && refreshGlobalPricing()) {
-      refreshedMissKeys.add(missKey);
+    // A model with no price may be newer than the pricing in use.
+    if (this === globalRegistry) {
+      refreshGlobalPricing();
     }
     return null;
   }
