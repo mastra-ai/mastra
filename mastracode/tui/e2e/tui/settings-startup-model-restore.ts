@@ -18,7 +18,6 @@ export const settingsStartupModelRestoreScenario = {
       skippedAt: null,
       version: 1,
       modePackId: packId,
-      quietModePreferenceSelected: true,
     };
     settings.customModelPacks = [
       {

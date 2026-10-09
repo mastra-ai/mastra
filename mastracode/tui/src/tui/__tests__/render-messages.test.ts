@@ -422,8 +422,7 @@ describe('addUserMessage', () => {
 
   it('truncates notifications in quiet mode to the tool preview line limit', () => {
     const state = createState();
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 2;
+    state.previewLines = 2;
     const longMessage = Array.from({ length: 6 }, (_, i) => `detail line ${i + 1}`).join('\n');
 
     addUserMessage(
@@ -476,8 +475,7 @@ describe('addUserMessage', () => {
 
   it('keeps the quiet notification ellipsis inside the terminal width', () => {
     const state = createState();
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 1;
+    state.previewLines = 1;
     // A single long word wraps into lines that fill the content width exactly.
     const longMessage = 'x'.repeat(200);
 
@@ -550,8 +548,7 @@ describe('addUserMessage', () => {
 
   it('keeps background completions to one line in quiet mode and expands them in full', () => {
     const state = createState();
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 1;
+    state.previewLines = 1;
     const longMessage = Array.from({ length: 4 }, (_, i) => `result line ${i + 1}`).join('\n');
 
     addUserMessage(
@@ -1057,9 +1054,9 @@ describe('addUserMessage', () => {
 
     const collapsed = stripAnsi((component as ScheduleFireComponent).render(100).join('\n'));
     expect(collapsed).toContain('⏱ schedule 0f75d166 · every 5m · run ./check.sh · exit 3 · created by agent');
-    expect(collapsed).toContain('line 3');
-    expect(collapsed).not.toContain('line 4');
-    expect(collapsed).toContain('… 2 more lines (ctrl+e to expand)');
+    expect(collapsed).toContain('line 1');
+    expect(collapsed).not.toContain('line 2');
+    expect(collapsed).toContain('… 4 more lines (ctrl+e to expand)');
     expect(collapsed).not.toContain('steer');
 
     (component as ScheduleFireComponent).setExpanded(true);
@@ -1070,8 +1067,7 @@ describe('addUserMessage', () => {
 
   it('trims schedule fire prompts to the quiet preview limit in quiet mode', () => {
     const state = createState();
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 1;
+    state.previewLines = 1;
     addUserMessage(
       state,
       createUserMessage('first\nsecond\nthird', 'signal-q', { source: 'schedule', scheduleId: 'abcdef1234' }),
@@ -1085,8 +1081,7 @@ describe('addUserMessage', () => {
 
   it('shows a schedule fire line instead of hiding it behind a one-line hint', () => {
     const state = createState();
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 0;
+    state.previewLines = 0;
     addUserMessage(
       state,
       createUserMessage('test test', 'signal-one', { source: 'schedule', scheduleId: 'abcdef1234' }),
@@ -1381,8 +1376,8 @@ describe('renderExistingMessages tools', () => {
       .render(120)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('backgroundCompletion');
-    expect(rendered).toContain('render-messages.ts:534');
+    // The compact search row counts the authoritative result rather than a placeholder.
+    expect(rendered).toContain('backgroundCompletion (1 results)');
     expect(rendered).toContain('✓ background · task-result-1');
     expect(rendered).toContain('search_content completed in background');
     expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
@@ -1445,7 +1440,8 @@ describe('renderExistingMessages tools', () => {
         .join('\n')
         .replace(/\x1b\[[0-9;]*m/g, '');
       expect(rendered.includes('◌ background · task-1')).toBe(enabled === true);
-      expect(rendered.includes('Background task started')).toBe(enabled !== true);
+      // The compact view row names the file either way; only the opted-in row is a background row.
+      expect(rendered).toContain('▐view▌package.json▌');
     },
   );
 });
@@ -1461,7 +1457,6 @@ describe('renderExistingMessages subagents', () => {
       isError: false,
     });
     const state = createState();
-    state.quietMode = true;
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
@@ -1515,7 +1510,6 @@ describe('renderExistingMessages subagents', () => {
       },
     ]);
     const state = createState();
-    state.quietMode = true;
     state.pluginManager = {
       getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria', modelId: 'openai/gpt-5.5' })),
     } as unknown as TUIState['pluginManager'];
@@ -1588,7 +1582,8 @@ describe('renderExistingMessages subagents', () => {
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(collapsed).toContain('background · task-plugin-1');
-    expect(collapsed).not.toContain('Authoritative Alexandria audit');
+    // Completed subagents replay expanded, so the authoritative result is visible.
+    expect(collapsed).toContain('Authoritative Alexandria audit');
 
     subagent.setExpanded(true);
     const expanded = subagent
@@ -1709,7 +1704,6 @@ describe('renderExistingMessages subagents', () => {
       },
     ]);
     const state = createState();
-    state.quietMode = true;
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },

@@ -20,7 +20,6 @@ export const loginSeedsOmDefaultScenario = {
       skippedAt: null,
       version: 1,
       omPackId: null,
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,

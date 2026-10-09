@@ -245,7 +245,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -333,10 +332,8 @@ export interface GlobalSettings {
     thinkingLevel: ThinkingLevelSetting;
     /** Whether native subagents are enabled for Mastra Code TUI sessions. */
     subagentsEnabled: boolean;
-    /** When true, components like subagent output collapse to compact summaries on completion. */
-    quietMode: boolean;
-    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
-    quietModeMaxToolPreviewLines: number;
+    /** Maximum detail preview lines shown under compact tool calls (0-8). Set to 0 to hide previews. */
+    previewLines: number;
     /**
      * Default web search/extract provider. `auto` picks the first configured
      * provider key (Tavily, then Parallel). An explicit provider is only
@@ -443,7 +440,6 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -469,8 +465,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     subagentsEnabled: false,
-    quietMode: false,
-    quietModeMaxToolPreviewLines: 2,
+    previewLines: 2,
     webSearchProvider: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
@@ -503,7 +498,7 @@ const DEFAULTS: GlobalSettings = {
 };
 
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
-const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
+const PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
 function cloneSignalSettings(signals: SignalSettings): SignalSettings {
@@ -628,10 +623,21 @@ export function pruneRemovedAccountPreferences(settings: GlobalSettings, removed
   settings.models.packAccountPreferences = next;
 }
 
-function parseQuietModeMaxToolPreviewLines(value: unknown): number {
-  const rawValue =
-    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
-  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Resolves the preview line limit. `previewLines` wins when valid; otherwise the legacy
+ * `quietModeMaxToolPreviewLines` key (still written by older Mastra Code versions) is used.
+ */
+function parsePreviewLines(raw: Record<string, unknown>): number {
+  const value = isFiniteNumber(raw.previewLines)
+    ? raw.previewLines
+    : isFiniteNumber(raw.quietModeMaxToolPreviewLines)
+      ? raw.quietModeMaxToolPreviewLines
+      : DEFAULTS.preferences.previewLines;
+  return Math.min(PREVIEW_LINES_MAX, Math.max(0, Math.floor(value)));
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -643,7 +649,7 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     subagentsEnabled:
       typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
-    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+    previewLines: parsePreviewLines(raw),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
 }
@@ -710,26 +716,6 @@ function parseMcpDiscoverySettings(rawMcp: unknown): McpDiscoverySettings {
     claudeCodeGlobal: typeof raw.claudeCodeGlobal === 'boolean' ? raw.claudeCodeGlobal : DEFAULTS.mcp.claudeCodeGlobal,
     codexGlobal: typeof raw.codexGlobal === 'boolean' ? raw.codexGlobal : DEFAULTS.mcp.codexGlobal,
   };
-}
-
-function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
-  return Boolean(
-    rawOnboarding &&
-    typeof rawOnboarding === 'object' &&
-    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
-  );
-}
-
-function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
-  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
-  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
-}
-
-function getNewInstallDefaults(): GlobalSettings {
-  const settings = structuredClone(DEFAULTS);
-  settings.preferences.quietMode = true;
-  settings.onboarding.quietModePreferenceSelected = true;
-  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -1053,7 +1039,6 @@ function migrateFromAuth(settingsPath: string): boolean {
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -1148,7 +1133,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
+  if (!existsSync(filePath)) return rememberLoadedSettings(structuredClone(DEFAULTS));
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
@@ -1195,12 +1180,13 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       observability: parseObservabilitySettings(raw.observability),
     };
 
-    // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
-    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
+    // Persist the resolved preview line limit under its current key. Legacy quiet-mode keys are
+    // left untouched so older Mastra Code instances that are still running keep working.
+    if (!isFiniteNumber(raw.preferences?.previewLines)) {
       settingsChanged = true;
     }
+    // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;

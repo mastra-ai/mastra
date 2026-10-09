@@ -31,7 +31,6 @@ export const omAttachmentObservationScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...((typeof settings.models === 'object' && settings.models !== null ? settings.models : {}) as Record<
@@ -79,7 +78,8 @@ export const omAttachmentObservationScenario = {
     await runtime.waitForScreenText(/User submitted an image attachment for OM observation/i, terminal, 45_000);
     await runtime.waitForScreenText(/Current task:\s+OM attachment observation e2e complete/i, terminal, 45_000);
     await runtime.waitForScreenText(/Suggested response:\s+Continue the recovery loop/i, terminal, 45_000);
-    await runtime.waitForScreenText(/thread title updated:\s+Attachment observation/i, terminal, 45_000);
+    // The generated thread title shows in the status line; there is no in-chat title marker.
+    await runtime.waitForScreenText(/% · Attachment observation/i, terminal, 45_000);
     await runtime.waitForScreenText(/MC OM attachment chat response/i, terminal, 45_000);
     terminal.keyCtrlC();
   },

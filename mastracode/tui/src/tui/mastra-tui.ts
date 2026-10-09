@@ -60,7 +60,6 @@ import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { drainQueuedActionIfIdle } from './handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from './handlers/types.js';
-import { askModalQuestion } from './modal-question.js';
 import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
 import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
@@ -68,7 +67,6 @@ import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
-import { applyQuietModeToRenderedComponents } from './quiet-mode.js';
 import {
   addPendingUserMessage,
   addUserMessage,
@@ -264,8 +262,7 @@ export class MastraTUI {
 
     // Load user preferences
     const savedSettings = loadSettings();
-    this.state.quietMode = savedSettings.preferences.quietMode;
-    this.state.quietModeMaxToolPreviewLines = savedSettings.preferences.quietModeMaxToolPreviewLines;
+    this.state.previewLines = savedSettings.preferences.previewLines;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
@@ -864,8 +861,6 @@ export class MastraTUI {
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
-
-    await this.showQuietModePreferencePromptIfNeeded();
 
     if (startupResumeIssue?.kind === 'missing') {
       showError(
@@ -1744,67 +1739,6 @@ export class MastraTUI {
       return ob.version < ONBOARDING_VERSION;
     }
     return true;
-  }
-
-  private applyQuietModePreference(enabled: boolean, previewLineLimit = this.state.quietModeMaxToolPreviewLines): void {
-    const settings = loadSettings();
-    settings.preferences.quietMode = enabled;
-    settings.preferences.quietModeMaxToolPreviewLines = previewLineLimit;
-    settings.onboarding.quietModePreferenceSelected = true;
-    saveSettings(settings);
-
-    this.state.quietMode = enabled;
-    this.state.quietModeMaxToolPreviewLines = previewLineLimit;
-    this.state.taskProgress?.setQuietMode(enabled);
-
-    const color = this.state.session?.mode.resolve().metadata?.color;
-    const modeColor = typeof color === 'string' ? color : undefined;
-    applyQuietModeToRenderedComponents(this.state, enabled, previewLineLimit, modeColor);
-    flushRender(this.state);
-  }
-
-  private parseQuietPreviewLineAnswer(answer: string | null): number {
-    if (answer === 'None') return 0;
-    const match = answer?.match(/^(\d+)/);
-    return match ? Number(match[1]) : this.state.quietModeMaxToolPreviewLines;
-  }
-
-  async showQuietModePreferencePromptIfNeeded(): Promise<void> {
-    const settings = loadSettings();
-    if (settings.onboarding.quietModePreferenceSelected) return;
-
-    const answer = await askModalQuestion(this.state.ui, {
-      question:
-        'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
-      options: [
-        { label: 'Enable quiet mode', description: 'Use compact rendering by default' },
-        { label: 'Keep classic mode', description: 'Keep the current full rendering' },
-      ],
-      allowCustomResponse: false,
-      selectedOptionLabel: 'Enable quiet mode',
-      overlay: { maxHeight: '50%' },
-    });
-
-    if (answer !== 'Enable quiet mode') {
-      this.applyQuietModePreference(false);
-      return;
-    }
-
-    const previewLineAnswer = await askModalQuestion(this.state.ui, {
-      question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
-      options: [
-        { label: 'None', description: 'Hide tool previews and shell output' },
-        { label: '1 line', description: 'Show the latest preview line' },
-        { label: '2 lines', description: 'Default' },
-        { label: '4 lines', description: 'Show more streaming detail' },
-        { label: '8 lines', description: 'Show the most detail' },
-      ],
-      allowCustomResponse: false,
-      selectedOptionLabel: '2 lines',
-      overlay: { maxHeight: '50%' },
-    });
-
-    this.applyQuietModePreference(true, this.parseQuietPreviewLineAnswer(previewLineAnswer));
   }
 
   // ===========================================================================

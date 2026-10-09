@@ -62,7 +62,7 @@ function syncQuietThinkingStatus(ctx: EventHandlerContext, message?: MastraDBMes
         part => part.type === 'text' || part.type === 'reasoning' || part.type === 'tool-invocation',
       )
     : undefined;
-  const thinking = state.quietMode && state.hideThinkingBlock && latest?.type === 'reasoning';
+  const thinking = state.hideThinkingBlock && latest?.type === 'reasoning';
   if (!state.idleCounter || state.idleCounter.isThinking() === thinking) return;
   state.idleCounter.setThinking(thinking);
   // Redraw the Working row now so its label swaps without waiting for the next tick.
@@ -230,11 +230,9 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
         state.ui,
       );
       component.setExpanded(state.toolOutputExpanded);
-      if (state.quietMode) {
-        component.setCompactToolModeColor(getCurrentModeColor(ctx));
-        component.setQuietModeDisplay('quiet');
-        component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
-      }
+      component.setCompactToolModeColor(getCurrentModeColor(ctx));
+      component.setQuietModeDisplay('quiet');
+      component.setQuietPreviewLineLimit(state.previewLines);
       ctx.addChildBeforeFollowUps(component);
       state.pendingTools.set(tool.toolCallId, component);
       state.allToolComponents.push(component);

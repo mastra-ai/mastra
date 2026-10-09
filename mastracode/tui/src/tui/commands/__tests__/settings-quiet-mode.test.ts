@@ -1,4 +1,3 @@
-import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -27,7 +26,6 @@ vi.mock('../../overlay.js', () => ({ showModalOverlay: vi.fn() }));
 vi.mock('../../modal-question.js', () => ({ askModalQuestion: vi.fn() }));
 vi.mock('../api-keys.js', () => ({ handleApiKeysCommand: vi.fn() }));
 
-import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
 import { handleSettingsCommand } from '../settings.js';
@@ -39,8 +37,8 @@ function stripAnsi(text: string): string {
 
 function createSettings() {
   return {
-    onboarding: { quietModePreferenceSelected: true },
-    preferences: { thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2, webSearchProvider: 'auto' },
+    onboarding: {},
+    preferences: { thinkingLevel: 'off', previewLines: 2, webSearchProvider: 'auto' },
     storage: { backend: 'libsql', libsql: {}, pg: {} },
     signals: { experimentalGithubSignals: false, experimentalCrossAgentSignals: false },
     experimentalAgent: null,
@@ -56,18 +54,19 @@ function createCtx() {
     priority: 'high',
     kind: 'ci-status',
     status: 'delivered',
+    quietDisplayMode: 'quiet',
+    quietPreviewLineLimit: 2,
   });
   const summary = new NotificationSummaryComponent({
     message: '2 pending notifications',
     pending: 2,
     bySource: { github: 2 },
+    quietDisplayMode: 'quiet',
   });
   const ctx = {
     state: {
       ui: { requestRender: vi.fn(), hideOverlay: vi.fn() },
-      quietMode: false,
-      quietModeMaxToolPreviewLines: 2,
-      taskProgress: { setQuietMode: vi.fn() },
+      previewLines: 2,
       allToolComponents: [tool],
       messageComponentsById: new Map<string, unknown>([
         ['notification-1', notification],
@@ -87,41 +86,13 @@ function createCtx() {
   return { ctx, tool, notification, summary };
 }
 
-describe('/settings quiet mode callbacks', () => {
+describe('/settings preview lines callbacks', () => {
   beforeEach(() => {
     mocks.config = null;
     mocks.callbacks = null;
     mocks.loadSettings.mockReset();
     mocks.saveSettings.mockReset();
     mocks.loadSettings.mockImplementation(() => createSettings());
-  });
-
-  it('applies the quiet toggle to rendered tools, notifications, and summaries', async () => {
-    const { ctx, tool, notification, summary } = createCtx();
-    void handleSettingsCommand(ctx);
-    expect(mocks.callbacks).not.toBeNull();
-
-    const before = stripAnsi(notification.render(80).join('\n'));
-    expect(before).toContain('high · ci-status · delivered');
-    expect(before).toContain('line four');
-
-    mocks.callbacks.onQuietModeChange(true);
-
-    expect(ctx.state.quietMode).toBe(true);
-    expect(tool.setQuietModeDisplay).toHaveBeenCalledWith('quiet');
-    const quiet = stripAnsi(notification.render(80).join('\n'));
-    expect(quiet).not.toContain('high · ci-status · delivered');
-    expect(quiet).toContain('line two…');
-    expect(quiet).not.toContain('line three');
-    expect(stripAnsi(summary.render(80).join('\n'))).not.toContain('notification_inbox');
-
-    mocks.callbacks.onQuietModeChange(false);
-
-    expect(tool.setQuietModeDisplay).toHaveBeenLastCalledWith('normal');
-    const restored = stripAnsi(notification.render(80).join('\n'));
-    expect(restored).toContain('high · ci-status · delivered');
-    expect(restored).toContain('line four');
-    expect(stripAnsi(summary.render(80).join('\n'))).toContain('notification_inbox');
   });
 
   it('narrows an invalid persisted experimental agent value for the settings UI', () => {
@@ -142,42 +113,22 @@ describe('/settings quiet mode callbacks', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith('Experimental agent: evented (restart required)');
   });
 
-  it('applies the preview line limit to rendered notifications', async () => {
+  it('persists Preview lines and applies it to rendered tools and notifications without changing display mode', async () => {
     const { ctx, tool, notification } = createCtx();
     void handleSettingsCommand(ctx);
-    mocks.callbacks.onQuietModeChange(true);
+    expect(mocks.config).toEqual(expect.objectContaining({ previewLines: 2 }));
+    expect(stripAnsi(notification.render(80).join('\n'))).toContain('line two…');
 
-    mocks.callbacks.onQuietModeMaxToolPreviewLinesChange(3);
+    mocks.callbacks.onPreviewLinesChange(3);
 
-    expect(ctx.state.quietModeMaxToolPreviewLines).toBe(3);
+    expect(mocks.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ preferences: expect.objectContaining({ previewLines: 3 }) }),
+    );
+    expect(ctx.state.previewLines).toBe(3);
     expect(tool.setQuietPreviewLineLimit).toHaveBeenLastCalledWith(3);
+    expect(tool.setQuietModeDisplay).not.toHaveBeenCalled();
     const rendered = stripAnsi(notification.render(80).join('\n'));
     expect(rendered).toContain('line three…');
     expect(rendered).not.toContain('line four');
-  });
-  it('moves Thinking placeholders out of rendered assistant messages', async () => {
-    const { ctx } = createCtx();
-    const thinking = (id: string) =>
-      new AssistantMessageComponent(
-        {
-          id,
-          role: 'assistant',
-          createdAt: new Date(),
-          content: { format: 2, parts: [{ type: 'reasoning', reasoning: 'hmm' }] },
-        } as never,
-        true,
-      );
-    const chatContainer = new Container();
-    chatContainer.addChild(thinking('a1'));
-    chatContainer.addChild(thinking('a2'));
-    ctx.state.chatContainer = chatContainer;
-    const countThinking = () => stripAnsi(chatContainer.render(80).join('\n')).split('Thinking...').length - 1;
-    void handleSettingsCommand(ctx);
-
-    expect(countThinking()).toBe(2);
-    mocks.callbacks.onQuietModeChange(true);
-    expect(countThinking()).toBe(0);
-    mocks.callbacks.onQuietModeChange(false);
-    expect(countThinking()).toBe(2);
   });
 });

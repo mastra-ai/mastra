@@ -96,6 +96,8 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { legacySettingsNoPromptScenario } from './legacy-settings-no-prompt.js';
+import { legacySettingsUpgradeScenario } from './legacy-settings-upgrade.js';
 import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
@@ -160,6 +162,7 @@ import {
   pluginsScaffoldInstallToolScenario,
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
+import { previewLinesSettingsScenario } from './preview-lines-settings.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { profileCommandScenario } from './profile-command.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
@@ -168,7 +171,6 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
-import { quietSettingsScenario } from './quiet-settings.js';
 import { quietShellDescriptionScenario } from './quiet-shell-description.js';
 import { quietShellGroupedScenario } from './quiet-shell-grouped.js';
 import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
@@ -404,7 +406,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
   'cross-agent-settings': crossAgentSettingsScenario,
-  'quiet-settings': quietSettingsScenario,
+  'legacy-settings-no-prompt': legacySettingsNoPromptScenario,
+  'legacy-settings-upgrade': legacySettingsUpgradeScenario,
+  'preview-lines-settings': previewLinesSettingsScenario,
   'quiet-shell-description': quietShellDescriptionScenario,
   'quiet-shell-grouped': quietShellGroupedScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,

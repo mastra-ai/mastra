@@ -119,7 +119,6 @@ function createState(modeCount = 2) {
       editorContainer: { type: 'editor-container', addChild: vi.fn(child => editorChildren.push(child)) },
       editor,
       footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)), render: vi.fn(() => []) },
-      quietMode: true,
     } as any,
     uiChildren,
     editorChildren,

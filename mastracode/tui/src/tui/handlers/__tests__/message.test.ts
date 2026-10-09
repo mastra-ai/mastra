@@ -328,10 +328,9 @@ describe('handleMessageStart signals', () => {
     const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
     const lines = stripAnsi((component as NotificationComponent).render(100).join('\n')).split('\n');
-    // Left-bar card: title, details, message, every row on the bar.
+    // Left-bar card: title and message, every row on the bar, no details row.
     expect(lines).toEqual([
       expect.stringMatching(/^▎ notification from github/),
-      expect.stringMatching(/^▎ high · ci-status · delivered/),
       expect.stringMatching(/^▎ CI failed on main/),
     ]);
   });
@@ -647,7 +646,7 @@ describe('handleMessageUpdate assistant streaming', () => {
 
   it('flags quiet-mode thinking for the Working row while reasoning streams, and shows nothing in the chat', () => {
     const idleCounter = new IdleCounterComponent();
-    Object.assign(state, { quietMode: true, hideThinkingBlock: true, idleCounter });
+    Object.assign(state, { hideThinkingBlock: true, idleCounter });
     const updateStatusLine = vi.fn();
     Object.assign(ctx, { updateStatusLine });
     const chat = () => stripAnsi(state.chatContainer.render(80).join('\n'));
@@ -873,8 +872,7 @@ describe('handleMessageUpdate assistant streaming', () => {
   });
 
   it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {
-    state.quietMode = true;
-    state.quietModeMaxToolPreviewLines = 2;
+    state.previewLines = 2;
 
     handleMessageUpdate(
       ctx,

@@ -57,11 +57,9 @@ export const quietStreamingPreviewHeightScenario: McE2eScenario = {
   prepare({ appDataDir, projectDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
-    settings.onboarding = { ...settings.onboarding, quietModePreferenceSelected: true };
     settings.preferences = {
       ...settings.preferences,
-      quietMode: true,
-      quietModeMaxToolPreviewLines: 4,
+      previewLines: 4,
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 

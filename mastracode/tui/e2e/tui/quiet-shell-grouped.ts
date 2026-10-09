@@ -28,8 +28,7 @@ export const quietShellGroupedScenario: McE2eScenario = {
   prepare({ appDataDir, dbPath, projectDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
-    settings.onboarding = { ...settings.onboarding, quietModePreferenceSelected: true };
-    settings.preferences = { ...settings.preferences, quietMode: true, quietModeMaxToolPreviewLines: 0 };
+    settings.preferences = { ...settings.preferences, previewLines: 0 };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
     mkdirSync(join(projectDir, 'packages', 'core'), { recursive: true });

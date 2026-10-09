@@ -95,7 +95,7 @@ export const pruneRenderStateScenario: McE2eScenario = {
       );
     }
 
-    await runtime.waitForScreenText(/search_content/, terminal, 15_000);
+    await runtime.waitForScreenText(/▐grep▌/, terminal, 15_000);
     terminal.keyCtrlC();
 
     const pruneDeadline = Date.now() + 15_000;
@@ -114,7 +114,7 @@ export const pruneRenderStateScenario: McE2eScenario = {
     const retainedReferences = countTrackedReferences(tuiState, retainedTool);
     if (retainedReferences === 0) throw new Error('Expected newest tool identity to remain tracked after pruning');
 
-    if (!terminal.serialize().view.includes('search_content')) {
+    if (!terminal.serialize().view.includes('▐grep▌')) {
       throw new Error('Expected newest tool output to remain rendered after pruning');
     }
 

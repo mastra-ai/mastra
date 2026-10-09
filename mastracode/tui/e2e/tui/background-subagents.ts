@@ -93,8 +93,12 @@ export const backgroundSubagentsScenario = {
       'BACKGROUND_SUBAGENTS_COMPLETE',
     ];
 
+    // Completed subagents expand, so the nested subagent's result line shows DEEP_DELEGATION_FOREGROUND
+    // once and the parent's echo shows it again; every other marker appears exactly once.
+    const expectedCounts: Record<string, number> = { DEEP_DELEGATION_FOREGROUND: 2 };
     for (const marker of markers) {
-      check(count(output, marker) === 1, `Expected exactly one visible ${marker} marker.\n${output}`);
+      const expected = expectedCounts[marker] ?? 1;
+      check(count(output, marker) === expected, `Expected ${expected} visible ${marker} marker(s).\n${output}`);
     }
 
     for (let index = 1; index < markers.length; index++) {

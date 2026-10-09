@@ -253,8 +253,7 @@ export interface TUIState {
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
-  quietMode: boolean;
-  quietModeMaxToolPreviewLines: number;
+  previewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
   activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
 
@@ -456,8 +455,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
-    quietMode: false,
-    quietModeMaxToolPreviewLines: 2,
+    previewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,

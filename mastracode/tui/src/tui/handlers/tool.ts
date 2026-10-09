@@ -38,7 +38,7 @@ function createPostToolAssistantComponent(ctx: EventHandlerContext, toolCallId: 
   const messageId = state.streamingMessage?.id;
   if (!messageId) {
     const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    component.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
+    component.setQuietModeDisplay('quiet');
     state.streamingComponent = component;
     ctx.addChildBeforeFollowUps(component);
     return component;
@@ -53,11 +53,9 @@ export function isTaskMutationTool(toolName: string): boolean {
 }
 
 function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
-  if (!ctx.state.quietMode) return;
-
   component.setCompactToolModeColor(getCurrentModeColor(ctx));
   component.setQuietModeDisplay('quiet');
-  component.setQuietPreviewLineLimit(ctx.state.quietModeMaxToolPreviewLines);
+  component.setQuietPreviewLineLimit(ctx.state.previewLines);
 }
 
 function reconcileToolBoundaries(ctx: EventHandlerContext): void {
@@ -229,7 +227,7 @@ export function createStaticSubagentComponent(
     renderConfig.modelId,
     {
       collapseOnComplete: false,
-      expandOnComplete: state.quietMode,
+      expandOnComplete: true,
       forked: renderConfig.forked,
       label: renderConfig.label,
       maxActivityLines: renderConfig.maxActivityLines,
@@ -372,19 +370,11 @@ export function handleToolApprovalRequired(
     state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
   };
 
-  // The card names the tool and its arguments itself unless the row above shows exactly this call: the
-  // approval can target something else (a wrapper tool asking for an inner one), there can be no row, and
-  // quiet mode rows show a description instead of the command.
-  // An ask_user call has no tool row: its question preview is the row, so fill it with the final arguments.
+  // The card names the tool and its arguments itself: compact tool rows show a description instead of the
+  // command. An ask_user call has no tool row: its question preview is the row, so fill it with the final arguments.
   const askPreview = toolName === 'ask_user' ? state.pendingAskUserComponents.get(toolCallId) : undefined;
   askPreview?.updateArgs(args);
-  const visibleCall = state.pendingTools.get(toolCallId)?.getToolCall?.();
-  const showTarget =
-    !askPreview &&
-    (state.quietMode ||
-      !visibleCall ||
-      visibleCall.toolName !== toolName ||
-      safeStringify(visibleCall.args) !== safeStringify(args));
+  const showTarget = !askPreview;
 
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,

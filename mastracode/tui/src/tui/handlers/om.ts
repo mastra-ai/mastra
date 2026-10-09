@@ -181,18 +181,8 @@ export function handleOMBufferingStart(
   state.activeActivationMarker = undefined;
   state.activeActivationData = undefined;
   state.activeActivationProviderChangeMarker = undefined;
-  if (state.quietMode) {
-    removeChatChild(ctx, state.activeBufferingMarker);
-    state.activeBufferingMarker = undefined;
-    state.ui.requestRender();
-    return;
-  }
-  state.activeBufferingMarker = new OMMarkerComponent({
-    type: 'om_buffering_start',
-    operationType,
-    tokensToBuffer,
-  });
-  addChildBeforeStreaming(ctx, state.activeBufferingMarker);
+  removeChatChild(ctx, state.activeBufferingMarker);
+  state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }
 
@@ -204,21 +194,7 @@ export function handleOMBufferingEnd(
   observations?: string,
 ): void {
   const { state } = ctx;
-  if (state.quietMode) {
-    removeChatChild(ctx, state.activeBufferingMarker);
-    state.activeBufferingMarker = undefined;
-    state.ui.requestRender();
-    return;
-  }
-  if (state.activeBufferingMarker) {
-    state.activeBufferingMarker.update({
-      type: 'om_buffering_end',
-      operationType,
-      tokensBuffered,
-      bufferedTokens,
-      observations,
-    });
-  }
+  removeChatChild(ctx, state.activeBufferingMarker);
   state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }
@@ -229,19 +205,7 @@ export function handleOMBufferingFailed(
   error: string,
 ): void {
   const { state } = ctx;
-  if (state.quietMode) {
-    removeChatChild(ctx, state.activeBufferingMarker);
-    state.activeBufferingMarker = undefined;
-    state.ui.requestRender();
-    return;
-  }
-  if (state.activeBufferingMarker) {
-    state.activeBufferingMarker.update({
-      type: 'om_buffering_failed',
-      operationType,
-      error,
-    });
-  }
+  removeChatChild(ctx, state.activeBufferingMarker);
   state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }
@@ -311,12 +275,4 @@ export function handleOMActivation(
 }
 
 export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {
-  if (ctx.state.quietMode) return;
-  const marker = new OMMarkerComponent({
-    type: 'om_thread_title_updated',
-    newTitle,
-    oldTitle,
-  });
-  addChildBeforeStreaming(ctx, marker);
-  ctx.state.ui.requestRender();
 }

@@ -21,7 +21,6 @@ function createCtx() {
 describe('OM event handlers', () => {
   it('removes an existing buffering marker when quiet mode suppresses buffering start', () => {
     const { ctx, state } = createCtx();
-    state.quietMode = true;
     const marker = new Container();
     state.chatContainer.addChild(marker);
     state.activeBufferingMarker = marker as any;

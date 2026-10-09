@@ -14,8 +14,7 @@ export const quietShellDescriptionScenario: McE2eScenario = {
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
-    settings.onboarding = { ...settings.onboarding, quietModePreferenceSelected: true };
-    settings.preferences = { ...settings.preferences, quietMode: true, quietModeMaxToolPreviewLines: 2 };
+    settings.preferences = { ...settings.preferences, previewLines: 2 };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
   async run({ terminal, runtime }) {

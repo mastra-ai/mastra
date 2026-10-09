@@ -27,7 +27,7 @@ function createSettings(overrides?: Partial<GlobalSettings['models']>): GlobalSe
       subagentModels: {},
       ...overrides,
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', previewLines: 2 },
     storage,
     customModelPacks: [],
     customProviders: [],

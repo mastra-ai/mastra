@@ -311,7 +311,7 @@ export function ensureAssistantRenderSegment(
   const key = getAssistantSegmentKey(messageId, precedingToolCallId);
   const { segment, created } = state.assistantRenderRegistry.start(messageId, key, () => {
     const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    component.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
+    component.setQuietModeDisplay('quiet');
     return component;
   });
   state.streamingComponent = segment.component;
