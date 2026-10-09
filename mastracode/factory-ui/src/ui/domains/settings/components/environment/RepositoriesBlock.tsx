@@ -138,7 +138,7 @@ function RepositoryRow({
           }
         }}
       >
-        <Tooltip>
+        <Tooltip hoverable={false}>
           <TooltipTrigger
             render={
               <span
@@ -158,7 +158,7 @@ function RepositoryRow({
             </Txt>
             <GripVertical className="hidden size-4 group-hover/row:block" aria-hidden />
           </TooltipTrigger>
-          <TooltipContent className="pointer-events-none">Drag to reorder</TooltipContent>
+          <TooltipContent>Drag to reorder</TooltipContent>
         </Tooltip>
         <span className="min-w-0 flex-1">
           <Txt as="span" tone={repository.inEnvironment ? 'ink' : 'muted'} className="flex items-center gap-1.5">
@@ -179,7 +179,7 @@ function RepositoryRow({
           <Txt as="span" variant="caption" tone="muted">
             {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
           </Txt>
-          <Tooltip>
+          <Tooltip hoverable={false}>
             <TooltipTrigger
               render={
                 <Switch
@@ -190,7 +190,7 @@ function RepositoryRow({
                 />
               }
             />
-            <TooltipContent className="pointer-events-none">Include in the environment</TooltipContent>
+            <TooltipContent>Include in the environment</TooltipContent>
           </Tooltip>
         </span>
         <ChevronDown
