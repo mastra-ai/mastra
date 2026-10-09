@@ -2,7 +2,7 @@
 '@mastra/docker': minor
 ---
 
-Added `DockerFactorySandbox`, which plugs Docker into Mastra Factory as the sandbox provider. Factory gets one container per session, a repository image it can build ahead of the first session, and user-tunable settings. It takes the same options as `DockerSandbox` except `id` and `template`.
+Added `DockerFactorySandbox`, which plugs Docker into Mastra Factory as the sandbox provider. Factory gets one container per session, a repository image built from the session's repositories, and user-tunable settings. It takes the same options as `DockerSandbox` except `id` and `template`.
 
 ```ts
 import { MastraFactory } from '@mastra/factory';
@@ -14,5 +14,3 @@ new MastraFactory({
 ```
 
 **Settings:** `baseImage`, the image the repository image builds from, and `owner`, the `user[:group]` that owns the checked-out repositories in it. Unset values fall back to the `defaults` option, then to `node:22-slim` and root.
-
-**Builds:** builds the repository image in the background and reports its status. Builds live in the host process, so after a restart an earlier build id reads as `unknown`. No build history.
