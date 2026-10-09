@@ -189,8 +189,8 @@ test.describe('Knowledge graph canvas', () => {
 
       await page.getByRole('button', { name: harness.resourceScopeName }).click();
       await expect(page.getByTestId('knowledge-truncation-banner')).toContainText('Bounded lens');
-      // Selecting a scope opens its details over the canvas edge; close it before clicking boundaries.
-      await page.getByRole('button', { name: 'Close scope details' }).click();
+      // Selecting a scope switches the lens without opening its details over the canvas.
+      await expect(page.getByTestId('knowledge-scope-flyout')).toHaveCount(0);
       await expect(page.getByTestId('knowledge-node')).toHaveCount(251);
       await expect(page.getByText('Cycle A')).toBeVisible();
       await expect(page.getByText('Cycle B')).toBeVisible();
