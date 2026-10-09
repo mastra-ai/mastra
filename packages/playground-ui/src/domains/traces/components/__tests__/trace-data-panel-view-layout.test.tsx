@@ -37,6 +37,13 @@ const props = (entityType: string): TraceDataPanelViewProps => ({
 const storageKey = (entityType: string) =>
   `react-resizable-panels:mastra:trace-panel-layout:${entityType}:trace-side:trace-main`;
 
+const defaultSidePanelFlexGrow = () => {
+  const { unmount } = render(<TraceDataPanelView {...props('agent')} />);
+  const value = sidePanelFlexGrow();
+  unmount();
+  return value;
+};
+
 const sidePanelFlexGrow = () =>
   (document.body.querySelector('[data-panel][id="trace-side"]') as HTMLElement | null)?.style.flexGrow;
 
@@ -55,5 +62,26 @@ describe('TraceDataPanelView — persisted layout', () => {
     render(<TraceDataPanelView {...props('scorer')} />);
 
     expect(sidePanelFlexGrow()).not.toBe('25');
+  });
+
+  it('falls back to the default layout when the stored value is corrupted', () => {
+    const expected = defaultSidePanelFlexGrow();
+    localStorage.setItem(storageKey('agent'), '{not json');
+
+    render(<TraceDataPanelView {...props('agent')} />);
+
+    expect(sidePanelFlexGrow()).toBe(expected);
+  });
+
+  it('falls back to the default layout when storage is unavailable', () => {
+    const expected = defaultSidePanelFlexGrow();
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+
+    render(<TraceDataPanelView {...props('agent')} />);
+
+    expect(sidePanelFlexGrow()).toBe(expected);
+    getItem.mockRestore();
   });
 });

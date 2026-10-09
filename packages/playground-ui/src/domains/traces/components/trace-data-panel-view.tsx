@@ -550,6 +550,27 @@ export function TraceDataPanelView({
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
+// localStorage access throws when storage is blocked (privacy modes, sandboxed iframes), and the
+// library parses stored values without a guard; fall back to defaults instead of crashing the panel.
+const safeLayoutStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const value = localStorage.getItem(key);
+      if (value !== null) JSON.parse(value);
+      return value;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Persisting is best-effort.
+    }
+  },
+};
+
 function TracePanelColumns({
   layoutKey,
   sideColumnSlot,
@@ -585,7 +606,7 @@ function TracePanelColumns({
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: `mastra:trace-panel-layout:${layoutKey ?? 'unknown'}`,
     panelIds,
-    storage: localStorage,
+    storage: safeLayoutStorage,
   });
 
   return (
