@@ -83,7 +83,7 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
   }
 
   template(ctx: FactorySandboxContext, settings: DockerFactorySandboxSettings): DockerRepoTemplateResolver | undefined {
-    const { defaults, template, image, workingDirectory, workingDir } = this.#options;
+    const { defaults, template, image, workingDirectory, workingDir, dockerOptions } = this.#options;
     // `image` is the image sessions run on; with a repository the repository
     // image is built on top of it, so it doubles as the base image fallback.
     const baseImage = settings.baseImage ?? defaults?.baseImage ?? image;
@@ -99,6 +99,8 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
     } = ctx;
     return createDockerRepoTemplate({
       ...rest,
+      // The image builds on the daemon the sandbox runs on unless the template names its own.
+      ...(dockerOptions !== undefined ? { dockerOptions } : {}),
       ...template,
       ...(baseImage !== undefined ? { baseImage } : {}),
       ...(owner !== undefined ? { owner } : {}),
