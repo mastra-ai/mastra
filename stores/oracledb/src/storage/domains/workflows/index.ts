@@ -125,16 +125,19 @@ export class WorkflowsOracle extends WorkflowsStorage {
           if (expectedGeneration !== undefined && expectedGeneration !== 0) {
             return { acquired: false, record: null };
           }
+          // The first generation comes from the database clock, so a claim
+          // after this row is pruned still outranks a surviving fence.
           await client.none(
-            `INSERT INTO ${table} ("runId", generation, "ownerId", "leaseExpiresAt")
-             VALUES (:runId, 1, :ownerId, ${DB_NOW_MS} + :leaseMs)`,
+            `INSERT INTO ${table} ("runId", generation, "ownerId", "leaseExpiresAt", "updatedAt")
+             VALUES (:runId, ${DB_NOW_MS}, :ownerId, ${DB_NOW_MS} + :leaseMs, ${DB_NOW_MS})`,
             { runId, ownerId, leaseMs },
           );
           return { acquired: true, record: (await this.readRunOwner(client, runId))! };
         }
         await client.none(
           `UPDATE ${table}
-           SET generation = generation + 1, "ownerId" = :ownerId, "leaseExpiresAt" = ${DB_NOW_MS} + :leaseMs
+           SET generation = generation + 1, "ownerId" = :ownerId, "leaseExpiresAt" = ${DB_NOW_MS} + :leaseMs,
+               "updatedAt" = ${DB_NOW_MS}
            WHERE "runId" = :runId
              AND (:expectedGeneration IS NULL OR generation = :expectedGeneration)
              AND (:force = 1 OR "leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= ${DB_NOW_MS})`,
@@ -157,7 +160,7 @@ export class WorkflowsOracle extends WorkflowsStorage {
       return await this.db.tx(async client => {
         await client.none(
           `UPDATE ${this.runOwnersTable()}
-           SET "leaseExpiresAt" = ${DB_NOW_MS} + :leaseMs
+           SET "leaseExpiresAt" = ${DB_NOW_MS} + :leaseMs, "updatedAt" = ${DB_NOW_MS}
            WHERE "runId" = :runId AND generation = :generation AND "ownerId" = :ownerId
              AND "leaseExpiresAt" IS NOT NULL`,
           { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId, leaseMs },
@@ -181,7 +184,7 @@ export class WorkflowsOracle extends WorkflowsStorage {
     try {
       return await this.db.tx(async client => {
         await client.none(
-          `UPDATE ${this.runOwnersTable()} SET "leaseExpiresAt" = NULL
+          `UPDATE ${this.runOwnersTable()} SET "leaseExpiresAt" = NULL, "updatedAt" = ${DB_NOW_MS}
            WHERE "runId" = :runId AND generation = :generation AND "ownerId" = :ownerId`,
           { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
         );

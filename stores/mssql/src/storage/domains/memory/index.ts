@@ -31,7 +31,7 @@ import type {
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
-import { assertRunFence, claimTransaction, withRunFence } from '../../db/run-fencing';
+import { assertRunFence, claimTransaction, DB_NOW_MS, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
@@ -154,27 +154,55 @@ export class MemoryMSSQL extends MemoryStorage {
           await transaction
             .request()
             .input('runId', fence.runId)
-            .input('generation', sql.Int, fence.generation)
+            .input('generation', sql.BigInt, fence.generation)
             .input('ownerId', fence.ownerId)
             .query(`INSERT INTO ${table} ([runId], [generation], [ownerId]) VALUES (@runId, @generation, @ownerId)`);
           return true;
         }
         const generation = Number(row.generation);
-        if (generation < fence.generation) {
-          await transaction
-            .request()
-            .input('runId', fence.runId)
-            .input('generation', sql.Int, fence.generation)
-            .input('ownerId', fence.ownerId)
-            .query(`UPDATE ${table} SET [generation] = @generation, [ownerId] = @ownerId WHERE [runId] = @runId`);
-          return true;
-        }
-        return generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        const raises = generation < fence.generation;
+        const reaffirms = generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        if (!raises && !reaffirms) return false;
+        // Every write un-retires the fence.
+        await transaction
+          .request()
+          .input('runId', fence.runId)
+          .input('generation', sql.BigInt, fence.generation)
+          .input('ownerId', fence.ownerId)
+          .query(
+            `UPDATE ${table} SET [generation] = @generation, [ownerId] = @ownerId, [retiredAt] = NULL WHERE [runId] = @runId`,
+          );
+        return true;
       });
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const updated = await this.pool
+        .request()
+        .input('runId', fence.runId)
+        .input('generation', sql.BigInt, fence.generation)
+        .input('ownerId', fence.ownerId)
+        .query(
+          `UPDATE ${this.#runFencesTable} SET [retiredAt] = ${DB_NOW_MS}
+           WHERE [runId] = @runId AND [generation] = @generation AND [ownerId] = @ownerId`,
+        );
+      return updated.rowsAffected[0] === 1;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },

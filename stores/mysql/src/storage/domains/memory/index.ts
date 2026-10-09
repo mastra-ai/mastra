@@ -48,7 +48,7 @@ import type {
   UpdateBufferedReflectionInput,
 } from '@mastra/core/storage';
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import { assertRunFence, claimTransaction, inTransaction, withRunFence } from '../../db/run-fencing';
+import { assertRunFence, claimTransaction, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { indexKey } from '../../db/schema-snapshot';
 import type { StoreOperationsMySQL } from '../operations';
@@ -67,6 +67,7 @@ const OM_TABLE_QUOTED = quoteIdentifier(OM_TABLE, 'table name');
 const RUN_FENCES_TABLE = formatTableName(TABLE_MEMORY_RUN_FENCES as TABLE_NAMES);
 const RUN_ID = quoteIdentifier('runId', 'column name');
 const OWNER_ID = quoteIdentifier('ownerId', 'column name');
+const RETIRED_AT = quoteIdentifier('retiredAt', 'column name');
 
 function emitValidationError(message: string): MastraError {
   return new MastraError({
@@ -237,19 +238,49 @@ export class MemoryMySQL extends MemoryStorage {
           return true;
         }
         const generation = Number(row.generation);
-        if (generation < fence.generation) {
-          await connection.execute(
-            `UPDATE ${RUN_FENCES_TABLE} SET generation = ?, ${OWNER_ID} = ? WHERE ${RUN_ID} = ?`,
-            [fence.generation, fence.ownerId, fence.runId],
-          );
-          return true;
-        }
-        return generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        const raises = generation < fence.generation;
+        const reaffirms = generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        if (!raises && !reaffirms) return false;
+        // Every write un-retires the fence.
+        await connection.execute(
+          `UPDATE ${RUN_FENCES_TABLE} SET generation = ?, ${OWNER_ID} = ?, ${RETIRED_AT} = NULL WHERE ${RUN_ID} = ?`,
+          [fence.generation, fence.ownerId, fence.runId],
+        );
+        return true;
       });
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('MYSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      return await inTransaction(this.pool, async connection => {
+        const [rows] = await connection.execute<RowDataPacket[]>(
+          `SELECT generation, ${OWNER_ID} AS ownerId FROM ${RUN_FENCES_TABLE} WHERE ${RUN_ID} = ? FOR UPDATE`,
+          [fence.runId],
+        );
+        const row = rows[0];
+        if (!row || Number(row.generation) !== fence.generation || String(row.ownerId) !== fence.ownerId) {
+          return false;
+        }
+        await connection.execute(`UPDATE ${RUN_FENCES_TABLE} SET ${RETIRED_AT} = ${DB_NOW_MS} WHERE ${RUN_ID} = ?`, [
+          fence.runId,
+        ]);
+        return true;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },

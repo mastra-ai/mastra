@@ -34,9 +34,9 @@ import type { Queryable } from '../../db/run-fencing';
 import { getTableName, getSchemaName } from '../utils';
 
 interface RunOwnerRow {
-  generation: number;
-  ownerId: string;
   /** BIGINT columns come back as strings. */
+  generation: string | number;
+  ownerId: string;
   leaseExpiresAt: string | number | null;
   nowMs: string | number;
 }
@@ -47,7 +47,7 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
   return {
     runId,
-    generation: row.generation,
+    generation: Number(row.generation),
     ownerId: row.ownerId,
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
@@ -204,10 +204,12 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               }
               // A concurrent first claim makes this insert fail with an OCC
               // conflict or a duplicate key; the retry sees its row and takes
-              // the update path below.
+              // the update path below. The first generation comes from the
+              // database clock, so a claim after this row is pruned still
+              // outranks a surviving fence.
               const inserted = await t.one<RunOwnerRow>(
-                `INSERT INTO ${table} ("runId", generation, "ownerId", "leaseExpiresAt")
-                 VALUES ($1, 1, $2, ${DB_NOW_MS} + $3)
+                `INSERT INTO ${table} ("runId", generation, "ownerId", "leaseExpiresAt", "updatedAt")
+                 VALUES ($1, ${DB_NOW_MS}, $2, ${DB_NOW_MS} + $3, ${DB_NOW_MS})
                  RETURNING ${RUN_OWNER_COLUMNS}`,
                 [runId, ownerId, leaseMs],
               );
@@ -215,9 +217,10 @@ export class WorkflowsDSQL extends WorkflowsStorage {
             }
             const claimed = await t.oneOrNone<RunOwnerRow>(
               `UPDATE ${table}
-               SET generation = generation + 1, "ownerId" = $2, "leaseExpiresAt" = ${DB_NOW_MS} + $3
+               SET generation = generation + 1, "ownerId" = $2, "leaseExpiresAt" = ${DB_NOW_MS} + $3,
+                   "updatedAt" = ${DB_NOW_MS}
                WHERE "runId" = $1
-                 AND ($4::integer IS NULL OR generation = $4)
+                 AND ($4::bigint IS NULL OR generation = $4)
                  AND ($5::boolean OR "leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= ${DB_NOW_MS})
                RETURNING ${RUN_OWNER_COLUMNS}`,
               [runId, ownerId, leaseMs, expectedGeneration ?? null, force === true],
@@ -238,7 +241,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
       const { result } = await withRetry(async (): Promise<RenewRunOwnershipResult> => {
         const renewed = await this.#db.client.oneOrNone<RunOwnerRow>(
           `UPDATE ${this.#runOwnersTable()}
-           SET "leaseExpiresAt" = ${DB_NOW_MS} + $4
+           SET "leaseExpiresAt" = ${DB_NOW_MS} + $4, "updatedAt" = ${DB_NOW_MS}
            WHERE "runId" = $1 AND generation = $2 AND "ownerId" = $3 AND "leaseExpiresAt" IS NOT NULL
            RETURNING ${RUN_OWNER_COLUMNS}`,
           [fence.runId, fence.generation, fence.ownerId, leaseMs],
@@ -257,7 +260,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
       const { result } = await withRetry(() =>
         this.#db.client.oneOrNone(
           `UPDATE ${this.#runOwnersTable()}
-           SET "leaseExpiresAt" = NULL
+           SET "leaseExpiresAt" = NULL, "updatedAt" = ${DB_NOW_MS}
            WHERE "runId" = $1 AND generation = $2 AND "ownerId" = $3
            RETURNING "runId"`,
           [fence.runId, fence.generation, fence.ownerId],

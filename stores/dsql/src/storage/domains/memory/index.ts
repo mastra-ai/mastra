@@ -31,7 +31,7 @@ import type {
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
-import { assertRunFence, isRetriableRunFenceWrite, withRunFence } from '../../db/run-fencing';
+import { assertRunFence, DB_NOW_MS, isRetriableRunFenceWrite, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -182,13 +182,14 @@ export class MemoryDSQL extends MemoryStorage {
     try {
       // One statement: inserts the first fence, raises an older one, and
       // re-affirms an identical one; any other existing fence is left alone
-      // and no row comes back.
+      // and no row comes back. Every write un-retires the fence.
       const { result } = await withRetry(
         () =>
           this.#db.client.oneOrNone(
             `INSERT INTO ${this.#runFencesTable()} AS f ("runId", generation, "ownerId")
              VALUES ($1, $2, $3)
-             ON CONFLICT ("runId") DO UPDATE SET generation = EXCLUDED.generation, "ownerId" = EXCLUDED."ownerId"
+             ON CONFLICT ("runId") DO UPDATE
+             SET generation = EXCLUDED.generation, "ownerId" = EXCLUDED."ownerId", "retiredAt" = NULL
              WHERE f.generation < EXCLUDED.generation
                 OR (f.generation = EXCLUDED.generation AND f."ownerId" = EXCLUDED."ownerId")
              RETURNING "runId"`,
@@ -201,6 +202,32 @@ export class MemoryDSQL extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const { result } = await withRetry(
+        () =>
+          this.#db.client.oneOrNone(
+            `UPDATE ${this.#runFencesTable()} SET "retiredAt" = ${DB_NOW_MS}
+             WHERE "runId" = $1 AND generation = $2 AND "ownerId" = $3
+             RETURNING "runId"`,
+            [fence.runId, fence.generation, fence.ownerId],
+          ),
+        { isRetriable: isRetriableRunFenceWrite },
+      );
+      return result !== null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },

@@ -40,7 +40,7 @@ import { isOracleErrorCode, normalizeBatchSize } from '../../../shared/connectio
 import { normalizeIdentifier } from '../../../vector/identifiers';
 import { filterIndexesForTables, OracleDB } from '../../db';
 import type { OracleCreateIndexOptions } from '../../db';
-import { claimTransaction } from '../../db/run-fencing';
+import { claimTransaction, DB_NOW_MS } from '../../db/run-fencing';
 import type { OracleDomainConfig } from '../../types';
 import {
   deleteMessages,
@@ -187,17 +187,39 @@ export class MemoryOracle extends MemoryStorage {
           return true;
         }
         const generation = Number(row.generation);
-        if (generation < fence.generation) {
-          await client.none(
-            `UPDATE ${fences} SET generation = :generation, "ownerId" = :ownerId WHERE "runId" = :runId`,
-            binds,
-          );
-          return true;
-        }
-        return generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        const raises = generation < fence.generation;
+        const reaffirms = generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        if (!raises && !reaffirms) return false;
+        // Every write un-retires the fence.
+        await client.none(
+          `UPDATE ${fences} SET generation = :generation, "ownerId" = :ownerId, "retiredAt" = NULL WHERE "runId" = :runId`,
+          binds,
+        );
+        return true;
       });
     } catch (error) {
       throw storageError('RAISE_RUN_FENCE', 'FAILED', { runId: fence.runId }, error);
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    const fences = table(this.ctx, TABLE_MEMORY_RUN_FENCES);
+    try {
+      return await this.db.tx(async client => {
+        const row = await client.oneOrNone<{ generation: number; ownerId: string }>(
+          `SELECT generation AS "generation", "ownerId" FROM ${fences} WHERE "runId" = :runId FOR UPDATE`,
+          { runId: fence.runId },
+        );
+        if (!row || Number(row.generation) !== fence.generation || String(row.ownerId) !== fence.ownerId) {
+          return false;
+        }
+        await client.none(`UPDATE ${fences} SET "retiredAt" = ${DB_NOW_MS} WHERE "runId" = :runId`, {
+          runId: fence.runId,
+        });
+        return true;
+      });
+    } catch (error) {
+      throw storageError('RETIRE_RUN_FENCE', 'FAILED', { runId: fence.runId }, error);
     }
   }
 
