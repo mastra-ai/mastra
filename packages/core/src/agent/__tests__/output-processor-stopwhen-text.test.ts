@@ -357,9 +357,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
               message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
             );
             if (!response) return messages;
-            const parts = (response.content?.parts ?? []).map(part =>
-              part.type === 'text' ? { ...part, text: 'REVISED' } : part,
-            );
+            // Current-iteration-only, so the revision carries no earlier-iteration boundary.
+            const parts = [{ type: 'text' as const, text: 'REVISED' }];
             return [
               ...messages,
               {
@@ -367,7 +366,7 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
                 id: `${response.id}-revised`,
                 content: {
                   ...response.content,
-                  content: parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
+                  content: 'REVISED',
                   parts,
                 },
               },
@@ -406,9 +405,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
               message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
             );
             if (!response) return messages;
-            const parts = (response.content?.parts ?? []).map(part =>
-              part.type === 'text' ? { ...part, text: 'REVISED' } : part,
-            );
+            // Current-iteration-only, so the revision carries no earlier-iteration boundary.
+            const parts = [{ type: 'text' as const, text: 'REVISED' }];
             return [
               ...messages,
               {
@@ -416,7 +414,7 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
                 id: `${response.id}-revised`,
                 content: {
                   ...response.content,
-                  content: parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
+                  content: 'REVISED',
                   parts,
                 },
               },
@@ -437,5 +435,60 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     // revision, so full output accumulates the per-iteration step text instead of the whole response.
     expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'REVISED']);
     expect(fullOutput.text).toBe('abcdefREVISED');
+  });
+
+  it('keeps every part of an appended response when the original offset is nonzero', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'abcdef'), finish('stop')],
+      [...textPart('t2', 'ghij'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'append-two-part-revision',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            // Two text parts, all belonging to the current iteration.
+            const parts = [
+              { type: 'text' as const, text: 'REV' },
+              { type: 'text' as const, text: 'ISED' },
+            ];
+            return [
+              ...messages,
+              {
+                ...response,
+                id: `${response.id}-revised`,
+                content: {
+                  ...response.content,
+                  content: 'REVISED',
+                  parts,
+                },
+              },
+            ];
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The original response has two parts (offset derived against the pre-processing message), but the
+    // appended response is current-iteration-only, so its offset is zero. Applying the original offset
+    // would drop its first part, making the step and full output disagree with the streamed text.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'REVISED']);
+    expect(fullOutput.text).toBe('abcdefREVISED');
+    expect(await stream.text).toBe('REVISED');
   });
 });

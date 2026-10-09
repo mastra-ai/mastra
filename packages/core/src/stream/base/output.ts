@@ -249,6 +249,85 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
   return lastConverted ? coreContentToString(lastConverted.content) : undefined;
 }
 
+/**
+ * A single entry of a stored message's part array.
+ */
+type StepMessagePart = MastraDBMessage['content']['parts'][number];
+
+/**
+ * Step text for the current iteration of the message that supplies the resolved output text.
+ *
+ * The iteration boundary is a property of a message's own part array, so the offset measured before
+ * processing must not be transplanted onto a message a processor produced. Resolve the boundary in
+ * this order:
+ *   1. the message's own `step-start` marker, when it has one;
+ *   2. for the same message, the pre-processing offset, which still applies when an in-place rewrite
+ *      keeps the part count (redaction changes text, not positions);
+ *   3. for a different message, the trailing text matching the pre-processing step text, which finds
+ *      the boundary when a processor replaced the id of the accumulated response;
+ *   4. otherwise the whole message, which then holds only this iteration.
+ */
+function resolveProcessedStepText({
+  processedStepMessage,
+  processedStepParts,
+  originalMessageId,
+  originalIterationPartOffset,
+  originalPartCount,
+  originalStepText,
+  outputText,
+}: {
+  processedStepMessage: MastraDBMessage | undefined;
+  processedStepParts: StepMessagePart[] | undefined;
+  originalMessageId: string | undefined;
+  originalIterationPartOffset: number | undefined;
+  originalPartCount: number | undefined;
+  originalStepText: string | undefined;
+  outputText: string | undefined;
+}): string {
+  if (!processedStepMessage || !processedStepParts) return outputText ?? '';
+
+  const textWithin = (parts: StepMessagePart[]) => parts.map(part => (part.type === 'text' ? part.text : '')).join('');
+
+  // A `step-start` part in the processed message marks where its current iteration begins.
+  const boundaryIndex = processedStepParts.findLastIndex(part => part.type === 'step-start');
+  if (boundaryIndex !== -1) {
+    return textWithin(processedStepParts.slice(boundaryIndex + 1));
+  }
+
+  // No marker to anchor on: an in-place rewrite keeps part positions, so the offset measured before
+  // processing still applies when the same message survives with the same part count.
+  if (processedStepMessage.id === originalMessageId) {
+    if (
+      originalPartCount !== undefined &&
+      processedStepParts.length === originalPartCount &&
+      originalIterationPartOffset !== undefined
+    ) {
+      return textWithin(processedStepParts.slice(originalIterationPartOffset));
+    }
+    return textWithin(processedStepParts);
+  }
+
+  // A different message: it may still carry earlier iterations (a processor that replaced the id of
+  // the accumulated response), so locate the boundary the pre-processing step text ends at. When the
+  // text is not found the message holds only this iteration.
+  const offset = findIterationOffsetInParts(processedStepParts, originalStepText);
+  return offset !== undefined ? textWithin(processedStepParts.slice(offset)) : textWithin(processedStepParts);
+}
+
+/** Index in `parts` where the trailing text that equals `stepText` begins, or undefined. */
+function findIterationOffsetInParts(parts: StepMessagePart[], stepText: string | undefined): number | undefined {
+  if (!stepText) return undefined;
+
+  let suffixText = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part?.type === 'text') suffixText = part.text + suffixText;
+    if (suffixText === stepText) return index;
+    if (!stepText.endsWith(suffixText)) return undefined;
+  }
+  return undefined;
+}
+
 function findIterationPartOffset(
   messageList: MessageList,
   message: MastraDBMessage,
@@ -1288,16 +1367,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const processedStepParts = processedStepMessage?.content?.parts;
                   const stepText =
                     outputText !== outputTextBeforeProcessing
-                      ? processedStepMessage &&
-                        processedStepParts &&
-                        stepMessageParts &&
-                        processedStepParts.length === stepMessageParts.length &&
-                        iterationPartOffset !== undefined
-                        ? processedStepParts
-                            .slice(iterationPartOffset)
-                            .map(part => (part.type === 'text' ? part.text : ''))
-                            .join('')
-                        : (outputText ?? '')
+                      ? resolveProcessedStepText({
+                          processedStepMessage,
+                          processedStepParts,
+                          originalMessageId: stepMessage?.id,
+                          originalIterationPartOffset: iterationPartOffset,
+                          originalPartCount: stepMessageParts?.length,
+                          originalStepText: lastStepText,
+                          outputText,
+                        })
                       : undefined;
 
                   // Earlier buffered steps retain their model text, so only the final step of a continuation
