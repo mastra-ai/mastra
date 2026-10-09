@@ -145,7 +145,14 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * in-memory only).
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
-const OM_STATE_KEYS = ['observerModelId', 'reflectorModelId', 'observationThreshold', 'reflectionThreshold'] as const;
+const OM_STATE_KEYS = [
+  'observerModelId',
+  'reflectorModelId',
+  'observerModelSelection',
+  'reflectorModelSelection',
+  'observationThreshold',
+  'reflectionThreshold',
+] as const;
 const THREAD_DERIVED_STATE_KEYS = [...OM_STATE_KEYS, ...PERSISTED_STATE_KEYS] as const;
 function isSubagentModelKey(key: string): boolean {
   return key === 'subagentModelId' || key.startsWith('subagentModelId_');
