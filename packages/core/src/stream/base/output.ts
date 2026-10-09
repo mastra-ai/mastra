@@ -18,6 +18,7 @@ import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { isSignalChunkExcluded } from '../signal-exclusions';
+import { ChunkFrom } from '../types';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -1029,6 +1030,65 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               if (self.#status !== 'failed' && self.#status !== 'canceled') {
                 self.#status = 'success';
               }
+
+              const finalStep = self.#bufferedSteps.at(-1);
+              const completedToolCallIds = new Set(finalStep?.toolResults.map(result => result.payload.toolCallId));
+              const stoppedAfterCompletedToolCalls =
+                self.#structuredOutputMode === 'direct' &&
+                self.#bufferedObject === undefined &&
+                finalStep !== undefined &&
+                finalStep.toolCalls.length > 0 &&
+                finalStep.toolCalls.every(toolCall => completedToolCallIds.has(toolCall.payload.toolCallId));
+
+              if (stoppedAfterCompletedToolCalls) {
+                const error = new MastraError({
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.SYSTEM,
+                  id: 'STRUCTURED_OUTPUT_MISSING_AFTER_TOOL_CALL',
+                  text: 'Structured output is missing because the run ended after a tool call without a terminal response.',
+                });
+                const errorStrategy = self.#options.structuredOutput?.errorStrategy;
+
+                if (errorStrategy === 'warn') {
+                  self.logger.warn(error.message);
+                } else if (errorStrategy === 'fallback') {
+                  const fallbackChunk = {
+                    from: ChunkFrom.AGENT,
+                    runId: self.runId,
+                    type: 'object-result' as const,
+                    object: self.#options.structuredOutput?.fallbackValue as OUTPUT,
+                    metadata: { fallback: true },
+                  };
+                  self.#bufferedObject = fallbackChunk.object;
+                  self.#usedFallbackValue = true;
+                  if (self.#delayedPromises.object.status.type === 'pending') {
+                    self.#delayedPromises.object.resolve(fallbackChunk.object);
+                  }
+                  self.#emitChunk(fallbackChunk);
+                  controller.enqueue(fallbackChunk);
+                } else {
+                  const errorChunk = {
+                    from: ChunkFrom.AGENT,
+                    runId: self.runId,
+                    type: 'error' as const,
+                    payload: { error },
+                  };
+                  self.#error = error;
+                  self.#status = 'failed';
+                  self.#streamFinished = true;
+                  Object.values(self.#delayedPromises).forEach(promise => {
+                    if (promise.status.type === 'pending') {
+                      promise.reject(error);
+                    }
+                  });
+                  self.#closeTransportIfNeeded();
+                  self.#emitChunk(errorChunk);
+                  controller.enqueue(errorChunk);
+                  self.#emitter.emit('settled');
+                  return;
+                }
+              }
+
               // A caller `abortSignal` cancellation bails through the same path processor
               // tripwires use, so the bail's `finish` chunk carries `reason: 'tripwire'`. The
               // preceding `abort` chunk already set the status to 'canceled'; preserve the
