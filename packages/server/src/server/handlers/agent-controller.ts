@@ -606,6 +606,19 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
             }, 25_000);
           };
 
+          // Live events are not replayed, so seed a late subscriber with the
+          // current display state (including the message in flight). This runs
+          // before subscribe() so it precedes the buffered workspace events
+          // subscribe() replays; both are synchronous, so no event slips between.
+          try {
+            controller.enqueue(
+              toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+            );
+          } catch {
+            cleanup(controller);
+            return;
+          }
+
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
             try {
