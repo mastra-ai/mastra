@@ -18,6 +18,7 @@ import type {
 } from '@mastra/core/workspace';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
+import { redactCredentials } from './environment/build.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -47,7 +48,7 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-import type { SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -55,7 +56,7 @@ import {
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
-import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
@@ -395,7 +396,10 @@ export interface SessionEnvironmentRepo {
   projectRepositoryId: string;
   repositoryId: string;
   slug: string;
+  /** The session's base branch: the link's branch when set, else the repository default. */
   defaultBranch: string;
+  /** The repository's own default branch, which the template image clones and pins. */
+  templateBranch: string;
   position: number;
   setupCommand: string | undefined;
   teardownCommand: string | undefined;
@@ -429,18 +433,29 @@ async function resolveSessionEnvironment(
   if (!projects || !session.factoryProjectId) return undefined;
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
-  const links = (
-    await storage.projectRepositories.listByProject({ orgId: session.orgId, factoryProjectId: project.id })
-  )
+  return resolveProjectEnvironment(storage, project);
+}
+
+/**
+ * The project's environment as a session (or an environment build) sees it:
+ * every `inEnvironment` link under this source-control integration in
+ * position order, plus the project's settings, setup command and workdir.
+ */
+export async function resolveProjectEnvironment(
+  storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>,
+  project: FactoryProject,
+): Promise<SessionEnvironment> {
+  const orgId = project.orgId;
+  const links = (await storage.projectRepositories.listByProject({ orgId, factoryProjectId: project.id }))
     .filter(link => link.inEnvironment)
     .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
   const repos: SessionEnvironmentRepo[] = [];
   const directories = new Set<string>();
   for (const link of links) {
-    const repository = await storage.repositories.get({ orgId: session.orgId, id: link.repositoryId });
+    const repository = await storage.repositories.get({ orgId, id: link.repositoryId });
     if (!repository) {
       console.warn('[Mastra Factory] Environment repository link has no repository row; skipping it', {
-        orgId: session.orgId,
+        orgId,
         factoryProjectId: project.id,
         projectRepositoryId: link.id,
       });
@@ -454,7 +469,7 @@ async function resolveSessionEnvironment(
       console.warn(
         '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
         {
-          orgId: session.orgId,
+          orgId,
           factoryProjectId: project.id,
           projectRepositoryId: link.id,
           slug: repository.slug,
@@ -469,6 +484,7 @@ async function resolveSessionEnvironment(
       repositoryId: repository.id,
       slug: repository.slug,
       defaultBranch: link.branch || repository.defaultBranch,
+      templateBranch: repository.defaultBranch,
       position: link.position,
       setupCommand: link.setupCommand ?? undefined,
       teardownCommand: link.teardownCommand ?? undefined,
@@ -480,6 +496,37 @@ async function resolveSessionEnvironment(
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
     settings: project.sandboxSettings ?? {},
+  };
+}
+
+/**
+ * The context fields the list form of the repo templates needs: one entry per
+ * environment repository, each minting its own token at build time, with
+ * `getRepositoryAccess` present but undefined (the two are mutually exclusive
+ * for the template). Shared by session boot and environment builds so both
+ * resolve the same template identity; `resolveHead` is only set when given.
+ */
+export function environmentSandboxContext(
+  environment: SessionEnvironment,
+  options: {
+    orgId: string;
+    getRepositoryAccess: (args: { orgId: string; repositoryId: string }) => Promise<RepositoryAccess>;
+    resolveHead?: FactorySandboxContext['resolveHead'];
+  },
+): Omit<FactorySandboxContext, 'sessionId'> {
+  return {
+    setupCommand: undefined,
+    getRepositoryAccess: undefined,
+    repos: environment.repos.map(repo => ({
+      getRepositoryAccess: () => options.getRepositoryAccess({ orgId: options.orgId, repositoryId: repo.repositoryId }),
+      ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+    })),
+    ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
+    // A repository whose setup fails still lands in the image; the boot hook
+    // re-runs that setup from `setup-failed`.
+    continueOnSetupFailure: true,
+    ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
+    ...(options.resolveHead ? { resolveHead: options.resolveHead } : {}),
   };
 }
 
@@ -747,29 +794,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             sandboxId: session.sandboxId ?? undefined,
             repoFullName,
             ...(environment
-              ? {
-                  // The list form of the repo templates: one entry per
-                  // environment repository, each minting its own token at build
-                  // time; `getRepositoryAccess` stays present but undefined, the
-                  // two being mutually exclusive for the template.
-                  setupCommand: undefined,
-                  getRepositoryAccess: undefined,
-                  repos: environment.repos.map(repo => ({
-                    getRepositoryAccess: () =>
-                      sourceControl.versionControl.getRepositoryAccess({
-                        orgId: session.orgId,
-                        repositoryId: repo.repositoryId,
-                      }),
-                    ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
-                  })),
-                  ...(environment.workspaceSetupCommand
-                    ? { workspaceSetupCommand: environment.workspaceSetupCommand }
-                    : {}),
-                  // A repository whose setup fails still lands in the image;
-                  // the boot hook re-runs that setup from `setup-failed`.
-                  continueOnSetupFailure: true,
-                  ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
-                }
+              ? environmentSandboxContext(environment, {
+                  orgId: session.orgId,
+                  getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                })
               : {
                   // Stored nullable; the context speaks `undefined` for absent.
                   setupCommand: projectRepository.setupCommand ?? undefined,
@@ -1192,6 +1220,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const repos = environment!.repos;
       const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
       const states: SessionEnvironmentRepositoryState[] = [];
+      // Setup failures by slug: a template build cannot observe a setup
+      // command's result, so the boot that finds one records it on the link.
+      const failures = new Map<string, string>();
       let primaryError: unknown;
       // Recorded whatever happens: once a repository is materialized and set
       // up, retirement must tear it down even when this boot fails later.
@@ -1204,8 +1235,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
           }),
         );
+      // The repository whose setup is running when the boot throws something
+      // other than a setup failure: its outcome is unknown, never `configured`.
+      let inFlight: string | undefined;
       try {
         for (const repo of repos) {
+          inFlight = repo.slug;
           const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
           if (!entry) continue;
           const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
@@ -1222,12 +1257,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             try {
               await runSessionSetup(target, primaryDir, entry.gate);
               state.branch = session.branch;
-              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand))
+              if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
                 state.setupStatus = 'failed';
+                failures.set(repo.slug, 'The setup command failed earlier in this session.');
+              }
             } catch (error) {
               if (!(error instanceof SetupCommandError)) throw error;
               state.branch = session.branch;
               state.setupStatus = 'failed';
+              failures.set(repo.slug, error.message);
               primaryError = error;
             }
             continue;
@@ -1272,11 +1310,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             // The checkout may be missing or stale and its setup never ran.
             state.setupStatus = 'failed';
+            failures.set(repo.slug, error instanceof Error ? error.message : String(error));
             continue;
           }
           if (!repo.setupCommand || entry.gate.setupDone) continue;
           if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
+            failures.set(repo.slug, 'The setup command failed earlier in this session.');
             continue;
           }
           try {
@@ -1288,6 +1328,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             if (!(error instanceof SetupCommandError)) throw error;
             recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
             state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
             console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
               orgId: session.orgId,
               sessionId: session.sessionId,
@@ -1296,6 +1337,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           }
         }
+        inFlight = undefined;
         const workspaceCommand = environment!.workspaceSetupCommand;
         if (workspaceCommand && !gate.workspace.setupDone) {
           // Fatal on its first failure, skipped afterwards: like the per-repo
@@ -1324,8 +1366,43 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       } finally {
         record();
+        await recordSetupResults(repos, states, failures, inFlight);
       }
       if (primaryError) throw primaryError;
+    };
+    // Best effort: the per-link status is informational and never fails a
+    // boot. A repository whose setup ran is `configured`; one whose setup or
+    // sync failed is `failed` with the redacted message; one with no setup
+    // command, or whose setup was interrupted, is left as it was.
+    const recordSetupResults = async (
+      repos: SessionEnvironmentRepo[],
+      states: SessionEnvironmentRepositoryState[],
+      failures: Map<string, string>,
+      inFlight: string | undefined,
+    ) => {
+      const builtAt = new Date();
+      try {
+        for (const state of states) {
+          if (state.setupStatus === 'skipped') continue;
+          if (state.slug === inFlight && state.setupStatus !== 'failed') continue;
+          const repo = repos.find(candidate => candidate.slug === state.slug);
+          if (!repo) continue;
+          const error = failures.get(state.slug);
+          await storage.projectRepositories.setBuildStatus({
+            orgId: session.orgId,
+            id: repo.projectRepositoryId,
+            status: state.setupStatus === 'failed' ? 'failed' : 'configured',
+            error: error === undefined ? null : redactCredentials(error).slice(-2000),
+            builtAt,
+          });
+        }
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not record environment setup results', {
+          orgId: session.orgId,
+          sessionId: session.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     };
     // The session's real sandbox goes straight onto the Workspace. Providers
     // own lazy start (`ensureRunning()` inside the first command/process op)

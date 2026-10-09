@@ -1,3 +1,4 @@
+import { MastraError } from '@mastra/core/error';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -5,6 +6,9 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
+import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
+import { redactCredentials } from '../environment/build.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type {
   FactoryProject,
@@ -191,6 +195,17 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   controller?: ModelApplyController;
   /** The factory's normalized sandbox; describes and validates the environment settings. */
   sandbox?: FactorySandbox;
+  /** Environment builds, present only when the sandbox has a `builds` capability. */
+  environmentBuilds?: EnvironmentBuildRunner;
+}
+
+/** Provider output is shown to the user; strip any clone credential from it first. */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+  return {
+    ...build,
+    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+  };
 }
 
 /** What the environment reports when the factory has no sandbox configured. */
@@ -339,8 +354,125 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         activeTemplateId: project.activeTemplateId,
         activeTemplateHeads: project.activeTemplateHeads,
         repositories,
+        ...(await this.#buildPayload(project)),
       },
     };
+  }
+
+  /**
+   * The build keys of the environment payload, present only when the
+   * sandbox can build. Reads the project row and the schedule row; never
+   * the provider (live status is the builds routes' job).
+   */
+  async #buildPayload(project: FactoryProject) {
+    const builds = this.deps.environmentBuilds;
+    if (!builds) return {};
+    const schedules = builds.scheduleAvailable ? builds.schedules() : undefined;
+    const schedule = schedules
+      ? await readSchedule(schedules, project.id)
+      : { enabled: false, cron: null, timezone: null };
+    return {
+      buildTriggers: {
+        schedule: { ...schedule, scheduleAvailable: builds.scheduleAvailable },
+        push: { enabled: project.buildOnPushEnabled, debounceMinutes: project.buildPushDebounceMinutes },
+      },
+      build: project.lastBuildId
+        ? { buildId: project.lastBuildId, attemptedAt: project.lastBuildAttemptedAt?.toISOString() ?? null }
+        : null,
+    };
+  }
+
+  /** The builds capability behind the routes, or the 404 to answer with. */
+  #builds(context: Context) {
+    const builds = this.deps.sandbox?.builds;
+    const runner = this.deps.environmentBuilds;
+    if (!builds || !runner) return { response: context.json({ error: 'no_builds' }, 404) };
+    return { builds, runner };
+  }
+
+  #buildRoutes(): ApiRoute[] {
+    return [
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuild.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          const { heads: _heads, ...outcome } = await capability.runner.start(project.id, 'manual');
+          return context.json(outcome);
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuilds.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          if (!capability.builds.list) return context.json({ error: 'no_history' }, 404);
+          const read = await capability.runner.readContext(project.id);
+          if (!read) return context.json({ error: 'no_environment' }, 404);
+          const builds = await capability.builds.list(read.ctx, read.settings);
+          return context.json({ builds: builds.map(redactBuild) });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const capability = this.#builds(context);
+          if ('response' in capability) return capability.response;
+          // A composite provider id (E2B's `<templateId>:<buildId>`) travels
+          // encoded; Hono hands the param back decoded.
+          const buildId = context.req.param('buildId') ?? '';
+          if (!buildId) return context.json({ error: 'Build not found' }, 404);
+          const read = await capability.runner.readContext(project.id);
+          if (!read) return context.json({ error: 'no_environment' }, 404);
+          // Providers answer for any id on the host's account, so the route
+          // only forwards ids that belong to this project: its last build, or
+          // one the provider lists under the project's template.
+          if (buildId !== project.lastBuildId) {
+            const listed = capability.builds.list ? await capability.builds.list(read.ctx, read.settings) : [];
+            if (!listed.some(build => build.buildId === buildId)) {
+              return context.json({ error: 'Build not found' }, 404);
+            }
+          }
+          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
+        },
+      }),
+    ];
+  }
+
+  /** Best effort: a deleted project's cron schedule must not keep firing. */
+  async #dropSchedule(projectId: string): Promise<void> {
+    const runner = this.deps.environmentBuilds;
+    if (!runner?.scheduleAvailable) return;
+    try {
+      await runner.schedules()!.delete(scheduleIdFor(projectId));
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'SCHEDULES_NOT_FOUND') return;
+      console.warn('[factory] could not delete the environment build schedule of a deleted project:', error);
+    }
   }
 
   async #retireProjectRepositorySessions(
@@ -551,6 +683,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
+          await this.#dropSchedule(id);
           return context.body(null, 204);
         },
       }),
@@ -718,8 +851,49 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!project) return context.json({ error: 'Project not found' }, 404);
           const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
-          const { repositories: repositoryPatches, settings: settingsPatch, ...projectInput } = parsed.data;
+          const {
+            repositories: repositoryPatches,
+            settings: settingsPatch,
+            buildTriggers,
+            ...projectInput
+          } = parsed.data;
           const input: UpdateFactoryProjectInput = projectInput;
+          const runner = this.deps.environmentBuilds;
+          if (buildTriggers !== undefined) {
+            if (!runner) return context.json({ error: 'no_builds' }, 400);
+            if (buildTriggers.push?.enabled !== undefined) input.buildOnPushEnabled = buildTriggers.push.enabled;
+            if (buildTriggers.push?.debounceMinutes !== undefined) {
+              input.buildPushDebounceMinutes = buildTriggers.push.debounceMinutes;
+            }
+            if (buildTriggers.schedule) {
+              if (!runner.scheduleAvailable) {
+                if (buildTriggers.schedule.enabled) return context.json({ error: 'schedules_unavailable' }, 400);
+              } else {
+                const { cron, timezone } = buildTriggers.schedule;
+                const stored = await readSchedule(runner.schedules()!, project.id);
+                const nextCron = cron ?? stored.cron;
+                if (!nextCron)
+                  return context.json(
+                    {
+                      error: 'invalid_environment',
+                      issues: [{ message: 'cron is required', path: ['buildTriggers', 'schedule', 'cron'] }],
+                    },
+                    400,
+                  );
+                const nextTimezone = timezone ?? stored.timezone ?? undefined;
+                const message = invalidCronMessage(nextCron, nextTimezone);
+                if (message) {
+                  return context.json(
+                    {
+                      error: 'invalid_environment',
+                      issues: [{ message, path: ['buildTriggers', 'schedule', 'cron'] }],
+                    },
+                    400,
+                  );
+                }
+              }
+            }
+          }
           if (settingsPatch !== undefined) {
             if (!this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
             const result = await this.#mergeSettings(project.sandboxSettings ?? {}, settingsPatch);
@@ -770,6 +944,18 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               input,
             });
           }
+          if (buildTriggers?.schedule && runner?.scheduleAvailable) {
+            const stored = await readSchedule(runner.schedules()!, project.id);
+            await ensureSchedule(runner.schedules()!, project.id, {
+              enabled: buildTriggers.schedule.enabled,
+              cron: (buildTriggers.schedule.cron ?? stored.cron)!,
+              ...((buildTriggers.schedule.timezone ?? stored.timezone)
+                ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
+                : {}),
+            });
+          }
+          // Saving never builds: the next Build now, schedule or push run
+          // picks the changed template up.
           return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
@@ -818,6 +1004,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           return context.body(null, 204);
         },
       }),
+      ...this.#buildRoutes(),
     ];
   }
 }

@@ -1,6 +1,8 @@
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
+
 export interface FactoryProject {
   id: string;
   orgId: string;
@@ -25,6 +27,16 @@ export interface FactoryProject {
   activeTemplateId: string | null;
   /** Repository slug → commit the active template was built at. */
   activeTemplateHeads: Record<string, string> | null;
+  /** Provider build id of the most recent build attempt; its status is read live from the provider. */
+  lastBuildId: string | null;
+  /** Repository slug → commit the most recent build attempt pinned, so its status can be read back. */
+  lastBuildHeads: Record<string, string> | null;
+  /** When the most recent build attempt started (also the leading edge of the push debounce window). */
+  lastBuildAttemptedAt: Date | null;
+  /** Whether a push to an environment repository's default branch starts a build. */
+  buildOnPushEnabled: boolean;
+  /** Minutes after a push-triggered attempt during which further pushes do not build. */
+  buildPushDebounceMinutes: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +59,11 @@ export interface UpdateFactoryProjectInput {
   workspaceSetupCommand?: string | null;
   activeTemplateId?: string | null;
   activeTemplateHeads?: Record<string, string> | null;
+  lastBuildId?: string | null;
+  lastBuildHeads?: Record<string, string> | null;
+  lastBuildAttemptedAt?: Date | null;
+  buildOnPushEnabled?: boolean;
+  buildPushDebounceMinutes?: number;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -66,6 +83,11 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
+    last_build_id: { type: 'text', nullable: true },
+    last_build_heads: { type: 'json', nullable: true },
+    last_build_attempted_at: { type: 'timestamp', nullable: true },
+    build_on_push_enabled: { type: 'boolean', default: false },
+    build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
     /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -89,6 +111,11 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   workspace_setup_command: string | null;
   active_template_id: string | null;
   active_template_heads: Record<string, string> | null;
+  last_build_id: string | null;
+  last_build_heads: Record<string, string> | null;
+  last_build_attempted_at: Date | null;
+  build_on_push_enabled: boolean | null;
+  build_push_debounce_minutes: number | null;
   environment_backfilled_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -110,6 +137,11 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     workspaceSetupCommand: row.workspace_setup_command ?? null,
     activeTemplateId: row.active_template_id ?? null,
     activeTemplateHeads: row.active_template_heads ?? null,
+    lastBuildId: row.last_build_id ?? null,
+    lastBuildHeads: row.last_build_heads ?? null,
+    lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
+    buildOnPushEnabled: row.build_on_push_enabled ?? false,
+    buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -208,9 +240,71 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.workspaceSetupCommand !== undefined ? { workspace_setup_command: input.workspaceSetupCommand } : {}),
       ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
       ...(input.activeTemplateHeads !== undefined ? { active_template_heads: input.activeTemplateHeads } : {}),
+      ...(input.lastBuildId !== undefined ? { last_build_id: input.lastBuildId } : {}),
+      ...(input.lastBuildHeads !== undefined ? { last_build_heads: input.lastBuildHeads } : {}),
+      ...(input.lastBuildAttemptedAt !== undefined ? { last_build_attempted_at: input.lastBuildAttemptedAt } : {}),
+      ...(input.buildOnPushEnabled !== undefined ? { build_on_push_enabled: input.buildOnPushEnabled } : {}),
+      ...(input.buildPushDebounceMinutes !== undefined
+        ? { build_push_debounce_minutes: input.buildPushDebounceMinutes }
+        : {}),
       updated_at: new Date(),
     }));
     return row ? toFactoryProject(row) : null;
+  }
+
+  /**
+   * Leading-edge debounce for push-triggered builds: stamps
+   * `last_build_attempted_at = now` and resolves true when no attempt started
+   * within the last `debounceMinutes`, else writes nothing and resolves
+   * false. The read and the write run under one `updateAtomic`, so two
+   * concurrent webhooks never both win.
+   */
+  async claimBuildAttempt({
+    id,
+    debounceMinutes,
+    now = new Date(),
+  }: {
+    id: string;
+    debounceMinutes: number;
+    now?: Date;
+  }): Promise<boolean> {
+    let claimed = false;
+    await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+      const last = current.last_build_attempted_at;
+      if (last && now.getTime() - last.getTime() < debounceMinutes * 60_000) return null;
+      claimed = true;
+      return { last_build_attempted_at: now, updated_at: now };
+    });
+    return claimed;
+  }
+
+  /**
+   * Pins the active template to a finished build, but only while that build is
+   * still the project's last one. Overlapping runs (two settings edits in a
+   * row, Build now during a push build) can finish out of order; the write and
+   * the `last_build_id` check run under one `updateAtomic` so a stale run never
+   * overwrites a newer build's pin. Resolves false when the pin was skipped.
+   */
+  async pinActiveTemplate({
+    id,
+    buildId,
+    templateId,
+    heads,
+    now = new Date(),
+  }: {
+    id: string;
+    buildId: string;
+    templateId: string;
+    heads: Record<string, string>;
+    now?: Date;
+  }): Promise<boolean> {
+    let pinned = false;
+    await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+      if (current.last_build_id !== buildId) return null;
+      pinned = true;
+      return { active_template_id: templateId, active_template_heads: heads, updated_at: now };
+    });
+    return pinned;
   }
 
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {

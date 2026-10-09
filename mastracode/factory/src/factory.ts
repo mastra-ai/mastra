@@ -46,6 +46,8 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { EnvironmentBuildRunner } from './environment/build-runner.js';
+import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
@@ -424,6 +426,8 @@ export class MastraFactory {
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
+  #environmentBuilds: EnvironmentBuildRunner | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -820,9 +824,30 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    // Proactive environment builds exist only when the sandbox can build
+    // templates on its own; the workflow is registered on the host's Mastra
+    // and the runner reaches the booted instance through the controller.
+    this.#environmentBuilds = this.#sandbox?.builds
+      ? new EnvironmentBuildRunner(
+          {
+            sandbox: this.#sandbox,
+            projects: factoryProjectsStorage,
+            sourceControl: githubIntegration?.versionControl
+              ? {
+                  storage: sourceControlStorage.forIntegration(githubIntegration.id),
+                  versionControl: githubIntegration.versionControl,
+                }
+              : undefined,
+            logger: { info: (msg, meta) => console.info(`[Mastra Factory] ${msg}`, meta ?? {}) },
+          },
+          { getMastra: () => this.#prepared?.base.controller.getMastra() },
+        )
+      : undefined;
+    const environmentBuilds = this.#environmentBuilds;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
       sandbox: this.#sandbox,
+      ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
       versionControlIntegrationIds: integrations
@@ -1340,6 +1365,7 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
+            ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
             factoryStorage: storage,
             integrationStorage,
@@ -1662,6 +1688,7 @@ export class MastraFactory {
       // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
       ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
+      ...(environmentBuilds ? { workflows: { [ENVIRONMENT_BUILD_WORKFLOW_ID]: environmentBuilds.workflow } } : {}),
     };
   }
 
@@ -1675,6 +1702,7 @@ export class MastraFactory {
       throw new Error('MastraFactory.finalize() called before prepare()');
     }
     await timedPhase('finalize.controller', () => this.#prepared!.finalize());
+    await this.#environmentBuilds?.probeSchedules();
     await timedPhase(
       'finalize.reconcileBoundThreads',
       () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),

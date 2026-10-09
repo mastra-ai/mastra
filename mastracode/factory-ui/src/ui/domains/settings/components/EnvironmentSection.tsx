@@ -1,12 +1,22 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useFactoryEnvironmentQuery, useSaveFactoryEnvironmentMutation } from '../../../../hooks/useFactoryEnvironment';
+import {
+  useEnvironmentBuildQuery,
+  useEnvironmentBuildsQuery,
+  useFactoryEnvironmentQuery,
+  useRequestEnvironmentBuildMutation,
+  useSaveFactoryEnvironmentMutation,
+} from '../../../../hooks/useFactoryEnvironment';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { settingsSectionPath } from '../settingsSections';
+import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
+import { BuildStatusBlock } from './environment/BuildStatusBlock';
+import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
@@ -14,8 +24,8 @@ import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * The Factory's environment: what every session's sandbox boots from. The
- * repositories it clones, then its configuration: workspace setup and the
- * sandbox provider's own settings.
+ * repositories it clones, its configuration (workspace setup and the sandbox
+ * provider's own settings) and, when the sandbox can build, its builds.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -81,6 +91,7 @@ function EnvironmentBlocks({
       );
 
   const disabled = saveMutation.isPending;
+  const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
@@ -109,6 +120,65 @@ function EnvironmentBlocks({
           <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
         </WorkspaceSetupBlock>
       </SettingsSubsection>
+      {canBuild && (
+        <SettingsSubsection
+          scope="factory"
+          title="Builds"
+          description="The template image built ahead of sessions, and when it rebuilds."
+          action={<BuildNow factoryId={factoryId} environment={environment} />}
+        >
+          <div className="flex flex-col gap-4">
+            <SettingsContainer>
+              <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+            </SettingsContainer>
+            {environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
+          </div>
+        </SettingsSubsection>
+      )}
     </div>
+  );
+}
+
+/** Build now with the last build's live status beside it; in the Builds header. */
+function BuildNow({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
+  const requestBuild = useRequestEnvironmentBuildMutation();
+  const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);
+
+  const buildNow = () =>
+    requestBuild.mutate(
+      { factoryId },
+      {
+        onSuccess: started => {
+          if (started.outcome === 'started') toast.success('Build started');
+          else toast.error(`Build not started: ${started.reason ?? started.outcome}`);
+        },
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to start the build'),
+      },
+    );
+
+  return (
+    <BuildStatusBlock
+      lastBuild={environment.build}
+      build={buildQuery.data}
+      requesting={requestBuild.isPending}
+      onBuildNow={buildNow}
+    />
+  );
+}
+
+/** The provider's build history; mounted only when the sandbox lists builds. */
+function BuildHistory({ factoryId }: { factoryId: string }) {
+  const buildsQuery = useEnvironmentBuildsQuery(factoryId, true);
+  return (
+    <BuildHistoryBlock
+      builds={buildsQuery.data}
+      error={
+        buildsQuery.isError
+          ? buildsQuery.error instanceof Error
+            ? buildsQuery.error.message
+            : 'Failed to load builds'
+          : undefined
+      }
+    />
   );
 }
