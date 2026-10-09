@@ -78,6 +78,16 @@
         "default": "./dist/routes/index.cjs"
       }
     },
+    "./knowledge-compat": {
+      "import": {
+        "types": "./dist/knowledge-compat/index.d.ts",
+        "default": "./dist/knowledge-compat/index.js"
+      },
+      "require": {
+        "types": "./dist/knowledge-compat/index.d.cts",
+        "default": "./dist/knowledge-compat/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
