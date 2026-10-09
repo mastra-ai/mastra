@@ -392,7 +392,7 @@ const RETIRED_SANDBOX_OPTIONS: Record<string, string> = {
   machine:
     "'machine' becomes the provider instance: one sandbox per session, constructed by the FactorySandbox, instead of one template machine cloned per repository",
   workdir:
-    "'workdir' is gone: remote providers clone into the VM's home directory and local providers check out under their own workingDirectory",
+    "'workdir' becomes the workingDirectory of the FactorySandboxContext, which every provider passes to its sandbox; when it is absent the provider uses its own default",
   maxSandboxes: "'maxSandboxes' is gone with the sandbox fleet: there is one sandbox per session and no pool to cap",
 };
 
