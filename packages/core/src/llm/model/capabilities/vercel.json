@@ -47,6 +47,7 @@
     "bytedance/seedance-2.0",
     "bytedance/seedance-2.0-fast",
     "bytedance/seedance-2.0-mini",
+    "callstack/apex",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4.1-flash",
     "fireworks/ember-1",
@@ -1393,6 +1394,12 @@
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
+      }
+    ],
+    "callstack/apex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "fireworks/ember-1": [
