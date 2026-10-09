@@ -494,7 +494,7 @@ export class OtelExporter extends BaseExporter {
     const signals: string[] = [];
 
     if (this.processor) {
-      flushPromises.push(this.processor.forceFlush());
+      flushPromises.push(this.processor.forceFlush().then(() => this.exporter?.forceFlush?.()));
       signals.push('traces');
     }
     if (this.loggerProvider) {
