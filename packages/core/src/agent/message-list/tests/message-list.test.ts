@@ -4433,4 +4433,74 @@ describe('MessageList', () => {
       expect(uiMessages[0].content).toBe('Content with empty parts');
     });
   });
+
+  describe('response iteration splitting', () => {
+    const createSplitList = () => {
+      const list = new MessageList({ generateMessageId: () => 'current-response' });
+      list.add(
+        {
+          id: 'response',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'reasoning', reasoning: 'thinking' },
+              { type: 'text', text: 'answer' },
+            ],
+          },
+        },
+        'response',
+      );
+      return list;
+    };
+
+    it('keeps the original id on persisted parts while the processor split is live', () => {
+      const list = createSplitList();
+
+      expect(list.splitResponseMessageAtPartOffset('response', 1)).toEqual({
+        earlierMessageId: 'response',
+        currentMessageId: 'current-response',
+      });
+      expect(list.get.response.db().map(message => message.id)).toEqual(['response', 'current-response']);
+
+      const persistenceList = list.cloneForPersistence();
+      expect(persistenceList.get.response.db()).toMatchObject([
+        {
+          id: 'response',
+          content: {
+            parts: [
+              { type: 'reasoning', reasoning: 'thinking' },
+              { type: 'text', text: 'answer' },
+            ],
+          },
+        },
+      ]);
+    });
+
+    it('keeps the original id when the current iteration is removed', () => {
+      const list = createSplitList();
+      const split = list.splitResponseMessageAtPartOffset('response', 1)!;
+
+      list.removeByIds([split.currentMessageId]);
+      list.coalesceSplitResponseMessages(split.earlierMessageId, split.currentMessageId);
+
+      expect(list.get.response.db().map(message => message.id)).toEqual(['response']);
+    });
+
+    it('hands the original id to the current iteration when earlier parts are removed', () => {
+      const list = createSplitList();
+      const split = list.splitResponseMessageAtPartOffset('response', 1)!;
+
+      list.removeByIds([split.earlierMessageId]);
+      list.coalesceSplitResponseMessages(split.earlierMessageId, split.currentMessageId);
+
+      expect(list.get.response.db()).toMatchObject([
+        {
+          id: 'response',
+          content: { parts: [{ type: 'text', text: 'answer' }] },
+        },
+      ]);
+    });
+  });
 });

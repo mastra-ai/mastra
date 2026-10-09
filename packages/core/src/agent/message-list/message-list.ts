@@ -809,7 +809,8 @@ export class MessageList {
 
   /**
    * Split an accumulated response message so result processors can transform the current loop iteration independently.
-   * The original id stays with the current iteration because callers use it to detect removal by a processor.
+   * The original id stays with the earlier, potentially persisted parts so storage and client updates keep resolving
+   * the same row while processors work with the current iteration under a temporary id.
    * @internal
    */
   public splitResponseMessageAtPartOffset(
@@ -845,29 +846,30 @@ export class MessageList {
       return content;
     };
 
-    const earlierMessageId = this.newMessageId(message.role);
-    const earlierMessage: MastraDBMessage = {
+    const earlierMessageId = messageId;
+    const currentMessageId = this.newMessageId(message.role);
+    const currentMessage: MastraDBMessage = {
       ...message,
-      id: earlierMessageId,
-      content: contentForParts(parts.slice(0, partOffset)),
+      id: currentMessageId,
+      content: contentForParts(parts.slice(partOffset)),
     };
-    message.content = contentForParts(parts.slice(partOffset));
-    this.messages.splice(messageIndex, 1, earlierMessage, message);
+    message.content = contentForParts(parts.slice(0, partOffset));
+    this.messages.splice(messageIndex, 1, message, currentMessage);
 
     const state = this.serialize();
     for (const key of ['newResponseMessages', 'newResponseMessagesPersisted'] as const) {
-      state[key] = state[key].flatMap(id => (id === messageId ? [earlierMessageId, messageId] : [id]));
+      state[key] = state[key].flatMap(id => (id === messageId ? [earlierMessageId, currentMessageId] : [id]));
     }
     this.deserialize(state);
-    this.responseMessageSplits.set(messageId, earlierMessageId);
+    this.responseMessageSplits.set(currentMessageId, earlierMessageId);
 
-    return { earlierMessageId, currentMessageId: messageId };
+    return { earlierMessageId, currentMessageId };
   }
 
   /**
    * Restore a split processor view to the accumulated response shape used for persistence.
-   * The original response id belongs to the current iteration and remains stable even when
-   * the processor removes that half.
+   * The original response id belongs to the earlier iteration and remains stable unless the
+   * processor removes that half, in which case the current survivor inherits it.
    * @internal
    */
   public coalesceSplitResponseMessages(earlierMessageId: string, currentMessageId: string): void {
@@ -877,12 +879,12 @@ export class MessageList {
     const earlierMessage = this.messages[earlierIndex];
     const currentMessage = this.messages[currentIndex];
 
-    if (!earlierMessage) return;
-
-    if (!currentMessage) {
-      earlierMessage.id = currentMessageId;
+    if (!earlierMessage) {
+      if (currentMessage) currentMessage.id = earlierMessageId;
       return;
     }
+
+    if (!currentMessage) return;
 
     const parts = [...(earlierMessage.content.parts ?? []), ...(currentMessage.content.parts ?? [])];
     const content = {
@@ -913,10 +915,10 @@ export class MessageList {
       );
     }
 
-    currentMessage.content = content;
+    earlierMessage.content = content;
     this.messages.splice(Math.max(earlierIndex, currentIndex), 1);
-    this.messages.splice(Math.min(earlierIndex, currentIndex), 1, currentMessage);
-    this.stateManager.removeMessage(earlierMessage);
+    this.messages.splice(Math.min(earlierIndex, currentIndex), 1, earlierMessage);
+    this.stateManager.removeMessage(currentMessage);
   }
 
   /**
