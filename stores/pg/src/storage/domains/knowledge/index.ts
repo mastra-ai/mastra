@@ -872,6 +872,7 @@ export class KnowledgePG extends KnowledgeStorage {
       for (const scope of plan.scopes) {
         if (deletedScopeAddresses.has(scope.address)) continue;
         const scopeNodeId = scopes[scope.address]!;
+        if (plan.retrofit === false && !createdScopeIds.includes(scopeNodeId)) continue;
         for (const parentAddress of scope.parentAddresses ?? []) {
           const parentId = await resolveAddress(parentAddress);
           if (!parentId || deletedScopeAddresses.has(parentAddress)) {

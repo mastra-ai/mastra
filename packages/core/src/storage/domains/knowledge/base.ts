@@ -135,6 +135,11 @@ export interface KnowledgeStructureScope {
 }
 export interface KnowledgeStructurePlan {
   scopes: KnowledgeStructureScope[];
+  /**
+   * Whether scopes that already exist gain newly declared parents and grants. Defaults to true;
+   * lazily materialized scopes pass false so they keep the shape they were created with.
+   */
+  retrofit?: boolean;
 }
 export interface KnowledgeStructureReconcileResult {
   scopes: Record<string, string>;
