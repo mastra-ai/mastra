@@ -55,6 +55,8 @@ new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH!
 
 A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it (2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`), and Factory stores only the values that were set.
 
+Keep schema changes additive: add fields, and read both names for a release when you rename one. The stored document outlives the schema that wrote it, so a key the current schema no longer declares can appear in it, for example after the host switches provider. When such a key makes an update fail validation, Factory drops the undeclared keys and retries before refusing the update. Keys the update itself sets are never dropped.
+
 ### Callback form
 
 The bare callback `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })` is also supported. Factory wraps it as a `provider: 'custom'` sandbox. Everything about the sandbox stays inside the callback, and the environment exposes nothing to tune.
