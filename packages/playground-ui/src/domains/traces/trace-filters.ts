@@ -120,6 +120,7 @@ const TRACE_SYNTHETIC_PARAM_BY_FIELD: Record<string, string> = {
   rootEntityType: TRACE_ROOT_ENTITY_TYPE_PARAM,
   status: TRACE_STATUS_PARAM,
 };
+
 export const TRACE_LIST_MODE_PARAM = 'listMode';
 /** Branch-mode only: identifies the anchor span that defines the displayed subtree.
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
