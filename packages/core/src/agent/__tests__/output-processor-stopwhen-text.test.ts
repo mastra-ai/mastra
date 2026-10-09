@@ -288,4 +288,57 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('');
     expect(await stream.text).toBe('');
   });
+
+  it('reconciles the final step when a processor replaces the response under a new id', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'abcdef'), finish('stop')],
+      [...textPart('t2', 'ghij'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'replace-response-id',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            const parts = response.content?.parts ?? [];
+            const rewritten = parts.map(part =>
+              part.type === 'text' ? { ...part, text: part.text.replace('abcdef', 'ab') } : part,
+            );
+            return messages.map(message =>
+              message.id === response.id
+                ? {
+                    ...message,
+                    id: 'replaced-response',
+                    content: {
+                      ...message.content,
+                      content: rewritten.map(part => (part.type === 'text' ? part.text : '')).join(''),
+                      parts: rewritten,
+                    },
+                  }
+                : message,
+            );
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The processor is still matched to the step it rewrote, so the final step carries only the
+    // current iteration's text instead of the whole accumulated response.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'ghij']);
+    expect(fullOutput.text).toBe('abcdefghij');
+  });
 });

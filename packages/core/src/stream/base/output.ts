@@ -1276,7 +1276,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   const responseMessages = self.messageList.get.response.db();
                   const processedStepMessage = stepMessage
-                    ? responseMessages.find(message => message.id === stepMessage.id)
+                    ? (responseMessages.find(message => message.id === stepMessage.id) ??
+                      resolveOutputMessageSkippingCompletionChecks(self.messageList))
                     : undefined;
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
                   const processedStepParts = processedStepMessage?.content?.parts;
