@@ -59,7 +59,7 @@ describe('Environment settings', () => {
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
     expect(headings).toEqual(['Repositories', 'Configuration']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
-    const command = screen.getByRole('textbox', { name: 'Workspace setup command' });
+    const command = screen.getByRole('textbox', { name: 'Setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));
     expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Configuration' }).closest('section'));
   });
@@ -108,7 +108,7 @@ describe('Environment settings', () => {
     renderEnvironmentSettings();
 
     expect(await screen.findByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');
-    expect(screen.getByRole('textbox', { name: 'Workspace setup command' })).toHaveValue('pnpm install');
+    expect(screen.getByRole('textbox', { name: 'Setup command' })).toHaveValue('pnpm install');
 
     // Rows follow `position`; a link whose repository is gone is not shown at all.
     const names = screen.getAllByText(/^acme\//).map(node => node.textContent);
@@ -383,7 +383,7 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    const input = await screen.findByRole('textbox', { name: 'Workspace setup command' });
+    const input = await screen.findByRole('textbox', { name: 'Setup command' });
     await user.type(input, 'pnpm install{Enter}');
 
     await waitFor(() => expect(patches).toHaveLength(1));

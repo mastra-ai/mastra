@@ -35,14 +35,14 @@ export function WorkspaceSetupBlock({
         </div>
       </SettingsRow>
       <SettingsRow
-        label="Workspace setup"
-        description="Runs in the working directory after every repository's setup, while the template builds."
+        label="Setup command"
+        description="Runs in the working directory once every repository is cloned and its own setup command has finished, while the template builds."
       >
         <div className="w-full lg:max-w-96">
           <CommittedInput
-            label="Workspace setup command"
+            label="Setup command"
             value={command ?? ''}
-            placeholder="e.g. pnpm install"
+            placeholder="e.g. ./scripts/bootstrap.sh"
             disabled={disabled}
             onCommit={next => onSave({ workspaceSetupCommand: next || null })}
           />
