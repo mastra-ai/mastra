@@ -1,6 +1,7 @@
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import type { KnowledgeRecord, KnowledgeScope } from '@mastra/core/storage';
+import type { KnowledgeRecord } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it } from 'vitest';
 
@@ -37,7 +38,7 @@ const TRANSIENT = [
   'bespoke',
 ];
 
-const scope: KnowledgeScope = ['org:acme', 'resource:user-42', 'thread:alpha'];
+const scopeAddresses = ['org:acme', 'resource:user-42', 'resource:user-42:thread:alpha'];
 
 const vector = {
   createIndex: async () => {},
@@ -60,10 +61,11 @@ const embedder = {
 
 describe.skipIf(!runEval)('Subconscious curator on a noisy transcript (live model)', () => {
   it('saves the durable fact and none of the progress, IDs, PIDs, temp paths, or guesses', async () => {
-    const memory = new Memory({ storage: new InMemoryStore(), vector, embedder });
-    const subconscious = new Subconscious({ defaultScope: 'resource', model: 'anthropic/claude-haiku-4-5' });
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'eval', storage }), vector, embedder });
+    const subconscious = new Subconscious({ model: 'anthropic/claude-haiku-4-5' });
     const curate = subconscious
-      .createObservationExtractors('anthropic/claude-haiku-4-5', () => memory)
+      .createObservationExtractors('anthropic/claude-haiku-4-5', () => memory.createSubconsciousMemory())
       .find(extractor => extractor.name === 'Curate')!;
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
@@ -81,14 +83,19 @@ describe.skipIf(!runEval)('Subconscious curator on a noisy transcript (live mode
     } as any);
     await subconscious.settled();
 
-    const store = (await memory.storage.getStore('knowledge'))!;
-    const nodes = await store.listNodes({ scope, limit: 100 });
+    const store = await memory.getKnowledgeStore();
+    const scopeIds: string[] = [];
+    for (const address of scopeAddresses) {
+      const scope = await store.getScopeAddress(address);
+      if (scope) scopeIds.push(scope.scopeNodeId);
+    }
+    const nodes = await store.listNodes({ scopeIds, isScope: false, limit: 100 });
     const records: KnowledgeRecord[] = [];
     for (const node of nodes) {
-      records.push(...(await store.listKnowledgeAbout({ node, scope, limit: 100 })).records);
+      records.push(...(await store.listRecords({ node, scopeIds, limit: 100 })).records);
     }
     const saved = [
-      ...nodes.map(node => `${node.name}\n${node.description ?? ''}\n${node.content ?? ''}`),
+      ...nodes.map(node => `${node.name}\n${String(node.metadata?.description ?? '')}`),
       ...records.map(record => record.text),
     ].join('\n---\n');
     console.info(`Curator saved ${nodes.length} nodes and ${records.length} records:\n${saved}`);
