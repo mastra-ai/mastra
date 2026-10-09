@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Tree } from '@mastra/playground-ui/components/Tree';
@@ -15,6 +16,7 @@ import type {
   WorkspaceChangeStatus,
 } from '../../../../api/types';
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
+import { GitLabIcon } from '../../../ui/icons';
 import { treeRowContainmentClass } from '../layout';
 
 const CodeDiff = lazy(() =>
@@ -149,21 +151,29 @@ function buildChangeTree(changes: WorkspaceChange[], prefix = ''): ChangeTreeNod
   return sortChangeTree(nodes);
 }
 
+export type RepositoryProvider = 'github' | 'gitlab';
+
+/** Source control provider per repository slug, from the factory's linked repositories. */
+export type RepositoryProviders = Record<string, RepositoryProvider | undefined>;
+
 interface RepositoryGroupHeaderProps {
-  slug: string;
+  /** What the row names: the repository slug on Changes, the checkout directory on Files. */
+  label: string;
+  /** Shown before the label when known; the Changes tab passes it, the Files tab does not. */
+  provider?: RepositoryProvider;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children?: ReactNode;
 }
 
 /** The collapsible row a repository's files sit under when the session holds several repositories. */
-export function RepositoryGroupHeader({ slug, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
+export function RepositoryGroupHeader({ label, provider, open, onOpenChange, children }: RepositoryGroupHeaderProps) {
   return (
     <button
       type="button"
       className="flex min-h-8 w-full items-center gap-1.5 px-2 text-left"
       aria-expanded={open}
-      aria-label={`${open ? 'Hide' : 'Show'} files in ${slug}`}
+      aria-label={`${open ? 'Hide' : 'Show'} files in ${label}`}
       data-testid="workspace-repository-group"
       onClick={() => onOpenChange(!open)}
     >
@@ -172,8 +182,17 @@ export function RepositoryGroupHeader({ slug, open, onOpenChange, children }: Re
       ) : (
         <ChevronRight className="text-muted-foreground shrink-0" size={14} />
       )}
+      {provider ? (
+        <span aria-hidden="true" className="flex shrink-0 items-center" data-testid={`repository-provider-${provider}`}>
+          {provider === 'gitlab' ? (
+            <GitLabIcon className="text-foreground size-3.5 shrink-0" />
+          ) : (
+            <GithubIcon className="text-foreground size-3.5 shrink-0" />
+          )}
+        </span>
+      ) : null}
       <Txt as="span" tone="ink" variant="column" font="mono" className="min-w-0 flex-1 truncate">
-        {slug}
+        {label}
       </Txt>
       {children}
     </button>
@@ -323,6 +342,8 @@ interface WorkspaceChangesPanelProps {
   workspacePath: string;
   visible: boolean;
   changes?: WorkspaceChanges;
+  /** Provider per repository slug for the group icons; a slug without one gets the GitHub icon. */
+  repositoryProviders?: RepositoryProviders;
   isLoading: boolean;
   isRefreshing: boolean;
   error?: Error;
@@ -336,6 +357,7 @@ export function WorkspaceChangesPanel({
   workspacePath,
   visible,
   changes,
+  repositoryProviders,
   isLoading,
   isRefreshing,
   error,
@@ -443,6 +465,7 @@ export function WorkspaceChangesPanel({
               <RepositoryChangesGroup
                 key={repository.prefix}
                 repository={repository}
+                provider={repositoryProviders?.[repository.slug.toLowerCase()] ?? 'github'}
                 open={openFolders[repository.prefix] ?? true}
                 onOpenChange={open => onFolderOpenChange(repository.prefix, open)}
                 openFolders={openFolders}
@@ -460,6 +483,7 @@ export function WorkspaceChangesPanel({
 
 interface RepositoryChangesGroupProps {
   repository: WorkspaceChangesRepository;
+  provider: RepositoryProvider;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   openFolders: Record<string, boolean>;
@@ -470,6 +494,7 @@ interface RepositoryChangesGroupProps {
 
 function RepositoryChangesGroup({
   repository,
+  provider,
   open,
   onOpenChange,
   openFolders,
@@ -481,7 +506,7 @@ function RepositoryChangesGroup({
 
   return (
     <section aria-label={`Changes in ${repository.slug}`}>
-      <RepositoryGroupHeader slug={repository.slug} open={open} onOpenChange={onOpenChange}>
+      <RepositoryGroupHeader label={repository.slug} provider={provider} open={open} onOpenChange={onOpenChange}>
         <Txt as="span" tone="muted" variant="meta" className="shrink-0">
           {!repository.available
             ? 'Unavailable'

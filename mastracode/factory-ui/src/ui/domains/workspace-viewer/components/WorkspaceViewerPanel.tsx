@@ -1,10 +1,12 @@
 import { useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import { useFactoryQuery } from '../../../../hooks/useFactories';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
 import type { WorkItem } from '../../factory/services/workItems';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
+import type { RepositoryProviders } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceOverview } from './WorkspaceOverview';
@@ -39,6 +41,10 @@ export function WorkspaceViewerPanel({
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
   const listing = useWorkspaceFiles(workspacePath, threadId, { enabled: visible });
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
+  const factory = useFactoryQuery(factoryProjectId);
+  const repositoryProviders: RepositoryProviders | undefined = factory.data
+    ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
+    : undefined;
   const file = useWorkspaceFile(workspacePath, selectedFilePath, threadId, {
     enabled: visible && view.type === 'file',
     select: selectWorkspaceFilePreview,
@@ -70,6 +76,7 @@ export function WorkspaceViewerPanel({
         workspacePath={workspacePath}
         visible={visible}
         changes={changes.data}
+        repositoryProviders={repositoryProviders}
         isLoading={changes.isLoading}
         isRefreshing={changes.isFetching}
         error={changes.error ?? undefined}

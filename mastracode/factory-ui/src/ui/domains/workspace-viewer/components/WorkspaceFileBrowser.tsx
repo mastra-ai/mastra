@@ -271,7 +271,7 @@ export function WorkspaceFileBrowser({
               group.repository ? (
                 <section key={group.repository.prefix} aria-label={`Files in ${group.repository.slug}`}>
                   <RepositoryGroupHeader
-                    slug={group.repository.slug}
+                    label={group.repository.prefix.replace(/\/$/, '')}
                     open={openFolders[group.repository.prefix] ?? true}
                     onOpenChange={open => onFolderOpenChange(group.repository!.prefix, open)}
                   >

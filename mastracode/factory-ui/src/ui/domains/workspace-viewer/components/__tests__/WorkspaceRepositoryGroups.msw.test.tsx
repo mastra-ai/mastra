@@ -36,6 +36,7 @@ function renderChanges(changes: typeof multiRepositoryChanges) {
       workspacePath={WORKSPACE}
       visible
       changes={changes}
+      repositoryProviders={{ 'mastra-ai/mastra': 'github', 'mastra-ai/platform': 'gitlab' }}
       isLoading={false}
       isRefreshing={false}
       onRefresh={noop}
@@ -87,6 +88,10 @@ describe('workspace repository groups', () => {
       expect.stringContaining('mastra-ai/platform'),
       expect.stringContaining('mastra-ai/mastra-website'),
     ]);
+    // The icon follows the factory's provider for the slug; an unknown slug gets the GitHub icon.
+    expect(within(groups[0]!).getByTestId('repository-provider-github')).toBeInTheDocument();
+    expect(within(groups[1]!).getByTestId('repository-provider-gitlab')).toBeInTheDocument();
+    expect(within(groups[2]!).getByTestId('repository-provider-github')).toBeInTheDocument();
     expect(groups[0]).toHaveTextContent('2 files');
     expect(groups[0]).toHaveTextContent('+6');
     expect(groups[0]).toHaveTextContent('−2');
@@ -125,16 +130,19 @@ describe('workspace repository groups', () => {
 
     const panel = screen.getByLabelText('Workspace files');
     const groups = repositoryGroups(panel);
+    // Files groups are named after the checkout directories, without an icon.
     expect(groups.map(group => group.textContent)).toEqual([
-      expect.stringContaining('mastra-ai/mastra'),
-      expect.stringContaining('mastra-ai/platform'),
-      expect.stringContaining('mastra-ai/mastra-website'),
+      expect.stringMatching(/^mastra\d/),
+      expect.stringMatching(/^platform\d/),
+      expect.stringMatching(/^mastra-website\d/),
     ]);
+    expect(within(panel).queryByText('mastra-ai/mastra')).not.toBeInTheDocument();
+    expect(within(panel).queryByTestId('repository-provider-github')).not.toBeInTheDocument();
     expect(groups[0]).toHaveTextContent('1 file');
     expect(within(panel).getByText('4 files')).toBeInTheDocument();
     // Repository folders never render as tree folders; the artifacts folder does, after the groups.
     expect(treeItemIds(panel)).toEqual(['platform/proof.txt', 'mastra-website/proof.txt']);
-    expect(within(panel).queryByText('platform')).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('treeitem', { name: /^platform$/ })).not.toBeInTheDocument();
     const artifacts = within(panel).getByRole('button', { name: '.artifacts' });
     expect(artifacts.compareDocumentPosition(groups[2]!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
 
