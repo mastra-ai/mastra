@@ -1,4 +1,4 @@
-import { ChevronRight, Play } from 'lucide-react';
+import { Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
@@ -11,6 +11,7 @@ import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
 import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { DynamicForm } from '@/lib/form';
@@ -217,7 +218,7 @@ export const WorkflowInputData = ({
   return (
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 

@@ -56,9 +56,9 @@ function Stage({
         </Tooltip>
         {!isLast && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
       </div>
-      <div className="grid min-w-0 gap-0.5">
+      <div className="grid min-w-0 grid-cols-1 gap-0.5">
         <div className="flex min-h-5 items-center">
-          <Txt tone="ink" as="span" variant="caption" className="block">
+          <Txt tone="ink" as="span" variant="caption" className="block min-w-0">
             {subject}
           </Txt>
         </div>
@@ -70,7 +70,7 @@ function Stage({
   );
 }
 
-const linkClass = 'text-foreground inline-flex min-w-0 items-center gap-1.5 hover:underline';
+const linkClass = 'text-foreground inline-flex max-w-full min-w-0 items-center gap-1.5 hover:underline';
 
 /**
  * Reads the experiment as the pipeline it actually is: every dataset item is sent

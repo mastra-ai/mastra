@@ -1,7 +1,7 @@
 import { Code } from '@mastra/playground-ui/components/Code';
 import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
@@ -53,15 +53,7 @@ function AuditEventRow({
       <DataList.TextCell>{target?.name ?? target?.id}</DataList.TextCell>
       <DataList.TextCell>{auditMetadataPreview(event)}</DataList.TextCell>
       <DataList.Cell className="text-placeholder justify-end empty:before:content-none">
-        {hasMetadata ? (
-          <ChevronRight
-            aria-hidden="true"
-            className={cn(
-              'size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none',
-              expanded && 'rotate-90',
-            )}
-          />
-        ) : null}
+        {hasMetadata ? <DisclosureChevron direction="right" className="size-3.5" /> : null}
       </DataList.Cell>
     </>
   );

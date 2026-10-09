@@ -214,6 +214,12 @@ export interface SerializableClientTool {
 export interface SerializableDurableOptions {
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
+  /**
+   * Names of call-time `toolsets` tools. Their `execute` closures cannot cross
+   * a process boundary, so a worker rebuilding tools uses these names to fail
+   * loudly instead of silently dropping them.
+   */
+  toolsetToolNames?: string[];
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
