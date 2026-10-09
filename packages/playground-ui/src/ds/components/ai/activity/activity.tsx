@@ -1,8 +1,9 @@
-import { ChevronRight, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useArriving } from '@/ds/components/Arrival';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
@@ -205,11 +206,12 @@ export const ActivityDisclosure = ({ className, children, ...props }: ComponentP
         className={cn(
           'flex shrink-0 items-center text-muted-foreground/60 transition duration-150 motion-reduce:transition-none',
           'group-hover/row:text-muted-foreground group-has-focus-visible/row:text-muted-foreground',
-          open && 'rotate-90 text-muted-foreground',
+          open && 'text-muted-foreground',
+          open && children != null && 'rotate-90',
           !foldable && 'opacity-0',
         )}
       >
-        {children ?? <ChevronRight size={13} />}
+        {children ?? <DisclosureChevron direction="right" open={open} className="size-3.25" />}
       </span>
     </span>
   );

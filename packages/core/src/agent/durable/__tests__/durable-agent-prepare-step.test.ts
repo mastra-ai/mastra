@@ -179,16 +179,6 @@ describe('DurableAgent prepareStep', () => {
         maxSteps: 2,
         prepareStep: async ({ stepNumber }) => (stepNumber === 1 ? { tools: { kept } } : undefined),
       },
-      differences: {
-        durable: {
-          reason: 'Durable tool errors include the available-tool message and workflow continuation metadata.',
-          ignore: ['chunkPayloads'],
-        },
-        evented: {
-          reason: 'Evented tool errors include the available-tool message and workflow continuation metadata.',
-          ignore: ['chunkPayloads'],
-        },
-      },
     });
 
     expect(executeStep).toHaveBeenCalledTimes(3);

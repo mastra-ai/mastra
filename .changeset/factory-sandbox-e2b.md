@@ -2,4 +2,16 @@
 '@mastra/e2b': minor
 ---
 
-Add `E2BFactorySandbox`, the factory host contract for E2B sandboxes, with `cpuCount`, `memoryMb` and `idleTimeoutMinutes` settings (2 CPUs, 1024 MB and 5 minutes when unset) and a `builds` capability that starts template builds in the background, reads build status with logs, and lists a template's builds.
+Added `E2BFactorySandbox`, which plugs E2B into Mastra Factory as the sandbox provider. Factory gets one sandbox per session, a repository template it can build ahead of the first session, and user-tunable settings on the environment page.
+
+```ts
+import { E2BFactorySandbox } from '@mastra/e2b';
+
+new MastraFactory({
+  sandbox: new E2BFactorySandbox({ apiKey: process.env.E2B_API_KEY }),
+});
+```
+
+**Settings:** `cpuCount`, `memoryMb` and `idleTimeoutMinutes`. Unset values fall back to the `defaults` option, then to 2 CPUs, 1024 MB and 5 minutes.
+
+**Builds:** starts a template build in the background, reports its status with logs, and lists the template's build history.
