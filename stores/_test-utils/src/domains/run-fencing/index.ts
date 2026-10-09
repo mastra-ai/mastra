@@ -669,6 +669,16 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         config: { observationThreshold: 5000, reflectionThreshold: 40000 },
       });
       await memory.raiseRunFence(fenceB);
+      const scopeB = recordingScope(store => (store === memory ? fenceB : undefined));
+      await inRunFenceScope(scopeB, () =>
+        memory.updateBufferedReflection({
+          id: record.id,
+          reflection: 'b reflection',
+          tokenCount: 10,
+          inputTokenCount: 20,
+          reflectedObservationLineCount: 0,
+        }),
+      );
 
       const scopeA = recordingScope(store => (store === memory ? fenceA : undefined));
       await inRunFenceScope(scopeA, async () => {
@@ -696,17 +706,18 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         await expectFenceConflict(
           memory.createReflectionGeneration({ currentRecord: record, reflection: 'stale', tokenCount: 10 }),
         );
+        await expectFenceConflict(memory.swapBufferedReflectionToActive({ currentRecord: record, tokenCount: 10 }));
         // Coordination flags are not fenced, so a superseded owner can still clear its own.
         await memory.setObservingFlag(record.id, true);
         await memory.setObservingFlag(record.id, false);
       });
-      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA]);
+      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA, fenceA]);
       const afterStale = await memory.getObservationalMemory(null, resourceId);
       expect(afterStale?.id).toBe(record.id);
       expect(afterStale?.activeObservations).toBe('');
       expect(afterStale?.bufferedObservationChunks ?? []).toHaveLength(0);
+      expect(afterStale?.bufferedReflection).toBe('b reflection');
 
-      const scopeB = recordingScope(store => (store === memory ? fenceB : undefined));
       await inRunFenceScope(scopeB, () =>
         memory.updateActiveObservations({
           id: record.id,
