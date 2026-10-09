@@ -1,6 +1,10 @@
 import { writeFileSync } from 'node:fs';
-import { createClient } from '@libsql/client';
-import pg from 'pg';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+const fromStore = store => specifier =>
+  import(pathToFileURL(createRequire(new URL(`../../stores/${store}/package.json`, import.meta.url)).resolve(specifier)).href);
+const { createClient } = await fromStore('libsql')('@libsql/client');
+const { default: pg } = await fromStore('pg')('pg');
 import { KnowledgeLibSQL } from '../../stores/libsql/dist/index.js';
 import { KnowledgePG } from '../../stores/pg/dist/index.js';
 
