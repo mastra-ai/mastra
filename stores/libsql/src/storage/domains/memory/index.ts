@@ -1744,11 +1744,14 @@ export class MemoryLibSQL extends MemoryStorage {
    * an open write transaction makes any other connection's write in this process block the
    * event loop until `busy_timeout` (SQLITE_BUSY). Each statement or batch here runs in one call.
    */
-  async #withOMCas<T>(operation: string, attempt: () => Promise<T | typeof OM_CAS_CONFLICT>): Promise<T> {
+  async #withOMCas<T>(
+    operation: string,
+    attempt: (attemptIndex: number) => Promise<T | typeof OM_CAS_CONFLICT>,
+  ): Promise<T> {
     // A SQLITE_BUSY rerun is as safe as a conflict rerun: every attempt re-reads before its guarded write.
     return this.#write(operation, async () => {
       for (let i = 0; i < OM_MAX_CAS_ATTEMPTS; i++) {
-        const result = await attempt();
+        const result = await attempt(i);
         if (result !== OM_CAS_CONFLICT) return result;
         // An embedded replica reads locally; pull the other instance's write before re-reading.
         if (this.#embeddedReplica) await this.#client.sync?.();
@@ -1760,6 +1763,15 @@ export class MemoryLibSQL extends MemoryStorage {
         category: ErrorCategory.THIRD_PARTY,
       });
     });
+  }
+
+  /**
+   * Whether a missing row may only be missing from this embedded replica's local copy: the first
+   * attempt reads before any sync, so it returns a conflict to sync and read again instead of
+   * acting on the absence.
+   */
+  #mayBeUnsynced(attemptIndex: number): boolean {
+    return this.#embeddedReplica && attemptIndex === 0;
   }
 
   #toOMRow(result: { columns: string[]; rows: Record<string, unknown>[] }): OMRow | null {
@@ -2054,7 +2066,7 @@ export class MemoryLibSQL extends MemoryStorage {
         supersededBy: null,
       };
 
-      return await this.#write('initializeObservationalMemory', async () => {
+      return await this.#withOMCas('INITIALIZE_OBSERVATIONAL_MEMORY', async () => {
         const existing = (await this.#readOMHeadRow(lookupKey))?.record ?? null;
         if (existing) return existing;
         // Insert only while the key has no live record. One statement, so SQLite's database write
@@ -2098,7 +2110,10 @@ export class MemoryLibSQL extends MemoryStorage {
           ],
         });
         if (inserted.rowsAffected === 1) return record;
-        return (await this.#readOMHeadRow(lookupKey))?.record ?? record;
+        // Another initializer won. Its row may not be in an embedded replica's local copy yet, or the
+        // key may have been cleared since; rerun (syncing first on a replica) rather than return a
+        // record that was never stored.
+        return (await this.#readOMHeadRow(lookupKey))?.record ?? OM_CAS_CONFLICT;
       });
     } catch (error) {
       throw new MastraError(
@@ -2188,9 +2203,10 @@ export class MemoryLibSQL extends MemoryStorage {
       const now = new Date();
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
 
-      return await this.#withOMCas('UPDATE_ACTIVE_OBSERVATIONS', async () => {
+      return await this.#withOMCas('UPDATE_ACTIVE_OBSERVATIONS', async attemptIndex => {
         const row = await this.#readOMRow(input.id);
         if (!row) {
+          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
           throw new MastraError({
             id: createStorageErrorId('LIBSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
             text: `Observational memory record not found: ${input.id}`,
@@ -2251,10 +2267,10 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      return await this.#withOMCas('CREATE_REFLECTION_GENERATION', async () => {
+      return await this.#withOMCas('CREATE_REFLECTION_GENERATION', async attemptIndex => {
         const { currentRecord } = input;
         const row = await this.#readOMRow(currentRecord.id);
-        if (!row) return currentRecord;
+        if (!row) return this.#mayBeUnsynced(attemptIndex) ? OM_CAS_CONFLICT : currentRecord;
         const stored = row.record;
         // A retired snapshot creates nothing; the caller adopts the head.
         if (stored.supersededBy) return (await this.#resolveLiveOMRow(row)).record;
@@ -2356,9 +2372,10 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
     try {
-      await this.#withOMCas('SET_BUFFERING_OBSERVATION_FLAG', async () => {
+      await this.#withOMCas('SET_BUFFERING_OBSERVATION_FLAG', async attemptIndex => {
         const row = await this.#readOMRow(id);
         if (!row) {
+          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
           throw new MastraError({
             id: createStorageErrorId('LIBSQL', 'SET_BUFFERING_OBSERVATION_FLAG', 'NOT_FOUND'),
             text: `Observational memory record not found: ${id}`,
@@ -2456,9 +2473,10 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
-      await this.#withOMCas('SET_PENDING_MESSAGE_TOKENS', async () => {
+      await this.#withOMCas('SET_PENDING_MESSAGE_TOKENS', async attemptIndex => {
         const row = await this.#readOMRow(id);
         if (!row) {
+          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
           throw new MastraError({
             id: createStorageErrorId('LIBSQL', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
             text: `Observational memory record not found: ${id}`,
@@ -2493,7 +2511,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
     try {
-      await this.#withOMCas('UPDATE_OM_CONFIG', async () => {
+      await this.#withOMCas('UPDATE_OM_CONFIG', async attemptIndex => {
         // Read current config
         const selectResult = await this.#client.execute({
           sql: `SELECT config FROM "${OM_TABLE}" WHERE id = ?`,
@@ -2501,6 +2519,7 @@ export class MemoryLibSQL extends MemoryStorage {
         });
 
         if (selectResult.rows.length === 0) {
+          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
           throw new MastraError({
             id: createStorageErrorId('LIBSQL', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
             text: `Observational memory record not found: ${input.id}`,
@@ -2549,9 +2568,10 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      return await this.#withOMCas('UPDATE_BUFFERED_OBSERVATIONS', async () => {
+      return await this.#withOMCas('UPDATE_BUFFERED_OBSERVATIONS', async attemptIndex => {
         const row = await this.#readOMRow(input.id);
         if (!row) {
+          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
           throw new MastraError({
             id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
             text: `Observational memory record not found: ${input.id}`,
@@ -2627,7 +2647,7 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      return await this.#withOMCas('SWAP_BUFFERED_TO_ACTIVE', async () => {
+      return await this.#withOMCas('SWAP_BUFFERED_TO_ACTIVE', async attemptIndex => {
         // Get current record
         const current = await this.#client.execute({
           sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,
@@ -2635,6 +2655,7 @@ export class MemoryLibSQL extends MemoryStorage {
         });
 
         if (!current.rows || current.rows.length === 0) {
+          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
           throw new MastraError({
             id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
             text: `Observational memory record not found: ${input.id}`,
@@ -2906,10 +2927,10 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
-      return await this.#withOMCas('SWAP_BUFFERED_REFLECTION_TO_ACTIVE', async () => {
+      return await this.#withOMCas('SWAP_BUFFERED_REFLECTION_TO_ACTIVE', async attemptIndex => {
         const { currentRecord } = input;
         const row = await this.#readOMRow(currentRecord.id);
-        if (!row) return currentRecord;
+        if (!row) return this.#mayBeUnsynced(attemptIndex) ? OM_CAS_CONFLICT : currentRecord;
         const stored = row.record;
         // A retired snapshot creates nothing; the caller adopts the head.
         if (stored.supersededBy) return (await this.#resolveLiveOMRow(row)).record;
