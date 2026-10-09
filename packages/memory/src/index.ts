@@ -3687,8 +3687,8 @@ Notes:
     cloned.id = crypto.randomUUID();
     cloned.createdAt = now;
     cloned.updatedAt = now;
-    // The clone is the new thread's only record, so it is live even if the source generation it
-    // was read from has since been replaced by a reflection.
+    // The clone starts live even if the source generation it was read from has since been
+    // replaced by a reflection; that source's `supersededBy` must not carry over.
     cloned.supersededBy = null;
     await memoryStore.insertObservationalMemoryRecord(cloned);
   }

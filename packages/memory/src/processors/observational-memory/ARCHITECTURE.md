@@ -214,6 +214,8 @@ Activation sets the cursor to the last activated chunk's `lastObservedAt` uncond
 
 `updateActiveObservations` replaces `activeObservations` wholesale with text built from an earlier head read. Text appended by a concurrent activation in between is overwritten. A prefix check can't detect this safely: resource scope rewrites the middle of the text when it merges a same-day `<thread>` section (`observation-strategies/base.ts` `replaceOrAppendThreadSection`).
 
+On a conflict the commit recomposes against the fresh head and retries. If the fresh head's `observedMessageIds` already include every message this cycle observed, another instance observed the same messages first: the cycle skips its commit and its indexing, finishes normally (the reflection snapshot is the head's text), does not overwrite the thread's title, task, or cursor metadata, and does not report a commit to Knowledge curation, instead of appending a second copy of those observations. The cursor alone is not used as proof, because an activation can move it past a message it never covered (`lifecycle-safety.test.ts` "skips the commit when another instance already observed the same messages"). A partial overlap still recomposes and can duplicate the overlapping part.
+
 ### H3. Sync observation patches the thread cursor and end marker before (and regardless of) the commit (main, proven; fixed in PR 1)
 
 `sync.ts` and `resource-scoped.ts` patch the thread's `lastObservedMessageCursor` (and per-thread `lastObservedAt`) before `updateActiveObservations`, and `base.ts` emits the completion end marker after it without checking where the commit landed. `filterObservedMessages` removes live messages on that basis, so an aborted commit, or one that landed on a retired record, still removes context. A P4 variant.
@@ -248,11 +250,13 @@ Oracle's shared OM suite failed two cursor round-trip tests under a non-UTC host
 
 ### Smaller notes
 
+- **Config writes can land on a retired generation (pre-existing, not fixed).** `updateObservationalMemoryConfig` writes to the id the caller read. If another process reflects between that read and the write, the setting lands on the retired record and the new head keeps the old config. The other per-record setters redirect to the head; config does not, in any adapter.
+- **`copyThread` into a resource that already has resource-scoped OM (pre-existing, not fixed).** The clone inserts a second live record for that resource, as on `main`. PR 1 only makes sure the clone starts live (`supersededBy = null`) when its source was retired mid-copy.
 - A buffered reflection written to a record that has since been retired is discarded: wasted Reflector work, no coverage loss.
 - LibSQL's head query ordered by `generationCount DESC` only, so with duplicate rows for one generation (which exist in some databases, see PG's `om-generation-concurrency.test.ts`) its head was nondeterministic. PR 1 gives every adapter PostgreSQL's order, `generationCount DESC, createdAt ASC, id ASC`.
 - **LibSQL interactive transactions and `SQLITE_BUSY` (pre-existing; fixed for OM in PR 1).** `@libsql/client` local clients use a pool of connections over a synchronous driver. A write transaction held open across `await`s makes any other write in the same process, on another pooled connection, block the event loop until `busy_timeout` and then fail with `SQLITE_BUSY` (`database is locked` / `cannot commit transaction - SQL statements in progress`). On `main`, OM appends and pending-token writes racing `saveMessages` on one file database fail this way (62 errors in a 40+40-write repro). A durable agent with OM on a LibSQL file hit it every turn on PR 1's first, transactional LibSQL adapter. PR 1's LibSQL OM writes never hold a transaction open (see the per-adapter primitive). **Not fixed:** LibSQL's other interactive transactions (for example `deleteMessages`, thread cloning) can still fail this way against concurrent same-process writes.
 
-## Direction (approved)
+## Direction
 
 Correctness lives at the storage boundary, because that's the only thing every process passes through. The in-process queue adds ordering and priority, not correctness. #22078 lands last, rebased on both.
 
@@ -326,11 +330,15 @@ What it drops, as D1 and D2 make them unnecessary: `pendingChunkWrites` and the 
 
 ## PR stack
 
-| #   | Branch                                 | Base                       | Scope                                                                    |
-| --- | -------------------------------------- | -------------------------- | ------------------------------------------------------------------------ |
-| 1   | `fix/om-lossless-rollover`             | `main`                     | D1: storage contract, `supersededBy`, all seven adapters, memory callers |
-| 2   | `fix/om-commit-queue`                  | `fix/om-lossless-rollover` | D2: in-process commit queue, interleaving fuzz harness                   |
-| 3   | `fix/om-async-band-buffering` (#22078) | `fix/om-commit-queue`      | D3: async band rebased, superseded guards removed                        |
+| #   | Branch                                    | Base                             | Scope                                                                    |
+| --- | ----------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
+| 1   | `fix/om-lossless-rollover` (#25906)       | `main`                           | D1: storage contract, `supersededBy`, all seven adapters, memory callers |
+| 2   | `fix/om-commit-queue` (#25998)            | `fix/om-lossless-rollover`       | D2: in-process commit queue, interleaving fuzz harness                   |
+| 3   | `fix/om-async-band-buffering` (#22078)    | `fix/om-commit-queue`            | D3: async band rebased, superseded guards removed                        |
+| 4   | `fix/om-observer-chronology` (#26129)     | `fix/om-async-band-buffering`    | Observer keeps observations in event order                               |
+| 5   | `fix/om-marker-persistence` (#26149)      | `fix/om-observer-chronology`     | Buffering markers stay on the cycle's start message                      |
+| 6   | `fix/om-observer-context-budget` (#26193) | `fix/om-marker-persistence`      | `previousObserverTokens` applies to Observer calls again                 |
+| 7   | `fix/om-reflector-keep-facts` (#26465)    | `fix/om-observer-context-budget` | Default Reflector guidance keeps concrete facts                          |
 
 Related history:
 

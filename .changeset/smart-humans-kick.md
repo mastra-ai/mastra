@@ -1,5 +1,5 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
 Fixed observational memory losing context when a reflection, a buffered-observation write, and an observation activation overlap. The in-memory store now keeps buffered observations across a reflection, never lets activation drop a chunk written by someone else or move the observation cursor backward, and refuses observational memory lifecycle writes (buffered-observation appends, activation, active-observation commits, reflections) to a superseded generation.
@@ -10,6 +10,20 @@ Storage gained two methods that report the outcome of a write, plus optional inp
 - `appendBufferedObservations` appends a buffered chunk to the current generation and returns `{ persisted, recordId }`.
 - `createReflectionGeneration` and `swapBufferedReflectionToActive` accept `newRecordId`; the reflection applied when the returned record has that id. `swapBufferedToActive` reports `retired`.
 - Observational memory records carry `supersededBy`, set when a newer generation replaces them.
+
+**Before:**
+
+```ts
+const memory = await storage.getStore('memory');
+await memory.updateActiveObservations({
+  id: record.id,
+  observations,
+  tokenCount,
+  lastObservedAt: new Date(),
+});
+```
+
+**After:**
 
 ```ts
 const memory = await storage.getStore('memory');
