@@ -86,7 +86,7 @@ export function getGithubFeatureDiagnostics(options: GithubFeatureGateOptions): 
     appDbConfigured,
     stateSecretConfigured: stateSigner?.stable ?? false,
     sandboxEnabled: !!sandbox,
-    sandboxProvider: sandbox ? 'custom' : 'none',
+    sandboxProvider: sandbox?.provider ?? 'none',
     missingGithubAppEnvVars: github ? [] : [...GITHUB_APP_ENV_VARS],
   };
 }

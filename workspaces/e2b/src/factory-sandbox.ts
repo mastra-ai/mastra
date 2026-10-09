@@ -60,6 +60,25 @@ const SETTINGS_SCHEMA = {
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
+/**
+ * The settings schema with the provider's effective defaults as `default`:
+ * the built-in values, overridden by the host's `defaults` option. The schema
+ * is what clients show as placeholders, so it must match what the provider
+ * applies when a setting is unset.
+ */
+function settingsSchema(
+  defaults: Partial<E2BFactorySandboxSettings> | undefined,
+): PublicSchema<E2BFactorySandboxSettings> {
+  const effective = { ...DEFAULT_SETTINGS, ...defaults };
+  const properties = Object.fromEntries(
+    Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
+      key,
+      { ...property, default: effective[key as keyof typeof effective] },
+    ]),
+  );
+  return { ...SETTINGS_SCHEMA, properties } as PublicSchema<E2BFactorySandboxSettings>;
+}
+
 export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template'> {
   /** Provider-side defaults used when a setting is unset. Never stored by factory. */
   defaults?: Partial<E2BFactorySandboxSettings>;
@@ -77,7 +96,7 @@ const EXISTING_BUILD = 'existing';
  */
 export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings> {
   readonly provider = 'e2b';
-  readonly settings: PublicSchema<E2BFactorySandboxSettings> = SETTINGS_SCHEMA;
+  readonly settings: PublicSchema<E2BFactorySandboxSettings>;
   readonly builds: FactorySandboxBuilds<E2BFactorySandboxSettings>;
 
   readonly #options: E2BFactorySandboxOptions;
@@ -86,6 +105,7 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
   constructor(options: E2BFactorySandboxOptions = {}) {
     super();
     this.#options = options;
+    this.settings = settingsSchema(options.defaults);
     this.#connection = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
