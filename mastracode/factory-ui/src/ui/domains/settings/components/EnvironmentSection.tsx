@@ -15,16 +15,17 @@ import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../w
 import { settingsSectionPath } from '../settingsSections';
 import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
 import { BuildStatusBlock } from './environment/BuildStatusBlock';
-import { BuildTriggersBlock } from './environment/BuildTriggersBlock';
+import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from.
- * Template holds the repositories, the workspace setup and the provider's
- * settings; Builds the triggers and, when the provider lists them, the history.
+ * The Factory's environment: what every session's sandbox boots from. The
+ * repositories it clones, then its configuration: workspace setup, the
+ * sandbox provider's own settings and, when the sandbox can build, the build
+ * triggers and history.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -95,16 +96,23 @@ function EnvironmentBlocks({
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
         scope="factory"
-        title="Template"
-        description={`Repositories cloned into each new sandbox, in this order. ${providerLine(environment.sandbox.provider)}`}
+        title="Repositories"
+        description="Repositories cloned into each new sandbox, in this order."
+      >
+        <RepositoriesBlock
+          repositories={environment.repositories}
+          providers={providers}
+          disabled={disabled}
+          onSave={save}
+        />
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="factory"
+        title="Configuration"
+        description={`How each sandbox is set up${canBuild ? ' and when its template rebuilds' : ''}. ${providerLine(environment.sandbox.provider)}`}
+        action={canBuild ? <BuildNow factoryId={factoryId} environment={environment} /> : undefined}
       >
         <div className="flex flex-col gap-4">
-          <RepositoriesBlock
-            repositories={environment.repositories}
-            providers={providers}
-            disabled={disabled}
-            onSave={save}
-          />
           <WorkspaceSetupBlock
             workdir={environment.sandboxWorkdir}
             command={environment.workspaceSetupCommand}
@@ -112,27 +120,16 @@ function EnvironmentBlocks({
             onSave={save}
           >
             <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+            {canBuild && <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />}
           </WorkspaceSetupBlock>
+          {canBuild && environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
         </div>
       </SettingsSubsection>
-      {canBuild && (
-        <SettingsSubsection
-          scope="factory"
-          title="Builds"
-          description="The template image built ahead of sessions, and when it rebuilds."
-          action={<BuildNow factoryId={factoryId} environment={environment} />}
-        >
-          <div className="flex flex-col gap-4">
-            <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
-            {environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
-          </div>
-        </SettingsSubsection>
-      )}
     </div>
   );
 }
 
-/** Build now with the last build's live status beside it; in the Builds header. */
+/** Build now with the last build's live status beside it; in the Configuration header. */
 function BuildNow({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
   const requestBuild = useRequestEnvironmentBuildMutation();
   const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);

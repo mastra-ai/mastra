@@ -49,19 +49,19 @@ function renderEnvironmentSettings() {
 }
 
 describe('Environment settings', () => {
-  it('renders one Template subsection with the working directory, the setup command and the provider settings', async () => {
+  it('renders Repositories, then Configuration with the working directory, the setup command and the provider settings', async () => {
     useFactory();
     useEnvironment(environmentPayload());
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Template' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Template', 'Builds']);
+    expect(headings).toEqual(['Repositories', 'Configuration']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     const command = screen.getByRole('textbox', { name: 'Workspace setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));
-    expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Template' }).closest('section'));
+    expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Configuration' }).closest('section'));
   });
 
   it('points to Repositories when nothing is linked yet', async () => {
