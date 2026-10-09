@@ -323,7 +323,7 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('firstMORE');
   });
 
-  it('does not reconcile the final step from an earlier message when its response is removed', async () => {
+  it('removes final step text when its response is removed', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
       [...textPart('t2', 'MORE'), finish('stop')],
@@ -367,8 +367,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     const fullOutput = await stream.getFullOutput();
 
     expect(await stream.text).toBe('first');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
-    expect(fullOutput.text).toBe('firstMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', '']);
+    expect(fullOutput.text).toBe('first');
   });
 
   for (const [label, rewrite, step, expected] of [

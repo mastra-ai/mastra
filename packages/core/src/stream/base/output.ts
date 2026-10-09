@@ -1229,8 +1229,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     : undefined;
                   const processedStepParts = processedStepMessage?.content?.parts;
                   const stepText =
-                    outputText !== outputTextBeforeProcessing && processedStepMessage
-                      ? processedStepParts &&
+                    outputText !== outputTextBeforeProcessing
+                      ? processedStepMessage &&
+                        processedStepParts &&
                         stepMessageParts &&
                         processedStepParts.length === stepMessageParts.length &&
                         iterationPartOffset !== undefined
@@ -1239,16 +1240,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                             .map(part => (part.type === 'text' ? part.text : ''))
                             .join('')
                         : self.#bufferedSteps.length === 1 || iterationTextOffset === undefined
-                          ? outputText
-                          : outputText?.slice(iterationTextOffset)
+                          ? (outputText ?? '')
+                          : (outputText?.slice(iterationTextOffset) ?? '')
                       : undefined;
 
-                  // Only reconcile the final step when result processing changed the run-level response
-                  // and the same response message still exists. Earlier steps retain their model text.
-                  // Preserve the final iteration slice when its part structure is stable. If a processor
-                  // replaces the structure, derive the processed final-step text from the run-level text at
-                  // the pre-processing iteration boundary so removed text cannot leak through the raw step.
-                  // Compare against undefined, not truthiness, so clearing to '' still applies.
+                  // Only reconcile the final step when result processing changed the run-level response. Earlier
+                  // steps retain their model text. Preserve the final iteration slice when its message and part
+                  // structure remain stable. If a processor replaces or removes that message, derive the processed
+                  // final-step text from the run-level text at the pre-processing iteration boundary so removed text
+                  // cannot leak through the raw step. Compare against undefined, not truthiness, so clearing to '' applies.
                   if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
                     lastStep.text = stepText;
                   }
