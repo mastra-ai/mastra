@@ -24,29 +24,23 @@ function geometry() {
   const C=Cam(45,.5,1.25);
   fit(C,[[-60,140,0],[144,-35,0],[-60,-35,96],[56,40,0]],200,157);
   const P=proj(C),front=facing(C),line=(a,b)=>[...P(...a),...P(...b)];
-  const slab=(x,y,w,h,z,d=3)=>{
+  const slab=(x,y,w,h,z,d=3,etched=true)=>{
     const [ring,inner]=rings(x,y,x+w,y+h,2,1),top=ringAt(P,ring,z+d);
-    return surface(hull([...ringAt(P,ring,z),...top]),[[...P(x+2,y+h-1,z+d),...P(x+w-2,y+h-1,z+d)],... [8,14].map((offset,i)=>[...P(x+6,y+offset,z+d),...P(x+w-6-i*4,y+offset,z+d)])]);
+    return surface(hull([...ringAt(P,ring,z),...top]),[[...P(x+2,y+h-1,z+d),...P(x+w-2,y+h-1,z+d)],...(etched?[8,14].map((offset,i)=>[...P(x+6,y+offset,z+d),...P(x+w-6-i*4,y+offset,z+d)]):[])]);
   };
   const factory=[0,1,2].map(i=>{
     const x=-60+i*39,profile=fillet([[x,39],[x,70],[x+36,45],[x+38,39]],[1,2,2,1]);
     return surface(hull(profile.flatMap(([u,z])=>[P(u,-35,z),P(u,40,z)])),[line([x+1,39,68],[x+35,39,44]),line([x+35,39,44],[x+35,-34,44])]);
   });
   factory.push(slab(-48,102,34,28,8),slab(111,-8,28,34,8,6),folded);
-  const D=Cam(45,.5,1.15);
-  fit(D,[[-116,26,0],[118,42,0],[-116,-36,104],[118,-50,104]],200,151);
-  const Q=proj(D),code=[];
-  for(const y of [-30,-12,6]) {
-    const points=rounded([Q(-112,y,10),Q(-112,y,80),Q(-52,y,80),Q(-52,y,10)]);
-    const marks=[63,53,43].map((z,i)=>[...Q(-104,y,z),...Q(-66-i*5,y,z)]);
-    code.push(surface(points,marks));
+  // The selected repository is a solid code cartridge docking into the Factory base.
+  const code=factory.slice(0,3);
+  code.push(slab(-56,80,70,54,8,5,false));
+  for(const right of [false,true]) {
+    const points=[[-40,102],[-27,89],[-22,94],[-31,103],[-22,112],[-27,117]];
+    const ring=fillet(points.map(([x,y])=>{const u=(right?-42-x:x)+21,v=y-103;return [-21+(u+v)*Math.SQRT1_2,107+(-u+v)*Math.SQRT1_2];}),points.map(()=>1));
+    code.push(surface(ring.map(([x,y])=>P(x,y,14)),[]));
   }
-  const folder=fillet([[-116,30],[-116,79],[-87,79],[-82,73],[-46,73],[-46,30]],[2,2,2,2,2,2]);
-  code.push(surface(folder.map(([x,z])=>Q(x,25,z-25)),[[...Q(-111,25,43),...Q(-87,25,43)]]));
-  const screen=(x,z)=>Q(x,-40-(z-8)*.12,z);
-  code.push(surface(rounded([screen(23,8),screen(23,99),screen(118,99),screen(118,8)]),[82,70,58,46,34].map((z,i)=>[...screen(34+(i%3)*6,z),...screen(102-(i%2)*14,z)])));
-  const [base,crease]=rings(23,-40,118,43,4,1);
-  code.push(surface(hull([...ringAt(Q,base,0),...ringAt(Q,base,6)]),[[...Q(26,41,6),...Q(114,41,6)],...[-18,-7,4].map(y=>[...Q(34,y,7),...Q(107,y,7)]),[...Q(60,26,7),...Q(81,26,7)]]));
   return {P,front,factory,code};
 }
 function poses(scene,mode,objects) {
@@ -58,8 +52,7 @@ function poses(scene,mode,objects) {
 }
 function routes(scene,mode) {
   const off=[200,175,200,175,200,175,200,175];
-  if(scene==='factory')return [off,off,off];
-  if(scene==='codebase')return [[163,166,205,166,205,196,250,196],off,off];
+  if(scene==='factory'||scene==='codebase')return [off,off,off];
   if(scene==='intake')return [[104,112,104,142,80,150,80,186],off,off];
   return [80,200,320].map((x,i)=>{const origin=mode==='individual'?x:mode==='hybrid'&&i===2?320:200;return [origin,90,origin,126,x,126,x,156];});
 }
@@ -72,16 +65,18 @@ function mount({stage,svg,read},value) {
   const packet=mk('path',{class:'sil'},root),assembly=mk('g',{},root);
   const parts=[solid(assembly),solid(assembly),solid(assembly),solid(assembly),solid(assembly)];
   const details=mk('path',{class:'nf lo'},assembly);
-  let bodyTween=tween(scene==='factory'?1:0),bodyDrawn=NaN,packetDrawn='';
+  let bodyTween=tween(scene==='factory'||scene==='codebase'?1:0),baseTween=tween(scene==='codebase'?1:0),bodyDrawn='',packetDrawn='';
   const panels=poses(scene,mode,objects).map((q,i)=>{
     const g=mk('g',{},root),face=mk('path',{class:i===3?'sil hi':'sil'},g),marks=mk('path',{class:'nf lo'},g);
     return {g,face,marks,tw:q.map(v=>tween(v)),lift:tween(0),drawn:''};
   });
-  function drawBody(amount) {
-    if(amount===bodyDrawn)return;bodyDrawn=amount;
+  function drawBody(amount,base) {
+    const key=amount+','+base;if(key===bodyDrawn)return;bodyDrawn=key;
     assembly.setAttribute('display',amount<.002?'none':'');if(amount<.002)return;
     const P=(...v)=>objects.P(...v).map((n,i)=>(i?190:200)+(n-(i?190:200))*amount);
-    [[-52,38,40,104,0,7],[54,-14,91,46,0,7],[30,-34,16,16,0,93],[28,-36,20,20,89,96],[-60,-35,117,75,0,39]].forEach(([x,y,w,h,z,top],i)=>{
+    const feet=[[-68,-43,134,190,-8,0],[-59,42,76,94,0,5]];
+    [[-52,38,40,104,0,7],[54,-14,91,46,0,7],[30,-34,16,16,0,93],[28,-36,20,20,89,96],[-60,-35,117,75,0,39]].forEach((values,i)=>{
+      const [x,y,w,h,z,top]=values.map((v,k)=>i<2?v+(feet[i][k]-v)*base:v);
       const [ring,inner]=rings(x,y,x+w,y+h,2,1);put(parts[i],prism(P,objects.front,ring,inner,z,top));
     });
     const wall=(x,z)=>P(x,40,z),side=(y,z)=>P(57,y,z);
@@ -102,17 +97,18 @@ function mount({stage,svg,read},value) {
   function tick(_dt,now) {
     let moving=false;
     links.forEach(link=>{const q=link.tw.map(tw=>tval(tw,now)),key=q.join(',');if(key!==link.drawn){link.drawn=key;link.el.setAttribute('d',curve(q));}if(link.tw.some(tw=>!tdone(tw,now)))moving=true;});
-    drawBody(tval(bodyTween,now));if(!tdone(bodyTween,now))moving=true;
+    drawBody(tval(bodyTween,now),tval(baseTween,now));if(!tdone(bodyTween,now)||!tdone(baseTween,now))moving=true;
     panels.forEach((panel,i)=>{
       let q=panel.tw.map(tw=>tval(tw,now));
-      if(scene==='factory'&&i===3&&tdone(bodyTween,now)) {
-        const origin=objects.P(0,0,0),end=objects.P(0,-52*Math.min(tval(delivery,now)*2,1),0);
+      if((scene==='factory'&&i===3||scene==='codebase'&&i>=3)&&tdone(bodyTween,now)&&panel.tw.every(tw=>tdone(tw,now))) {
+        const distance=scene==='codebase'?30:52;
+        const origin=objects.P(0,0,0),end=objects.P(0,-distance*Math.min(tval(delivery,now)*2,1),0);
         q=q.map((v,k)=>v+end[k%2]-origin[k%2]);
       }
       drawPanel(panel,q,tval(panel.lift,now));if(panel.tw.some(tw=>!tdone(tw,now))||!tdone(panel.lift,now))moving=true;
     });
     const progress=tval(delivery,now),route=routes(scene,mode)[scene==='accounts'?Math.max(active,0):0],point=at(route,progress),key=point.join(',')+packetOn;
-    if(key!==packetDrawn){packetDrawn=key;packet.setAttribute('d',poly(rounded(box(point[0]-4,point[1]-5,8,10))));packet.setAttribute('display',packetOn&&scene!=='factory'&&progress>.01&&progress<.99?'':'none');}
+    if(key!==packetDrawn){packetDrawn=key;packet.setAttribute('d',poly(rounded(box(point[0]-4,point[1]-5,8,10))));packet.setAttribute('display',packetOn&&scene!=='factory'&&scene!=='codebase'&&progress>.01&&progress<.99?'':'none');}
     if(!tdone(delivery,now))moving=true;return moving;
   }
   const loop=register(stage,tick);bag.add(loop.unregister);tick(0,performance.now());
@@ -121,16 +117,17 @@ function mount({stage,svg,read},value) {
     panels.forEach(panel=>{if(!immediate&&panel.rendered)panel.tw=panel.rendered.map(v=>tween(v));panel.lift=tween(0);});
     poses(scene,mode,objects).forEach((q,i)=>q.forEach((v,k)=>{if(immediate)panels[i].tw[k]=tween(v);else tset(panels[i].tw[k],v,now,Math.abs(i-1)*stagger);}));
     routes(scene,mode).forEach((q,i)=>q.forEach((v,k)=>{if(immediate)links[i].tw[k]=tween(v);else tset(links[i].tw[k],v,now,0);}));
-    if(immediate)bodyTween=tween(scene==='factory'?1:0);else tset(bodyTween,scene==='factory'?1:0,now,0);
+    const body=scene==='factory'||scene==='codebase'?1:0,base=scene==='codebase'?1:0;
+    if(immediate){bodyTween=tween(body);baseTween=tween(base);}else{tset(bodyTween,body,now,0);tset(baseTween,base,now,0);}
     active=-1;packetOn=false;delivery=tween(0);
-    panels.forEach((panel,i)=>{tset(panel.lift,0,now,0);panel.face.classList.toggle('hi',i===(scene==='factory'?3:0));});read.textContent='rest';loop.wake();
+    panels.forEach((panel,i)=>{tset(panel.lift,0,now,0);panel.face.classList.toggle('hi',i===(scene==='factory'||scene==='codebase'?3:0));});read.textContent='rest';loop.wake();
   }
   function select(next) {
     if(active===next)return;active=next;const now=performance.now();
     if(next===0){delivery=tween(0);packetOn=false;}else if(next>0){packetOn=true;tset(delivery,next===1?.5:1,now,0);}
-    const chosen=scene==='factory'?(next<1?3:next===1?1:4):scene==='codebase'?(next<1?0:next===1?2:4):scene==='intake'?(next<=0?0:1):Math.max(next,0);
+    const chosen=scene==='factory'?(next<1?3:next===1?1:4):scene==='codebase'?(next<1?3:1):scene==='intake'?(next<=0?0:1):Math.max(next,0);
     panels.forEach((panel,i)=>{
-      const lift=scene==='codebase'&&i<3&&next>=0?Math.max(0,6-Math.abs(i-next)*3):scene==='factory'&&i===4&&next===2?3:0;
+      const lift=scene==='factory'&&i===4&&next===2?3:0;
       tset(panel.lift,lift,now,Math.abs(i-chosen)*stagger);panel.face.classList.toggle('hi',i===chosen);
     });
     read.textContent=next<0?'rest':['source','in progress','ready'][next];loop.wake();
