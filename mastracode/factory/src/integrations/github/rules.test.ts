@@ -466,6 +466,74 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
   });
 
+  it('re-evaluates a delivery whose work item changed during rule evaluation (#25884)', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const item = await createLinkedIssue(workItems, project.id);
+    const commit = workItems.commitRuleEvaluation.bind(workItems);
+    let raced = false;
+    vi.spyOn(workItems, 'commitRuleEvaluation').mockImplementation(async input => {
+      if (!raced) {
+        raced = true;
+        await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { title: 'Edited' } });
+      }
+      return commit(input);
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(service.ingest(issueClosed('delivery-closed-race', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await expect(service.ingest(issueClosed('delivery-closed-race', 'completed'))).resolves.toEqual({
+      status: 'replayed',
+    });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
+  });
+
+  it('stores nothing when the work item keeps changing, so the same delivery evaluates later (#25884)', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const item = await createLinkedIssue(workItems, project.id);
+    const commit = workItems.commitRuleEvaluation.bind(workItems);
+    let races = 3;
+    const spy = vi.spyOn(workItems, 'commitRuleEvaluation').mockImplementation(async input => {
+      if (races > 0) {
+        races--;
+        await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { title: `Edit ${races}` } });
+      }
+      return commit(input);
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(service.ingest(issueClosed('delivery-closed-busy', 'completed'))).resolves.toEqual({
+      status: 'stale',
+    });
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
+
+    await expect(service.ingest(issueClosed('delivery-closed-busy', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
+  });
+
   it('cancels an issue-backed work card when its issue closes as not planned', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await createLinkedIssue(workItems, project.id);

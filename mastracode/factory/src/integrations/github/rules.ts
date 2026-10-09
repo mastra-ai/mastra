@@ -32,6 +32,7 @@ import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
+const STALE_EVALUATION_ATTEMPTS = 3;
 const FACTORY_TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
 
 async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -396,7 +397,7 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
-  async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+  async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' | 'stale' }> {
     const event = eventName(parsed);
     const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
@@ -421,6 +422,7 @@ export class GithubRules {
           : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
       );
     }
+    if (results.some(result => result.status === 'stale')) return { status: 'stale' };
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
@@ -434,7 +436,7 @@ export class GithubRules {
     repositoryName: string,
     login: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' | 'stale' }> {
     const factoryProject = await this.options.projects.get({
       orgId: project.orgId,
       id: project.factoryProjectId,
@@ -528,12 +530,12 @@ export class GithubRules {
     // decision a rule returns is committed against a single item, at that
     // item's revision. So the evaluation, not the decision, is what fans out:
     // the rule runs once per bound item, each with its own ingress identity.
-    const evaluate = async (
+    const evaluateOnce = async (
       item: WorkItemRow | undefined,
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
-    ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
+    ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' | 'stale' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
         actor,
@@ -686,8 +688,22 @@ export class GithubRules {
         decisions,
         causalChain: [],
         now: new Date(),
+        onStale: 'abort',
       });
       return { status: committed.status };
+    };
+    // A write to the item while the rule ran makes the commit stale. Nothing is
+    // stored then, so re-read the item and evaluate again; if it keeps changing,
+    // report `stale` so the delivery fails and a redelivery evaluates afresh.
+    const evaluate: typeof evaluateOnce = async (item, ingressIdentity, pullRequestIntake) => {
+      let current = item;
+      for (let attempt = 1; ; attempt++) {
+        const result = await evaluateOnce(current, ingressIdentity, pullRequestIntake);
+        if (result.status !== 'stale' || attempt === STALE_EVALUATION_ATTEMPTS || !current) return result;
+        const reread = await this.options.storage.get({ orgId: current.orgId, id: current.id });
+        if (!reread) return { status: 'missing' };
+        current = reread;
+      }
     };
 
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
@@ -801,7 +817,7 @@ export class GithubRules {
     const companion = linked ?? authoringItem;
     const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
     await stampClosed(secondary.status);
-    for (const status of ['committed', 'replayed'] as const) {
+    for (const status of ['stale', 'committed', 'replayed'] as const) {
       if (primary.status === status || secondary.status === status) return { status };
     }
     return primary;
