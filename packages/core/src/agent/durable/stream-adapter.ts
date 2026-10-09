@@ -414,7 +414,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.STEP_FINISH: {
           const data = streamEvent.data as AgentStepFinishEventData;
-          await onStepFinish?.(data);
+          await onStepFinish?.({ ...data, runId } as any);
           break;
         }
 
@@ -476,6 +476,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               await onFinish({
+                runId,
                 // Every step's streamed text, retried attempts included — matches the main loop,
                 // whose onFinish text is everything the run streamed.
                 text: steps.length > 0 ? steps.map((s: any) => s?.text ?? '').join('') : (data.output?.text ?? ''),
@@ -727,7 +728,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     finishUsageIsTotal: true,
     options: {
       runId,
-      onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,
+      onStepFinish: onStepFinish
+        ? (((data: any) => onStepFinish({ ...data, runId } as any)) as unknown as MastraOnStepFinishCallback<OUTPUT>)
+        : undefined,
       // For durable agents there is only one MastraModelOutput for the whole run.
       // isLLMExecutionStep must be true so output processors run per-chunk
       // (processOutputStream / processPart path) rather than the batch

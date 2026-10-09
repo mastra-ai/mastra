@@ -247,11 +247,11 @@ const PLAIN_STEP_FINISH_KEYS = [
 ];
 
 /** Durable and evented observe the same callback contract, without plain's `runId` payload key. */
-const WRAPPED_STEP_FINISH_KEYS = PLAIN_STEP_FINISH_KEYS.filter(key => key !== 'runId');
+const WRAPPED_STEP_FINISH_KEYS = [...PLAIN_STEP_FINISH_KEYS];
 
 /**
  * `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above).
- * COR-1390: plain's `onFinish` payload carries `runId`, `error`, `messages`, `model`, `object` and
+ * COR-1390: plain's `onFinish` payload carries `error`, `messages`, `model`, `object` and
  * `usedFallbackValue`, none of which reach the wrapped engines' `onFinish`, so the two key sets are
  * pinned separately rather than derived from each other. Pinning the wrapped set at its current keys
  * is what makes this go stale — and red — when COR-1390 lands. The parity helper compares streams,
@@ -287,7 +287,7 @@ const PLAIN_FINISH_KEYS = [
 ];
 
 const WRAPPED_FINISH_KEYS = PLAIN_FINISH_KEYS.filter(
-  key => !['runId', 'error', 'messages', 'model', 'object', 'usedFallbackValue'].includes(key),
+  key => !['error', 'messages', 'model', 'object', 'usedFallbackValue'].includes(key),
 );
 
 /** `onAbort` received the same key set on every engine. */
