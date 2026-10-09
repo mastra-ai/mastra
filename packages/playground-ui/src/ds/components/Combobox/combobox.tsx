@@ -12,6 +12,7 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { deprecatedErrorAria } from '@/ds/primitives/form-element';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -192,7 +193,11 @@ export function Combobox(props: ComboboxProps) {
           <BaseCombobox.Popup className={comboboxStyles.popup}>
             <div className={comboboxStyles.searchContainer}>
               <Search className={comboboxStyles.searchIcon} />
-              <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+              <BaseCombobox.Input
+                className={comboboxStyles.searchInput}
+                placeholder={searchPlaceholder}
+                {...textFieldAutofillProps(undefined)}
+              />
             </div>
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
             <ScrollArea maxHeight="var(--spacing-dropdown)">
