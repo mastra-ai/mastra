@@ -606,12 +606,12 @@ export function createKnowledgeStorageTests(
       await store.deleteRecord({ id: deleted.id, deletedBy: 'test' });
 
       const found = await store.listVisibleKnowledgeIds({
-        // The project scope node is visible through its own id even though its membership is the org scope.
+        // A scope node is visible only through a scope it belongs to, never through its own id.
         nodeIds: [visible.id, hidden.id, PROJECT_SCOPE_ID, 'missing-node'],
         recordIds: [plain.id, foreign.id, mentioning.id, deleted.id, 'missing-record'],
         scopeIds: [PROJECT_SCOPE_ID],
       });
-      expect([...found.nodeIds].sort()).toEqual([visible.id, PROJECT_SCOPE_ID].sort());
+      expect(found.nodeIds).toEqual([visible.id]);
       expect(found.recordIds).toEqual([plain.id]);
       expect(await store.listVisibleKnowledgeIds({ nodeIds: [], recordIds: [], scopeIds: [PROJECT_SCOPE_ID] })).toEqual(
         {

@@ -288,10 +288,9 @@ function assertImportRunTransition(
   if (!allowed) throw new KnowledgeConflictError(`Import run cannot transition from ${from} to ${to}`);
 }
 
-/** Mirrors `isKnowledgeNodeVisible`: a member of a visible scope, or a visible scope itself. Binds `scopeIds` twice. */
+/** Mirrors `isKnowledgeNodeVisible`: scope nodes are visible only through direct parent membership. */
 function visibleNodeSql(scopeIds: KnowledgeScopeIds, alias = 'n', extraScopeSql?: string): string {
-  const ids = scopeIdListSql(scopeIds, extraScopeSql);
-  return `((${alias}.isScope=TRUE AND ${alias}.id IN (${ids})) OR EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${ids})))`;
+  return `EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" v WHERE v.nodeId=${alias}.id AND v.scopeNodeId IN (${scopeIdListSql(scopeIds, extraScopeSql)}))`;
 }
 
 /** `?` placeholders for `scopeIds`, plus an optional SQL expression naming one more scope id per row. */
@@ -317,7 +316,7 @@ function visibleRecordContentSql(scopeIds: KnowledgeScopeIds, extraScopeSql?: st
     `${alias}.deletedAt IS NULL AND ${visibleNodeSql(scopeIds, alias, extraScopeSql)}`;
   return {
     sql: `${visibleNode('p')} AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" m WHERE m.recordId=r.id AND NOT EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODES}" t WHERE t.id=m.targetNodeId AND ${visibleNode('t')}))`,
-    args: [...scopeIds, ...scopeIds, ...scopeIds, ...scopeIds],
+    args: [...scopeIds, ...scopeIds],
   };
 }
 
@@ -1065,7 +1064,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
     if (scopeIds.length === 0) return [];
     const clauses = ['n.deletedAt IS NULL', visibleNodeSql(scopeIds)];
-    const args: QueryValues = [...scopeIds, ...scopeIds];
+    const args: QueryValues = [...scopeIds];
     if (input.namePrefix) {
       clauses.push("lower(n.name) LIKE ? ESCAPE '='");
       args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
@@ -1398,7 +1397,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const visibleNodes = nodeIds.length
       ? await this.#readExecutor.execute({
           sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.id IN (${marks(nodeIds)}) AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)}`,
-          args: [...nodeIds, ...scopeIds, ...scopeIds],
+          args: [...nodeIds, ...scopeIds],
         })
       : { rows: [] };
     // A prospective scope set replaces the stored-scope clause; the parent and mention rules still apply.
@@ -1495,7 +1494,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const pattern = `%${escapeLikePattern(query)}%`;
     const nodes = await this.#readExecutor.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} AND (lower(n.name) LIKE ? ESCAPE '=' OR lower(coalesce(n.kind,'')) LIKE ? ESCAPE '=' OR lower(coalesce(n.metadata::text,'')) LIKE ? ESCAPE '=') ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
-      args: [...scopeIds, ...scopeIds, pattern, pattern, pattern, limit],
+      args: [...scopeIds, pattern, pattern, pattern, limit],
     });
     const results: SearchKnowledgeResult[] = [];
     for (const row of nodes.rows) {
@@ -2562,7 +2561,7 @@ export class KnowledgePG extends KnowledgeStorage {
     // Only same-named nodes in a visible scope are candidates; the widest membership wins.
     const result = await executor.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE lower(n.name)=? AND n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} ORDER BY (SELECT COUNT(*) FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" c WHERE c.nodeId=n.id) DESC, n.id ASC LIMIT 1`,
-      args: [canonicalName(name), ...scopeIds, ...scopeIds],
+      args: [canonicalName(name), ...scopeIds],
     });
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }

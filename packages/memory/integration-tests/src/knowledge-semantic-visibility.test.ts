@@ -152,15 +152,15 @@ describe.each(adapters)('Knowledge semantic search visibility (%s)', adapter => 
     ).toEqual([`record:${record.id}`]);
   });
 
-  it('returns a scope node to a caller who holds that scope id', async () => {
+  it('returns a scope node to a caller who can read the scope it belongs to', async () => {
     const { knowledge, store, alice, bob } = await scopedStore(adapter);
-    const scopeNodeScopes = await store.getNodeScopeIds(alice);
-    const coordinator = coordinatorReturning(knowledge, store, () => [hit('node', alice, scopeNodeScopes)]);
+    const team = await store.createNode({ name: 'Alice Team', kind: 'team', isScope: true, scopeIds: [alice] });
+    const coordinator = coordinatorReturning(knowledge, store, () => [hit('node', team.id, [alice])]);
     await coordinator.drain();
 
     expect(
       (await coordinator.search('alice', [alice])).map((h: { type: string; id: string }) => `${h.type}:${h.id}`),
-    ).toEqual([`node:${alice}`]);
+    ).toEqual([`node:${team.id}`]);
     expect(
       (await coordinator.search('alice', [bob])).map((h: { type: string; id: string }) => `${h.type}:${h.id}`),
     ).toEqual([]);
