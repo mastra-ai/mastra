@@ -6177,7 +6177,6 @@ export type ProviderModelsMap = {
     'tencent/deepseek-v4-pro-0813',
     'tencent/hy3',
     'tencent/hy4-preview',
-    'tencent/step-5-preview',
     'tensorx/deepseek/deepseek-v4-flash-0731',
     'tensorx/deepseek/deepseek-v4-pro-0813',
     'tensorx/deepseek/deepseek-v4.1-flash',

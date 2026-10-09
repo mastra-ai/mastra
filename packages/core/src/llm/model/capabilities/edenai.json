@@ -966,12 +966,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "tencent/step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "tencent/deepseek-v4-pro-0813": [
       {
         "type": "effort",
