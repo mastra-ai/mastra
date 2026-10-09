@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
 import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -101,6 +102,15 @@ export function persistProcessorDataChunk(
   };
   messageList.add(message, 'response');
 }
+
+type ToolCallStreamingMeta = {
+  toolName: string;
+  providerExecuted?: boolean;
+  providerMetadata?: ProviderMetadata;
+  dynamic?: boolean;
+  title?: string;
+  observability?: ToolCallChunk['payload']['observability'];
+};
 
 type PromiseResults<OUTPUT = undefined> = Pick<
   LLMStepResult<OUTPUT>,
@@ -292,17 +302,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCallStreamingMeta: Record<
-    string,
-    {
-      toolName: string;
-      providerExecuted?: boolean;
-      providerMetadata?: ProviderMetadata;
-      dynamic?: boolean;
-      title?: string;
-      observability?: ToolCallChunk['payload']['observability'];
-    }
-  > = {};
+  #toolCallStreamingMeta: Record<string, ToolCallStreamingMeta> = {};
+  /**
+   * Tool calls whose input stream ended without any deltas. Their args only arrive with the
+   * final `tool-call` chunk, so they wait here instead of being emitted as a synthetic `{}` call.
+   */
+  #pendingToolCalls: Record<string, { meta: ToolCallStreamingMeta; runId: string; from: ToolCallChunk['from'] }> = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
   #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
@@ -615,6 +620,44 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       );
     }
 
+    const emitSyntheticToolCall = (
+      controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+      toolCallId: string,
+      meta: ToolCallStreamingMeta,
+      args: Record<string, unknown>,
+      runId: string,
+      from: ToolCallChunk['from'],
+    ) => {
+      const synthetic: ToolCallChunk = {
+        type: 'tool-call',
+        runId,
+        from,
+        payload: {
+          toolCallId,
+          toolName: meta.toolName,
+          args,
+          providerExecuted: meta.providerExecuted,
+          providerMetadata: meta.providerMetadata,
+          dynamic: meta.dynamic,
+          ...(meta.title ? { title: meta.title } : {}),
+          ...(meta.observability ? { observability: meta.observability } : {}),
+        },
+      };
+      self.#toolCalls.push(synthetic);
+      self.#bufferedByStep.toolCalls.push(synthetic);
+      self.#emitChunk(synthetic);
+      controller.enqueue(synthetic);
+    };
+
+    // A provider that ended a tool input stream without deltas and never sent the final
+    // tool-call still gets a (no-args) tool call recorded before the step closes.
+    const flushPendingToolCalls = (controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) => {
+      for (const [toolCallId, { meta, runId, from }] of Object.entries(self.#pendingToolCalls)) {
+        emitSyntheticToolCall(controller, toolCallId, meta, {}, runId, from);
+      }
+      self.#pendingToolCalls = {};
+    };
+
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
@@ -697,29 +740,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               delete self.#toolCallStreamingMeta[toolCallId];
               delete self.#toolCallArgsDeltas[toolCallId];
               delete self.#toolCallDeltaIdNameMap[toolCallId];
+              if (meta && !deltaParts?.length) {
+                // No streamed input (e.g. OpenAI Responses, Anthropic PTC): the args only arrive
+                // with the final tool-call. Emitting a synthetic `{}` call now would let eager tool
+                // execution run the tool with empty input, so let the real tool-call drive emission.
+                self.#pendingToolCalls[toolCallId] = { meta, runId: chunk.runId, from: chunk.from };
+                break;
+              }
               if (meta) {
-                const synthetic: ToolCallChunk = {
-                  type: 'tool-call',
-                  runId: chunk.runId,
-                  from: chunk.from,
-                  payload: {
-                    toolCallId,
-                    toolName: meta.toolName,
-                    args,
-                    providerExecuted: meta.providerExecuted,
-                    providerMetadata: meta.providerMetadata,
-                    dynamic: meta.dynamic,
-                    ...(meta.title ? { title: meta.title } : {}),
-                    ...(meta.observability ? { observability: meta.observability } : {}),
-                  },
-                };
-                self.#toolCalls.push(synthetic);
-                self.#bufferedByStep.toolCalls.push(synthetic);
                 // Emit streaming-end then synthetic so studio receives tool-input-end then tool-input-available before tool-output-available
                 self.#emitChunk(chunk);
                 controller.enqueue(chunk);
-                self.#emitChunk(synthetic);
-                controller.enqueue(synthetic);
+                emitSyntheticToolCall(controller, toolCallId, meta, args, chunk.runId, chunk.from);
                 return;
               }
               break;
@@ -793,6 +825,21 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-call': {
+              // Own-property check: provider-supplied IDs like "constructor" must not hit Object.prototype.
+              const pending = Object.hasOwn(self.#pendingToolCalls, chunk.payload.toolCallId)
+                ? self.#pendingToolCalls[chunk.payload.toolCallId]
+                : undefined;
+              if (pending) {
+                delete self.#pendingToolCalls[chunk.payload.toolCallId];
+                const { meta } = pending;
+                chunk.payload.providerExecuted ??= meta.providerExecuted;
+                chunk.payload.providerMetadata ??= meta.providerMetadata;
+                chunk.payload.dynamic ??= meta.dynamic;
+                if (meta.title && !chunk.payload.title) chunk.payload.title = meta.title;
+                if (meta.observability && !chunk.payload.observability) {
+                  chunk.payload.observability = meta.observability;
+                }
+              }
               // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
               const existingSynthetic = self.#toolCalls.find(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
               // In some providers (e.g. Anthropic PTC), args are only present in the final tool-call event.
@@ -834,6 +881,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#bufferedByStep.toolResults.push(chunk);
               break;
             case 'step-finish': {
+              flushPendingToolCalls(controller);
               self.updateUsageCount(chunk.payload.output.usage);
               // chunk.payload.totalUsage = self.totalUsage;
               self.#warnings = chunk.payload.stepResult.warnings || [];
@@ -1023,6 +1071,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               controller.terminate();
               return;
             case 'finish':
+              // A tripwire/abort bail ends the run without the final tool-call; don't record a
+              // placeholder no-args call for it.
+              if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
+                self.#pendingToolCalls = {};
+              } else {
+                flushPendingToolCalls(controller);
+              }
               // 'suspended' is not terminal: a resume leg rehydrates the persisted 'suspended'
               // status and must be able to finish as 'success'. Only 'failed' and 'canceled'
               // block the success transition.
@@ -2186,6 +2241,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallArgsDeltas = {};
     this.#toolCallDeltaIdNameMap = {};
     this.#toolCallStreamingMeta = {};
+    this.#pendingToolCalls = {};
   }
 
   #createEventedStream() {
@@ -2277,6 +2333,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       toolCallArgsDeltas: this.#toolCallArgsDeltas,
       toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
       toolCallStreamingMeta: this.#toolCallStreamingMeta,
+      pendingToolCalls: this.#pendingToolCalls,
       toolCalls: this.#toolCalls,
       toolResults: this.#toolResults,
       warnings: this.#warnings,
@@ -2303,6 +2360,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
     this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
     this.#toolCallStreamingMeta = state.toolCallStreamingMeta ?? {};
+    this.#pendingToolCalls = state.pendingToolCalls ?? {};
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;
