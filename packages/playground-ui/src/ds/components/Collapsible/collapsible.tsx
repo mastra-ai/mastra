@@ -25,7 +25,8 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
           focusRing,
           'hover:text-foreground',
           '[&>svg]:transition-transform [&>svg]:duration-normal [&>svg]:ease-out-custom',
-          '[&[data-panel-open]>svg]:rotate-90',
+          // DisclosureChevron turns itself; this rule only covers plain chevrons.
+          '[&[data-panel-open]>svg:not([data-slot=disclosure-chevron])]:rotate-90',
           className,
         )}
         {...renderProps}
