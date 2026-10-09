@@ -2,7 +2,7 @@
 '@mastra/docker': minor
 ---
 
-Added `DockerFactorySandbox`, which plugs Docker into Mastra Factory as the sandbox provider. Factory gets one container per session, a repository image it can build ahead of the first session, and user-tunable settings on the environment page. It takes the same options as `DockerSandbox` except `id` and `template`.
+Added `DockerFactorySandbox`, which plugs Docker into Mastra Factory as the sandbox provider. Factory gets one container per session, a repository image it can build ahead of the first session, and user-tunable settings. It takes the same options as `DockerSandbox` except `id` and `template`.
 
 ```ts
 import { DockerFactorySandbox } from '@mastra/docker';
