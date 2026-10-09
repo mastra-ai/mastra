@@ -120,11 +120,7 @@ export function signUpWithPassword(
  * disabled), reports `authEnabled: false` so the UI hides all auth affordances.
  */
 export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState> {
-  const res = await fetch(`${baseUrl}/auth/me`, {
-    headers: { Accept: 'application/json' },
-    credentials: 'include',
-    cache: 'no-store',
-  });
+  const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (res.status === 404) {
     return { authEnabled: false, authenticated: false };
   }

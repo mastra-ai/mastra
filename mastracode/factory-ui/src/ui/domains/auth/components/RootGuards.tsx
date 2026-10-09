@@ -6,7 +6,6 @@ import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboard
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
 
 export const RootGuards = () => {
@@ -21,37 +20,27 @@ export const RootGuards = () => {
 
 const AuthGuard = () => {
   const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
+  const location = useLocation();
+  const [wasSignedIn, setWasSignedIn] = useState(false);
+
+  if (data?.authenticated && !wasSignedIn) setWasSignedIn(true);
 
   if (isPending) return <AuthPendingSkeleton />;
   if (isError && !data) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (!data?.authEnabled) return <AuthNotConfiguredScreen />;
 
-  const state = data;
-  if (!state?.authEnabled) return <AuthNotConfiguredScreen />;
-
-  return (
-    <AuthSessionGuard authenticated={state.authenticated}>
-      <OnboardingGuard />
-    </AuthSessionGuard>
-  );
-};
-
-/** Mounted after the first auth check, so expiry is distinct from a signed-out visit. */
-function AuthSessionGuard({ authenticated, children }: { authenticated: boolean; children: ReactNode }) {
-  const [startedAuthenticated] = useState(authenticated);
-  const location = useLocation();
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
-
-  if (!startedAuthenticated) {
+  if (!data.authenticated && !wasSignedIn) {
     return <Navigate to={`/signin?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   return (
     <>
-      {children}
-      {!authenticated && <SessionExpiredDialog returnTo={returnTo} />}
+      <OnboardingGuard />
+      {!data.authenticated && <SessionExpiredDialog returnTo={returnTo} />}
     </>
   );
-}
+};
 
 const OnboardingGuard = () => {
   const pathname = useLocation().pathname;

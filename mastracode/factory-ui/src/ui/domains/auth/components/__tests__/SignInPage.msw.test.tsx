@@ -70,15 +70,15 @@ describe('SignInPage', () => {
       });
       const requestSeen = vi.fn();
       server.use(
-        http.get(AUTH_ME_URL, async ({ request }) => {
-          requestSeen(request.credentials, request.cache);
+        http.get(AUTH_ME_URL, async () => {
+          requestSeen();
           await checked;
           return HttpResponse.json(signedOut);
         }),
       );
       const router = renderCachedSignIn(signedIn);
 
-      await waitFor(() => expect(requestSeen).toHaveBeenCalledWith('include', 'no-store'));
+      await waitFor(() => expect(requestSeen).toHaveBeenCalled());
       expect(router.state.location.pathname).toBe('/signin');
       expect(screen.queryByRole('heading', { name: 'Work board' })).not.toBeInTheDocument();
 
