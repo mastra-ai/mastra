@@ -1,5 +1,5 @@
 export type FigureMode = 'shared' | 'individual' | 'hybrid';
-export type FigureScene = 'factory' | 'codebase' | 'intake' | 'accounts';
+export type FigureScene = 'factory' | 'codebase' | 'intake' | 'setup' | 'accounts';
 export interface FigureDefinition {
   name: string;
   means: string;

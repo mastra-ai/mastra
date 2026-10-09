@@ -10,7 +10,7 @@ const output = resolve(outputPath);
 const { assemble } = await import(pathToFileURL(resolve(skill, 'build.mjs')).href);
 const figures = resolve(dirname(fileURLToPath(import.meta.url)), '../src/ui/domains/workspaces/figures');
 mkdirSync(output, { recursive: true });
-for (const scene of ['factory', 'codebase', 'intake', 'accounts']) {
+for (const scene of ['factory', 'codebase', 'intake', 'setup', 'accounts']) {
   const name = `journey-${scene}`;
   const module = readFileSync(resolve(figures, 'journey.js'), 'utf8');
   const source = module

@@ -33,6 +33,7 @@ function figureScene(step: OnboardingStep): FigureScene {
   if (step === 'initial') return 'factory';
   if (step === 'vcs') return 'codebase';
   if (step === 'project-management') return 'intake';
+  if (step === 'model-preset') return 'setup';
   return 'accounts';
 }
 
