@@ -712,6 +712,44 @@ describe('getDynamicMemory', () => {
     expect(memorySettledMock.mock.contexts).toEqual(expect.arrayContaining([first, second]));
   });
 
+  it('drains every memory and raises no unhandled rejection when one fails to settle', async () => {
+    vi.resetModules();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const factory = getDynamicMemory({ storage: true } as never);
+    const first = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project', observationThreshold: 30_000 }) as never,
+    });
+    let releaseSecond!: () => void;
+    const secondPending = new Promise<void>(resolve => (releaseSecond = resolve));
+    let second: unknown;
+    memorySettledMock.mockImplementation(function (this: unknown) {
+      if (this === first) return Promise.reject(new Error('OM engine failed to start'));
+      return this === second ? secondPending : Promise.resolve();
+    });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      // A threshold change retires the first instance, whose settled() rejects in the background.
+      second = factory({
+        requestContext: createRequestContext({ projectPath: '/tmp/project', observationThreshold: 40_000 }) as never,
+      });
+
+      let settled = false;
+      const settling = factory.settled().then(() => (settled = true));
+      await new Promise(resolve => setTimeout(resolve, 0));
+      // The rejected first instance doesn't end the drain early.
+      expect(settled).toBe(false);
+
+      releaseSecond();
+      await expect(settling).resolves.toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',

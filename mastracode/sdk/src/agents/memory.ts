@@ -345,7 +345,12 @@ export function getDynamicMemory(
     if (cachedMemory) {
       const retired = cachedMemory;
       retiredMemories.add(retired);
-      void retired.settled().finally(() => retiredMemories.delete(retired));
+      // settled() rejects if the instance's OM engine failed to start; that must not surface as
+      // an unhandled rejection from a background retirement.
+      void retired
+        .settled()
+        .catch(() => {})
+        .finally(() => retiredMemories.delete(retired));
     }
 
     cachedMemory = new Memory({
@@ -422,7 +427,8 @@ export function getDynamicMemory(
      * instance this factory created. Await before closing storage.
      */
     async settled(): Promise<void> {
-      await Promise.all([cachedMemory?.settled(), ...[...retiredMemories].map(memory => memory.settled())]);
+      // Drain every instance even if one rejects, so teardown can still close storage.
+      await Promise.allSettled([cachedMemory?.settled(), ...[...retiredMemories].map(memory => memory.settled())]);
     },
   });
 }
