@@ -309,6 +309,142 @@ describe('PG retention', () => {
     });
   });
 
+  // Run ownership rows are anchored on `updatedAt` (refreshed by every claim,
+  // renew and release), run fence rows on `retiredAt` (NULL until the
+  // execution settles). Both are bigint epoch-ms columns written from the
+  // database clock, so tests backdate them directly.
+  describe('run ownership', () => {
+    const OWNERS = `"${SCHEMA}"."mastra_workflow_run_owners"`;
+    const FENCES = `"${SCHEMA}"."mastra_memory_run_fences"`;
+    const LEASE_MS = 60_000;
+
+    beforeEach(async () => {
+      await store.stores.workflows!.dangerouslyClearAll();
+    });
+
+    async function claim(runId: string, ownerId = 'owner-a') {
+      const claimed = await store.stores.workflows!.claimRunOwnership({ runId, ownerId, leaseMs: LEASE_MS });
+      if (!claimed.acquired) throw new Error(`claim of ${runId} failed`);
+      return { runId, generation: claimed.record.generation, ownerId: claimed.record.ownerId };
+    }
+
+    async function backdateOwner(runId: string, ageDays: number) {
+      await store.db.none(`UPDATE ${OWNERS} SET "updatedAt" = $2 WHERE "runId" = $1`, [
+        runId,
+        Date.now() - ageDays * DAY,
+      ]);
+    }
+
+    async function backdateRetired(runId: string, ageDays: number) {
+      await store.db.none(`UPDATE ${FENCES} SET "retiredAt" = $2 WHERE "runId" = $1`, [
+        runId,
+        Date.now() - ageDays * DAY,
+      ]);
+    }
+
+    async function ownerRunIds(target = store): Promise<string[]> {
+      const rows = await target.db.manyOrNone<{ runId: string }>(`SELECT "runId" FROM ${OWNERS} ORDER BY "runId"`);
+      return rows.map(r => r.runId);
+    }
+
+    async function fenceRunIds(target = store): Promise<string[]> {
+      const rows = await target.db.manyOrNone<{ runId: string }>(`SELECT "runId" FROM ${FENCES} ORDER BY "runId"`);
+      return rows.map(r => r.runId);
+    }
+
+    it('deletes owner rows idle longer than maxAge and keeps one that was just renewed', async () => {
+      await claim('run-idle');
+      const live = await claim('run-live');
+      await backdateOwner('run-idle', 40);
+      await backdateOwner('run-live', 40);
+
+      const renewed = await store.stores.workflows!.renewRunOwnership({ ...live, leaseMs: LEASE_MS });
+      expect(renewed.renewed).toBe(true);
+
+      const results = await store.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ domain: 'workflows', table: 'mastra_workflow_run_owners', done: true });
+      expect(results[0]!.deleted).toBe(1);
+      expect(await ownerRunIds()).toEqual(['run-live']);
+    });
+
+    // The two tables are pruned independently. A claim after its owner row was
+    // pruned must still land above the surviving fence, or the execution
+    // could never raise it.
+    it('claims above a surviving fence after the owner row was pruned', async () => {
+      const first = await claim('run-reused', 'owner-a');
+      expect(await store.stores.memory!.raiseRunFence(first)).toBe(true);
+      await backdateOwner('run-reused', 40);
+
+      await store.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+      expect(await store.stores.workflows!.getRunOwnership({ runId: 'run-reused' })).toBeNull();
+      expect(await fenceRunIds()).toEqual(['run-reused']);
+
+      const second = await claim('run-reused', 'owner-b');
+      expect(second.generation).toBeGreaterThan(first.generation);
+      expect(await store.stores.memory!.raiseRunFence(second)).toBe(true);
+    });
+
+    it('never deletes an un-retired fence row and deletes a retired one older than maxAge', async () => {
+      const running = { runId: 'run-running', generation: Date.now(), ownerId: 'owner-a' };
+      const retiredOld = { runId: 'run-retired-old', generation: Date.now(), ownerId: 'owner-a' };
+      const retiredNew = { runId: 'run-retired-new', generation: Date.now(), ownerId: 'owner-a' };
+      for (const fence of [running, retiredOld, retiredNew]) {
+        expect(await store.stores.memory!.raiseRunFence(fence)).toBe(true);
+      }
+      expect(await store.stores.memory!.retireRunFence(retiredOld)).toBe(true);
+      expect(await store.stores.memory!.retireRunFence(retiredNew)).toBe(true);
+      await backdateRetired('run-retired-old', 40);
+
+      const results = await store.stores.memory!.prune({ runFences: { maxAge: '30d' } });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ domain: 'memory', table: 'mastra_memory_run_fences', done: true });
+      expect(results[0]!.deleted).toBe(1);
+      expect(await fenceRunIds()).toEqual(['run-retired-new', 'run-running']);
+    });
+
+    it('un-retires a fence when a later execution raises it, so prune keeps it', async () => {
+      const first = { runId: 'run-resumed', generation: Date.now(), ownerId: 'owner-a' };
+      expect(await store.stores.memory!.raiseRunFence(first)).toBe(true);
+      expect(await store.stores.memory!.retireRunFence(first)).toBe(true);
+      await backdateRetired('run-resumed', 40);
+
+      const next = { ...first, generation: first.generation + 1, ownerId: 'owner-b' };
+      expect(await store.stores.memory!.raiseRunFence(next)).toBe(true);
+
+      await store.stores.memory!.prune({ runFences: { maxAge: '30d' } });
+
+      expect(await fenceRunIds()).toEqual(['run-resumed']);
+    });
+
+    it('routes workflows.runOwnership and memory.runFences through the composite prune()', async () => {
+      const configured = newStore({
+        workflows: { runOwnership: { maxAge: '30d' } },
+        memory: { runFences: { maxAge: '30d' } },
+      });
+      await configured.init();
+      try {
+        const fence = await claim('run-settled');
+        expect(await store.stores.memory!.raiseRunFence(fence)).toBe(true);
+        expect(await store.stores.memory!.retireRunFence(fence)).toBe(true);
+        await backdateOwner('run-settled', 40);
+        await backdateRetired('run-settled', 40);
+
+        const results = await configured.prune();
+
+        expect(results.map(r => r.table)).toEqual(
+          expect.arrayContaining(['mastra_workflow_run_owners', 'mastra_memory_run_fences']),
+        );
+        expect(await ownerRunIds(configured)).toEqual([]);
+        expect(await fenceRunIds(configured)).toEqual([]);
+      } finally {
+        await configured.close().catch(() => {});
+      }
+    });
+  });
+
   // Anchor indexes are created lazily on the first prune() call — never at
   // init() — so deployments that don't configure retention pay no index
   // write/disk overhead on their growth tables. Uses its own schema so the
@@ -352,6 +488,16 @@ describe('PG retention', () => {
       await lazyStore.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
 
       expect(await retentionIndexes()).toContain(`${LAZY_SCHEMA}_mastra_experiments_retention_idx`);
+    });
+
+    it('creates the run ownership and run fence anchor indexes on their first prune', async () => {
+      await lazyStore.stores.workflows!.prune({ runOwnership: { maxAge: '30d' } });
+      await lazyStore.stores.memory!.prune({ runFences: { maxAge: '30d' } });
+
+      const indexes = await retentionIndexes();
+      expect(indexes).toContain(`${LAZY_SCHEMA}_mastra_runownership_retention_idx`);
+      expect(indexes).toContain(`${LAZY_SCHEMA}_mastra_runfences_retention_idx`);
+      expect(indexes).not.toContain(`${LAZY_SCHEMA}_mastra_workflowsnapshot_retention_idx`);
     });
 
     // Retention is an explicit opt-in, so its supporting anchor index is not

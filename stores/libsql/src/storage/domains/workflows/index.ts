@@ -56,9 +56,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   /**
    * Workflow run snapshots accumulate as runs execute. Anchored on `updatedAt`
    * (last activity) so suspended/long-running runs are not pruned by start age.
+   *
+   * Run ownership rows are anchored on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's row is never
+   * older than its renew interval.
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAt', indexed: true },
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: true, anchorType: 'epoch-ms' },
   };
 
   #db: LibSQLDB;
@@ -182,14 +187,17 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             if (current?.live && !force) {
               return { acquired: false, record: current };
             }
+            // A run's first generation is the database clock, so a run claimed
+            // again after its record was pruned still gets a higher generation.
             await tx.execute({
-              sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_OWNERS} (runId, generation, ownerId, leaseExpiresAt)
-                VALUES (?, ?, ?, ${DB_NOW_MS} + ?)
+              sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_OWNERS} (runId, generation, ownerId, leaseExpiresAt, updatedAt)
+                VALUES (?, COALESCE(?, MAX(1, ${DB_NOW_MS})), ?, ${DB_NOW_MS} + ?, ${DB_NOW_MS})
                 ON CONFLICT(runId) DO UPDATE SET
                   generation = excluded.generation,
                   ownerId = excluded.ownerId,
-                  leaseExpiresAt = excluded.leaseExpiresAt`,
-              args: [runId, generation + 1, ownerId, leaseMs],
+                  leaseExpiresAt = excluded.leaseExpiresAt,
+                  updatedAt = excluded.updatedAt`,
+              args: [runId, current ? generation + 1 : null, ownerId, leaseMs],
             });
             return { acquired: true, record: (await this.#readRunOwner(tx, runId))! };
           }),
@@ -206,7 +214,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         () =>
           inWriteTransaction(this.#client, async tx => {
             const renewed = await tx.execute({
-              sql: `UPDATE ${TABLE_WORKFLOW_RUN_OWNERS} SET leaseExpiresAt = ${DB_NOW_MS} + ?
+              sql: `UPDATE ${TABLE_WORKFLOW_RUN_OWNERS} SET leaseExpiresAt = ${DB_NOW_MS} + ?, updatedAt = ${DB_NOW_MS}
                 WHERE runId = ? AND generation = ? AND ownerId = ? AND leaseExpiresAt IS NOT NULL`,
               args: [leaseMs, fence.runId, fence.generation, fence.ownerId],
             });
@@ -226,7 +234,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         () =>
           withClientWriteLock(this.#client, () =>
             this.#client.execute({
-              sql: `UPDATE ${TABLE_WORKFLOW_RUN_OWNERS} SET leaseExpiresAt = NULL
+              sql: `UPDATE ${TABLE_WORKFLOW_RUN_OWNERS} SET leaseExpiresAt = NULL, updatedAt = ${DB_NOW_MS}
                 WHERE runId = ? AND generation = ? AND ownerId = ?`,
               args: [fence.runId, fence.generation, fence.ownerId],
             }),
@@ -247,12 +255,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
-  /** Delete workflow snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
+  /** Delete workflow run snapshots and run ownership rows older than their policy's `maxAge`, batched. */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const targets = resolveTargets({
       policies,
       descriptor: WorkflowsLibSQL.retentionTables,
-      order: ['workflowSnapshot'],
+      order: ['workflowSnapshot', 'runOwnership'],
     });
     return runPrune({ db: this.#db, domain: 'workflows', targets, options, logger: this.logger });
   }

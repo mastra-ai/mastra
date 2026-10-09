@@ -64,7 +64,7 @@ import type {
   SqliteInValue as InValue,
   SqliteTransaction as Transaction,
 } from '../../db/client';
-import { assertRunFence, inWriteTransaction, withRunFence } from '../../db/run-fencing';
+import { assertRunFence, DB_NOW_MS, inWriteTransaction, withRunFence } from '../../db/run-fencing';
 import type { RunFenceCheck, SqliteWriter } from '../../db/run-fencing';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
@@ -128,11 +128,16 @@ export class MemoryLibSQL extends MemoryStorage {
    * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
    * on `createdAt` and are indexed for fast batched deletes. Cascade order is
    * enforced in `prune()` (children before threads), not here.
+   *
+   * Run fences anchor on `retiredAt` (epoch ms), which stays NULL until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     messages: { table: TABLE_MESSAGES, column: 'createdAt', indexed: true },
     resources: { table: TABLE_RESOURCES, column: 'createdAt', indexed: true },
     threads: { table: TABLE_THREADS, column: 'createdAt', indexed: true },
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: true, anchorType: 'epoch-ms' },
   };
 
   #client: Client;
@@ -270,15 +275,16 @@ export class MemoryLibSQL extends MemoryStorage {
             });
             const row = result.rows[0];
             const generation = row ? Number(row.generation) : undefined;
-            if (generation === undefined || generation < fence.generation) {
-              await tx.execute({
-                sql: `INSERT INTO ${TABLE_MEMORY_RUN_FENCES} (runId, generation, ownerId) VALUES (?, ?, ?)
-                  ON CONFLICT(runId) DO UPDATE SET generation = excluded.generation, ownerId = excluded.ownerId`,
-                args: [fence.runId, fence.generation, fence.ownerId],
-              });
-              return true;
-            }
-            return generation === fence.generation && String(row!.ownerId) === fence.ownerId;
+            const raises = generation === undefined || generation < fence.generation;
+            const reaffirms = generation === fence.generation && String(row!.ownerId) === fence.ownerId;
+            if (!raises && !reaffirms) return false;
+            // Every write un-retires the fence.
+            await tx.execute({
+              sql: `INSERT INTO ${TABLE_MEMORY_RUN_FENCES} (runId, generation, ownerId) VALUES (?, ?, ?)
+                ON CONFLICT(runId) DO UPDATE SET generation = excluded.generation, ownerId = excluded.ownerId, retiredAt = NULL`,
+              args: [fence.runId, fence.generation, fence.ownerId],
+            });
+            return true;
           }),
         'raiseRunFence',
       );
@@ -286,6 +292,33 @@ export class MemoryLibSQL extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const retired = await this.#db.executeWriteOperationWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `UPDATE ${TABLE_MEMORY_RUN_FENCES} SET retiredAt = ${DB_NOW_MS}
+                WHERE runId = ? AND generation = ? AND ownerId = ?`,
+              args: [fence.runId, fence.generation, fence.ownerId],
+            }),
+          ),
+        'retireRunFence',
+      );
+      return retired.rowsAffected > 0;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },
@@ -312,7 +345,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const targets = resolveTargets({
       policies,
       descriptor: MemoryLibSQL.retentionTables,
-      order: ['messages', 'resources', 'threads'],
+      order: ['messages', 'resources', 'threads', 'runFences'],
     });
     return runPrune({ db: this.#db, domain: 'memory', targets, options, logger: this.logger });
   }

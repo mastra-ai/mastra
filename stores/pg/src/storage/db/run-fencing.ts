@@ -24,10 +24,12 @@ export async function assertRunFence(
   fence: RunFence,
   operation: string,
 ): Promise<void> {
-  const current = await t.oneOrNone<{ generation: number; ownerId: string }>(
+  // `generation` is BIGINT, which comes back as a string.
+  const row = await t.oneOrNone<{ generation: string | number; ownerId: string }>(
     `SELECT generation, "ownerId" FROM ${claimsTable} WHERE "runId" = $1 FOR SHARE`,
     [fence.runId],
   );
+  const current = row && { generation: Number(row.generation), ownerId: row.ownerId };
   if (!matchesRunFence(current, fence)) {
     throw new RunFenceConflictError(fence, operation);
   }

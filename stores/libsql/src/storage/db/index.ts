@@ -8,7 +8,12 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_WORKFLOW_RUN_OWNERS,
+  StorageColumn,
+} from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import { withRunFence } from './run-fencing';
@@ -21,6 +26,9 @@ import {
   prepareUpdateStatement,
 } from './utils';
 import { withClientWriteLock } from './write-lock';
+
+/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
+export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
 
 /**
  * Base configuration options shared across LibSQL domain configurations
@@ -1172,7 +1180,7 @@ export class LibSQLDB extends MastraBase {
     cutoff,
     limit,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
     /**
      * Exclusive upper bound for the anchor column. Must match the column's
@@ -1264,7 +1272,7 @@ export class LibSQLDB extends MastraBase {
     column,
   }: {
     indexName: string;
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
   }): Promise<void> {
     const parsedTable = parseSqlIdentifier(tableName, 'table name');
