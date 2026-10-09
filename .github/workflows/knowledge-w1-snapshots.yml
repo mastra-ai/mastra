@@ -12,8 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 0.0.0-knowledge-w1-20261006001735
-          - 0.0.0-knowledge-w1-20261007232522
+          - latest
+          - alpha
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
@@ -31,13 +31,13 @@ jobs:
           mkdir -p /tmp/proj out && cp .github/knowledge-w1-snapshots/dump.mjs /tmp/proj/
           cd /tmp/proj && npm init -y >/dev/null
           V='${{ matrix.version }}'
-          if [ "$V" = main-alpha ]; then
-            for p in core libsql pg mysql mongodb; do echo "@mastra/$p@$(npm view @mastra/$p dist-tags.alpha)"; done > specs
+          if [ "$V" = latest ] || [ "$V" = alpha ]; then
+            for p in core libsql pg mysql mongodb; do echo "@mastra/$p@$(npm view @mastra/$p dist-tags.$V)"; done > specs
           else
             for p in core libsql pg mysql mongodb; do echo "@mastra/$p@$V"; done > specs
           fi
           cat specs
-          npm install --no-audit --no-fund $(cat specs) @libsql/client pg mysql2 mongodb
+          npm install --legacy-peer-deps --no-audit --no-fund $(cat specs) @libsql/client pg mysql2 mongodb
           npm ls @mastra/core @mastra/libsql @mastra/pg @mastra/mysql @mastra/mongodb > "$GITHUB_WORKSPACE/out/${{ matrix.version }}.versions.txt" || true
       - name: Dump
         run: cd /tmp/proj && node dump.mjs "$GITHUB_WORKSPACE/out" '${{ matrix.version }}'
