@@ -23,6 +23,7 @@ constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
+  typegen?: { outFile: string };
 }: MCPClientOptions)
 ```
 
@@ -52,8 +53,139 @@ constructor({
     defaultValue: '60000',
     description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
   },
+  {
+    name: 'typegen',
+    type: '{ outFile: string }',
+    isOptional: true,
+    description:
+      'Enables optional CLI generation for this client. outFile must be a nonempty path, resolved from the command working directory. Construction stores readonly metadata and does not generate files.',
+  },
 ]}
 />
+
+### Typed client contracts
+
+Pass an explicit server-map type to `MCPClient<TServers>` to check configured server names, discovered tool names, and direct-call arguments. `MCPClientOptions<TServers>` accepts the same map. All declared servers are required. Use `Pick<TServers, 'weather'>` to configure a subset. Without a type argument, discovery keeps its existing broad types.
+
+The map describes each server's `tools`, with `input` and `output` types for each tool. This example assumes a running weather server at `WEATHER_MCP_URL`:
+
+```typescript
+import { MCPClient } from '@mastra/mcp'
+
+interface MCPServers {
+  weather: {
+    tools: {
+      get_weather: {
+        input: { location: string }
+        output: { temperature: number; conditions: string }
+      }
+    }
+  }
+}
+
+const mcp = new MCPClient<MCPServers>({
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+})
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+`listTools()` and `listToolsWithErrors().tools` expose exact `server_tool` keys. `listToolsets()` and `listToolsetsWithErrors().toolsets` expose server keys containing raw tool names. Both forms are partial: a server or tool can be absent. Check availability before calling a tool. Error maps, error details, and optional discovery durations keep their existing types.
+
+Execution can return the structured output, a protocol result envelope, a validation error, or `undefined`. Check the shape and property types before reading success fields. Protocol envelopes can have additional properties. Set `output: unknown` for tools without an output schema.
+
+These contracts describe a schema snapshot. Live servers can differ from that snapshot. Update them when server schemas change, using equivalent permissions. Extra live tools remain available at runtime but aren't included in the snapshot's known keys. Runtime discovery, validation, and execution are unchanged.
+
+### Generate client types
+
+Generate concrete TypeScript interfaces from live tool input and output schemas with the command included in `@mastra/mcp`. Export your existing client and set `typegen.outFile`:
+
+```typescript title="src/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+import type { MCPServers } from './mcp-types.generated'
+
+export const mcp = new MCPClient<MCPServers>({
+  id: 'weather-client',
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+  typegen: { outFile: 'src/mcp/mcp-types.generated.ts' },
+})
+```
+
+Set the environment variables and authentication credentials your module needs, then run this command from your project root:
+
+```bash npm2yarn
+npx @mastra/mcp generate ./src/mcp/client.ts
+```
+
+The generated type-only import can be missing on the first run. The loader handles TypeScript and transitive imports without typechecking. Run your typecheck after generation.
+
+Use the generated names and check runtime availability and result shape. This example assumes the server publishes `get_weather` with a required string `location` and a numeric `temperature` output:
+
+```typescript title="src/mcp/call-weather.ts"
+import { mcp } from './client'
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+The command accepts one or more file paths. Both input files and `outFile` paths are relative to the command's working directory. It selects direct named and default exports of typegen-enabled clients. It doesn't scan your source tree, invoke factories, or inspect nested exported objects. Repeated files, symlink aliases, and exports of the same client are processed once. A file without an eligible client fails.
+
+For independent clients with identical server configurations, use distinct IDs and output paths:
+
+```typescript title="src/mcp/clients.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const servers = { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } }
+export const first = new MCPClient({
+  id: 'first',
+  servers,
+  typegen: { outFile: 'first.generated.ts' },
+})
+export const second = new MCPClient({
+  id: 'second',
+  servers,
+  typegen: { outFile: 'second.generated.ts' },
+})
+```
+
+```bash npm2yarn
+npx @mastra/mcp generate ./src/mcp/clients.ts
+```
+
+The existing instance cache still applies. Constructing a client with the same explicit ID, server configuration, and `typegen.outFile` returns the existing object. A different server configuration or `outFile` replaces the cached instance instead, so a later constructor never silently keeps an output file it wasn't given.
+
+Generation lists tool definitions without calling tools. It fails on discovery errors, missing authentication, timeouts, output collisions, outputs that overwrite supplied input files, and schemas that can't be represented at all, such as reference cycles, excessive depth, or unresolved local references. Each failure names the client file, server, or tool it concerns. It prepares all sources before replacing files and disconnects selected clients on success or failure. Discovery and preflight failures preserve existing outputs. Each replacement is atomic, but multiple replacements aren't one transaction. A filesystem failure during replacement can leave earlier files updated.
+
+Tools without output schemas use `unknown`. Constraints such as string formats, length limits, and numeric bounds retain their base TypeScript types and remain runtime validation rules. Unsupported schema portions, including conditional schemas and `prefixItems` tuples, widen to `unknown` with a warning. A keyword whose value is outside its allowed shape widens that schema to `unknown` with a warning too, so one unusable tool doesn't stop generation for other servers. Warnings name the server, tool, and schema position they concern. External schema references aren't fetched. Unresolved local references and reference cycles fail generation. Schemas nested deeper than 128 levels fail generation too, matching the protocol depth limit. A schema that exceeds the protocol node budget of 10,000 widens to `unknown` with a warning, as does any schema or catalogue that exceeds the larger budgets generation applies to raw JSON values. Generation measures those budgets before it copies or converts a schema, so a server that advertises large schemas can't stall the command.
+
+:::note Module execution and credentials
+
+The command executes the supplied modules and their imports. Use trusted modules without application startup side effects. Provide credentials before invoking the command. It doesn't load dotenv files or launch interactive authentication. Existing client timeout and discovery settings apply.
+
+Generator diagnostics omit raw schemas, transport errors, and credentials. Logs emitted by your imported application, custom log handlers, or server subprocesses remain outside that guarantee.
+
+:::
 
 ### `MastraMCPServerDefinition`
 
@@ -1141,7 +1273,7 @@ const client = new MCPClient({
 
 ### Custom Token Storage
 
-For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys, so the backend only needs a key-value contract:
+For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys. The backend only needs a key-value contract:
 
 ```typescript
 import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp'

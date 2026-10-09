@@ -14,6 +14,46 @@ describe('MCPClient tool discovery retries', () => {
     clients.length = 0;
   });
 
+  it('replaces a cached same-id instance when the requested typegen output differs', () => {
+    const options = { id: `typegen-cache-${++clientId}`, servers: {}, typegen: { outFile: 'first.ts' } };
+    const original = new MCPClient(options);
+    clients.push(original);
+    // A cached instance must never keep an output file the caller did not ask for, in either
+    // construction order, so the differing `typegen` replaces it exactly like a server change.
+    const replacement = new MCPClient({ ...options, typegen: { outFile: 'second.ts' } });
+    clients.push(replacement);
+    expect(replacement).not.toBe(original);
+    expect(replacement.typegen).toEqual({ outFile: 'second.ts' });
+    options.typegen.outFile = 'mutated.ts';
+    expect(original.typegen?.outFile).toBe('first.ts');
+    expect(replacement.typegen?.outFile).toBe('second.ts');
+    expect(Object.isFrozen(replacement.typegen)).toBe(true);
+    // An untyped construction with the same id must not inherit or hide the requested output.
+    const untypedAfter = new MCPClient({ id: options.id, servers: {} });
+    clients.push(untypedAfter);
+    expect(untypedAfter).not.toBe(replacement);
+    expect(untypedAfter.typegen).toBeUndefined();
+    const typedAfter = new MCPClient({ id: options.id, servers: {}, typegen: { outFile: 'third.ts' } });
+    clients.push(typedAfter);
+    expect(typedAfter.typegen).toEqual({ outFile: 'third.ts' });
+    const independent = new MCPClient({ ...options, id: `typegen-cache-${++clientId}` });
+    clients.push(independent);
+    expect(independent).not.toBe(original);
+  });
+
+  it('keeps returning the cached instance when the requested typegen output matches', () => {
+    const options = { id: `typegen-same-${++clientId}`, servers: {}, typegen: { outFile: 'same.ts' } };
+    const original = new MCPClient(options);
+    clients.push(original);
+    const alias = new MCPClient({ ...options, typegen: { outFile: 'same.ts' } });
+    expect(alias).toBe(original);
+    expect(alias.typegen).toEqual({ outFile: 'same.ts' });
+  });
+
+  it.each(['', '  ', '\0'])('rejects invalid typegen output paths', outFile => {
+    expect(() => new MCPClient({ id: `typegen-invalid-${++clientId}`, servers: {}, typegen: { outFile } })).toThrow('nonempty file path');
+  });
+
   function createClient() {
     const client = new MCPClient({
       id: `configuration-test-${++clientId}`,

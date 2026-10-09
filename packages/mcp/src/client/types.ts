@@ -1,6 +1,8 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
+import type { Tool } from '@mastra/core/tools';
 import type {
+  CallToolResult,
   StreamableHTTPClientTransportOptions,
   ClientCapabilities,
   ElicitRequestParams,
@@ -11,6 +13,55 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import type { MCPTraceContext } from '../shared/trace-context';
+
+/** Published tool input and structured-output snapshot for each configured server. */
+export type MCPServerMap = Record<string, { tools: Record<string, { input: unknown; output: unknown }> }>;
+
+/**
+ * Constraint for a supplied server snapshot. Mapping over the given keys lets concrete
+ * generated interfaces satisfy it without declaring an index signature.
+ */
+export type MCPClientServers<TServers> = { [Server in keyof TServers]: MCPServerMap[string] };
+
+type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, any, any>, 'execute'> & {
+  execute?: (
+    input: Input,
+    context?: Parameters<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>[1],
+  ) => ReturnType<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>;
+};
+
+/** Flat discovery remains partial because servers and tools may be unavailable. */
+export type MCPClientTools<TServers extends MCPClientServers<TServers>> =
+  string extends keyof TServers
+    ? Record<string, Tool<any, any, any, any>>
+    : Partial<{
+        [
+          Entry in {
+            [Server in keyof TServers & string]: {
+              [Name in keyof TServers[Server]['tools'] & string]: {
+                key: `${Server}_${Name}`;
+                tool: MCPClientTool<
+                  TServers[Server]['tools'][Name]['input'],
+                  TServers[Server]['tools'][Name]['output']
+                >;
+              };
+            }[keyof TServers[Server]['tools'] & string];
+          }[keyof TServers & string] as Entry['key']
+        ]: Entry['tool'];
+      }>;
+
+/** Grouped discovery preserves raw tool names and potentially absent servers. */
+export type MCPClientToolsets<TServers extends MCPClientServers<TServers>> =
+  string extends keyof TServers
+    ? Record<string, Record<string, Tool<any, any, any, any>>>
+    : Partial<{
+        [Server in keyof TServers]: Partial<{
+          [Name in keyof TServers[Server]['tools'] & string]: MCPClientTool<
+            TServers[Server]['tools'][Name]['input'],
+            TServers[Server]['tools'][Name]['output']
+          >;
+        }>;
+      }>;
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
