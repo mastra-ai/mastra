@@ -1,7 +1,7 @@
 /**
  * Mastra `apiRoutes` for the incident.io intake feature.
  *
- * Registered alongside the other `/web/*` routes, behind the host auth gate.
+ * Registered alongside the other `/web/*` routes, behind core route auth.
  * Mirrors the Jira module: no connect/callback flow here — credentials are
  * either deployment-global constructor config (direct) or Platform-managed
  * connections discovered at runtime. Every route re-resolves the
@@ -184,7 +184,6 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
   routes.push(
     registerApiRoute('/web/incidentio/status', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         if (!enabled || !incidentio || !intake) {
           return c.json({
@@ -226,7 +225,6 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
   routes.push(
     registerApiRoute('/web/incidentio/issues', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -316,7 +314,6 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
   routes.push(
     registerApiRoute('/web/incidentio/issues/detail', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;

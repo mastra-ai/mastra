@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createFactoryAuthGate } from '../../auth.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
 import type { TestAuthUser } from '../../routes/test-utils.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
@@ -27,9 +26,8 @@ function buildApp(
 const orgUser = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('GitLab webhook auth boundary', () => {
-  it('passes an unauthenticated delivery through the auth gate to GitLab token verification', async () => {
+  it('lets an unauthenticated delivery reach GitLab token verification', async () => {
     const app = new Hono();
-    app.use('*', createFactoryAuthGate({} as never));
     const gitlab = new GitLabIntegration({ accessToken: 'group-token', webhookSecret: 'webhook-secret' });
     mountApiRoutes(
       app,

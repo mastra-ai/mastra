@@ -125,7 +125,6 @@ function receiptRoute(
         : FACTORY_ROUTE_CONTRACTS.attentionRestore;
   return registerApiRoute(contract.path, {
     method: contract.method,
-    requiresAuth: false,
     handler: async context => {
       const resolved = await dependencies.resolveProject(context);
       if ('response' in resolved) return resolved.response;
@@ -175,7 +174,6 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
   return [
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.attentionList.path, {
       method: FACTORY_ROUTE_CONTRACTS.attentionList.method,
-      requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
@@ -251,7 +249,6 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
     }),
     registerApiRoute(FACTORY_ROUTE_CONTRACTS.attentionReadAll.path, {
       method: FACTORY_ROUTE_CONTRACTS.attentionReadAll.method,
-      requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
