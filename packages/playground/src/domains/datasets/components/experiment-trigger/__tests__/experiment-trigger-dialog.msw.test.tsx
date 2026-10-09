@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
+import { targetAgents } from '../../__tests__/fixtures/target-agents';
 import { ExperimentTriggerDialog } from '../experiment-trigger-dialog';
 import type { ExperimentTriggerDialogProps } from '../experiment-trigger-dialog';
 import { getMultiSelectValues, setMultiSelectValues } from '@/test/mock-combobox-helpers';
@@ -61,12 +62,7 @@ function setupHandlers() {
     http.get(`${BASE_URL}/api/datasets/:datasetId/versions`, ({ params }) =>
       HttpResponse.json(params.datasetId === 'dataset-1' ? datasetVersionsResponse : emptyVersionsResponse),
     ),
-    http.get(`${BASE_URL}/api/agents`, () =>
-      HttpResponse.json({
-        'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} },
-        'agent-2': { name: 'Agent Two', instructions: '', tools: {}, workflows: {} },
-      }),
-    ),
+    http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(targetAgents)),
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
     http.post(`${BASE_URL}/api/datasets/:datasetId/experiments`, async ({ params, request }) => {
