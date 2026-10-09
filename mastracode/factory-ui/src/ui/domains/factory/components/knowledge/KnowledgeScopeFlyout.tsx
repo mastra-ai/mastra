@@ -35,7 +35,7 @@ export function KnowledgeScopeFlyout({
     <aside
       data-testid="knowledge-scope-flyout"
       aria-label={`${scope.name} scope details`}
-      className="border-border bg-card shadow-overlay absolute inset-y-0 right-0 z-20 flex w-80 flex-col overflow-y-auto rounded-l-xl border-l"
+      className="border-border bg-card shadow-overlay fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-y-auto rounded-t-xl border-t md:static md:z-auto md:max-h-none md:w-80 md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
     >
       <header className="flex items-start gap-2 px-4 py-3">
         <div className="min-w-0">
