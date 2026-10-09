@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added `FactorySandbox`, the contract a host implements to plug a sandbox provider into Mastra Factory. Before, Factory took a bare callback that built one `MastraSandbox` per session, so a provider had no way to expose tunable settings, a prebuilt repository template or template builds. A `FactorySandbox` owns all four, and lives in `@mastra/core/workspace` so provider packages implement it without depending on `@mastra/factory`.
+Added `FactorySandbox`, the contract a host implements to plug a sandbox provider into Mastra Factory. The bare callback that builds one `MastraSandbox` per session still works, but it gives a provider no way to expose tunable settings, a prebuilt repository template or template builds. A `FactorySandbox` owns all four, and lives in `@mastra/core/workspace` so provider packages implement it without depending on `@mastra/factory`.
 
 **Required:** `provider`, a `settings` schema (zod, JSON Schema or Standard Schema; every field optional, absent means the provider default) and `create`, which returns the session's `MastraSandbox`.
 
