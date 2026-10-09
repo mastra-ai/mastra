@@ -818,6 +818,44 @@ describe('PlatformSandbox', () => {
     );
   });
 
+  it('resumes through the recovery id when getInfo() runs before start() with a stale hint', async () => {
+    // The sequence a resumed Factory session runs: the workspace tools emit
+    // metadata (getInfo) before their first exec. The stored hint is unknown
+    // to the proxy, so start() must own the 404 and fall through to POST
+    // /sandbox keyed by the logical id; getInfo() must not fail the tool first.
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }))
+      .mockResolvedValueOnce(json({ id: 'sbx_same_vm', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      id: 'session-1',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'stale-hint',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    const before = await sandbox.getInfo();
+    expect(before.status).toBe('pending');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const result = await sandbox.executeCommand('pwd');
+    expect(result.exitCode).toBe(0);
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/stale-hint',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject({ id: 'session-1' });
+    // The confirmed id replaces the hint for the next persist.
+    expect(sandbox.sandboxId).toBe('sbx_same_vm');
+  });
+
   it('creates a fresh sandbox when the reattached sandbox record is destroyed', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
