@@ -304,11 +304,12 @@ describe('knowledge semantic index descriptions', () => {
 
 describe('knowledge semantic index claim timeout', () => {
   it('passes a configured claim timeout to the storage claim', async () => {
-    const { store, scopeIds } = await fixture();
+    const { knowledge, store, scopeIds } = await fixture();
     const { embedder, vector } = createFakes();
     const claim = vi.spyOn(store, 'claimSemanticOutbox');
     const coordinator = new KnowledgeSemanticIndexCoordinator({
-      knowledge: store,
+      knowledge,
+      storage: store,
       vector,
       embedder,
       claimTimeoutMs: 5_000,
@@ -328,7 +329,7 @@ describe('knowledge semantic index claim timeout', () => {
   });
 
   it('reclaims an abandoned claim once the configured timeout has passed', async () => {
-    const { store, scopeIds, coordinator: defaultCoordinator } = await fixture();
+    const { knowledge, store, scopeIds, coordinator: defaultCoordinator } = await fixture();
     const { embedder, vector } = createFakes();
     await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
     const abandoned = await store.claimSemanticOutbox({ workerId: 'crashed', scopeIds });
@@ -337,7 +338,8 @@ describe('knowledge semantic index claim timeout', () => {
 
     await expect(defaultCoordinator.drain(scopeIds)).rejects.toThrow('stale');
     const coordinator = new KnowledgeSemanticIndexCoordinator({
-      knowledge: store,
+      knowledge,
+      storage: store,
       vector,
       embedder,
       claimTimeoutMs: 20,
@@ -361,7 +363,7 @@ describe('knowledge semantic index lost claims', () => {
   });
 
   it('repairs the index when an expired claim writes stale content after another worker finished', async () => {
-    const { store, scopeIds } = await fixture();
+    const { knowledge, store, scopeIds } = await fixture();
     const node = await store.createNode({ name: 'Version one', kind: 'project', scopeIds });
     const indexed = new Map<string, unknown>();
     const indexes = new Set<string>();
@@ -393,7 +395,8 @@ describe('knowledge semantic index lost claims', () => {
       query: async () => [],
     } as any;
     const slow = new KnowledgeSemanticIndexCoordinator({
-      knowledge: store,
+      knowledge,
+      storage: store,
       vector,
       embedder: makeEmbedder(true),
       workerId: 'slow',
@@ -408,7 +411,8 @@ describe('knowledge semantic index lost claims', () => {
       },
     });
     const fast = new KnowledgeSemanticIndexCoordinator({
-      knowledge: expiringStore,
+      knowledge,
+      storage: expiringStore,
       vector,
       embedder: makeEmbedder(false),
       workerId: 'fast',
