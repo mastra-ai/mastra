@@ -1007,14 +1007,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const abortController = new AbortController();
       if (streamOptions?.abortSignal) {
         const external = streamOptions.abortSignal;
-        if (external.aborted) {
+        // Also publish the abort request: the step worker may be another
+        // process that never sees this controller (mirrors `result.abort()`).
+        const forwardAbort = () => {
           abortController.abort((external as AbortSignal & { reason?: unknown }).reason);
+          void requestRemoteAbort(runId);
+        };
+        if (external.aborted) {
+          forwardAbort();
         } else {
-          external.addEventListener(
-            'abort',
-            () => abortController.abort((external as AbortSignal & { reason?: unknown }).reason),
-            { once: true },
-          );
+          external.addEventListener('abort', forwardAbort, { once: true });
         }
       }
       registryEntry.abortController = abortController;
@@ -1233,14 +1235,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const abortController = new AbortController();
       if (resumeOptions?.abortSignal) {
         const external = resumeOptions.abortSignal;
-        if (external.aborted) {
+        // Also publish the abort request: the step worker may be another
+        // process that never sees this controller (mirrors `result.abort()`).
+        const forwardAbort = () => {
           abortController.abort((external as AbortSignal & { reason?: unknown }).reason);
+          void requestRemoteAbort(runId);
+        };
+        if (external.aborted) {
+          forwardAbort();
         } else {
-          external.addEventListener(
-            'abort',
-            () => abortController.abort((external as AbortSignal & { reason?: unknown }).reason),
-            { once: true },
-          );
+          external.addEventListener('abort', forwardAbort, { once: true });
         }
       }
       // Ensure a registry entry exists for this resumed segment. On Inngest,

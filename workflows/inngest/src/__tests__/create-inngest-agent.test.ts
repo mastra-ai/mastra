@@ -2837,6 +2837,26 @@ describe('thread and run abort (#25156)', () => {
     expect(publish.mock.calls.filter(([topic]: any[]) => String(topic).startsWith('agent.control.'))).toHaveLength(0);
   });
 
+  // #26538: the step worker may be another process, so an external abortSignal
+  // must publish the abort request just like result.abort().
+  it('an external abortSignal asks the worker to abort the run', async () => {
+    const durableAgent = makeDurable('abort-external-signal');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
+    const external = new AbortController();
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], { abortSignal: external.signal });
+
+    try {
+      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      external.abort(new Error('external-cancel'));
+      expect(globalRunRegistry.get(result.runId)?.abortSignal?.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
   it('abortRunStream asks the worker to abort a run this process does not know', async () => {
     const durableAgent = makeDurable('abort-run-remote');
     const publish = vi.spyOn(durableAgent.pubsub, 'publish');

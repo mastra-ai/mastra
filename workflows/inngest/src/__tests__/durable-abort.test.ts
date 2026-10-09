@@ -231,6 +231,45 @@ describe('durable agent abort on a connect worker', () => {
     await streamAndAbortThroughAgent((durableAgent, runId) => durableAgent.abortRunStream(runId));
   });
 
+  // #26538: a caller-supplied abortSignal must reach the worker, like result.abort().
+  it('an external abortSignal stops the run on the worker', async () => {
+    const { buildAbortAgent } = await import('./fixtures/abort-agent');
+    const { durableAgent } = buildAbortAgent({ dbUrl, agentId, inngestPort: INNGEST_PORT });
+
+    const controller = new AbortController();
+    let abortPayload: unknown;
+    let finishReason: string | undefined;
+    const result = await durableAgent.stream('Count slowly.', {
+      abortSignal: controller.signal,
+      onAbort: data => {
+        abortPayload = data;
+      },
+      onFinish: data => {
+        finishReason = data.finishReason;
+      },
+    });
+
+    const consume = async () => {
+      try {
+        for await (const chunk of result.output.fullStream as AsyncIterable<{ type: string }>) {
+          if (!controller.signal.aborted && chunk.type === 'text-delta') {
+            controller.abort();
+          }
+        }
+      } catch {
+        // The ABORT bridge path may error the stream after firing onAbort.
+      } finally {
+        result.cleanup();
+      }
+    };
+    await Promise.race([consume(), workerHandle!.exited]);
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(abortPayload).toBeDefined();
+    expect(finishReason).toBe('abort');
+    await expect(result.output.finishReason).resolves.toBe('abort');
+  });
+
   it('fails fast when the worker dies after readiness', async () => {
     const handle = await startWorker();
     // No disarm — any post-readiness exit must reject `exited`. SIGTERM (unlike
