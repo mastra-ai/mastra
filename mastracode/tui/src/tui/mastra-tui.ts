@@ -28,8 +28,9 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  performUpdate,
+  planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
+import type { UpdatePlan } from '@mastra/code-sdk/utils/update-check';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
@@ -93,6 +94,7 @@ import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js
 import { updateStatusLine } from './status-line.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
+import { offerUpdate } from './update-flow.js';
 
 // =============================================================================
 // Types
@@ -1830,74 +1832,29 @@ export class MastraTUI {
       return;
     }
 
-    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
+    const pm = await detectPackageManager();
+    const [plan, changelog] = await Promise.all([planUpdate(pm, latestVersion), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog, plan);
   }
 
   /**
-   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
+   * Offer the update inline in the chat, or show the command to run when it
+   * can't be installed for the user.
    */
   private async showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
     changelog: string | null,
+    plan: UpdatePlan,
   ): Promise<void> {
-    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
-    if (changelog) {
-      question += `\n\nWhat's new:\n${changelog}`;
-    }
-    question += `\n\nWould you like to update now?`;
-
-    const answer = await new Promise<string | null>(resolve => {
-      const component = new AskQuestionInlineComponent(
-        {
-          question,
-          options: [
-            { label: 'Yes', description: 'Update and restart' },
-            { label: 'No', description: 'Skip this version' },
-          ],
-          allowCustomResponse: false,
-          onSubmit: answer => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(answer);
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(null);
-          },
-        },
-        this.state.ui,
-      );
-
-      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
-      this.state.activeInlineQuestion = component;
-      component.focused = true;
-      flushRender(this.state);
-    });
-
-    if (answer === 'Yes') {
-      showInfo(this.state, `Updating to v${latestVersion}…`);
-      const outcome = await performUpdate(pm, latestVersion);
-      if (outcome.status === 'updated') {
-        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
-        this.stop();
-        console.info(outcome.message);
-        this.exit(0);
-      } else {
-        showError(this.state, outcome.message);
-      }
-    } else {
-      // User declined — save the dismissed version
-      const settings = loadSettings();
-      settings.updateDismissedVersion = latestVersion;
-      saveSettings(settings);
-      if (answer === 'No') {
-        showInfo(this.state, `Update skipped. Run /update to update later.`);
-      }
-    }
+    await offerUpdate(
+      { state: this.state, stop: () => this.stop(), exit: code => this.exit(code) },
+      { currentVersion, latestVersion, pm, changelog, plan },
+      { startup: true },
+    );
   }
 }
