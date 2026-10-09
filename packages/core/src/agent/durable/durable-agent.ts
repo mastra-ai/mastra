@@ -2017,7 +2017,10 @@ export class DurableAgent<
    * @param workflowInput - The serialized workflow input
    * @internal
    */
-  protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  protected async executeWorkflow(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<{ status?: string } | void> {
     const workflow = this.getWorkflow();
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
@@ -2049,6 +2052,19 @@ export class DurableAgent<
     if (result?.status && result.status !== 'suspended') {
       await this.deleteRunSnapshots(runId);
     }
+    return result;
+  }
+
+  /**
+   * Whether `executeWorkflow()` resolves only after a suspended snapshot has
+   * been persisted, reporting `{ status: 'suspended' }`. When true,
+   * `closeOnSuspend` streams close on that result instead of on the SUSPENDED
+   * pubsub event (which the tool-call step publishes before persistence), so
+   * an immediate cold resume finds the `suspended` snapshot.
+   * @internal
+   */
+  protected get suspendPersistedOnReturn(): boolean {
+    return true;
   }
 
   /**
@@ -2430,11 +2446,14 @@ export class DurableAgent<
     // to false (stream stays open for a same-reader resume). The same value
     // gates the `across-suspension` continuation so the two cannot drift.
     const closeOnSuspend = options?.closeOnSuspend ?? false;
+    const closeOnPersistedSuspend = closeOnSuspend && this.suspendPersistedOnReturn;
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const {
       output,
       cleanup: createdStreamCleanup,
+      detach: detachStream,
+      waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2468,7 +2487,10 @@ export class DurableAgent<
       // now calls it in-process from globalRunRegistry and honors its return
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
-      closeOnSuspend,
+      // When the engine reports the persisted suspension, the stream is closed
+      // after executeWorkflow() returns (below) rather than on the SUSPENDED
+      // event, which is published before the snapshot is saved.
+      closeOnSuspend: closeOnSuspend && !closeOnPersistedSuspend,
       hideSignals: options?.hideSignals,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
@@ -2501,10 +2523,18 @@ export class DurableAgent<
             requestContext: globalRunRegistry.get(runId)?.requestContext,
           });
         }
+        let result: { status?: string } | void;
         try {
-          return await this.executeWorkflow(runId, workflowInput);
+          result = await this.executeWorkflow(runId, workflowInput);
         } finally {
           await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
+        if (closeOnPersistedSuspend && result?.status === 'suspended') {
+          // The workflow result is the persisted suspension boundary. Deliver
+          // buffered events (including onSuspended) before closing the stream.
+          await this.pubsub.flush();
+          await waitForEventDelivery();
+          detachStream();
         }
       })
       .catch(error => {
