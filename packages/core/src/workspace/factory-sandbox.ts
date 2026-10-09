@@ -134,7 +134,6 @@ const NO_SETTINGS = { type: 'object', properties: {}, additionalProperties: fals
  * optional: an absent setting means the provider default. Providers may
  * ignore `ctx.resolveHead` and resolve heads themselves.
  */
-
 export abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record<string, unknown>> {
   /** Brand factory detects the class by; never test by shape. */
   readonly [FACTORY_SANDBOX_BRAND] = true as const;
