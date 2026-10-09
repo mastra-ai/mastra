@@ -114,7 +114,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { assertRunFence, withRunFence } from '../../db/run-fencing';
+import { assertRunFence, DB_NOW_MS, withRunFence } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
@@ -189,11 +189,16 @@ export class MemoryPG extends MemoryStorage {
    * and are indexed for fast batched deletes. Cascade order is enforced in
    * `prune()` (children before threads), not here. Observational memory has no
    * timestamp anchor and is deliberately excluded.
+   *
+   * Run fences anchor on `retiredAt` (epoch ms), which stays NULL until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     messages: { table: TABLE_MESSAGES, column: 'createdAtZ', indexed: true },
     resources: { table: TABLE_RESOURCES, column: 'createdAtZ', indexed: true },
     threads: { table: TABLE_THREADS, column: 'createdAtZ', indexed: true },
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: true, anchorType: 'epoch-ms' },
   };
 
   #db: PgDB;
@@ -436,11 +441,12 @@ export class MemoryPG extends MemoryStorage {
     try {
       // One statement: inserts the first fence, raises an older one, and
       // re-affirms an identical one; any other existing fence is left alone
-      // and no row comes back.
+      // and no row comes back. Every write un-retires the fence.
       const current = await this.#db.client.oneOrNone(
         `INSERT INTO ${this.#runFencesTable()} AS f ("runId", generation, "ownerId")
          VALUES ($1, $2, $3)
-         ON CONFLICT ("runId") DO UPDATE SET generation = EXCLUDED.generation, "ownerId" = EXCLUDED."ownerId"
+         ON CONFLICT ("runId") DO UPDATE
+           SET generation = EXCLUDED.generation, "ownerId" = EXCLUDED."ownerId", "retiredAt" = NULL
          WHERE f.generation < EXCLUDED.generation
             OR (f.generation = EXCLUDED.generation AND f."ownerId" = EXCLUDED."ownerId")
          RETURNING "runId"`,
@@ -451,6 +457,29 @@ export class MemoryPG extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const retired = await this.#db.client.oneOrNone(
+        `UPDATE ${this.#runFencesTable()}
+         SET "retiredAt" = ${DB_NOW_MS}
+         WHERE "runId" = $1 AND generation = $2 AND "ownerId" = $3
+         RETURNING "runId"`,
+        [fence.runId, fence.generation, fence.ownerId],
+      );
+      return retired !== null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },
@@ -476,7 +505,7 @@ export class MemoryPG extends MemoryStorage {
     const targets = resolveTargets({
       policies,
       descriptor: MemoryPG.retentionTables,
-      order: ['messages', 'resources', 'threads'],
+      order: ['messages', 'resources', 'threads', 'runFences'],
     });
     const results = await runPrune({ db: this.#db, domain: 'memory', targets, options });
     if (policies['messages']) {

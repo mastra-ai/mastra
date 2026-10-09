@@ -13,6 +13,8 @@ import type {
   KNOWLEDGE_TABLE_NAME,
   StorageColumn,
   TABLE_NAMES,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_WORKFLOW_RUN_OWNERS,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -31,6 +33,9 @@ import type { SchemaSnapshot } from './schema-snapshot';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
+
+/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
+export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
 
 const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
 
@@ -2228,7 +2233,7 @@ export class PgDB extends MastraBase {
     cutoff,
     limit,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
     cutoff: Date | string | number;
     limit: number;
@@ -2237,6 +2242,8 @@ export class PgDB extends MastraBase {
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
     const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
 
+    // The outer anchor check keeps a row whose anchor moved past the cutoff
+    // after the subquery selected it (e.g. a run ownership renewal).
     const sql = `
       DELETE FROM ${fullTableName}
       WHERE ctid IN (
@@ -2244,6 +2251,7 @@ export class PgDB extends MastraBase {
         WHERE ${parsedColumn} < $1
         LIMIT $2
       )
+      AND ${parsedColumn} < $1
     `;
 
     const result = await this.client.query(sql, [cutoff, limit]);
@@ -2314,7 +2322,7 @@ export class PgDB extends MastraBase {
     column,
   }: {
     indexName: string;
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
   }): Promise<void> {
     const name = buildConstraintName({ baseName: indexName });

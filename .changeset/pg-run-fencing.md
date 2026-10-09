@@ -6,4 +6,6 @@ Added run fencing for durable agents. Postgres stores now reject writes from a d
 
 Claims are kept in two new tables, `mastra_workflow_run_owners` and `mastra_memory_run_fences`, which are created on init. If you set `disableInit: true`, create them before upgrading. `exportSchemas()` includes them. Durable agent runs fail to start until the tables exist.
 
+To prune them, set `retention.workflows.runOwnership` and `retention.memory.runFences` and call `storage.prune()`.
+
 Requires `@mastra/core` 1.76.0 or a later 1.x release.

@@ -50,9 +50,9 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 }
 
 interface RunOwnerRow {
-  generation: number;
-  ownerId: string;
   /** BIGINT columns come back as strings. */
+  generation: string | number;
+  ownerId: string;
   leaseExpiresAt: string | number | null;
   nowMs: string | number;
 }
@@ -63,7 +63,7 @@ function toRunOwnershipRecord(runId: string, row: RunOwnerRow): RunOwnershipReco
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
   return {
     runId,
-    generation: row.generation,
+    generation: Number(row.generation),
     ownerId: row.ownerId,
     leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
     live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
@@ -157,9 +157,14 @@ export class WorkflowsPG extends WorkflowsStorage {
    * Workflow run snapshots accumulate as runs execute. Anchored on the
    * timezone-aware `updatedAtZ` mirror column (last activity) so suspended or
    * long-running runs are not pruned by start age.
+   *
+   * Run ownership rows are anchored on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's row is never
+   * older than its renew interval.
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAtZ', indexed: true },
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: true, anchorType: 'epoch-ms' },
   };
 
   constructor(config: PgDomainConfig) {
@@ -332,13 +337,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
+  /** Delete workflow run snapshots and run ownership rows older than their policy's `maxAge`, batched. */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     await this.ensureRetentionIndexes(policies);
     const targets = resolveTargets({
       policies,
       descriptor: WorkflowsPG.retentionTables,
-      order: ['workflowSnapshot'],
+      order: ['workflowSnapshot', 'runOwnership'],
     });
     return runPrune({ db: this.#db, domain: 'workflows', targets, options });
   }
@@ -412,9 +417,11 @@ export class WorkflowsPG extends WorkflowsStorage {
           if (expectedGeneration !== undefined && expectedGeneration !== 0) {
             return { acquired: false, record: null };
           }
+          // A first claim seeds its generation from the database clock, so a run
+          // whose ownership row was pruned starts above every generation it had.
           const inserted = await t.oneOrNone<RunOwnerRow>(
-            `INSERT INTO ${table} ("runId", generation, "ownerId", "leaseExpiresAt")
-             VALUES ($1, 1, $2, ${DB_NOW_MS} + $3)
+            `INSERT INTO ${table} ("runId", generation, "ownerId", "leaseExpiresAt", "updatedAt")
+             VALUES ($1, GREATEST(1, ${DB_NOW_MS}), $2, ${DB_NOW_MS} + $3, ${DB_NOW_MS})
              ON CONFLICT ("runId") DO NOTHING
              RETURNING ${RUN_OWNER_COLUMNS}`,
             [runId, ownerId, leaseMs],
@@ -426,9 +433,10 @@ export class WorkflowsPG extends WorkflowsStorage {
         // it reads the database clock at the moment the claim actually happens.
         const claimed = await t.oneOrNone<RunOwnerRow>(
           `UPDATE ${table}
-           SET generation = generation + 1, "ownerId" = $2, "leaseExpiresAt" = ${DB_NOW_MS} + $3
+           SET generation = generation + 1, "ownerId" = $2, "leaseExpiresAt" = ${DB_NOW_MS} + $3,
+               "updatedAt" = ${DB_NOW_MS}
            WHERE "runId" = $1
-             AND ($4::integer IS NULL OR generation = $4)
+             AND ($4::bigint IS NULL OR generation = $4)
              AND ($5::boolean OR "leaseExpiresAt" IS NULL OR "leaseExpiresAt" <= ${DB_NOW_MS})
            RETURNING ${RUN_OWNER_COLUMNS}`,
           [runId, ownerId, leaseMs, expectedGeneration ?? null, force === true],
@@ -445,7 +453,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const renewed = await this.#db.client.oneOrNone<RunOwnerRow>(
         `UPDATE ${this.#runOwnersTable()}
-         SET "leaseExpiresAt" = ${DB_NOW_MS} + $4
+         SET "leaseExpiresAt" = ${DB_NOW_MS} + $4, "updatedAt" = ${DB_NOW_MS}
          WHERE "runId" = $1 AND generation = $2 AND "ownerId" = $3 AND "leaseExpiresAt" IS NOT NULL
          RETURNING ${RUN_OWNER_COLUMNS}`,
         [fence.runId, fence.generation, fence.ownerId, leaseMs],
@@ -461,7 +469,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const released = await this.#db.client.oneOrNone(
         `UPDATE ${this.#runOwnersTable()}
-         SET "leaseExpiresAt" = NULL
+         SET "leaseExpiresAt" = NULL, "updatedAt" = ${DB_NOW_MS}
          WHERE "runId" = $1 AND generation = $2 AND "ownerId" = $3
          RETURNING "runId"`,
         [fence.runId, fence.generation, fence.ownerId],
