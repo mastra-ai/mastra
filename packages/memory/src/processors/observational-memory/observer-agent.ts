@@ -1138,7 +1138,9 @@ function formatObserverMessage(
 
   const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
 
-  const pushLine = (title: string, body: string, createdAt?: unknown) => {
+  // Tool lines always carry their time, so the Observer can order tool calls and results
+  // against the messages around them even within the same minute.
+  const pushLine = (title: string, body: string, createdAt?: unknown, opts?: { tool?: boolean }) => {
     if (!body) {
       return;
     }
@@ -1149,7 +1151,7 @@ function formatObserverMessage(
       time: formatObserverTime(normalizedCreatedAt, timeZone),
       title,
       body,
-      alwaysShowTime: title.startsWith('Tool '),
+      alwaysShowTime: opts?.tool === true,
     });
   };
 
@@ -1182,6 +1184,7 @@ function formatObserverMessage(
             `Tool Call ${exchange.signature.toolName}`,
             formatObserverToolArguments(exchange.signature.args, maxLen),
             partCreatedAt,
+            { tool: true },
           );
         }
 
@@ -1217,6 +1220,7 @@ function formatObserverMessage(
               `${inv.isError ? 'Tool Error' : 'Tool Result'} ${inv.toolName}`,
               maybeTruncate(body, maxLen),
               partCreatedAt,
+              { tool: true },
             );
           }
           return;
@@ -1229,6 +1233,7 @@ function formatObserverMessage(
               `Tool Error ${inv.toolName}`,
               maybeTruncate(inv.errorText?.trim() ? inv.errorText : 'Tool execution failed', maxLen),
               partCreatedAt,
+              { tool: true },
             );
           } else if (inv.state === 'output-denied') {
             pushLine(
@@ -1238,13 +1243,16 @@ function formatObserverMessage(
                 maxLen,
               ),
               partCreatedAt,
+              { tool: true },
             );
           }
           return;
         }
 
         if (!exchange) {
-          pushLine(`Tool Call ${inv.toolName}`, formatObserverToolArguments(inv.args, maxLen), partCreatedAt);
+          pushLine(`Tool Call ${inv.toolName}`, formatObserverToolArguments(inv.args, maxLen), partCreatedAt, {
+            tool: true,
+          });
         }
         return;
       }

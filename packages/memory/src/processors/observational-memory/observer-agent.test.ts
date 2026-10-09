@@ -119,6 +119,21 @@ describe('Observer event order', () => {
             parts: [
               toolPart('c1', 'task_update', 'ok'),
               toolPart('c2', 'submit_plan', 'Plan was not approved. The user will send revision instructions next.'),
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'output-error',
+                  toolCallId: 'c3',
+                  toolName: 'run_tests',
+                  args: {},
+                  errorText: 'boom',
+                },
+              },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'output-denied', toolCallId: 'c4', toolName: 'delete_branch', args: {} },
+              },
+              { type: 'text', text: 'Waiting on the revision.' },
             ],
           },
         },
@@ -135,7 +150,12 @@ describe('Observer event order', () => {
 
     const toolLines = input.split('\n').filter(line => line.startsWith('Tool '));
     expect(toolLines.length).toBeGreaterThanOrEqual(3);
-    for (const line of toolLines) expect(line).toMatch(/^Tool (Call|Result) \S+ \(5:29 PM\):/);
+    for (const line of toolLines) expect(line).toMatch(/^Tool (Call|Result|Error|Denied) \S+ \(5:29 PM\):/);
+    for (const kind of ['Call', 'Result', 'Error', 'Denied']) {
+      expect(toolLines.some(line => line.startsWith(`Tool ${kind} `))).toBe(true);
+    }
+    // Only tool lines repeat the time; other lines within the same minute keep omitting it.
+    expect(input).toMatch(/^Assistant: Waiting on the revision\.$/m);
     expect(input).toMatch(/User \(5:35 PM\):/);
   });
 });
