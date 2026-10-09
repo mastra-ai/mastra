@@ -93,8 +93,8 @@ export interface ProcessedObservation {
 }
 
 /**
- * What `persist()` did with a processed observation. A strategy returning nothing persisted
- * the observation as given.
+ * What `persist()` did with a processed observation. A strategy returns nothing when there
+ * was nothing to commit: the cycle still completes, but `observationCommitted` settles false.
  */
 export type ObservationPersistOutcome =
   | {
@@ -107,6 +107,12 @@ export type ObservationPersistOutcome =
        * reflections may have superseded it by the time the outcome is returned.
        */
       record: ObservationalMemoryRecord;
+      /**
+       * Another instance had already committed observations for every message this cycle
+       * observed, so this cycle wrote nothing. The cycle still completes (its messages are
+       * observed), but nothing new was saved.
+       */
+      alreadyCovered?: boolean;
     }
   | {
       /** Nothing was written; the cycle must not remove context or report completion. */

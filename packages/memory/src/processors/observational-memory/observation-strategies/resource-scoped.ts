@@ -458,6 +458,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       composedFrom: this.composedFrom,
       target: head,
       recompose: fresh => this.compose(fresh.activeObservations ?? '', fresh),
+      cycleMessageIds: this.observationResults.flatMap(r => r.threadMessages.map(m => m.id)),
     });
     if (!committed) {
       return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
@@ -466,7 +467,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
 
     const threadUpdateMarkers: Array<ReturnType<typeof createThreadUpdateMarker>> = [];
 
-    if (processed.threadMetadataUpdates) {
+    // A covered cycle wrote nothing; the instance that did commit owns each thread's title,
+    // task, and cursor metadata, so this cycle's output must not overwrite them.
+    if (processed.threadMetadataUpdates && !committed.alreadyCovered) {
       for (const update of processed.threadMetadataUpdates) {
         const thread = await this.storage.getThreadById({ threadId: update.threadId });
         if (thread) {
@@ -513,7 +516,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       await this.streamMarker(marker);
     }
 
-    if (resourceId) {
+    if (resourceId && !committed.alreadyCovered) {
       await Promise.all(
         this.observationResults.map(({ threadId, threadMessages, result }) =>
           this.indexObservationGroups(
@@ -527,7 +530,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       );
     }
 
-    return { status: 'committed', processed, record: committed.record };
+    return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

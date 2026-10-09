@@ -382,6 +382,156 @@ describe('sync observation commits against the head text', () => {
     expect(head.activeObservations.match(new RegExp(`<thread id="${ids.threadId}">`, 'g'))).toHaveLength(1);
   });
 
+  it('thread scope: skips the commit when another instance already observed the same messages', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 100 });
+    const ids = await setupThread(storage);
+    const record = await om.getOrCreateRecord(ids.threadId, ids.resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- base',
+      tokenCount: 2,
+      lastObservedAt: ids.t0,
+    });
+    const observedAt = new Date(ids.t0.getTime() + 1_000);
+    const messages = [message(ids.threadId, ids.resourceId, 'm1', 'x'.repeat(2_000), observedAt)];
+    await storage.saveMessages({ messages });
+    observerReturns(om, '- observed fact');
+    const reflect = vi.spyOn(om.reflector, 'maybeReflect').mockResolvedValue(undefined as never);
+
+    const original = storage.commitActiveObservations.bind(storage);
+    let injected = false;
+    vi.spyOn(storage, 'commitActiveObservations').mockImplementation(async input => {
+      if (input.expectedActiveObservations !== undefined && !injected) {
+        injected = true;
+        const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+        await original({
+          id: head.id,
+          observations: `${head.activeObservations}\n\n- other instance fact`,
+          tokenCount: head.observationTokenCount + 2,
+          lastObservedAt: observedAt,
+          observedMessageIds: ['m1'],
+        });
+      }
+      return original(input);
+    });
+
+    const patchThread = vi.spyOn(storage, 'patchThread');
+    const result = await om.observe({ threadId: ids.threadId, resourceId: ids.resourceId, messages });
+
+    const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+    expect(injected).toBe(true);
+    expect(result.observed).toBe(true);
+    expect(head.activeObservations).toBe('- base\n\n- other instance fact');
+    expect(head.activeObservations).not.toContain('- observed fact');
+    // The committing instance owns the thread's title, task, and cursor metadata.
+    expect(patchThread).not.toHaveBeenCalled();
+    // A reflection after the skipped commit reflects the head's text, not this cycle's stale composition.
+    expect(reflect).toHaveBeenCalledTimes(1);
+    expect(reflect.mock.calls[0]![0].record.activeObservations).toBe('- base\n\n- other instance fact');
+  });
+
+  it('thread scope: still commits when an activation moved the cursor past a different message with the same timestamp', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { messageTokens: 100 });
+    const ids = await setupThread(storage);
+    const record = await om.getOrCreateRecord(ids.threadId, ids.resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- base',
+      tokenCount: 2,
+      lastObservedAt: ids.t0,
+    });
+    const sameTime = new Date(ids.t0.getTime() + 1_000);
+    const a = message(ids.threadId, ids.resourceId, 'a', 'x'.repeat(2_000), sameTime);
+    const b = message(ids.threadId, ids.resourceId, 'b', 'y'.repeat(2_000), sameTime);
+    await storage.saveMessages({ messages: [a, b] });
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        cycleId: 'a-cycle',
+        observations: '- FACT_A',
+        tokenCount: 3,
+        messageIds: ['a'],
+        messageTokens: 1_000,
+        lastObservedAt: sameTime,
+      },
+      lastBufferedAtTime: sameTime,
+    });
+    observerReturns(om, '- FACT_B');
+
+    const original = storage.commitActiveObservations.bind(storage);
+    let raced = false;
+    vi.spyOn(storage, 'commitActiveObservations').mockImplementation(async input => {
+      if (!raced) {
+        raced = true;
+        // Activating a's chunk moves the cursor to the shared timestamp without covering b.
+        await storage.swapBufferedToActive({
+          id: record.id,
+          activationRatio: 1,
+          messageTokensThreshold: 1_000,
+          currentPendingTokens: 1_000,
+          lastObservedAt: sameTime,
+        });
+      }
+      return original(input);
+    });
+
+    const result = await om.observe({ threadId: ids.threadId, resourceId: ids.resourceId, messages: [b] });
+
+    const head = (await storage.getObservationalMemory(ids.threadId, ids.resourceId))!;
+    expect(raced).toBe(true);
+    expect(result.observed).toBe(true);
+    expect(head.activeObservations).toContain('FACT_A');
+    expect(head.activeObservations).toContain('FACT_B');
+  });
+
+  it('resource scope: skips the commit when another instance already observed the same messages', async () => {
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    const om = createOM(storage, { scope: 'resource', messageTokens: 100 });
+    const resourceId = randomUUID();
+    const ids = await setupThread(storage, resourceId);
+    const record = await om.getOrCreateRecord(ids.threadId, resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- base',
+      tokenCount: 2,
+      lastObservedAt: ids.t0,
+    });
+    const messages = [message(ids.threadId, resourceId, 'r1', 'y'.repeat(2_000), new Date(ids.t0.getTime() + 1_000))];
+    await storage.saveMessages({ messages });
+    vi.spyOn(om.observer, 'callMultiThread').mockResolvedValue({
+      results: new Map([[ids.threadId, { observations: '* observed fact' }]]),
+    } as Awaited<ReturnType<typeof om.observer.callMultiThread>>);
+
+    const original = storage.commitActiveObservations.bind(storage);
+    let injected = false;
+    vi.spyOn(storage, 'commitActiveObservations').mockImplementation(async input => {
+      if (input.expectedActiveObservations !== undefined && !injected) {
+        injected = true;
+        const head = (await storage.getObservationalMemory(null, resourceId))!;
+        await original({
+          id: head.id,
+          observations: `${head.activeObservations}\n\n* other instance fact`,
+          tokenCount: head.observationTokenCount + 2,
+          lastObservedAt: head.lastObservedAt!,
+          observedMessageIds: ['r1'],
+        });
+      }
+      return original(input);
+    });
+
+    const patchThread = vi.spyOn(storage, 'patchThread');
+    const result = await om.observe({ threadId: ids.threadId, resourceId, messages });
+
+    const head = (await storage.getObservationalMemory(null, resourceId))!;
+    expect(injected).toBe(true);
+    expect(result.observed).toBe(true);
+    expect(head.activeObservations).toBe('- base\n\n* other instance fact');
+    expect(head.activeObservations).not.toContain('* observed fact');
+    expect(patchThread).not.toHaveBeenCalled();
+  });
+
   it('commits to the head when a reflection retires the record during the Observer call, and patches the thread cursor only after (H3)', async () => {
     const storage = new InMemoryMemory({ db: new InMemoryDB() });
     const om = createOM(storage, { messageTokens: 100 });
