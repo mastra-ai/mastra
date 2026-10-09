@@ -22,9 +22,16 @@ export const passwordManagerIgnoreAttributes = {
   'data-protonpass-ignore': 'true',
 } as const;
 
-export type TextFieldAutofillProps =
-  | ({ autoComplete: 'off' } & typeof passwordManagerIgnoreAttributes)
-  | { autoComplete: string };
+/**
+ * Props that keep browser autofill and the common password managers off a field. Spread
+ * them on a text field that never takes a credential (a search box, a rename input).
+ */
+export const passwordManagerOptOutProps = {
+  autoComplete: 'off',
+  ...passwordManagerIgnoreAttributes,
+} as const;
+
+export type TextFieldAutofillProps = typeof passwordManagerOptOutProps | { autoComplete: string };
 
 /**
  * Autofill props for a DS text field. With no `autoComplete` (or `"off"`), the field opts
@@ -33,9 +40,8 @@ export type TextFieldAutofillProps =
  * Spread it after the caller's props so the opt-out reaches the DOM.
  */
 export function textFieldAutofillProps(autoComplete: string | undefined): TextFieldAutofillProps {
-  const token = autoComplete?.trim().toLowerCase();
-  if (autoComplete === undefined || !token || token === 'off') {
-    return { autoComplete: 'off', ...passwordManagerIgnoreAttributes };
-  }
+  if (autoComplete === undefined) return passwordManagerOptOutProps;
+  const token = autoComplete.trim().toLowerCase();
+  if (token === '' || token === 'off') return passwordManagerOptOutProps;
   return { autoComplete };
 }

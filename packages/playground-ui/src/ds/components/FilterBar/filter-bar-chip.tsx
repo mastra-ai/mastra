@@ -29,7 +29,7 @@ import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -345,7 +345,7 @@ function SegmentSearchInput<T>({
         className={comboboxStyles.searchInput}
         placeholder={placeholder}
         inputMode={inputMode}
-        {...textFieldAutofillProps(undefined)}
+        {...passwordManagerOptOutProps}
         onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
       />
     </div>

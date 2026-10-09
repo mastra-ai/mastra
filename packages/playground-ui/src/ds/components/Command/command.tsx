@@ -8,7 +8,7 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -187,7 +187,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
           className,
         )}
         {...props}
-        {...textFieldAutofillProps(undefined)}
+        {...passwordManagerOptOutProps}
       />
       {rightSlot && (
         <div data-slot="command-input-right-slot" className="ml-2 flex shrink-0 items-center text-muted-foreground">

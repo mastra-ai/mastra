@@ -4,7 +4,7 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { textFieldAutofillProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
+import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useAgents } from '@mastra/react/hooks/agents';
@@ -124,7 +124,7 @@ export function AgentsPage() {
                       <EntityDescription>
                         <input
                           type="text"
-                          {...textFieldAutofillProps(undefined)}
+                          {...passwordManagerOptOutProps}
                           disabled={isDisabled}
                           className={cn(
                             'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',

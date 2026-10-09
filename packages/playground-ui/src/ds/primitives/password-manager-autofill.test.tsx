@@ -57,6 +57,7 @@ describe('textFieldAutofillProps', () => {
 const fields: Array<{
   name: string;
   render: (autoComplete?: string) => React.ReactElement;
+  getField?: () => HTMLElement;
   explicit: boolean;
 }> = [
   { name: 'Input', render: ac => <Input aria-label="field" autoComplete={ac} />, explicit: true },
@@ -117,29 +118,30 @@ const fields: Array<{
         <Tree.Input type="file" placeholder="field" onSubmit={() => {}} autoFocus={false} />
       </ul>
     ),
+    getField: () => screen.getByPlaceholderText('field'),
     explicit: false,
   },
   {
     name: 'SavedViewNameInput',
     render: () => <SavedViewNameInput name="field" onCommit={() => {}} />,
+    getField: () => screen.getByLabelText('View name'),
     explicit: false,
   },
 ];
 
-const getField = () =>
-  (screen.queryByLabelText('field') ??
-    screen.queryByPlaceholderText('field') ??
-    screen.getByLabelText('View name')) as HTMLElement;
+const getLabelledField = () => screen.getByLabelText('field');
 
-describe.each(fields)('$name', ({ render: renderField, explicit }) => {
+describe.each(fields)('$name', ({ render: renderField, getField = getLabelledField }) => {
   it('opts out of password manager autofill by default', () => {
     render(renderField());
     expectOptedOut(getField());
   });
+});
 
-  it.runIf(explicit)('keeps an explicit autofill token and adds no ignore hints', () => {
+describe.each(fields.filter(field => field.explicit))('$name with an autofill token', ({ render: renderField }) => {
+  it('keeps the token and adds no ignore hints', () => {
     render(renderField('email'));
-    const el = getField();
+    const el = getLabelledField();
     expect(el.getAttribute('autocomplete')).toBe('email');
     expectNoHints(el);
   });

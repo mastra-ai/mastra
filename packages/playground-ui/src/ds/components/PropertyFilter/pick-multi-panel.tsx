@@ -4,7 +4,7 @@ import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Spinner } from '@/ds/components/Spinner/spinner';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { menuEmptyClass, menuItemCheckClass, menuItemClass, menuSearchClasses } from '@/ds/primitives/menu-item';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
 
 // Same rendering as Combobox items: no visible control, a trailing check when selected.
@@ -95,7 +95,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
             onChange={e => setQuery(e.target.value)}
             placeholder={`Search ${field.label.toLowerCase()}...`}
             className={menuSearchClasses.input}
-            {...textFieldAutofillProps(undefined)}
+            {...passwordManagerOptOutProps}
             onKeyDown={e => {
               if (e.key !== 'ArrowDown') return;
               const panel = e.currentTarget.closest<HTMLElement>('[data-pick-multi-panel]');
