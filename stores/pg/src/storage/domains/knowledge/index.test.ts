@@ -465,6 +465,145 @@ describe('PostgreSQL knowledge legacy schema boundary', () => {
   });
 });
 
+describe('PostgreSQL knowledge structured reconciliation', () => {
+  it('stores reconciled scope timestamps in UTC when the process is not', async () => {
+    const schemaName = `knowledge_reconcile_tz_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    const tz = process.env.TZ;
+    process.env.TZ = 'America/Los_Angeles';
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const before = Date.now();
+      const { scopes } = await store.reconcileStructure({ scopes: [{ address: 'org:acme', name: 'Acme' }] });
+      const node = await store.getNode(scopes['org:acme']!);
+      expect(Math.abs(node!.createdAt.getTime() - before)).toBeLessThan(60_000);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+      await pool.query(`DROP SCHEMA "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('creates a plan once and preserves existing scope fields on replay', async () => {
+    const schemaName = `knowledge_reconcile_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const plan = {
+        scopes: [
+          {
+            address: 'org:acme',
+            name: 'Acme',
+            grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
+          },
+          { address: 'org:partner', name: 'Partner' },
+          {
+            address: 'resource:mastra',
+            name: 'Mastra',
+            parentAddresses: ['org:acme'],
+            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
+          },
+        ],
+      };
+
+      const first = await store.reconcileStructure(plan);
+      const second = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope => ({ ...scope, name: `Changed ${scope.name}` })),
+      });
+
+      expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
+      expect(first.createdScopeIds).toHaveLength(3);
+      expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
+      expect(
+        (
+          await pool.query(`SELECT name FROM "${schemaName}".mastra_knowledge_nodes WHERE id=$1`, [
+            first.scopes['org:acme'],
+          ])
+        ).rows[0],
+      ).toMatchObject({ name: 'Acme' });
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(1);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
+
+      const enriched = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope =>
+          scope.address === 'resource:mastra'
+            ? {
+                ...scope,
+                parentAddresses: ['org:acme', 'org:partner'],
+                grants: [...(scope.grants ?? []), { scopeRefAddress: 'org:partner', role: 'readonly' as const }],
+              }
+            : scope,
+        ),
+      });
+      expect(enriched).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: 2 });
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_scope_grants`)).rows).toHaveLength(3);
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+
+  it('reads structural scope nodes and members after reconciliation', async () => {
+    const schemaName = `knowledge_scope_nodes_${Date.now()}`;
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const store = createStore(schemaName);
+      await store.init();
+      const plan = {
+        scopes: [
+          { address: 'org:acme', name: 'mastra' },
+          { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+          { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
+        ],
+      };
+      const { scopes } = await store.reconcileStructure(plan);
+
+      const { scopes: nodes } = await store.listScopeNodes();
+      expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'repo:mastra']);
+      const mastra = nodes.find(node => node.name === 'mastra')!;
+      const features = nodes.find(node => node.name === 'features')!;
+      expect(features).toMatchObject({ address: 'features', kind: 'domain', parentIds: [mastra.id] });
+      expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
+      expect(nodes.find(node => node.name === 'repo:mastra')).toMatchObject({ address: 'repo:mastra' });
+      expect(Object.values(scopes)).toEqual(expect.arrayContaining([mastra.id, features.id]));
+
+      const { members, hasMore } = await store.listScopeMembers({ scopeNodeId: mastra.id });
+      expect(hasMore).toBe(false);
+      expect(members.map(node => node.id).sort()).toEqual([features.id, scopes['repo:mastra']!].sort());
+      expect(members.every(node => node.scope === null)).toBe(true);
+      // A scope reconciled without a kind reads back as an empty kind, as in every adapter.
+      expect(Object.fromEntries(members.map(node => [node.name, node.kind]))).toEqual({
+        features: 'domain',
+        'repo:mastra': '',
+      });
+      const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
+      expect(firstPage.members).toHaveLength(1);
+      expect(firstPage.hasMore).toBe(true);
+      const secondPage = await store.listScopeMembers({
+        scopeNodeId: mastra.id,
+        limit: 1,
+        cursor: firstPage.nextCursor!,
+      });
+      expect(secondPage).toMatchObject({ hasMore: false, nextCursor: null });
+      expect([...firstPage.members, ...secondPage.members].map(node => node.id).sort()).toEqual(
+        [features.id, scopes['repo:mastra']!].sort(),
+      );
+      await expect(store.listScopeMembers({ scopeNodeId: features.id, cursor: firstPage.nextCursor! })).rejects.toThrow(
+        'Knowledge scope member cursor does not match this query.',
+      );
+      await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
+        members: [],
+        hasMore: false,
+        nextCursor: null,
+      });
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    }
+  });
+});
+
 describe('PostgreSQL knowledge concurrency and indexes', () => {
   it('creates required indexes idempotently and exports its schema', async () => {
     const store = createStore();

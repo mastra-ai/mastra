@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { InMemoryStore, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
@@ -6,6 +7,204 @@ import { Knowledge } from '../index';
 const scope = ['org:acme', 'resource:mastra'];
 
 describe('Knowledge', () => {
+  it('rejects over-long scope descriptions at construction', () => {
+    const storage = new InMemoryStore({ id: 'bounded' });
+    const description = 'x'.repeat(401);
+    expect(
+      () => new Knowledge({ storage, structure: { scopes: [{ address: 'scope:a', name: 'A', description }] } }),
+    ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
+    expect(() => new Knowledge({ storage, scopes: { 'team:$teamId': { description } } })).toThrow(
+      'Knowledge node description exceeds the 400 UTF-16 code unit limit',
+    );
+  });
+
+  it('reconciles configured structure in the background and coalesces explicit waits', async () => {
+    const storage = new InMemoryStore({ id: 'structured' });
+    const domain = storage.stores.knowledge!;
+    vi.spyOn(domain, 'getCapabilities').mockReturnValue({
+      contractVersion: 2,
+      schemaVersion: 2,
+      supportsV2: true,
+      supportsExplicitReset: true,
+    });
+    const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
+    const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
+    const knowledge = new Knowledge({
+      storage,
+      structure: { scopes: [{ address: 'org:acme', name: 'Acme' }] },
+    });
+
+    new Mastra({ knowledge: { default: knowledge }, logger: false });
+
+    await expect(Promise.all([knowledge.reconcile(), knowledge.reconcile()])).resolves.toEqual([result, result]);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['constructor', 'setLogger', 'addKnowledge'] as const)(
+    'reports a failing startup reconcile to the Mastra logger via %s',
+    async via => {
+      const storage = new InMemoryStore({ id: 'failing-structure' });
+      const error = new Error('reconcile failed');
+      vi.spyOn(storage.stores.knowledge!, 'reconcileStructure').mockRejectedValue(error);
+      const knowledge = new Knowledge({ storage, structure: { scopes: [{ address: 'org:acme', name: 'Acme' }] } });
+      const logger = new ConsoleLogger({ level: 'warn' });
+      vi.spyOn(logger, 'child').mockReturnValue(logger);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      if (via === 'constructor') {
+        new Mastra({ knowledge: { default: knowledge }, logger });
+      } else if (via === 'setLogger') {
+        new Mastra({ knowledge: { default: knowledge }, logger: false }).setLogger({ logger });
+      } else {
+        new Mastra({ logger }).addKnowledge(knowledge, 'default');
+      }
+
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith('Knowledge structure reconciliation failed; call reconcile() to retry', {
+          error,
+        }),
+      );
+    },
+  );
+
+  it('applies structured plans with the v2 in-memory storage', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore({ id: 'in-memory-structure' }),
+      structure: { scopes: [{ address: 'org:acme', name: 'Acme' }] },
+    });
+
+    const first = await knowledge.reconcile();
+    const second = await knowledge.reconcile();
+    const lazy = await knowledge.materializeScope({
+      address: 'resource:mastra',
+      contextualScopeAddress: 'org:acme',
+      parameters: { resourceId: 'mastra' },
+    });
+
+    expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
+    expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
+    expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
+  });
+
+  it('applies rules added to static structure after first boot', async () => {
+    const storage = new InMemoryStore({ id: 'static-structure-growth' });
+    const org = { address: 'org:acme', name: 'Acme' };
+    const firstBoot = await new Knowledge({
+      storage,
+      structure: { scopes: [org, { address: 'team', name: 'Team' }] },
+    }).reconcile();
+
+    const secondBoot = await new Knowledge({
+      storage,
+      structure: {
+        scopes: [
+          org,
+          {
+            address: 'team',
+            name: 'Team',
+            parentAddresses: ['org:acme'],
+            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' }],
+          },
+        ],
+      },
+    }).reconcile();
+
+    expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: firstBoot.accessEpoch + 1 });
+    const team = (await storage.stores.knowledge!.listScopeNodes({ addresses: ['team'] })).scopes[0];
+    expect(team?.parentIds).toEqual([firstBoot.scopes['org:acme']]);
+  });
+
+  it('keeps materialized scopes as created when their scope type template changes', async () => {
+    const storage = new InMemoryStore({ id: 'materialized-template-change' });
+    const structure = { scopes: [{ address: 'org:acme', name: 'Acme' }] };
+    const input = { address: 'project:atlas', contextualScopeAddress: 'org:acme', parentAddresses: ['org:acme'] };
+    const before = new Knowledge({ storage, structure, scopes: { 'project:$projectId': { access: [] } } });
+    await before.reconcile();
+    const created = await before.materializeScope(input);
+
+    const after = new Knowledge({
+      storage,
+      structure,
+      scopes: { 'project:$projectId': { access: [{ principal: 'org:acme', role: 'readonly' }] } },
+    });
+    const rematerialized = await after.materializeScope(input);
+
+    expect(rematerialized).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
+  });
+
+  it('creates templated child scopes for each materialized org', async () => {
+    const storage = new InMemoryStore({ id: 'templated-children' });
+    const knowledge = new Knowledge({
+      storage,
+      scopes: {
+        'org:$orgId': {
+          access: [{ principal: 'self', role: 'owner' }],
+          children: [
+            { address: '$self:about-me', name: 'About me' },
+            { address: 'machines:$orgId', name: 'Machines', access: [{ principal: 'org:$orgId', role: 'readonly' }] },
+          ],
+        },
+      },
+    });
+
+    const a = await knowledge.materializeScope({ address: 'org:a', contextualScopeAddress: 'org:a' });
+    const b = await knowledge.materializeScope({ address: 'org:b', contextualScopeAddress: 'org:b' });
+
+    expect(a.createdScopeIds).toHaveLength(3);
+    expect(b.createdScopeIds).toHaveLength(3);
+    const { scopes } = await storage.stores.knowledge!.listScopeNodes({
+      addresses: ['org:a:about-me', 'machines:a', 'org:b:about-me', 'machines:b'],
+    });
+    const parentsByAddress = Object.fromEntries(scopes.map(scope => [scope.address, scope.parentIds]));
+    expect(parentsByAddress).toEqual({
+      'org:a:about-me': [a.scopes['org:a']],
+      'machines:a': [a.scopes['org:a']],
+      'org:b:about-me': [b.scopes['org:b']],
+      'machines:b': [b.scopes['org:b']],
+    });
+    expect(scopes.find(scope => scope.address === 'machines:b')?.name).toBe('Machines');
+
+    const again = await knowledge.materializeScope({ address: 'org:a', contextualScopeAddress: 'org:a' });
+    expect(again).toMatchObject({ changed: false, createdScopeIds: [] });
+  });
+
+  it('does not add template children to a scope materialized before the template changed', async () => {
+    const storage = new InMemoryStore({ id: 'templated-children-copy-on-create' });
+    const input = { address: 'org:a', contextualScopeAddress: 'org:a' };
+    const created = await new Knowledge({ storage }).materializeScope(input);
+
+    const later = await new Knowledge({
+      storage,
+      scopes: { 'org:$orgId': { children: [{ address: '$self:shared', name: 'Shared' }] } },
+    }).materializeScope(input);
+
+    expect(later).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
+    expect((await storage.stores.knowledge!.listScopeNodes({ addresses: ['org:a:shared'] })).scopes).toEqual([]);
+  });
+
+  it('coalesces concurrent lazy materialization for one concrete address', async () => {
+    const storage = new InMemoryStore({ id: 'lazy-structured' });
+    const domain = storage.stores.knowledge!;
+    vi.spyOn(domain, 'getCapabilities').mockReturnValue({
+      contractVersion: 2,
+      schemaVersion: 2,
+      supportsV2: true,
+      supportsExplicitReset: true,
+    });
+    const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
+    const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
+    const knowledge = new Knowledge({ storage });
+    const input = { address: 'org:acme', contextualScopeAddress: 'org:acme', parameters: { orgId: 'acme' } };
+
+    const first = knowledge.materializeScope(input);
+    const second = knowledge.materializeScope(input);
+    const conflicting = knowledge.materializeScope({ ...input, name: 'Other Acme' });
+
+    await expect(conflicting).rejects.toThrow('Conflicting materialization is already in progress');
+    await expect(Promise.all([first, second])).resolves.toEqual([result, result]);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+  });
+
   it('registers default and named instances without eagerly initializing storage', async () => {
     const defaultStorage = new InMemoryStore({ id: 'default-knowledge' });
     const analyticsStorage = new InMemoryStore({ id: 'analytics-knowledge' });

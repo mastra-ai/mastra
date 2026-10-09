@@ -3,6 +3,199 @@ export const KNOWLEDGE_V2_CORE_FEATURE = 'knowledge-v2';
 export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
 export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
 
+/** Hard cap on scope nodes returned by one `listScopeNodes` read. */
+export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
+
+export interface ListKnowledgeScopeNodesInput {
+  /** Only the scope at this address and the scopes beneath it, following parent edges transitively. */
+  withinAddress?: string;
+  /** Only the scopes at these exact addresses. */
+  addresses?: string[];
+  /** Only the scope nodes with these UUIDs. Combines with the other filters. */
+  ids?: string[];
+  /** `nextCursor` from the previous page of the same query. */
+  cursor?: string;
+  /** Page size, from 1 to `MAX_KNOWLEDGE_SCOPE_NODES` (the default). */
+  limit?: number;
+}
+
+export interface ListKnowledgeScopeNodesOutput {
+  /** Scope nodes ordered by name, then id. */
+  scopes: KnowledgeScopeNodeSummary[];
+  /** Pass back as `cursor` for the next page; `null` when this is the last page. */
+  nextCursor: string | null;
+}
+
+function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
+  return JSON.stringify([
+    input.withinAddress ?? null,
+    input.addresses ? [...input.addresses].sort() : null,
+    input.ids ? [...input.ids].sort() : null,
+  ]);
+}
+
+export function createKnowledgeScopeNodeCursor(
+  scope: Pick<KnowledgeScopeNodeSummary, 'name' | 'id'>,
+  input: ListKnowledgeScopeNodesInput,
+): string {
+  return encodeURIComponent(
+    JSON.stringify({
+      version: 1,
+      type: 'scope',
+      name: scope.name,
+      id: scope.id,
+      filter: knowledgeScopeNodeFilterKey(input),
+    }),
+  );
+}
+
+/** Validates the page size and cursor of a `listScopeNodes` query; throws on a cursor from a different query. */
+export function parseListKnowledgeScopeNodesInput(input: ListKnowledgeScopeNodesInput = {}): {
+  limit: number;
+  after: { name: string; id: string } | null;
+} {
+  const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit!) : MAX_KNOWLEDGE_SCOPE_NODES;
+  const limit = Math.min(Math.max(requested, 1), MAX_KNOWLEDGE_SCOPE_NODES);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope node cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope' ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    parsed.filter !== knowledgeScopeNodeFilterKey(input)
+  ) {
+    throw new Error('Knowledge scope node cursor does not match this query.');
+  }
+  return { limit, after: { name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` name/id-ordered scope nodes. */
+export function pageKnowledgeScopeNodes(
+  rows: KnowledgeScopeNodeSummary[],
+  limit: number,
+  input: ListKnowledgeScopeNodesInput,
+): ListKnowledgeScopeNodesOutput {
+  const scopes = rows.slice(0, limit);
+  const last = scopes.at(-1);
+  return { scopes, nextCursor: rows.length > limit && last ? createKnowledgeScopeNodeCursor(last, input) : null };
+}
+
+/** A node placed inside a structural scope. Child scopes are members too, with `scope: null`. */
+export interface KnowledgeScopeMember {
+  id: string;
+  type: 'node';
+  name: string;
+  kind: string;
+  content?: string;
+  description?: string;
+  scope: string[] | null;
+  version: number;
+  mergedInto?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ListKnowledgeScopeMembersInput {
+  scopeNodeId: string;
+  /** `nextCursor` from the previous page for the same scope. */
+  cursor?: string;
+  /** Members to return, 1–500 (default 500). */
+  limit?: number;
+}
+
+export interface ListKnowledgeScopeMembersOutput {
+  /** Most recently updated members first (ties by name, then ID), at most `limit`. */
+  members: KnowledgeScopeMember[];
+  /** True when the scope has more members than were returned. */
+  hasMore: boolean;
+  /** Pass as `cursor` to read the next page; `null` on the last page. */
+  nextCursor: string | null;
+}
+
+export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
+
+/** Clamps a requested member limit to 1–{@link MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT}. */
+export function knowledgeScopeMembersLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT);
+}
+
+/** Validates the page size and cursor of a `listScopeMembers` query; throws on a cursor from another scope. */
+export function parseListKnowledgeScopeMembersInput(input: ListKnowledgeScopeMembersInput): {
+  limit: number;
+  after: { updatedAt: Date; name: string; id: string } | null;
+} {
+  const limit = knowledgeScopeMembersLimit(input.limit);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope member cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const updatedAt = typeof parsed.updatedAt === 'string' ? new Date(parsed.updatedAt) : new Date(Number.NaN);
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope-member' ||
+    parsed.scopeNodeId !== input.scopeNodeId ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    Number.isNaN(updatedAt.getTime())
+  ) {
+    throw new Error('Knowledge scope member cursor does not match this query.');
+  }
+  return { limit, after: { updatedAt, name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` members in `listScopeMembers` order. */
+export function pageKnowledgeScopeMembers(
+  rows: KnowledgeScopeMember[],
+  limit: number,
+  input: ListKnowledgeScopeMembersInput,
+): ListKnowledgeScopeMembersOutput {
+  const members = rows.slice(0, limit);
+  const last = members.at(-1);
+  const hasMore = rows.length > limit;
+  return {
+    members,
+    hasMore,
+    nextCursor:
+      hasMore && last
+        ? encodeURIComponent(
+            JSON.stringify({
+              version: 1,
+              type: 'scope-member',
+              scopeNodeId: input.scopeNodeId,
+              updatedAt: last.updatedAt.toISOString(),
+              name: last.name,
+              id: last.id,
+            }),
+          )
+        : null,
+  };
+}
+
+/** A reconciled structural scope node with its containing scope nodes. */
+export interface KnowledgeScopeNodeSummary {
+  /** UUID of the `isScope` node. */
+  id: string;
+  /** Canonical address the scope node was reconciled from (e.g. `features:memory`). */
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  /** UUIDs of the scope nodes that contain this scope (membership edges). */
+  parentIds: string[];
+}
+
 const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
 const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';

@@ -7,6 +7,8 @@ import {
   inspectKnowledgeSchema,
   KnowledgeConflictError,
   KnowledgeSchemaResetRequiredError,
+  KnowledgeStorage,
+  KnowledgeUnsupportedCapabilityError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
 } from '../base';
@@ -27,6 +29,129 @@ describe('InMemoryKnowledgeStorage', () => {
     const second = createKnowledgeUlid(1);
 
     expect(second > first).toBe(true);
+  });
+
+  it('lists reconciled scope nodes with parent membership edges', async () => {
+    const store = createStore();
+    const plan = {
+      scopes: [
+        { address: 'org:acme', name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: 'features:memory', name: 'memory', description: 'Memory scope', parentAddresses: ['features'] },
+      ],
+    };
+    const { scopes } = await store.reconcileStructure(plan);
+
+    const { scopes: nodes, nextCursor } = await store.listScopeNodes();
+    expect(nextCursor).toBeNull();
+    expect(nodes.map(node => node.name)).toEqual(['features', 'mastra', 'memory']);
+    const features = nodes.find(node => node.name === 'features')!;
+    const mastra = nodes.find(node => node.name === 'mastra')!;
+    const memory = nodes.find(node => node.name === 'memory')!;
+    expect(features).toMatchObject({ address: 'features', kind: 'domain', parentIds: [mastra.id] });
+    expect(memory).toMatchObject({ address: 'features:memory', description: 'Memory scope', parentIds: [features.id] });
+    expect(mastra).toMatchObject({ address: 'org:acme', parentIds: [] });
+    expect(Object.values(scopes)).toEqual(expect.arrayContaining([features.id, mastra.id, memory.id]));
+
+    // Child scopes are members of their parent, as in the persistent adapters.
+    const { members, hasMore, nextCursor: memberCursor } = await store.listScopeMembers({ scopeNodeId: mastra.id });
+    expect(hasMore).toBe(false);
+    expect(memberCursor).toBeNull();
+    expect(members).toEqual([
+      expect.objectContaining({ id: features.id, type: 'node', name: 'features', kind: 'domain', scope: null }),
+    ]);
+    await expect(store.listScopeMembers({ scopeNodeId: features.id })).resolves.toEqual({
+      members: [expect.objectContaining({ id: memory.id, name: 'memory', kind: '', description: 'Memory scope' })],
+      hasMore: false,
+      nextCursor: null,
+    });
+    await expect(store.listScopeMembers({ scopeNodeId: memory.id })).resolves.toEqual({
+      members: [],
+      hasMore: false,
+      nextCursor: null,
+    });
+    await expect(store.listScopeMembers({ scopeNodeId: crypto.randomUUID() })).resolves.toEqual({
+      members: [],
+      hasMore: false,
+      nextCursor: null,
+    });
+
+    // A scope with more members than the limit reports the overflow instead of silently dropping it.
+    await store.reconcileStructure({
+      ...plan,
+      scopes: [...plan.scopes, { address: 'docs', name: 'docs', parentAddresses: ['org:acme'] }],
+    });
+    const firstPage = await store.listScopeMembers({ scopeNodeId: mastra.id, limit: 1 });
+    expect(firstPage.members).toHaveLength(1);
+    expect(firstPage.hasMore).toBe(true);
+    // The cursor continues where the first page stopped, so every member is read exactly once.
+    const secondPage = await store.listScopeMembers({
+      scopeNodeId: mastra.id,
+      limit: 1,
+      cursor: firstPage.nextCursor!,
+    });
+    expect(secondPage).toMatchObject({ hasMore: false, nextCursor: null });
+    expect([...firstPage.members, ...secondPage.members].map(member => member.name).sort()).toEqual([
+      'docs',
+      'features',
+    ]);
+    await expect(store.listScopeMembers({ scopeNodeId: features.id, cursor: firstPage.nextCursor! })).rejects.toThrow(
+      'Knowledge scope member cursor does not match this query.',
+    );
+    await expect(store.listScopeMembers({ scopeNodeId: mastra.id, limit: 2 })).resolves.toMatchObject({
+      hasMore: false,
+    });
+  });
+
+  it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {
+    const store = createStore();
+    const { scopes: ids } = await store.reconcileStructure({
+      scopes: [
+        { address: 'org:acme', name: 'Acme' },
+        { address: 'team:a', name: 'A', parentAddresses: ['org:acme'] },
+        { address: 'team:b', name: 'B', parentAddresses: ['org:acme'] },
+        { address: 'project:p', name: 'P', parentAddresses: ['team:a', 'team:b'] },
+        { address: 'org:other', name: 'Other' },
+        { address: 'team:o', name: 'O', parentAddresses: ['org:other'] },
+      ],
+    });
+
+    const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
+    expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
+    expect(within.nextCursor).toBeNull();
+    expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds.sort()).toEqual(
+      [ids['team:a'], ids['team:b']].sort(),
+    );
+
+    expect(await store.listScopeNodes({ withinAddress: 'org:acme', limit: Number.NaN })).toEqual(within);
+    const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
+    expect(first.scopes).toHaveLength(3);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3, cursor: first.nextCursor! });
+    expect([...first.scopes, ...second.scopes]).toEqual(within.scopes);
+    expect(second.nextCursor).toBeNull();
+    await expect(store.listScopeNodes({ withinAddress: 'org:other', cursor: first.nextCursor! })).rejects.toThrow(
+      'does not match this query',
+    );
+
+    expect((await store.listScopeNodes({ withinAddress: 'team:b' })).scopes.map(scope => scope.address)).toEqual([
+      'team:b',
+      'project:p',
+    ]);
+    expect((await store.listScopeNodes({ addresses: ['team:o', 'missing'] })).scopes.map(scope => scope.id)).toEqual([
+      ids['team:o'],
+    ]);
+    expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+  });
+
+  it('throws a typed capability error for adapters without the structural scope read', async () => {
+    const bare = {} as KnowledgeStorage;
+    await expect(KnowledgeStorage.prototype.listScopeNodes.call(bare)).rejects.toBeInstanceOf(
+      KnowledgeUnsupportedCapabilityError,
+    );
+    await expect(
+      KnowledgeStorage.prototype.listScopeMembers.call(bare, { scopeNodeId: crypto.randomUUID() }),
+    ).rejects.toBeInstanceOf(KnowledgeUnsupportedCapabilityError);
   });
 
   it('reports the v2 contract and inspects schema without mutating Knowledge data', async () => {

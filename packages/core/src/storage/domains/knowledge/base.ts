@@ -190,6 +190,239 @@ export interface KnowledgeRecord {
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureGrant {
+  scopeRefAddress: string;
+  role: KnowledgeGrantRole;
+  canSuggest?: boolean;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureScope {
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  parentAddresses?: string[];
+  grants?: KnowledgeStructureGrant[];
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructurePlan {
+  scopes: KnowledgeStructureScope[];
+  /**
+   * Whether scopes that already exist gain parent edges and grants the plan declares but storage lacks.
+   * Defaults to `true`, so rules added to a static structure after first boot take effect. Plans from
+   * lazy materialization set `false`: a scope keeps the edges and grants it was created with, even if
+   * its scope type's template changes later.
+   */
+  retrofit?: boolean;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeStructureReconcileResult {
+  scopes: Record<string, string>;
+  createdScopeIds: string[];
+  deletedScopeAddresses?: string[];
+  changed: boolean;
+  accessEpoch: number;
+}
+
+/** A reconciled structural scope node with its containing scope nodes. @experimental */
+export interface KnowledgeScopeNodeSummary {
+  /** UUID of the `isScope` node. */
+  id: string;
+  /** Canonical structural address of the scope (for example `org:acme` or `features:memory`). */
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  /** UUIDs of the scope nodes that contain this scope (membership edges), sorted ascending. */
+  parentIds: string[];
+}
+
+/** Hard cap on scope nodes returned by one `listScopeNodes` read. */
+export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeNodesInput {
+  /** Only the scope at this address and the scopes beneath it, following parent edges transitively. */
+  withinAddress?: string;
+  /** Only the scopes at these exact addresses. */
+  addresses?: string[];
+  /** Only the scope nodes with these UUIDs. Combines with the other filters, so `{ withinAddress, ids: [id] }` checks one scope's membership in a subtree. */
+  ids?: string[];
+  /** `nextCursor` from the previous page of the same query. */
+  cursor?: string;
+  /** Page size, from 1 to `MAX_KNOWLEDGE_SCOPE_NODES` (the default). */
+  limit?: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+/**
+ * A node placed inside a structural scope. Child scopes are members too; they have no content scope,
+ * so `scope` is `null` for them.
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export type KnowledgeScopeMember = Omit<KnowledgeNode, 'scope'> & { scope: KnowledgeScope | null };
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeMembersInput {
+  scopeNodeId: string;
+  /** `nextCursor` from the previous page for the same scope. */
+  cursor?: string;
+  /** Members to return, 1–500 (default 500). */
+  limit?: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeMembersOutput {
+  /** Most recently updated members first (ties by name, then ID), at most `limit`. */
+  members: KnowledgeScopeMember[];
+  /** True when the scope has more members than were returned. */
+  hasMore: boolean;
+  /** Pass as `cursor` to read the next page; `null` on the last page. */
+  nextCursor: string | null;
+}
+
+export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
+
+/** Clamps a requested member limit to 1–{@link MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT}. */
+export function knowledgeScopeMembersLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT);
+}
+
+/** Validates the page size and cursor of a `listScopeMembers` query; throws on a cursor from another scope. */
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function parseListKnowledgeScopeMembersInput(input: ListKnowledgeScopeMembersInput): {
+  limit: number;
+  after: { updatedAt: Date; name: string; id: string } | null;
+} {
+  const limit = knowledgeScopeMembersLimit(input.limit);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope member cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  const updatedAt = typeof parsed.updatedAt === 'string' ? new Date(parsed.updatedAt) : new Date(Number.NaN);
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope-member' ||
+    parsed.scopeNodeId !== input.scopeNodeId ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    Number.isNaN(updatedAt.getTime())
+  ) {
+    throw new Error('Knowledge scope member cursor does not match this query.');
+  }
+  return { limit, after: { updatedAt, name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` members in `listScopeMembers` order. */
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function pageKnowledgeScopeMembers(
+  rows: KnowledgeScopeMember[],
+  limit: number,
+  input: ListKnowledgeScopeMembersInput,
+): ListKnowledgeScopeMembersOutput {
+  const members = rows.slice(0, limit);
+  const last = members.at(-1);
+  const hasMore = rows.length > limit;
+  return {
+    members,
+    hasMore,
+    nextCursor:
+      hasMore && last
+        ? encodeURIComponent(
+            JSON.stringify({
+              version: 1,
+              type: 'scope-member',
+              scopeNodeId: input.scopeNodeId,
+              updatedAt: last.updatedAt.toISOString(),
+              name: last.name,
+              id: last.id,
+            }),
+          )
+        : null,
+  };
+}
+
+export interface ListKnowledgeScopeNodesOutput {
+  /** Scope nodes ordered by name, then id. */
+  scopes: KnowledgeScopeNodeSummary[];
+  /** Pass back as `cursor` for the next page; `null` when this is the last page. */
+  nextCursor: string | null;
+}
+
+function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
+  return JSON.stringify([
+    input.withinAddress ?? null,
+    input.addresses ? [...input.addresses].sort() : null,
+    input.ids ? [...input.ids].sort() : null,
+  ]);
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function createKnowledgeScopeNodeCursor(
+  scope: Pick<KnowledgeScopeNodeSummary, 'name' | 'id'>,
+  input: ListKnowledgeScopeNodesInput,
+): string {
+  return encodeURIComponent(
+    JSON.stringify({
+      version: 1,
+      type: 'scope',
+      name: scope.name,
+      id: scope.id,
+      filter: knowledgeScopeNodeFilterKey(input),
+    }),
+  );
+}
+
+/** Validates the page size and cursor of a `listScopeNodes` query; throws on a cursor from a different query. */
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function parseListKnowledgeScopeNodesInput(input: ListKnowledgeScopeNodesInput = {}): {
+  limit: number;
+  after: { name: string; id: string } | null;
+} {
+  const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit!) : MAX_KNOWLEDGE_SCOPE_NODES;
+  const limit = Math.min(Math.max(requested, 1), MAX_KNOWLEDGE_SCOPE_NODES);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope node cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope' ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    parsed.filter !== knowledgeScopeNodeFilterKey(input)
+  ) {
+    throw new Error('Knowledge scope node cursor does not match this query.');
+  }
+  return { limit, after: { name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` name/id-ordered scope nodes. */
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function pageKnowledgeScopeNodes(
+  rows: KnowledgeScopeNodeSummary[],
+  limit: number,
+  input: ListKnowledgeScopeNodesInput,
+): ListKnowledgeScopeNodesOutput {
+  const scopes = rows.slice(0, limit);
+  const last = scopes.at(-1);
+  return { scopes, nextCursor: rows.length > limit && last ? createKnowledgeScopeNodeCursor(last, input) : null };
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface KnowledgeMention {
   sourceType: 'record' | 'node';
   source: string;
@@ -411,6 +644,13 @@ export class KnowledgeSchemaResetRequiredError extends Error {
   }
 }
 
+export class KnowledgeUnsupportedCapabilityError extends Error {
+  constructor(capability: string) {
+    super(`This Knowledge storage adapter does not expose ${capability}.`);
+    this.name = 'KnowledgeUnsupportedCapabilityError';
+  }
+}
+
 export function assertKnowledgeSchemaCompatible(inspection: KnowledgeSchemaInspection): void {
   if (inspection.status === 'compatible' || inspection.status === 'uninitialized') return;
   if (inspection.status === 'incompatible-reset-required') {
@@ -626,6 +866,24 @@ export abstract class KnowledgeStorage extends StorageDomain {
 
   async dangerouslyReset(): Promise<void> {
     throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
+  }
+
+  /** Applies an additive, idempotent structured scope plan. */
+  async reconcileStructure(_plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    throw new Error('This Knowledge storage adapter does not support structured reconciliation.');
+  }
+
+  /**
+   * Lists reconciled structural scope nodes with their parent membership edges, one name-ordered page at a time.
+   * Filter with `withinAddress` or `addresses` so a read never depends on how many scopes other tenants have.
+   */
+  async listScopeNodes(_input?: ListKnowledgeScopeNodesInput): Promise<ListKnowledgeScopeNodesOutput> {
+    throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+  }
+
+  /** Lists the nodes placed inside one structural scope, newest-first (bounded). */
+  async listScopeMembers(_input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
+    throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;
