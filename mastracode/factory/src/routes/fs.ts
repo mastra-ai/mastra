@@ -116,7 +116,7 @@ export interface WorkspaceChangesRepository {
   slug: string;
   /** The path prefix of this repository's changes in the flat list, e.g. `platform/`. */
   prefix: string;
-  /** False when the checkout could not be inspected (not recorded by the boot, missing, or git failed). */
+  /** False when the checkout could not be inspected (missing, or git failed). */
   available: boolean;
   changes: WorkspaceChange[];
   additions?: number;
@@ -506,8 +506,8 @@ interface SessionSandboxHandle {
   sandbox: ExecutableSandbox;
   filesystem: SandboxFilesystem;
   layout: SessionLayout;
-  /** The branch each layout repository is compared against, by slug; absent for a repository the boot never recorded. */
-  baseBranches: Map<string, string | undefined>;
+  /** The branch each layout repository is compared against, by slug. */
+  baseBranches: Map<string, string>;
 }
 
 /**
@@ -537,23 +537,25 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
 /**
  * The branch each layout repository is compared against: the session base
  * branch for the session's own repository (session branch vs base), the
- * default branch the boot recorded for every other one. `undefined` marks a
- * repository the boot never recorded: nothing to inspect there.
+ * default branch the boot recorded for every other one, `HEAD` (the checkout's
+ * own `origin/HEAD`) until the boot has recorded it.
  */
 function repositoryBaseBranches(
   session: SourceControlSession,
   layout: SessionLayout,
   ownRepo: string,
-): Map<string, string | undefined> {
+): Map<string, string> {
   const environment = layout.repos.length > 1 ? peekSessionEnvironment(session.sessionId) : undefined;
-  const bases = new Map<string, string | undefined>();
+  const bases = new Map<string, string>();
   for (const repo of layout.repos) {
     if (layout.repos.length === 1 || repo.slug.toLowerCase() === ownRepo.toLowerCase()) {
       bases.set(repo.slug, session.baseBranch);
       continue;
     }
     const state = environment?.repositories.find(candidate => candidate.slug.toLowerCase() === repo.slug.toLowerCase());
-    bases.set(repo.slug, state?.defaultBranch);
+    // The boot records the state at its end, after every setup command; until
+    // then a secondary checkout compares against its own `origin/HEAD`.
+    bases.set(repo.slug, state?.defaultBranch ?? 'HEAD');
   }
   return bases;
 }
@@ -824,16 +826,12 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
     return { workspacePath: session.sessionId, ...result };
   }
 
-  // Several: inspect every checkout in parallel, one group each. A repository
-  // the boot never recorded has no checkout to inspect and stays unavailable
-  // without a git call; a failing one is unavailable on its own, the others
+  // Several: inspect every checkout in parallel, one group each. A failing
+  // one (missing checkout, git error) is unavailable on its own, the others
   // still answer.
   const groups: WorkspaceChangesRepository[] = await Promise.all(
     layout.repos.map(async repo => {
-      const baseBranch = bases.get(repo.slug);
-      const result = baseBranch
-        ? await listRepositoryChanges(handle.sandbox, repo.dir, baseBranch)
-        : { available: false, changes: [] };
+      const result = await listRepositoryChanges(handle.sandbox, repo.dir, bases.get(repo.slug)!);
       return {
         slug: repo.slug,
         prefix: repo.prefix,
@@ -894,9 +892,11 @@ export async function readSessionWorkspaceDiff(
     throw new Error('previousPath is not available in the repository of path');
   }
   const workdir = target.repo.dir;
-  const baseBranch = handle.baseBranches.get(target.repo.slug);
-  if (!baseBranch) throw new Error("path is not available in this session's repositories");
-  const comparisonBase = await resolveSessionComparisonBase(handle.sandbox, workdir, baseBranch);
+  const comparisonBase = await resolveSessionComparisonBase(
+    handle.sandbox,
+    workdir,
+    handle.baseBranches.get(target.repo.slug)!,
+  );
 
   const pathspecs = previous ? [previous.relative, target.relative] : [target.relative];
   let result = await executeBoundedGitDiff(handle.sandbox, [

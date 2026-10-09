@@ -309,24 +309,29 @@ describe('captureSessionFilesystem across environment repositories', () => {
     });
   });
 
-  it('does not run a repository the boot never recorded, and writes the others', async () => {
+  it('compares a repository the boot has not recorded yet against its own HEAD', async () => {
     seedEnvironment(['acme/api', 'acme/site']);
     const { session, executeCommand } = createEnvironmentSession({
       '/sessions/s1/api': commandResult({ stdout: 'a.ts\0' }),
+      '/sessions/s1/docs': commandResult({ stdout: 'c.ts\0' }),
       '/sessions/s1/site': commandResult({ stdout: 'b.ts\0' }),
     });
     const dependencies = createDependencies();
 
     await captureSessionFilesystem(session, dependencies);
 
-    const gitDirs = executeCommand.mock.calls
+    const gitTargets = executeCommand.mock.calls
       .filter(call => call[1][2] === 'mastracode-changed-files')
-      .map(call => call[1][3]);
-    expect(gitDirs).toEqual(['/sessions/s1/api', '/sessions/s1/site']);
+      .map(call => [call[1][3], call[1][4]]);
+    expect(gitTargets).toEqual([
+      ['/sessions/s1/api', 'main'],
+      ['/sessions/s1/docs', 'HEAD'],
+      ['/sessions/s1/site', 'develop'],
+    ]);
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      files: [{ path: 'api/a.ts' }, { path: 'site/b.ts' }],
+      files: [{ path: 'api/a.ts' }, { path: 'docs/c.ts' }, { path: 'site/b.ts' }],
     });
   });
 

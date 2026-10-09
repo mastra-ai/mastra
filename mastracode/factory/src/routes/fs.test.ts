@@ -895,17 +895,18 @@ describe('workspace changes across environment repositories', () => {
     expect(executeCommand).toHaveBeenCalledTimes(12);
   });
 
-  it('marks a repository whose status fails, or that the boot never recorded, unavailable while the others answer', async () => {
+  it('marks a repository whose status fails unavailable, and compares an unrecorded one against its HEAD', async () => {
     const { executeCommand, session } = seedEnvironment(
       (dir, kind) => {
         if (kind === 'merge-base') return { exitCode: 0, stdout: `${BASE_SHA}\n` };
         if (kind === 'status') {
-          return dir === DIRS['acme/docs']
-            ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
-            : { exitCode: 0, stdout: ' M a.ts\0' };
+          if (dir === DIRS['acme/docs']) return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' };
+          return { exitCode: 0, stdout: dir === DIRS['acme/site'] ? ' M s.ts\0' : ' M a.ts\0' };
         }
         if (kind === 'tracked') return { exitCode: 1, stdout: '' };
-        if (kind === 'numstat') return { exitCode: 0, stdout: '1\t0\ta.ts\0' };
+        if (kind === 'numstat') {
+          return { exitCode: 0, stdout: dir === DIRS['acme/site'] ? '2\t0\ts.ts\0' : '1\t0\ta.ts\0' };
+        }
         return { exitCode: 1, stdout: '' };
       },
       { recorded: ['acme/repo', 'acme/docs'] },
@@ -914,9 +915,12 @@ describe('workspace changes across environment repositories', () => {
     await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
       workspacePath: session.sessionId,
       available: true,
-      additions: 1,
+      additions: 3,
       deletions: 0,
-      changes: [{ path: 'repo/a.ts', status: 'modified', additions: 1, deletions: 0 }],
+      changes: [
+        { path: 'repo/a.ts', status: 'modified', additions: 1, deletions: 0 },
+        { path: 'site/s.ts', status: 'modified', additions: 2, deletions: 0 },
+      ],
       repositories: [
         {
           slug: 'acme/repo',
@@ -927,11 +931,20 @@ describe('workspace changes across environment repositories', () => {
           changes: [{ path: 'repo/a.ts', status: 'modified', additions: 1, deletions: 0 }],
         },
         { slug: 'acme/docs', prefix: 'docs/', available: false, changes: [] },
-        { slug: 'acme/site', prefix: 'site/', available: false, changes: [] },
+        {
+          slug: 'acme/site',
+          prefix: 'site/',
+          available: true,
+          additions: 2,
+          deletions: 0,
+          changes: [{ path: 'site/s.ts', status: 'modified', additions: 2, deletions: 0 }],
+        },
       ],
     });
-    // The unrecorded repository is never inspected.
-    expect(executeCommand.mock.calls.some(call => call[1]?.includes(DIRS['acme/site']))).toBe(false);
+    // The boot has not recorded `acme/site` yet: it compares against its own HEAD.
+    expect(executeCommand).toHaveBeenCalledWith('git', ['-C', DIRS['acme/site'], 'merge-base', 'HEAD', 'origin/HEAD'], {
+      timeout: 30_000,
+    });
   });
 
   it('is unavailable as a whole, still listing the groups, when every checkout fails', async () => {

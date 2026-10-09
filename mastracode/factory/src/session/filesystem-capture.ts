@@ -86,24 +86,23 @@ export async function captureSessionFilesystem(
     // One git pass per checkout, in parallel so three repositories stay well
     // inside the 10 s readers wait for a pending capture. The session's own
     // repository compares against the session base branch; the others sit on
-    // their default branch and compare against that. A repository the boot
-    // never recorded, or whose checkout is missing (exit 3), is skipped: it
-    // has nothing to list and must not block the others. Any other failure
-    // is treated as transient and leaves the previous listing in place.
+    // their default branch and compare against that. A repository whose
+    // checkout is missing (exit 3) is skipped: it has nothing to list and
+    // must not block the others. Any other failure is treated as transient
+    // and leaves the previous listing in place.
     const multiRepo = layout.repos.length > 1;
     const environment = multiRepo ? peekSessionEnvironment(sourceSession.sessionId) : undefined;
     const ownRepo = entry.workdirRepo!.toLowerCase();
-    const baseBranchFor = (repo: SessionLayoutRepository): string | undefined => {
+    // The boot records the state at its end, after every setup command; until
+    // then a secondary checkout compares against its own `origin/HEAD`.
+    const baseBranchFor = (repo: SessionLayoutRepository): string => {
       if (repo.slug.toLowerCase() === ownRepo) return sourceSession.baseBranch;
       const state = environment?.repositories.find(
         candidate => candidate.slug.toLowerCase() === repo.slug.toLowerCase(),
       );
-      return state ? state.defaultBranch : undefined;
+      return state?.defaultBranch ?? 'HEAD';
     };
-    const targets = layout.repos.flatMap(repo => {
-      const baseBranch = baseBranchFor(repo);
-      return baseBranch === undefined ? [] : [{ repo, baseBranch }];
-    });
+    const targets = layout.repos.map(repo => ({ repo, baseBranch: baseBranchFor(repo) }));
     const executeCommand = sandbox.executeCommand.bind(sandbox);
     const results = await Promise.all(
       targets.map(({ repo, baseBranch }) =>
