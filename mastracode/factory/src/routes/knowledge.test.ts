@@ -345,6 +345,80 @@ describe('KnowledgeRoutes', () => {
     ]);
   });
 
+  it('lists a session under its project after a thread-level write, without a thread filter', async () => {
+    const h = await createHarness();
+    // The capture path's write-time vouch: org → project → session, then the thread-level write.
+    await h.instance.materializeScope({ address: `org:${ORG}`, contextualScopeAddress: `org:${ORG}` });
+    await h.instance.materializeScope({
+      address: `resource:${h.projectId}`,
+      contextualScopeAddress: `org:${ORG}`,
+      parentAddresses: [`org:${ORG}`],
+    });
+    await h.instance.materializeScope({
+      address: 'thread:thread-1',
+      contextualScopeAddress: `resource:${h.projectId}`,
+      parentAddresses: [`resource:${h.projectId}`],
+    });
+    const anchor = await node(h.knowledge, 'Session anchor', h.threadScope('thread-1'));
+    await record(h.knowledge, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as KnowledgeScopeTreePayload;
+    const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    expect(body.scopeNodes?.find(node => node.address === 'thread:thread-1')).toMatchObject({
+      parentIds: [resourceNode!.id],
+    });
+    expect(resourceNode?.childScopeCount).toBe(1);
+  });
+
+  it('hides sessions the thread drill-down would reject from the tree, search, and lenses', async () => {
+    const h = await createHarness();
+    const otherProjectId = 'other-project';
+    const vouch = async (address: string, parent: string) =>
+      h.instance.materializeScope({ address, contextualScopeAddress: parent, parentAddresses: [parent] });
+    await h.instance.materializeScope({ address: `org:${ORG}`, contextualScopeAddress: `org:${ORG}` });
+    await vouch(`resource:${h.projectId}`, `org:${ORG}`);
+    await vouch(`resource:${otherProjectId}`, `org:${ORG}`);
+    // Readable: a visible record captured in the session.
+    await vouch('thread:readable', `resource:${h.projectId}`);
+    const anchor = await node(h.knowledge, 'Readable anchor', h.threadScope('readable'));
+    await record(h.knowledge, anchor, 'Readable evidence', h.threadScope('readable'), 'readable');
+    // No record captured in the session: the drill-down 404s it.
+    await vouch('thread:empty', `resource:${h.projectId}`);
+    // Another project's session, with its own evidence.
+    await vouch('thread:foreign', `resource:${otherProjectId}`);
+    const foreignScope = [`org:${ORG}`, `resource:${otherProjectId}`, 'thread:foreign'];
+    const foreign = await node(h.knowledge, 'Foreign anchor', foreignScope);
+    await record(h.knowledge, foreign, 'Foreign evidence', foreignScope, 'foreign');
+
+    const tree = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`)
+    ).json()) as KnowledgeScopeTreePayload;
+    const sessions = tree.scopeNodes?.filter(node => node.address.startsWith('thread:')).map(node => node.address);
+    expect(sessions).toEqual(['thread:readable']);
+    const otherNode = tree.scopeNodes?.find(node => node.address === `resource:${otherProjectId}`);
+    const otherChildren = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?parentId=${otherNode!.id}`)
+    ).json()) as KnowledgeScopeTreePayload;
+    expect(otherChildren.scopeNodes?.some(node => node.address.startsWith('thread:'))).toBe(false);
+
+    const search = (await (
+      await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/search?q=readable`)
+    ).json()) as KnowledgeSearchPayload;
+    expect(search.results.filter(result => result.type === 'scope')).toEqual([]);
+
+    const { scopes } = await h.knowledge.listScopeNodes({ addresses: ['thread:empty', 'thread:foreign'] });
+    expect(scopes).toHaveLength(2);
+    for (const session of scopes) {
+      expect((await graph(h, `?scopeNodeId=${session.id}`)).status).toBe(404);
+    }
+    const projectNode = tree.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
+    const projectLens = await graph(h, `?scopeNodeId=${projectNode!.id}`);
+    expect(projectLens.status).toBe(200);
+    expect(projectLens.body.nodes.some(node => ['readable', 'empty'].includes(node.name))).toBe(false);
+  });
+
   it('reads one org correctly when other tenants hold more than 1000 scopes', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({

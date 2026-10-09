@@ -41,9 +41,10 @@ import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/Kn
  * The Knowledge page: a live force-directed graph of the project's knowledge —
  * nodes as nodes, wikilink relationships as edges. The default view is
  * project scope (org + project records, the knowledge records that carry across
- * sessions); thread-scoped knowledge is reached only by drilling into a
- * knowledge record's "captured in session" link, which switches to the thread view with
- * an org → project → thread breadcrumb (Amendment A2). Thread state lives in
+ * sessions); thread-scoped knowledge is reached by opening a session listed under
+ * the project in the scope tree, or a knowledge record's "captured in session" link.
+ * Either switches to the thread view with an org → project → thread breadcrumb
+ * (Amendment A2). Thread state lives in
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
 export function KnowledgePage() {
@@ -174,6 +175,7 @@ function ScopeTree({
   scopes,
   selection,
   onSelect,
+  onOpenSession,
   onNodesLoaded,
 }: {
   factoryProjectId: string | undefined;
@@ -181,6 +183,8 @@ function ScopeTree({
   scopes: KnowledgeScopeTreePayload | undefined;
   selection: KnowledgeSelection | undefined;
   onSelect: (selection: KnowledgeSelection) => void;
+  /** A listed session (`thread:<id>` scope) opens the thread view rather than a lens. */
+  onOpenSession: (threadId: string) => void;
   onNodesLoaded: (nodes: KnowledgeScopeNode[]) => void;
 }) {
   const scopePage = useKnowledgeScopePage(factoryProjectId, threadId);
@@ -244,11 +248,14 @@ function ScopeTree({
     if (path.has(node.id)) return null;
     const nextPath = new Set(path).add(node.id);
     const marker = markerByNodeId.get(node.id);
-    const kind = marker ? identityKind(marker) : (node.kind ?? 'scope');
+    const sessionId = !marker && node.address.startsWith('thread:') ? node.address.slice('thread:'.length) : undefined;
+    const kind = marker ? identityKind(marker) : sessionId ? 'session' : (node.kind ?? 'scope');
     const pressed = selection?.scopeNodeId === node.id || (marker !== undefined && selection?.scopeLevel === marker);
     const children = byParent.get(node.id) ?? [];
+    // Roots and the viewed project start open, so the project's sessions are listed without a click.
+    const openByDefault = depth === 0 || marker === 'resource';
     const expanded =
-      (depth === 0 && !collapsedRootIds.has(node.id)) || expandedIds.has(node.id) || selectedAncestors.has(node.id);
+      (openByDefault && !collapsedRootIds.has(node.id)) || expandedIds.has(node.id) || selectedAncestors.has(node.id);
     const canExpand = node.childScopeCount > 0;
     const hasCursorOverride = Object.hasOwn(nextCursorByParent, node.id);
     const childCursor = hasCursorOverride ? nextCursorByParent[node.id] : scopes?.childCursors?.[node.id];
@@ -264,7 +271,7 @@ function ScopeTree({
               className="hover:text-foreground flex size-5 shrink-0 items-center justify-center"
               onClick={() => {
                 if (expanded) {
-                  if (depth === 0) setCollapsedRootIds(current => new Set(current).add(node.id));
+                  if (openByDefault) setCollapsedRootIds(current => new Set(current).add(node.id));
                   else
                     setExpandedIds(current => {
                       const next = new Set(current);
@@ -274,7 +281,7 @@ function ScopeTree({
                   return;
                 }
                 if (children.length === 0) void loadPage(node.id, undefined);
-                if (depth === 0)
+                if (openByDefault)
                   setCollapsedRootIds(current => {
                     const next = new Set(current);
                     next.delete(node.id);
@@ -296,7 +303,11 @@ function ScopeTree({
               pressed && 'bg-fill text-foreground font-medium',
             )}
             title={node.description ?? node.name}
-            onClick={() => onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })}
+            onClick={() =>
+              sessionId
+                ? onOpenSession(sessionId)
+                : onSelect(marker ? { scopeNodeId: node.id, scopeLevel: marker } : { scopeNodeId: node.id })
+            }
           >
             <ScopeLabel
               name={node.name}
@@ -896,6 +907,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           scopes={scopesQuery.data}
           selection={selection}
           onSelect={selectScope}
+          onOpenSession={openThread}
           onNodesLoaded={nodes =>
             setLoadedScopeNodesByView(current => ({
               ...current,
