@@ -2,7 +2,7 @@
 '@mastra/platform-workspace': minor
 ---
 
-Added `PlatformFactorySandbox`, which plugs Mastra Platform sandboxes into Mastra Factory as the sandbox provider. Factory gets one sandbox per session, a repository template it can build ahead of the first session, and user-tunable settings on the environment page. It takes the same options as `PlatformSandbox` except the per-session ones (`id`, `sandboxId`, `sessionId`, `template`).
+Added `PlatformFactorySandbox`, which plugs Mastra Platform sandboxes into Mastra Factory as the sandbox provider. Factory gets one sandbox per session, a repository template it can build ahead of the first session, and user-tunable settings. It takes the same options as `PlatformSandbox` except the per-session ones (`id`, `sandboxId`, `sessionId`, `template`).
 
 ```ts
 import { PlatformFactorySandbox } from '@mastra/platform-workspace';
