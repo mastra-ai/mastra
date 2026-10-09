@@ -132,6 +132,56 @@ describe('Knowledge', () => {
     expect(rematerialized).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
   });
 
+  it('creates templated child scopes for each materialized org', async () => {
+    const storage = new InMemoryStore({ id: 'templated-children' });
+    const knowledge = new Knowledge({
+      storage,
+      scopes: {
+        'org:$orgId': {
+          access: [{ principal: 'self', role: 'owner' }],
+          children: [
+            { address: '$self:about-me', name: 'About me' },
+            { address: 'machines:$orgId', name: 'Machines', access: [{ principal: 'org:$orgId', role: 'readonly' }] },
+          ],
+        },
+      },
+    });
+
+    const a = await knowledge.materializeScope({ address: 'org:a', contextualScopeAddress: 'org:a' });
+    const b = await knowledge.materializeScope({ address: 'org:b', contextualScopeAddress: 'org:b' });
+
+    expect(a.createdScopeIds).toHaveLength(3);
+    expect(b.createdScopeIds).toHaveLength(3);
+    const { scopes } = await storage.stores.knowledge!.listScopeNodes({
+      addresses: ['org:a:about-me', 'machines:a', 'org:b:about-me', 'machines:b'],
+    });
+    const parentsByAddress = Object.fromEntries(scopes.map(scope => [scope.address, scope.parentIds]));
+    expect(parentsByAddress).toEqual({
+      'org:a:about-me': [a.scopes['org:a']],
+      'machines:a': [a.scopes['org:a']],
+      'org:b:about-me': [b.scopes['org:b']],
+      'machines:b': [b.scopes['org:b']],
+    });
+    expect(scopes.find(scope => scope.address === 'machines:b')?.name).toBe('Machines');
+
+    const again = await knowledge.materializeScope({ address: 'org:a', contextualScopeAddress: 'org:a' });
+    expect(again).toMatchObject({ changed: false, createdScopeIds: [] });
+  });
+
+  it('does not add template children to a scope materialized before the template changed', async () => {
+    const storage = new InMemoryStore({ id: 'templated-children-copy-on-create' });
+    const input = { address: 'org:a', contextualScopeAddress: 'org:a' };
+    const created = await new Knowledge({ storage }).materializeScope(input);
+
+    const later = await new Knowledge({
+      storage,
+      scopes: { 'org:$orgId': { children: [{ address: '$self:shared', name: 'Shared' }] } },
+    }).materializeScope(input);
+
+    expect(later).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
+    expect((await storage.stores.knowledge!.listScopeNodes({ addresses: ['org:a:shared'] })).scopes).toEqual([]);
+  });
+
   it('coalesces concurrent lazy materialization for one concrete address', async () => {
     const storage = new InMemoryStore({ id: 'lazy-structured' });
     const domain = storage.stores.knowledge!;

@@ -166,7 +166,15 @@ export class Knowledge extends MastraBase {
     }
 
     const promise = this.getStorage()
-      .then(storage => storage.reconcileStructure(plan))
+      .then(async storage => {
+        // Template children are copied on create: a scope that already exists keeps the
+        // children it was created with, even when its scope type template changes later.
+        if (plan.scopes.length > 1) {
+          const { scopes } = await storage.listScopeNodes({ addresses: [snapshot.address], limit: 1 });
+          if (scopes.length > 0) return storage.reconcileStructure({ ...plan, scopes: plan.scopes.slice(0, 1) });
+        }
+        return storage.reconcileStructure(plan);
+      })
       .then(result => {
         if (result.deletedScopeAddresses?.includes(snapshot.address)) {
           throw new Error(`Knowledge scope ${snapshot.address} was explicitly deleted and cannot be recreated lazily`);
@@ -279,6 +287,7 @@ export * from '../storage/domains/knowledge';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,
+  KnowledgeScopeChildTemplate,
   KnowledgeScopeTypeConfig,
   KnowledgeScopeTypesConfig,
   MaterializeKnowledgeScopeInput,

@@ -12,9 +12,24 @@ export interface KnowledgeScopeAccessConfig {
   canSuggest?: boolean;
 }
 
+/**
+ * A child scope created alongside every scope materialized from its pattern. `address` and string
+ * principals substitute `$param` values from the matched address, and `$self` with the materialized
+ * scope's address. In `access`, `self` and `parent` both resolve to the materialized scope.
+ * Children are created once and are not retrofitted when the template changes.
+ */
+export interface KnowledgeScopeChildTemplate {
+  address: string;
+  name: string;
+  description?: string;
+  /** Defaults to an owner grant for the materialized scope. */
+  access?: KnowledgeScopeAccessConfig[];
+}
+
 export interface KnowledgeScopeTypeConfig {
   access?: KnowledgeScopeAccessConfig[];
   description?: string;
+  children?: KnowledgeScopeChildTemplate[];
 }
 
 export type KnowledgeScopeTypesConfig = Record<string, KnowledgeScopeTypeConfig>;
@@ -38,7 +53,19 @@ export function validateKnowledgeScopeTypes(
   scopeTypes: KnowledgeScopeTypesConfig | undefined,
 ): KnowledgeScopeTypesConfig {
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
-  for (const config of Object.values(types)) assertKnowledgeDescriptionWithinBound(config?.description);
+  for (const [pattern, config] of Object.entries(types)) {
+    assertKnowledgeDescriptionWithinBound(config?.description);
+    for (const child of config?.children ?? []) {
+      if (!child.address.trim()) throw new Error(`Knowledge child scope template in ${pattern} must have an address`);
+      if (!child.name.trim()) throw new Error(`Knowledge child scope ${child.address} in ${pattern} must have a name`);
+      assertKnowledgeDescriptionWithinBound(child.description);
+      for (const access of child.access ?? []) {
+        if (access.role === 'mirror' && access.canSuggest !== undefined) {
+          throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
+        }
+      }
+    }
+  }
   const patterns = Object.keys(types).filter(pattern => pattern !== 'custom');
   for (const [index, pattern] of patterns.entries()) {
     assertPattern(pattern);
@@ -134,6 +161,22 @@ export function materializeKnowledgeScopePlan(
     return [{ scopeRefAddress: principal, role: access.role, canSuggest: access.canSuggest }];
   });
 
+  const childParameters = { ...parameters, self: input.address };
+  const children = (config.children ?? []).map<KnowledgeStructureScope>(child => ({
+    address: assertNotIdentityAddress(substituteParameters(child.address, childParameters)),
+    name: child.name.trim(),
+    description: child.description,
+    parentAddresses: [input.address],
+    grants: (child.access ?? [{ principal: 'self', role: 'owner' }]).map<KnowledgeStructureGrant>(access => ({
+      scopeRefAddress:
+        access.principal === 'self' || access.principal === 'parent'
+          ? input.address
+          : substituteParameters(access.principal, childParameters),
+      role: access.role,
+      canSuggest: access.canSuggest,
+    })),
+  }));
+
   return validateKnowledgeStructurePlan({
     scopes: [
       {
@@ -143,8 +186,28 @@ export function materializeKnowledgeScopePlan(
         parentAddresses: input.parentAddresses,
         grants,
       },
+      ...children,
     ],
     retrofit: false,
+  });
+}
+
+const IDENTITY_SCOPE_PATTERNS = ['org:$orgId', 'resource:$resourceId', 'thread:$threadId'];
+
+/** Child templates must not mint identity scopes; those are host-vouched. */
+function assertNotIdentityAddress(address: string): string {
+  assertAddress(address);
+  if (IDENTITY_SCOPE_PATTERNS.some(pattern => matchPattern(pattern, address))) {
+    throw new Error(`Knowledge child scope template cannot create identity scope ${address}`);
+  }
+  return address;
+}
+
+function substituteParameters(template: string, parameters: Record<string, string>): string {
+  return template.replace(/\$([A-Za-z][A-Za-z0-9_]*)/g, (_match, name: string) => {
+    const value = parameters[name];
+    if (!value) throw new Error(`Missing host-vouched Knowledge scope parameter: ${name}`);
+    return value;
   });
 }
 
@@ -178,11 +241,7 @@ function resolvePrincipal(
     }
     return input.parentAddresses[0]!;
   }
-  return principal.replace(/\$([A-Za-z][A-Za-z0-9_]*)/g, (_match, name: string) => {
-    const value = parameters[name];
-    if (!value) throw new Error(`Missing host-vouched Knowledge scope parameter: ${name}`);
-    return value;
-  });
+  return substituteParameters(principal, parameters);
 }
 
 function assertPattern(pattern: string): void {

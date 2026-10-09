@@ -69,6 +69,72 @@ describe('Knowledge structure reconciliation', () => {
     });
   });
 
+  it('emits templated children with parent edges and grants for the materialized scope', () => {
+    const scopeTypes = {
+      'org:$orgId': {
+        children: [
+          { address: '$self:shared', name: 'Shared', description: 'Shared org knowledge' },
+          {
+            address: 'machines:$orgId',
+            name: 'Machines',
+            access: [
+              { principal: 'parent', role: 'mirror' as const },
+              { principal: 'team:$orgId', role: 'readonly' as const },
+            ],
+          },
+        ],
+      },
+    };
+    for (const orgId of ['a', 'b']) {
+      const org = `org:${orgId}`;
+      expect(materializeKnowledgeScopePlan(scopeTypes, { address: org, contextualScopeAddress: org }).scopes).toEqual([
+        { address: org, name: orgId, description: undefined, parentAddresses: undefined, grants: [] },
+        {
+          address: `${org}:shared`,
+          name: 'Shared',
+          description: 'Shared org knowledge',
+          parentAddresses: [org],
+          grants: [{ scopeRefAddress: org, role: 'owner', canSuggest: undefined }],
+        },
+        {
+          address: `machines:${orgId}`,
+          name: 'Machines',
+          description: undefined,
+          parentAddresses: [org],
+          grants: [
+            { scopeRefAddress: org, role: 'mirror', canSuggest: undefined },
+            { scopeRefAddress: `team:${orgId}`, role: 'readonly', canSuggest: undefined },
+          ],
+        },
+      ]);
+    }
+
+    expect(() =>
+      materializeKnowledgeScopePlan(
+        { 'org:$orgId': { children: [{ address: 'x:$missing', name: 'X' }] } },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow('Missing host-vouched Knowledge scope parameter: missing');
+    expect(() =>
+      materializeKnowledgeScopePlan(
+        { 'org:$orgId': { children: [{ address: '$self', name: 'Self' }] } },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow('Knowledge child scope template cannot create identity scope org:a');
+    expect(() =>
+      materializeKnowledgeScopePlan(
+        { 'org:$orgId': { children: [{ address: 'thread:$orgId', name: 'Session' }] } },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow('Knowledge child scope template cannot create identity scope thread:a');
+    expect(() =>
+      materializeKnowledgeScopePlan(
+        { 'org:$orgId': { children: [{ address: '$self::bad', name: 'Bad' }] } },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow('Invalid Knowledge scope address: org:a::bad');
+  });
+
   it('rejects mismatched host-vouched parameters and ambiguous patterns', () => {
     expect(() =>
       materializeKnowledgeScopePlan(undefined, {
