@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -36,13 +36,25 @@ const PageInfoSchema = z.object({
   endCursor: z.string().nullable().optional(),
 });
 
+const GraphQLErrorSchema = z.object({
+  message: z.string(),
+  extensions: z.record(z.string(), z.unknown()).optional(),
+});
+
 const ProviderCyclesResponseSchema = z.object({
-  data: z.object({
-    cycles: z.object({
-      nodes: z.array(z.unknown()),
-      pageInfo: PageInfoSchema,
-    }),
-  }),
+  data: z
+    .object({
+      cycles: z
+        .object({
+          nodes: z.array(z.unknown()),
+          pageInfo: PageInfoSchema,
+        })
+        .nullable()
+        .optional(),
+    })
+    .nullable()
+    .optional(),
+  errors: z.array(GraphQLErrorSchema).optional(),
 });
 
 const OutputCycleSchema = z.object({
@@ -128,7 +140,22 @@ export function listCyclesTool(proxy: PlatformProxy) {
         });
       }
 
-      const cyclesData = parsed.data.data.cycles;
+      const firstError = parsed.data.errors?.[0];
+      if (firstError) {
+        throw new platformProxy.ActionError({
+          type: 'graphql_error',
+          message: firstError.message,
+          errors: parsed.data.errors,
+        });
+      }
+
+      const cyclesData = parsed.data.data?.cycles;
+      if (!cyclesData) {
+        throw new platformProxy.ActionError({
+          type: 'invalid_response',
+          message: 'Linear API returned no cycles data.',
+        });
+      }
       const nodes = cyclesData.nodes;
       const pageInfo = cyclesData.pageInfo;
 

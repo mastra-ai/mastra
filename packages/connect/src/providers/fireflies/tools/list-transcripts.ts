@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -94,7 +94,9 @@ const ProviderMeetingInfoSchema = z.object({
 
 const ProviderSummarySchema = z.object({
   keywords: z.array(z.string()).nullish(),
-  action_items: z.array(z.string()).nullish(),
+  // Fireflies returns action_items either as an array of strings or as a
+  // single newline-joined string depending on the account/summary version.
+  action_items: z.union([z.array(z.string()), z.string()]).nullish(),
   short_summary: z.string().nullish(),
   meeting_type: z.string().nullish(),
 });
@@ -171,6 +173,16 @@ const GraphQLResponseSchema = z.object({
     .nullish(),
   errors: z.array(z.unknown()).nullish(),
 });
+
+function normalizeActionItems(actionItems: string[] | string): string[] {
+  if (Array.isArray(actionItems)) {
+    return actionItems;
+  }
+  return actionItems
+    .split('\n')
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
+}
 
 export function listTranscriptsTool(proxy: PlatformProxy) {
   return createTool({
@@ -356,7 +368,7 @@ export function listTranscriptsTool(proxy: PlatformProxy) {
             summary: {
               ...(providerTranscript.summary.keywords != null && { keywords: providerTranscript.summary.keywords }),
               ...(providerTranscript.summary.action_items != null && {
-                action_items: providerTranscript.summary.action_items,
+                action_items: normalizeActionItems(providerTranscript.summary.action_items),
               }),
               ...(providerTranscript.summary.short_summary != null && {
                 short_summary: providerTranscript.summary.short_summary,

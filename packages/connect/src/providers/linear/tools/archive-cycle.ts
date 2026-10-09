@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -30,6 +30,7 @@ const GraphQlResponseSchema = z.object({
     .object({
       cycleArchive: ProviderPayloadSchema,
     })
+    .nullable()
     .optional(),
   errors: z.array(z.unknown()).optional(),
 });

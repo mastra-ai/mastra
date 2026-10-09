@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -131,20 +131,51 @@ export function listProjectsTool(proxy: PlatformProxy) {
 
       const responseData = z
         .object({
-          data: z.object({
-            projects: z.object({
-              nodes: z.array(z.unknown()),
-              pageInfo: z.object({
-                hasNextPage: z.boolean(),
-                endCursor: z.string().nullable(),
+          data: z
+            .object({
+              projects: z
+                .object({
+                  nodes: z.array(z.unknown()),
+                  pageInfo: z.object({
+                    hasNextPage: z.boolean(),
+                    endCursor: z.string().nullable(),
+                  }),
+                })
+                .nullable()
+                .optional(),
+            })
+            .nullable()
+            .optional(),
+          errors: z
+            .array(
+              z.object({
+                message: z.string(),
+                extensions: z.record(z.string(), z.unknown()).optional(),
               }),
-            }),
-          }),
+            )
+            .optional(),
         })
         .parse(response.data);
 
-      const nodes = responseData.data.projects.nodes;
-      const pageInfo = responseData.data.projects.pageInfo;
+      const firstError = responseData.errors?.[0];
+      if (firstError) {
+        throw new platformProxy.ActionError({
+          type: 'graphql_error',
+          message: firstError.message,
+          errors: responseData.errors,
+        });
+      }
+
+      const projectsData = responseData.data?.projects;
+      if (!projectsData) {
+        throw new platformProxy.ActionError({
+          type: 'invalid_response',
+          message: 'Linear API returned no projects data.',
+        });
+      }
+
+      const nodes = projectsData.nodes;
+      const pageInfo = projectsData.pageInfo;
 
       const projects: z.infer<typeof ProjectSchema>[] = [];
 

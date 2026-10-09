@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -34,6 +34,21 @@ export const getCycleOutputSchema = z.object({
   endsAt: z.string().optional(),
 });
 
+const GraphQLErrorSchema = z.object({
+  message: z.string(),
+  extensions: z.record(z.string(), z.unknown()).optional(),
+});
+
+const GraphQLResponseSchema = z.object({
+  data: z
+    .object({
+      cycle: ProviderCycleSchema.nullable(),
+    })
+    .nullable()
+    .optional(),
+  errors: z.array(GraphQLErrorSchema).optional(),
+});
+
 export function getCycleTool(proxy: PlatformProxy) {
   return createTool({
     id: 'linear_get_cycle',
@@ -54,16 +69,25 @@ export function getCycleTool(proxy: PlatformProxy) {
         retries: 3,
       });
 
-      const cycleData = response.data?.data?.cycle;
+      const payload = GraphQLResponseSchema.parse(response.data);
 
-      if (!cycleData) {
+      const firstError = payload.errors?.[0];
+      if (firstError) {
+        throw new platformProxy.ActionError({
+          type: 'graphql_error',
+          message: firstError.message,
+          errors: payload.errors,
+        });
+      }
+
+      const providerCycle = payload.data?.cycle;
+
+      if (!providerCycle) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: `Cycle with id ${input.id} not found.`,
         });
       }
-
-      const providerCycle = ProviderCycleSchema.parse(cycleData);
 
       return {
         id: providerCycle.id,

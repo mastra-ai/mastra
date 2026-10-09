@@ -42,6 +42,17 @@ const PIN_677: TemplatePin = {
   sha: 'c3091db1e8a623113d581197a8ee0d5b1aa87136',
 };
 
+/**
+ * NangoHQ/integration-templates#708 fixes linear attachment tools rejecting
+ * null creator emails, surfaces GraphQL errors[] in linear cycle/project
+ * actions (including partial `data: { field: null }` responses), and accepts
+ * fireflies action_items as either an array or a newline-joined string.
+ */
+const PIN_708: TemplatePin = {
+  repo: 'NangoHQ/integration-templates',
+  sha: 'eb384dddf5b268d655e9b9cf98067120b88e190a',
+};
+
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   // NangoHQ/integration-templates#670 fixed clerk_list_users and
   // clerk_list_sessions, which previously parsed Clerk's bare-array
@@ -63,6 +74,15 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
     repo: 'rhysbalevicius/integration-templates',
     sha: 'c4fb0d5d5b2c677f794d836a470013da46c347a2',
   },
+  // NangoHQ/integration-templates#708 — linear: nullable attachment creator
+  // emails and GraphQL errors[] surfaced in cycle/project actions; fireflies:
+  // action_items accepted as array or newline-joined string. The pinned
+  // commit is that PR's head (upstream main plus the fix), served directly by
+  // the upstream repository. Linear also picks up the #704 create-cycle and
+  // archive-cycle fixes by moving off TEMPLATE_SHA. Fold both back into
+  // TEMPLATE_SHA once #708 merges.
+  linear: PIN_708,
+  fireflies: PIN_708,
   // NangoHQ/integration-templates#677
   slack: PIN_677,
   github: PIN_677,
@@ -70,7 +90,6 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   stripe: PIN_677,
   'twitter-v2': PIN_677,
   hubspot: PIN_677,
-  fireflies: PIN_677,
   discord: PIN_677,
   'google-mail': PIN_677,
   'google-calendar': PIN_677,

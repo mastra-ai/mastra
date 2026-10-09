@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -38,7 +38,7 @@ const AttachmentSchema = z.object({
     .object({
       id: z.string(),
       name: z.string(),
-      email: z.string(),
+      email: z.string().nullable().optional(),
     })
     .nullable()
     .optional(),
@@ -46,7 +46,7 @@ const AttachmentSchema = z.object({
     .object({
       id: z.string(),
       name: z.string(),
-      email: z.string(),
+      email: z.string().nullable().optional(),
     })
     .nullable()
     .optional(),

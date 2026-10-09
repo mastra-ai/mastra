@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -36,6 +36,10 @@ const SummarySchema = z.object({
   topics_discussed: z.array(z.string()).nullish(),
   transcript_chapters: z.array(z.string()).nullish(),
   extended_sections: z.array(SummarySectionSchema).nullish(),
+});
+
+const ProviderSummarySchema = SummarySchema.extend({
+  action_items: z.union([z.string(), z.array(z.string())]).nullish(),
 });
 
 const SpeakerSchema = z.object({
@@ -93,7 +97,7 @@ const TranscriptSchema = z.object({
   id: z.string().nullish(),
   title: z.string().nullish(),
   sentences: z.array(SentenceSchema).nullish(),
-  summary: SummarySchema.nullable().optional(),
+  summary: ProviderSummarySchema.nullable().optional(),
   speakers: z.array(SpeakerSchema).nullish(),
   meeting_info: MeetingInfoSchema.nullable().optional(),
   meeting_attendees: z.array(MeetingAttendeeSchema).nullish(),
@@ -127,6 +131,10 @@ export const getTranscriptOutputSchema = z.object({
   meeting_attendees: z.array(MeetingAttendeeSchema).optional(),
   analytics: AnalyticsSchema.optional(),
 });
+
+function normalizeActionItems(actionItems: string | string[]): string {
+  return Array.isArray(actionItems) ? actionItems.join('\n') : actionItems;
+}
 
 export function getTranscriptTool(proxy: PlatformProxy) {
   return createTool({
@@ -246,7 +254,15 @@ export function getTranscriptTool(proxy: PlatformProxy) {
         id: transcript.id ?? undefined,
         title: transcript.title ?? undefined,
         sentences: transcript.sentences ?? undefined,
-        summary: transcript.summary ?? undefined,
+        summary: transcript.summary
+          ? {
+              ...transcript.summary,
+              action_items:
+                transcript.summary.action_items != null
+                  ? normalizeActionItems(transcript.summary.action_items)
+                  : transcript.summary.action_items,
+            }
+          : undefined,
         speakers: transcript.speakers ?? undefined,
         meeting_info: transcript.meeting_info ?? undefined,
         meeting_attendees: transcript.meeting_attendees ?? undefined,

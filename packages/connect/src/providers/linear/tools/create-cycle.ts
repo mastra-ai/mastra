@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -42,12 +42,22 @@ const CycleSchema = z.object({
 });
 
 const ProviderResponseSchema = z.object({
-  data: z.object({
-    cycleCreate: z.object({
-      success: z.boolean(),
-      cycle: CycleSchema.nullable().optional(),
-    }),
-  }),
+  data: z
+    .object({
+      cycleCreate: z.object({
+        success: z.boolean(),
+        cycle: CycleSchema.nullable().optional(),
+      }),
+    })
+    .nullable()
+    .optional(),
+  errors: z
+    .array(
+      z.object({
+        message: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export const createCycleOutputSchema = z.object({
@@ -120,13 +130,22 @@ export function createCycleTool(proxy: PlatformProxy) {
       });
 
       const parsed = ProviderResponseSchema.parse(response.data);
-      const payload = parsed.data.cycleCreate;
 
-      if (!payload.success || !payload.cycle) {
+      if (parsed.errors && parsed.errors.length > 0) {
+        const firstError = parsed.errors[0];
+        throw new platformProxy.ActionError({
+          type: 'graphql_error',
+          message: firstError?.message ?? 'GraphQL error occurred.',
+        });
+      }
+
+      const payload = parsed.data?.cycleCreate;
+
+      if (!payload?.success || !payload.cycle) {
         throw new platformProxy.ActionError({
           type: 'creation_failed',
           message: 'Cycle creation failed or returned no cycle.',
-          success: payload.success,
+          success: payload?.success ?? false,
         });
       }
 
