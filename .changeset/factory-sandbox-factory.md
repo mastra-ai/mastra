@@ -12,7 +12,7 @@ import { E2BFactorySandbox } from '@mastra/e2b';
 new MastraFactory({ sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId }) });
 
 // After: a provider instance, which also carries settings and builds
-new MastraFactory({ sandbox: new E2BFactorySandbox({ apiKey: process.env.E2B_API_KEY }) });
+new MastraFactory({ sandbox: new E2BFactorySandbox() });
 
 // Or run sessions on the host machine, one directory per session
 new MastraFactory({ sandbox: new LocalFactorySandbox({ root: '/var/sandboxes' }) });

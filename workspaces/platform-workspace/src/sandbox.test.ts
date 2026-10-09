@@ -3103,6 +3103,30 @@ describe('PlatformSandbox', () => {
       const [, fields] = loggerInfoSpy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
       expect(fields).not.toHaveProperty('templateHash');
     });
+
+    it('omits templateHash when the same instance reattaches after provisioning', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_again', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ id: 'sbx_again', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: async () => ({ repos: [], setupCommand: 'echo hi' }) as any,
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+      await sandbox._stop();
+      await sandbox._start();
+
+      const starts = loggerInfoSpy.mock.calls.filter(([message]) => message === 'platform-workspace start complete');
+      expect(starts.map(([, fields]) => (fields as { mode: string }).mode)).toEqual(['provision', 'reattach']);
+      expect(starts[1]![1]).not.toHaveProperty('templateHash');
+    });
   });
 
   describe('stop / destroy (checkpoint lifecycle)', () => {

@@ -24,9 +24,9 @@ class MyFactorySandbox extends FactorySandbox<Settings> {
     return new MyCloudSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId, region });
   }
 
-  // Optional: a template Factory can build before the first session
-  template(ctx: FactorySandboxContext, { region = 'us' }: Settings) {
-    return myCloudTemplate({ repos: ctx.repos, setup: ctx.workspaceSetupCommand, region });
+  // Optional: the sandbox template image Factory can build ahead of time
+  template(ctx: FactorySandboxContext, settings: Settings) {
+    return myCloudTemplate(ctx, settings);
   }
 
   // Optional: build that template ahead of time and report on it

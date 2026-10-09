@@ -8,10 +8,7 @@ Added `PlatformFactorySandbox`, which plugs Mastra Platform sandboxes into Mastr
 import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 
 new MastraFactory({
-  sandbox: new PlatformFactorySandbox({
-    accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
-    environmentId: process.env.MASTRA_ENVIRONMENT_ID,
-  }),
+  sandbox: new PlatformFactorySandbox(), // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
 });
 ```
 
