@@ -55,11 +55,6 @@ function recordPatches(holder: { environment: FactoryEnvironmentPayload }, build
   return patches;
 }
 
-/** Serves an empty history so the Builds subsection, which holds the triggers, renders. */
-function useHistory() {
-  server.use(http.get(`${ENVIRONMENT_URL}/builds`, () => HttpResponse.json({ builds: [] })));
-}
-
 function renderEnvironmentSettings() {
   renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
@@ -84,7 +79,7 @@ describe('Environment builds', () => {
     expect(screen.queryByRole('switch', { name: 'Rebuild on push' })).toBeNull();
   });
 
-  it('builds now from the Template header, polls until ready, and shows no Builds section without history', async () => {
+  it('builds now from the Builds header, polls until ready, and lists no history on platform', async () => {
     const holder = { environment: environmentPayload() };
     useFactory();
     const reads = useEnvironment(holder);
@@ -131,18 +126,18 @@ describe('Environment builds', () => {
     await new Promise(resolve => setTimeout(resolve, 6_000));
     expect(reads.count).toBe(readsAtPin);
     expect(historyReads).toBe(0);
-    expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Builds' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Build tpl/ })).toBeNull();
   }, 25_000);
 
   it('patches the push trigger and its debounce, and the cron schedule', async () => {
     const holder = {
-      environment: e2bEnvironment({
+      environment: environmentPayload({
         buildTriggers: buildTriggers({ push: { enabled: true, debounceMinutes: 10 } }),
       }),
     };
     useFactory();
     useEnvironment(holder);
-    useHistory();
     const patches = recordPatches(holder);
 
     renderEnvironmentSettings();
@@ -171,7 +166,7 @@ describe('Environment builds', () => {
 
   it('shows the schedule notice and disables the switch when the host has no schedules', async () => {
     const holder = {
-      environment: e2bEnvironment({
+      environment: environmentPayload({
         buildTriggers: buildTriggers({
           schedule: { enabled: false, cron: null, timezone: null, scheduleAvailable: false },
         }),
@@ -179,7 +174,6 @@ describe('Environment builds', () => {
     };
     useFactory();
     useEnvironment(holder);
-    useHistory();
 
     renderEnvironmentSettings();
 
@@ -190,7 +184,7 @@ describe('Environment builds', () => {
 
   it('edits the cron of an enabled schedule', async () => {
     const holder = {
-      environment: e2bEnvironment({
+      environment: environmentPayload({
         buildTriggers: buildTriggers({
           schedule: { enabled: true, cron: '0 3 * * *', timezone: 'UTC', scheduleAvailable: true },
         }),
@@ -198,7 +192,6 @@ describe('Environment builds', () => {
     };
     useFactory();
     useEnvironment(holder);
-    useHistory();
     const patches = recordPatches(holder);
 
     renderEnvironmentSettings();

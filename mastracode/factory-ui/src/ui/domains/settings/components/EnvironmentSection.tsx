@@ -24,7 +24,7 @@ import { SettingsSubsection } from './SettingsSubsection';
 /**
  * The Factory's environment: what every session's sandbox boots from.
  * Template holds the repositories, the workspace setup and the provider's
- * settings; Builds the history and triggers, only when the provider lists builds.
+ * settings; Builds the triggers and, when the provider lists them, the history.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -97,7 +97,6 @@ function EnvironmentBlocks({
         scope="factory"
         title="Template"
         description={`Repositories cloned into each new sandbox, in this order. ${providerLine(environment.sandbox.provider)}`}
-        action={canBuild ? <BuildNow factoryId={factoryId} environment={environment} /> : undefined}
       >
         <div className="flex flex-col gap-4">
           <RepositoriesBlock
@@ -116,15 +115,16 @@ function EnvironmentBlocks({
           </WorkspaceSetupBlock>
         </div>
       </SettingsSubsection>
-      {canBuild && environment.sandbox.capabilities.builds.history && (
+      {canBuild && (
         <SettingsSubsection
           scope="factory"
           title="Builds"
-          description="Images built ahead of sessions from the repositories above, and when to rebuild them."
+          description="The template image built ahead of sessions, and when it rebuilds."
+          action={<BuildNow factoryId={factoryId} environment={environment} />}
         >
           <div className="flex flex-col gap-4">
-            <BuildHistory factoryId={factoryId} />
             <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+            {environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
           </div>
         </SettingsSubsection>
       )}
@@ -132,7 +132,7 @@ function EnvironmentBlocks({
   );
 }
 
-/** Build now with the last build's live status beside it; in the Template header. */
+/** Build now with the last build's live status beside it; in the Builds header. */
 function BuildNow({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
   const requestBuild = useRequestEnvironmentBuildMutation();
   const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);
