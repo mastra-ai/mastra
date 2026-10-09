@@ -1,3 +1,4 @@
+import { buildDeferredStepFinishChunk } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableLLMExecutionStep,
@@ -5,6 +6,7 @@ import {
   createDurableToolCallStep,
   DurableAgentDefaults,
   DurableStepIds,
+  emitChunkEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -13,6 +15,8 @@ import {
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
+  globalRunRegistry,
+  pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -21,11 +25,13 @@ import type {
   DurableToolCallOutput,
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
+import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
-import type { Inngest } from 'inngest';
+import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
@@ -52,6 +58,7 @@ const durableAgenticInputSchema = z.object({
   agentId: z.string(),
   agentName: z.string().optional(),
   messageListState: z.any(),
+  initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
   options: z.any(),
@@ -153,6 +160,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+      pruneSnapshot: pruneAgentLoopSnapshot,
       evaluatePersistencePredicateBeforeDurableOperation: true,
       validateInputs: false,
       emitStepEvents: false,
@@ -168,6 +176,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           agentId: state.agentId,
           agentName: state.agentName,
           messageListState: state.messageListState,
+          initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
           toolsMetadata: state.toolsMetadata,
           modelConfig: state.modelConfig,
           options: state.options,
@@ -286,6 +295,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           internal: InternalSpans.WORKFLOW,
         },
         shouldPersistSnapshot: ({ workflowStatus }) => PERSISTED_SNAPSHOT_STATUSES.has(workflowStatus),
+        pruneSnapshot: pruneAgentLoopSnapshot,
         evaluatePersistencePredicateBeforeDurableOperation: true,
         validateInputs: false,
         emitStepEvents: false,
@@ -298,6 +308,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .map(
         async ({ inputData }) => {
           const input = inputData as DurableAgenticWorkflowInput;
+          const initialMessageList = new MessageList().deserialize(input.messageListState);
 
           // Use the agent span data passed from InngestAgent.stream()
           // This span was created before the workflow started, making it the trace root
@@ -308,6 +319,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           const iterationState: IterationState = {
             ...input,
+            initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
             iterationCount: 0,
             accumulatedSteps: [],
             accumulatedUsage: {
@@ -325,13 +337,30 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         { id: 'init-iteration-state' },
       )
       // Run the agentic loop with dowhile
-      .dowhile(singleIterationWorkflow, async ({ inputData }) => {
+      .dowhile(singleIterationWorkflow, async params => {
+        const { inputData, engine } = params;
         const state = inputData as IterationState;
+        const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+
+        const emitStepFinish = async (isContinued: boolean) => {
+          if (state.lastStepResult) {
+            state.lastStepResult.isContinued = isContinued;
+          }
+          const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+          state.deferredStepFinishChunk = undefined;
+          if (deferredChunk && pubsub) {
+            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
+              await emitChunkEvent(pubsub, state.runId, deferredChunk);
+            });
+          }
+        };
 
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          await emitStepFinish(false);
           return false;
         }
 
@@ -341,7 +370,36 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
-        return shouldContinue && underMaxSteps;
+        if (!shouldContinue || !underMaxSteps) {
+          await emitStepFinish(false);
+          return false;
+        }
+
+        // stopWhen is a closure parked on the in-process run registry; on a
+        // cross-worker resume the entry is absent and we fall back to maxSteps.
+        // The lookup happens inside a memoized step so Inngest replays reuse the
+        // recorded decision (even on a worker without the registry entry) instead
+        // of re-invoking (possibly stateful) user predicates.
+        let stopped: boolean;
+        try {
+          stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+            const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
+            if (!stopWhen || state.accumulatedSteps.length === 0) {
+              return false;
+            }
+            const steps = state.accumulatedSteps as any;
+            const conditions = await Promise.all(
+              (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
+            );
+            return conditions.some(Boolean);
+          });
+        } catch (error) {
+          await emitStepFinish(shouldContinue);
+          throw error;
+        }
+
+        await emitStepFinish(!stopped);
+        return !stopped;
       })
       // Map final state to output format, close agent span, and emit finish event
       .map(
@@ -383,14 +441,26 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             finalText = finishResult.outputText;
           }
 
+          const tripwire = finishResult.tripwire;
+          if (tripwire && pubsub) {
+            await emitChunkEvent(pubsub, state.runId, {
+              type: 'tripwire',
+              runId: state.runId,
+              from: ChunkFrom.AGENT,
+              payload: tripwire,
+            });
+          }
+
           const finalOutput = {
             messageListState: finishResult.messageListState,
             messageId: state.messageId,
-            stepResult: state.lastStepResult || {
-              reason: 'stop',
-              warnings: [],
-              isContinued: false,
-            },
+            stepResult: tripwire
+              ? { ...(state.lastStepResult ?? { warnings: [] }), reason: 'tripwire' as const, isContinued: false }
+              : state.lastStepResult || {
+                  reason: 'stop',
+                  warnings: [],
+                  isContinued: false,
+                },
             output: {
               text: finalText,
               usage: state.accumulatedUsage,

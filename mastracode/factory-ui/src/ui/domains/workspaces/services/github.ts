@@ -237,7 +237,7 @@ interface ProjectRepositoryPayload {
   id: string;
   branch: string | null;
   sandboxWorkdir: string;
-  repository: { slug: string; defaultBranch: string } | null;
+  repository: { externalId: string; slug: string; defaultBranch: string } | null;
 }
 
 /** A source-control connection (with linked repos) from the Factory project routes. */
@@ -252,6 +252,8 @@ interface ProjectConnectionPayload {
 export interface LinkedRepositoryPayload {
   projectRepositoryId: string;
   provider?: 'github' | 'gitlab';
+  /** Provider repository/project id; stable across renames. */
+  externalId?: string;
   slug: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
@@ -272,6 +274,7 @@ function toLinkedRepositoryPayload(
   return {
     projectRepositoryId: link.id,
     provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
+    externalId: link.repository?.externalId,
     slug: link.repository?.slug ?? project.name,
     gitBranch: link.branch ?? link.repository?.defaultBranch,
     sandboxWorkdir: link.sandboxWorkdir,

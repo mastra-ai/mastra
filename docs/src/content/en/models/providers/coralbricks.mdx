@@ -7,7 +7,7 @@ description: "Browse CoralBricks model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/coralbricks.svg" alt="CoralBricks logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoralBricks
 
-Access 5 CoralBricks models through Mastra's model router. Authentication is handled automatically using the `CORAL_API_KEY` environment variable.
+Access 4 CoralBricks models through Mastra's model router. Authentication is handled automatically using the `CORAL_API_KEY` environment variable.
 
 Learn more in the [CoralBricks documentation](https://www.coralbricks.ai/docs).
 
@@ -80,18 +80,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.12,
     "outputCost": 4.4
-  },
-  {
-    "model": "coralbricks/glm-5.3-flash-fp4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
-    "inputCost": 0.15,
-    "outputCost": 0.5
   },
   {
     "model": "coralbricks/glm-5.3-fp4",

@@ -20,7 +20,7 @@ import { ClassifierProcessor } from '@mastra/core/processors'
 
 const safety = new Classifier({
   id: 'safety',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     unsafe: {
       type: 'boolean',
@@ -98,7 +98,7 @@ inputProcessors: [
             name: 'errorStrategy',
             type: "'warn' | 'strict'",
             description:
-              "How to handle evaluation model failures. 'strict' is fail-closed: it aborts the request, including during streaming. 'warn' is fail-open: it logs the failure and lets the content through. Classifier configuration errors always throw.",
+              "How to handle decision model failures. 'strict' is fail-closed: it aborts the request, including during streaming. 'warn' is fail-open: it logs the failure and lets the content through. Classifier configuration errors always throw.",
             isOptional: true,
             default: "'strict'",
           },
@@ -127,7 +127,7 @@ inputProcessors: [
           {
             name: 'providerOptions',
             type: 'SharedV4ProviderOptions',
-            description: 'Provider-specific options forwarded to the evaluation model.',
+            description: 'Provider-specific options forwarded to the decision model.',
             isOptional: true,
           },
         ],
@@ -159,7 +159,7 @@ import { ClassifierProcessor } from '@mastra/core/processors'
 
 const topic = new Classifier({
   id: 'topic',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     topic: {
       type: 'choice',
@@ -201,7 +201,7 @@ import { ClassifierProcessor } from '@mastra/core/processors'
 
 const quality = new Classifier({
   id: 'quality',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     quality: {
       type: 'score',
@@ -240,7 +240,7 @@ export const mastra = new Mastra({
   classifiers: {
     safety: new Classifier({
       id: 'safety',
-      model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+      model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
       questions: {/* ... */},
     }),
   },

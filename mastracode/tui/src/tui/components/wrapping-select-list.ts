@@ -16,6 +16,14 @@ const CHECKBOX_CHECKED = '[x] ';
 const CHECKBOX_UNCHECKED = '[ ] ';
 const CHECKBOX_WIDTH = 4;
 
+/** Styling for `card` lists; prefixes must stay 2 columns (cursor) and 4 columns (checkbox) wide. */
+export interface CardListStyle {
+  cursor: string;
+  checked: string;
+  unchecked: string;
+  selectedLabel: (label: string) => string;
+}
+
 export class WrappingSelectList implements Component {
   private items: SelectItem[];
   private filteredItems: SelectItem[];
@@ -33,12 +41,25 @@ export class WrappingSelectList implements Component {
   /** Called when the user confirms a multi-select list with Enter; receives all checked items in display order. */
   onConfirmMulti?: (items: SelectItem[]) => void;
 
-  constructor(items: SelectItem[], maxVisible: number, theme: SelectListTheme, multiSelect = false) {
+  /**
+   * `card` style (inline prompts): an accent ❯ cursor and a bold label instead of a highlighted row,
+   * and ●/○ instead of [x]/[ ] in multi-select mode.
+   */
+  private cardStyle: CardListStyle | undefined;
+
+  constructor(
+    items: SelectItem[],
+    maxVisible: number,
+    theme: SelectListTheme,
+    multiSelect = false,
+    cardStyle?: CardListStyle,
+  ) {
     this.items = items;
     this.filteredItems = items;
     this.maxVisible = maxVisible;
     this.theme = theme;
     this.multiSelect = multiSelect;
+    this.cardStyle = cardStyle;
   }
 
   setFilter(filter: string): void {
@@ -129,6 +150,17 @@ export class WrappingSelectList implements Component {
         ? CHECKBOX_CHECKED
         : CHECKBOX_UNCHECKED
       : '';
+
+    if (this.cardStyle) {
+      const style = this.cardStyle;
+      const box = this.multiSelect ? (this.checkedValues.has(item.value) ? style.checked : style.unchecked) : '';
+      const rows = wrapped.length === 0 ? [''] : wrapped;
+      return rows.map((chunk, index) => {
+        if (index > 0) return `${' '.repeat(PREFIX_WIDTH + (this.multiSelect ? CHECKBOX_WIDTH : 0))}${chunk}`;
+        const cursor = isSelected ? style.cursor : UNSELECTED_PREFIX;
+        return `${cursor}${box}${isSelected ? style.selectedLabel(chunk) : chunk}`;
+      });
+    }
 
     if (wrapped.length === 0) {
       const prefix = isSelected ? SELECTED_PREFIX : UNSELECTED_PREFIX;

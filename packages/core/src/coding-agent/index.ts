@@ -58,7 +58,8 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * - `errorProcessors` is passed through when provided; otherwise it defaults to
  *   a {@link CyberRefusalHandler} followed by
  *   {@link defaultStabilityErrorProcessors} — provider-history compatibility,
- *   then prefill-error recovery, then catch-all stream retries with specialized
+ *   then prefill-error recovery, then unsupported-file recovery, then catch-all
+ *   stream retries with specialized
  *   ECONNRESET/bad-request policies. The repairs run before the retry because
  *   error processors short-circuit on the first `retry: true`, and the retry's
  *   bad-request matcher claims the same `400`s they repair. Unlike a bare

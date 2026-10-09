@@ -1610,8 +1610,10 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       if (!stepMessageId) return result;
 
       const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
       if (result.some(message => message.id === stepMessageId)) return result;
+      if (!lastMessage || lastMessage.role !== 'assistant') {
+        return appendAssistantMessage(result, stepMessageId, [], metadata);
+      }
 
       // Re-key the pending message in place while it only holds `data-*` parts
       // (they belong to the run, not a persisted row); once model content has

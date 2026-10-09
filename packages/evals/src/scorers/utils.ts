@@ -1008,7 +1008,7 @@ export type ToolResultInfo = {
  *
  * @example
  * ```ts
- * import { extractToolResults } from '@mastra/evals/scorers';
+ * import { extractToolResults } from '@mastra/evals/scorers/utils';
  * import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
  *
  * const scorer = createHallucinationScorer({

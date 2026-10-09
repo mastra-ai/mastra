@@ -10,10 +10,13 @@
 import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import type { Processor } from '../../../processors';
 import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -193,6 +196,10 @@ describe('DurableAgent processOutputStep abort', () => {
     expect(chunks.at(-1)?.type).toBe('finish');
     expect(await output.finishReason).toBe('tripwire');
     expect(output.tripwire).toMatchObject({ reason: 'Contains bad words', processorId: 'no-swearing' });
+    // The rejected reply is not returned as text (#26048).
+    expect(await output.text).toBe('');
+    const full = await output.getFullOutput();
+    expect(full.text).toBe('');
   });
 
   it('abort with retry: true stops as tripwire once maxProcessorRetries is used up', async () => {
@@ -213,5 +220,88 @@ describe('DurableAgent processOutputStep abort', () => {
     expect(chunks.at(-1)?.type).toBe('finish');
     expect(await output.finishReason).toBe('tripwire');
     expect(output.tripwire).toMatchObject({ reason: 'Still not good enough', processorId: 'quality-check' });
+    // The rejected reply is not returned as text (#26048).
+    expect(await output.text).toBe('');
+    const full = await output.getFullOutput();
+    expect(full.text).toBe('');
+  });
+
+  it('a run-ending rejection keeps an accepted tool step from earlier in the run (#26048)', async () => {
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        calls++;
+        const parts =
+          calls === 1
+            ? [
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"q":"x"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+                },
+              ]
+            : [
+                { type: 'text-start', id: 't' },
+                { type: 'text-delta', id: 't', delta: 'REJECTED reply' },
+                { type: 'text-end', id: 't' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              ];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `resp-${calls}`, modelId: 'mock', timestamp: new Date(0) },
+            ...parts,
+          ] as any),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const processor: Processor = {
+      id: 'reject-text',
+      processOutputStep: async ({ text, abort, messageList }) => {
+        if (text?.includes('REJECTED')) abort('Rejected', { retry: false });
+        return messageList;
+      },
+    };
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+    const agent = new Agent({
+      id: 'output-step-agent',
+      name: 'Output Step Agent',
+      instructions: 'You are a helpful assistant.',
+      model: model as LanguageModelV2,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({ q: z.string() }),
+          execute: async () => ({ answer: 'TOOL_RESULT_VALUE' }),
+        }),
+      },
+      outputProcessors: [processor],
+      memory,
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    new Mastra({
+      agents: { 'output-step-agent': durableAgent as any },
+      logger: false,
+      storage,
+      pubsub,
+    });
+
+    const { output } = await durableAgent.stream('Hello', { memory: { thread: 't-26048', resource: 'r-26048' } });
+    await drain(output.fullStream);
+    const full = await output.getFullOutput();
+
+    expect(calls).toBe(2);
+    expect(await output.finishReason).toBe('tripwire');
+    expect(full.text).toBe('');
+    const { messages } = await memory.recall({ threadId: 't-26048', resourceId: 'r-26048' });
+    expect(messages.some(m => m.role === 'user')).toBe(true);
+    const saved = JSON.stringify(messages);
+    expect(saved).toContain('TOOL_RESULT_VALUE');
+    expect(saved).not.toContain('REJECTED reply');
   });
 });

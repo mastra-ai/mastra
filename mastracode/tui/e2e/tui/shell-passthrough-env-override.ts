@@ -57,7 +57,7 @@ export const shellPassthroughEnvOverrideScenario: McE2eScenario = {
     terminal.submit("!printf 'MC_ENV_OVERRIDE_COMMAND=ok\\n'");
     await runtime.waitForScreenText(/MC_ENV_OVERRIDE_SHELL arg0=-c command=printf/i, terminal, 8_000);
     await runtime.waitForScreenText(/MC_ENV_OVERRIDE_COMMAND=ok/i, terminal, 8_000);
-    await runtime.waitForScreenText(/✓/i, terminal, 8_000);
+    await runtime.waitForScreenText(/• \$ printf [^\n]* \d+(?:ms|\.\ds|m\d+s)\b/, terminal, 8_000);
     expect(terminal.serialize().view).not.toMatch(/MC_SETTINGS_SHOULD_NOT_RUN/i);
     runtime.printScreen('after env override shell passthrough', terminal);
 

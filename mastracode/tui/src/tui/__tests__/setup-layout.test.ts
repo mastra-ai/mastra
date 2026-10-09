@@ -1,8 +1,8 @@
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
-const { renderBannerMock, updateStatusLineMock } = vi.hoisted(() => ({
-  renderBannerMock: vi.fn(),
+const { headerOptionsMock, updateStatusLineMock } = vi.hoisted(() => ({
+  headerOptionsMock: vi.fn(),
   updateStatusLineMock: vi.fn(),
 }));
 
@@ -27,6 +27,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
     type = 'spacer';
     constructor(public height: number) {}
   },
+  visibleWidth: (value: string) => value.length,
   Text: class {
     type = 'text';
     constructor(
@@ -38,7 +39,16 @@ vi.mock('@earendil-works/pi-tui', () => ({
 }));
 
 vi.mock('../components/banner.js', () => ({
-  renderBanner: renderBannerMock,
+  HeaderComponent: class {
+    type = 'header';
+    constructor(public options: unknown) {
+      headerOptionsMock(options);
+    }
+  },
+}));
+
+vi.mock('../components/surface.js', () => ({
+  keyHint: (key: string, description: string) => `[${key}] ${description}`,
 }));
 
 vi.mock('../components/task-progress.js', () => ({
@@ -62,12 +72,12 @@ vi.mock('../model-packs/apply.js', () => ({
   switchModeWithPack: vi.fn(),
 }));
 
-import { renderBanner } from '../components/banner.js';
 import { buildLayout, subscribeToAgentController } from '../setup.js';
 import { updateStatusLine } from '../status-line.js';
 
 function textOf(child: unknown) {
-  return stripAnsi((child as { text?: string }).text ?? '');
+  const c = child as { text?: string; render?: (width: number) => string[] };
+  return stripAnsi(c.text ?? c.render?.(200)[0] ?? '');
 }
 
 function createDeferred<T>() {
@@ -108,7 +118,7 @@ function createState(modeCount = 2) {
       globalBackgroundNoticeContainer: { type: 'global-background-notice' },
       editorContainer: { type: 'editor-container', addChild: vi.fn(child => editorChildren.push(child)) },
       editor,
-      footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)) },
+      footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)), render: vi.fn(() => []) },
       quietMode: true,
     } as any,
     uiChildren,
@@ -119,29 +129,29 @@ function createState(modeCount = 2) {
 }
 
 describe('buildLayout startup header', () => {
-  it('renders banner, project frontmatter, startup hints, containers, footer, and editor focus in order', () => {
-    renderBannerMock.mockReturnValue('BANNER v1.2.3');
+  it('renders the header, startup hints, containers, Working row, footer, and editor focus in order', () => {
     const refreshModelAuthStatus = vi.fn();
     const { state, uiChildren, editorChildren, footerChildren, editor } = createState();
 
     buildLayout(state, refreshModelAuthStatus);
 
-    expect(renderBanner).toHaveBeenCalledWith('1.2.3', 'Acme Code');
-    expect(textOf(uiChildren[1])).toBe('BANNER v1.2.3');
-    const projectDetails = textOf(uiChildren[2]);
-    expect(projectDetails).toBe(
-      ['Project: demo-project', 'Resource ID: resource-123', 'Branch: feature/banner', 'Worktree of: /repos/main'].join(
-        '\n',
-      ),
-    );
-    expect(projectDetails).not.toContain('User:');
-    expect(projectDetails).not.toContain('@');
-    expect(textOf(uiChildren[4])).toBe('  ⇧+Tab cycle modes · /help info & shortcuts');
-    expect(uiChildren[6]).toBe(state.chatContainer);
-    expect(uiChildren[7]).toBe(state.taskProgress);
-    expect(uiChildren[8]).toBe(state.globalBackgroundNoticeContainer);
-    expect(uiChildren[9]).toBe(state.editorContainer);
-    expect(uiChildren[10]).toBe(state.footer);
+    expect(headerOptionsMock).toHaveBeenCalledWith({
+      version: '1.2.3',
+      appName: 'Acme Code',
+      info: [
+        'Project: demo-project',
+        'Resource ID: resource-123',
+        'Branch: feature/banner',
+        'Worktree of: /repos/main',
+      ],
+    });
+    expect((uiChildren[1] as { type: string }).type).toBe('header');
+    expect(textOf(uiChildren[3])).toBe('  [shift+tab] cycle modes · [/help] info & shortcuts');
+    expect(uiChildren[5]).toBe(state.chatContainer);
+    expect(uiChildren[6]).toBe(state.taskProgress);
+    expect(uiChildren[7]).toBe(state.globalBackgroundNoticeContainer);
+    expect(uiChildren[8]).toBe(state.editorContainer);
+    expect(uiChildren[9]).toBe(state.footer);
     expect(state.taskProgress.quietMode).toBe(true);
     expect(editorChildren).toEqual([state.idleCounter, editor]);
     expect(footerChildren).toEqual([state.statusLine, state.memoryStatusLine]);
@@ -151,7 +161,6 @@ describe('buildLayout startup header', () => {
   });
 
   it('omits the background notice container when background tools are disabled', () => {
-    renderBannerMock.mockReturnValue('BANNER v1.2.3');
     const { state, uiChildren } = createState();
     state.options.backgroundToolsEnabled = false;
 
@@ -161,12 +170,33 @@ describe('buildLayout startup header', () => {
   });
 
   it('omits the mode-cycle startup hint when there is only one mode', () => {
-    renderBannerMock.mockReturnValue('BANNER v1.2.3');
     const { state, uiChildren } = createState(1);
 
     buildLayout(state, vi.fn());
 
-    expect(textOf(uiChildren[4])).toBe('  /help info & shortcuts');
+    expect(textOf(uiChildren[3])).toBe('  [/help] info & shortcuts');
+  });
+
+  it('drops startup hints that do not fit instead of wrapping them', () => {
+    const { state, uiChildren } = createState();
+
+    buildLayout(state, vi.fn());
+
+    const hints = uiChildren[3] as { render(width: number): string[] };
+    expect(hints.render(40)).toEqual(['  [shift+tab] cycle modes']);
+    expect(hints.render(10)).toEqual([]);
+  });
+
+  it('lays the status line out again when the footer renders at a new width', () => {
+    const { state } = createState();
+    buildLayout(state, vi.fn());
+    updateStatusLineMock.mockClear();
+
+    state.footer.render(80);
+    state.footer.render(80);
+    state.footer.render(50);
+
+    expect(updateStatusLineMock).toHaveBeenCalledTimes(2);
   });
 
   it('serializes controller event handling so abort cleanup cannot interleave with stream updates', async () => {

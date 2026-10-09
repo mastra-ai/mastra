@@ -40,6 +40,8 @@ overrides:
   'uuid@>=8.0.0 <11.1.1': 11.1.1
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'raw-body@<4.0.0': 4.0.0
+  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
+  'http-cache-semantics@<4.3.0': 4.3.0
 allowBuilds:
   esbuild: true
   snyk: false

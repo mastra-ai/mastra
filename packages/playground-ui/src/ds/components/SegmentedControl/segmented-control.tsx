@@ -41,6 +41,9 @@ export type SegmentedControlProps<T extends string = string> = RadioGroupPassthr
  * one tab stop, arrow keys move the selection. The selected item is marked by a thumb that
  * slides between items, so items keep their natural width.
  *
+ * Use it to set a value (a policy, a theme, on/off), where the layout around it stays the same.
+ * When the choice swaps what is shown below it (Form vs JSON, Overview vs Playground), use `Tabs`.
+ *
  * ```tsx
  * <SegmentedControl aria-label="Permission" value={policy} onValueChange={setPolicy}>
  *   <SegmentedControlItem value="allow">Allow</SegmentedControlItem>

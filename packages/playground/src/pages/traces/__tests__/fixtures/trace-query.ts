@@ -145,3 +145,43 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     feedback: false,
   },
 };
+
+/** Store runs trace queries but cannot filter on the root span duration. */
+export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryRootDuration: false,
+  },
+};
+
+/** Store declares `trace-query` but not `trace-query-discovery` (or the core lacks the discovery planners). */
+export const traceQueryWithoutDiscoveryCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryDiscovery: false,
+  },
+};
+
+/** Canonical trace-scope descriptors as returned by `/traces/query/fields` (subset). */
+export const traceQueryFieldsWithTags: GetTraceQueryFieldsResponse = {
+  canonicalFields: [
+    {
+      path: 'tags',
+      valueKind: 'array',
+      operators: ['includes', 'notIncludes', 'exists', 'notExists'],
+      valueSuggestions: true,
+    },
+  ],
+  observedFields: [],
+  observedFieldsTruncated: false,
+};
+
+export const traceQueryTagValues: GetTraceQueryValuesResponse = {
+  values: [
+    { value: 'manual-review', count: 3 },
+    { value: 'production', count: 7 },
+  ],
+  valuesTruncated: false,
+};

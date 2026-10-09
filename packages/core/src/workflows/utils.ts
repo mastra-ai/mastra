@@ -629,7 +629,9 @@ export const createRestartExecutionParams = ({
     activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
     activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
     isPreFirstStepRestart,
   };

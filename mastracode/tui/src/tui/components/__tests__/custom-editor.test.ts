@@ -57,6 +57,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   return {
     Editor: MockEditor,
     matchesKey: mocks.matchesKey,
+    visibleWidth: (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '').length,
   };
 });
 
@@ -76,6 +77,9 @@ vi.mock('chalk', () => ({
 }));
 
 import { CustomEditor } from '../custom-editor.js';
+
+/** The input's background fades per column, so background SGRs land between characters. */
+const noBg = (s: string) => s.replace(/\x1b\[48;[0-9;]*m/g, '');
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -286,11 +290,11 @@ describe('CustomEditor image paste handling', () => {
 
       const output = editor.render(20);
 
-      expect(mocks.superRender).toHaveBeenCalledWith(14, text.slice(1), text.length - 1);
+      expect(mocks.superRender).toHaveBeenCalledWith(16, text.slice(1), text.length - 1);
       expect(editor.getText()).toBe(text);
       expect(output).toHaveLength(3);
       expect(stripAnsi(output[1]!)).toHaveLength(20);
-      expect(stripAnsi(output[1]!)).toBe(`│ ${marker} 1234567890123  │`);
+      expect(stripAnsi(output[1]!)).toBe(` ${marker} ${'1234567890123'.padEnd(17)}`);
     });
 
     it.each(['/', '@', '!'])('accounts for a cursor-highlighted %s across explicit multiline input', marker => {
@@ -304,13 +308,13 @@ describe('CustomEditor image paste handling', () => {
       const output = editor.render(14);
       const contentRows = output.slice(1, -1).map(line => stripAnsi(line));
 
-      expect(mocks.superRender).toHaveBeenCalledWith(8, '1234567\n7654321', 0);
+      expect(mocks.superRender).toHaveBeenCalledWith(10, '1234567\n7654321', 0);
       expect(mocks.superRenderCursorLine).toHaveBeenCalledWith(-1);
-      expect(output[1]).toContain(`\x1b[7m${marker}\x1b[0m`);
+      expect(noBg(output[1]!)).toContain(`\x1b[7m${marker}\x1b[0m`);
       expect(editor.getText()).toBe(`${marker}1234567\n7654321`);
       expect(state).toMatchObject({ cursorLine: 0, cursorCol: 0 });
       expect(contentRows).toHaveLength(2);
-      expect(contentRows.every(line => line.length === 14 && line.endsWith('│'))).toBe(true);
+      expect(contentRows.every(line => line.length === 14)).toBe(true);
     });
 
     it('does not remove a content column from the ordinary prompt', () => {
@@ -320,12 +324,12 @@ describe('CustomEditor image paste handling', () => {
 
       const output = editor.render(20);
 
-      expect(mocks.superRender).toHaveBeenCalledWith(14, '1234567890123', 13);
-      expect(stripAnsi(output[1]!)).toBe('│ › 1234567890123  │');
+      expect(mocks.superRender).toHaveBeenCalledWith(16, '1234567890123', 13);
+      expect(stripAnsi(output[1]!)).toBe(` → ${'1234567890123'.padEnd(17)}`);
       expect(stripAnsi(output[1]!)).toHaveLength(20);
     });
 
-    it.each(['/', '@', '!'])('keeps multiline narrow rows and right borders aligned for %s', marker => {
+    it.each(['/', '@', '!'])('keeps multiline narrow rows aligned to the panel width for %s', marker => {
       const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
       editor.getModeColor = vi.fn(() => '#16c858');
       editor.setText(`${marker}12345678901234567890`);
@@ -333,140 +337,27 @@ describe('CustomEditor image paste handling', () => {
       const output = editor.render(14);
       const contentRows = output.slice(1, -1);
 
-      expect(mocks.superRender).toHaveBeenCalledWith(8, '12345678901234567890', 20);
+      expect(mocks.superRender).toHaveBeenCalledWith(10, '12345678901234567890', 20);
       expect(contentRows).toHaveLength(3);
-      expect(contentRows.every(line => stripAnsi(line).length === 14 && stripAnsi(line).endsWith('│'))).toBe(true);
-      expect(stripAnsi(contentRows[0]!)).toBe(`│ ${marker} 1234567  │`);
+      expect(contentRows.every(line => stripAnsi(line).length === 14)).toBe(true);
+      expect(stripAnsi(contentRows[0]!)).toBe(` ${marker} 123456789  `);
     });
   });
 
-  it('renders a chevron prompt when no animator is active', () => {
+  it('renders a static arrow prompt in the mode color', () => {
     const editor = new CustomEditor({} as any, {} as any);
     editor.getText = vi.fn(() => 'hello');
     editor.getModeColor = vi.fn(() => '#16c858');
 
-    const output = editor.render(20).join('\n');
-
-    expect(output).toContain('[rgb:22,200,88]›');
+    expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:98,246,157]→');
   });
 
-  it('fades the chevron out, fades the pulsing bullet in, then fades back to the chevron on exit', () => {
-    const editor = new CustomEditor({} as any, {} as any);
-    editor.getText = vi.fn(() => 'hello');
-    editor.getModeColor = vi.fn(() => '#16c858');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => true,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0.8,
-          getOffset: () => 0,
-        }) as any,
-    );
-    expect(editor.render(20).join('\n')).toContain('[rgb:13,120,53]›');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => true,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0.5,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const invisibleOutput = editor.render(20).join('\n');
-    expect(invisibleOutput).not.toContain('›');
-    expect(invisibleOutput).not.toContain('•');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => true,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0.2,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const transitionedOutput = editor.render(20).join('\n');
-    expect(transitionedOutput).toContain('[rgb:13,120,53]•');
-    expect(transitionedOutput).not.toContain('›');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => false,
-          getFadeProgress: () => 0,
-          getOffset: () => 0.5,
-        }) as any,
-    );
-    const pulsingOutput = editor.render(20).join('\n');
-    expect(pulsingOutput).toContain('[rgb:11,100,44]•');
-    expect(pulsingOutput).not.toContain('›');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => true,
-          getFadeProgress: () => 0.2,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const fadingOutDotOutput = editor.render(20).join('\n');
-    expect(fadingOutDotOutput).toContain('[rgb:13,120,53]•');
-    expect(fadingOutDotOutput).not.toContain('›');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => true,
-          getFadeProgress: () => 0.5,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const fadingOutGapOutput = editor.render(20).join('\n');
-    expect(fadingOutGapOutput).not.toContain('›');
-    expect(fadingOutGapOutput).not.toContain('•');
-
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          isFadingIn: () => false,
-          isFadingOut: () => true,
-          getFadeProgress: () => 0.8,
-          getOffset: () => 0,
-        }) as any,
-    );
-    const returnedChevronOutput = editor.render(20).join('\n');
-    expect(returnedChevronOutput).toContain('[rgb:13,120,53]›');
-    expect(returnedChevronOutput).not.toContain('•');
-  });
-
-  it('keeps slash prompts unanimated while showing the slash character', () => {
+  it('shows the slash character as the prompt for slash commands', () => {
     const editor = new CustomEditor({} as any, {} as any);
     editor.getText = vi.fn(() => '/help');
     editor.getModeColor = vi.fn(() => '#16c858');
-    editor.getPromptAnimator = vi.fn(
-      () =>
-        ({
-          isRunning: () => true,
-          getOffset: () => 0.75,
-        }) as any,
-    );
 
-    const output = editor.render(20).join('\n');
-
-    expect(output).toContain('[rgb:22,200,88]/');
+    expect(noBg(editor.render(20).join('\n'))).toContain('[rgb:98,246,157]/');
   });
 
   it('converts a pasted local image path into an image attachment', () => {
@@ -830,7 +721,7 @@ describe('CustomEditor voice push-to-talk', () => {
     mocks.superRender.mockImplementation(realisticLine);
 
     editor.insertVoiceTranscript('hello world');
-    const out = editor.render(40).join('\n');
+    const out = noBg(editor.render(40).join('\n'));
     // The dictated run is greyed...
     expect(out).toContain(`${greySeq}hello world`);
     // ...while the cursor highlight and trailing padding are left intact.
@@ -863,7 +754,7 @@ describe('CustomEditor voice push-to-talk', () => {
     editor.setVoiceListening(true);
     editor.replaceVoiceTranscript('😀hi');
     expect(text).toBe('hello world! 😀hi');
-    const lines = editor.render(14);
+    const lines = editor.render(14).map(noBg);
     editor.setVoiceListening(false);
     const typedLine = lines.find(l => stripAnsi(l).includes('hello world!'))!;
     expect(typedLine).not.toContain(greySeq);

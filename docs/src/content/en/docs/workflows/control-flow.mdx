@@ -302,7 +302,7 @@ import { z } from 'zod'
 
 const router = new Classifier({
   id: 'ticket-router',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     route: {
       type: 'choice',

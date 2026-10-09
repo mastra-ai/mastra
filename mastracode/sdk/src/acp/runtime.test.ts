@@ -33,6 +33,7 @@ function bootResult() {
     },
     githubSignals: { stopAllPolling: vi.fn() },
     stopPluginSignalProviders: vi.fn(),
+    releaseThreadClaims: vi.fn(),
     threadScheduler: { stop: vi.fn() },
     stopNotificationDispatch: vi.fn().mockResolvedValue(undefined),
     signalsPubSub: pubsub,
@@ -143,6 +144,7 @@ describe('ACP runtime factory', () => {
     const boot = bootResult();
     const dispatch = deferred();
     boot.stopNotificationDispatch.mockImplementationOnce(() => {
+      expect(boot.releaseThreadClaims).toHaveBeenCalledOnce();
       expect(boot.stopPluginSignalProviders).toHaveBeenCalledOnce();
       expect(boot.githubSignals.stopAllPolling).toHaveBeenCalledOnce();
       expect(boot.threadScheduler.stop).toHaveBeenCalledOnce();
@@ -166,6 +168,11 @@ describe('ACP runtime factory', () => {
     expect(boot.signalsPubSub.close).toHaveBeenCalledOnce();
     expect(boot.storage.close).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
+    // Claims go first, before any slow teardown, so a restarted process can claim right away.
+    const [releasedAt] = boot.releaseThreadClaims.mock.invocationCallOrder;
+    for (const step of [boot.session.abort, boot.stopPluginSignalProviders, boot.threadScheduler.stop]) {
+      expect(releasedAt).toBeLessThan(step.mock.invocationCallOrder[0]!);
+    }
   });
 
   it.each(['workers', 'MCP', 'intervals', 'thread lock'] as const)(

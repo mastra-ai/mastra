@@ -1,5 +1,12 @@
 {
   "attachment": ["standardcompute"],
   "temperature": ["standardcompute"],
-  "structuredOutput": ["standardcompute"]
+  "structuredOutput": ["standardcompute"],
+  "reasoning": {
+    "standardcompute": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

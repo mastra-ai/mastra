@@ -234,6 +234,14 @@ export const hubspotScenario: Scenario = {
     }
 
     // Search surfaces (name/subject filters hit our runId-tagged records).
+    if (tools['hubspot_search_contacts']) {
+      try {
+        await call('hubspot_search_contacts', { email: contactEmail });
+        steps.push(makeStep('search contacts', 'hubspot_search_contacts', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('search contacts', 'hubspot_search_contacts', 'fail', errorMessage(error)));
+      }
+    }
     if (tools['hubspot_search_companies']) {
       try {
         await call('hubspot_search_companies', { name: runId });

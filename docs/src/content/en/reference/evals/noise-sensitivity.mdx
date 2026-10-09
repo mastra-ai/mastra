@@ -415,7 +415,7 @@ describe('Agent Noise Resistance CI Tests', () => {
 This example shows an agent that completely resists misinformation in a test scenario:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createNoiseSensitivityScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -506,7 +506,7 @@ console.log(result)
 This example shows an agent that incorporates misinformation:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createNoiseSensitivityScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -551,7 +551,7 @@ console.log(result)
 Adjust scoring sensitivity for your specific use case:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 // Lenient scoring - more forgiving of minor issues
 const lenientScorer = createNoiseSensitivityScorerLLM({
@@ -600,7 +600,7 @@ const strictScorer = createNoiseSensitivityScorerLLM({
 Create detailed test suites to evaluate agent performance across noise categories in your CI pipeline:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const noiseTestCases = [
   {
@@ -669,7 +669,7 @@ async function evaluateNoiseResistance(testCases) {
 Use in your CI pipeline to compare noise resistance across different models before deployment:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 async function compareModelRobustness() {
   const models = [
@@ -722,7 +722,7 @@ function getGrade(score) {
 Include noise sensitivity tests in your security test suite to validate prompt injection resistance:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
+import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createNoiseSensitivityScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',

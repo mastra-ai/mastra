@@ -20,7 +20,7 @@ function readPreviewGeometry(terminal: McE2eTerminal): PreviewGeometry {
     detailRows += 1;
   }
 
-  const editorRow = rows.findLastIndex(row => /^╭─+╮$/.test(row));
+  const editorRow = rows.findLastIndex(row => /^\s*▄+\s*$/.test(row));
   if (editorRow < 0) throw new Error('Expected editor border while sampling preview geometry');
 
   return { detailRows, editorRow };

@@ -171,7 +171,6 @@ const sidebars = {
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
         { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
-
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
@@ -201,6 +200,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'connect/channels', label: 'channels()' },
+        { type: 'doc', id: 'connect/credential', label: 'credential()' },
+        { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
+        { type: 'doc', id: 'connect/tools', label: 'tools()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core',
       collapsed: true,
       items: [
@@ -225,7 +235,6 @@ const sidebars = {
         { type: 'doc', id: 'core/getScorerById', label: '.getScorerById()' },
         { type: 'doc', id: 'core/getServer', label: '.getServer()' },
         { type: 'doc', id: 'core/getStorage', label: '.getStorage()' },
-
         { type: 'doc', id: 'core/getTool', label: '.getTool()' },
         { type: 'doc', id: 'core/getToolById', label: '.getToolById()' },
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
@@ -591,6 +600,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/cyber-refusal-handler', label: 'CyberRefusalHandler' },
+        { type: 'doc', id: 'processors/file-upload-processor', label: 'FileUploadProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
@@ -624,6 +634,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
         { type: 'doc', id: 'processors/unicode-normalizer', label: 'UnicodeNormalizer' },
+        { type: 'doc', id: 'processors/unsupported-file-handler', label: 'UnsupportedFileHandler' },
         { type: 'doc', id: 'processors/working-memory-processor', label: 'WorkingMemory' },
       ],
     },

@@ -849,6 +849,55 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       });
     });
 
+    it('should record workflow state together with the step result', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow results with state test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: { __state: { counter: 0 } } } as any,
+      });
+
+      const stepResult = {
+        status: 'success' as const,
+        output: { data: 'test' },
+        payload: {},
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      };
+
+      const returnedContext = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: stepResult,
+        requestContext: {},
+        state: { counter: 1 },
+      });
+      expect(returnedContext).toEqual({ 'step-1': stepResult, __state: { counter: 1 } });
+
+      // Omitting state leaves the recorded state untouched.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-2',
+        result: stepResult,
+        requestContext: {},
+      });
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(finalSnapshot?.context).toEqual({
+        'step-1': stepResult,
+        'step-2': stepResult,
+        __state: { counter: 1 },
+      });
+    });
+
     it('should update workflow state sequentially', async () => {
       if (!supportsConcurrentUpdates) {
         console.log('Skipping workflow state updates sequentially test');

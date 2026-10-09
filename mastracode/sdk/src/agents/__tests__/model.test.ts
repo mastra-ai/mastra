@@ -846,6 +846,44 @@ describe('resolveModel', () => {
         'x-resource-id': 'resource-456',
       });
     });
+
+    function tenantRequest(allowsDeploymentCredentials?: (provider: string) => boolean) {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        allowsDeploymentCredentials,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      return requestContext;
+    }
+
+    it('refuses Bedrock for a signed-in Factory tenant unless the deployment opted in', () => {
+      const requestContext = tenantRequest();
+
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        ProviderAuthRequiredError,
+      );
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        'Amazon Bedrock is not enabled for this Factory deployment.',
+      );
+      expect(createAmazonBedrock).not.toHaveBeenCalled();
+    });
+
+    it('resolves Bedrock for a signed-in Factory tenant when the deployment opted in', () => {
+      const requestContext = tenantRequest(provider => provider === 'amazon-bedrock');
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext }) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
+    });
   });
 
   describe('mastra gateway enabled (gateway API key stored)', () => {

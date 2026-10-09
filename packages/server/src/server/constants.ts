@@ -63,6 +63,9 @@ const RESERVED_CONTEXT_KEYS = new Set([
   // Delegation stores a live memory instance here. A body-supplied value would
   // be handed to the agent as its memory and throw on the first memory call.
   MASTRA_INHERITED_MEMORY_KEY,
+  // Factory stores the authoritative per-caller OM settings result here before
+  // model-driven memory processors run. Client input must not spoof that result.
+  'mastra__factoryMemorySettings',
   // Tenant scope must be established server-side, never self-asserted by a
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.

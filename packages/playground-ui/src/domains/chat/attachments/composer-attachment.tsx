@@ -1,50 +1,204 @@
-import { X } from 'lucide-react';
+import { Ellipsis, Eye, Pencil, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ComposerAttachmentContext } from './composer-attachment-context';
-import { Icon } from '@/ds/icons/Icon';
+import { Button } from '@/ds/components/Button/Button';
+import { ContextMenu } from '@/ds/components/ContextMenu/context-menu';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/utils/cn';
+
+// Dark attachments need a fill above the muted composer. Light attachments keep
+// the white card material and use the shared rim and shadow for elevation.
+// Both stay opaque so the sleeve controls cannot show through the cover.
+const attachmentSurfaceStyle = cn(raisedSurfaceStyle, 'dark:bg-linear-to-b dark:from-fill dark:to-fill');
 
 export interface ComposerAttachmentProps {
   name: string;
   children: ReactNode;
   onRemove: () => void;
+  /** Optional application-owned editor, available in the sleeve and context menu. */
+  onEdit?: () => void;
+  /** Explicitly enables the context-menu preview action. Applications own preview state or navigation. */
+  onPreview?: () => void;
   /** Inline entries allow a little more width for long filenames. */
   variant?: 'thumbnail' | 'inline';
 }
 
-export function ComposerAttachment({ name, children, onRemove, variant = 'thumbnail' }: ComposerAttachmentProps) {
+export function ComposerAttachment({
+  name,
+  children,
+  onRemove,
+  onEdit,
+  onPreview,
+  variant = 'thumbnail',
+}: ComposerAttachmentProps) {
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const focusTargetRef = useRef<HTMLElement | undefined>(undefined);
+  const menuContentRef = useRef<HTMLDivElement>(null);
+  const actionSelected = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement>();
+
+  function openMenu(anchor?: HTMLElement) {
+    const focused = triggerRef.current?.ownerDocument.activeElement;
+    // Pointer menus keep their cursor position while remembering keyboard focus.
+    focusTargetRef.current = anchor;
+    if (!anchor && focused instanceof HTMLElement && triggerRef.current?.contains(focused)) {
+      focusTargetRef.current = focused;
+    }
+    actionSelected.current = false;
+    setMenuAnchor(anchor);
+    setMenuOpen(true);
+  }
+
+  function runMenuAction(action: () => void) {
+    actionSelected.current = true;
+    setMenuOpen(false);
+    action();
+    // The menu's focus trap may remain until its exit transition completes.
+    // Remember a synchronous application focus change across that teardown.
+    focusTargetRef.current = focusOutsideMenu() ?? focusTargetRef.current;
+  }
+
+  function focusOutsideMenu() {
+    const focused = triggerRef.current?.ownerDocument.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      focused !== focused.ownerDocument.body &&
+      !menuContentRef.current?.contains(focused)
+    ) {
+      return focused;
+    }
+  }
+
+  function returnFocus() {
+    // Preserve focus moved by the application (for example into an editor).
+    // Otherwise, an inline action still needs to return focus to its opener.
+    if (actionSelected.current && focusOutsideMenu()) return false;
+    if (focusTargetRef.current?.isConnected) return focusTargetRef.current;
+    return triggerRef.current;
+  }
+
   return (
-    <div
-      className={cn(
-        raisedSurfaceStyle,
-        surfaceStateLayerStyle,
-        'group/attachment relative flex h-14 min-w-24 shrink-0 items-center overflow-hidden rounded-(--attachment-radius) [--attachment-radius:var(--radius-xl)]',
-        variant === 'inline' ? 'max-w-56' : 'max-w-48',
-      )}
-      title={name}
+    <ContextMenu
+      open={menuOpen}
+      onOpenChange={open => {
+        if (open) openMenu();
+        else setMenuOpen(false);
+      }}
     >
-      <div className="flex h-full min-w-0 flex-1 items-center justify-center rounded-[inherit] pr-9 pointer-coarse:pr-12">
-        <ComposerAttachmentContext.Provider value={name}>{children}</ComposerAttachmentContext.Provider>
-      </div>
-      <button
-        type="button"
-        aria-label={`Remove ${name}`}
-        title={`Remove ${name}`}
-        onClick={onRemove}
+      <ContextMenu.Trigger
+        ref={triggerRef}
+        data-slot="composer-attachment"
+        title={name}
         className={cn(
-          'absolute top-0 right-0 z-10 flex size-7 cursor-pointer items-center justify-center rounded-tr-[inherit] rounded-bl-lg bg-fill-subtle text-muted-foreground hover:bg-fill hover:text-foreground',
-          // Follow actual hover state so a secondary mouse can reveal the tab too.
-          'opacity-0 group-focus-within/attachment:opacity-100 group-[:hover]/attachment:opacity-100 focus-visible:opacity-100 pointer-coarse:size-11 pointer-coarse:opacity-100',
-          'motion-safe:transition-opacity motion-safe:duration-fast',
-          focusRingInset,
+          attachmentSurfaceStyle,
+          'group/attachment relative h-17 shrink-0 rounded-(--attachment-radius) [--attachment-radius:var(--radius-xl)] [--attachment-thumbnail-size:--spacing(15)]',
+          // Concentric corners: the inner radius is the outer radius minus its inset.
+          '[--attachment-action-inset:--spacing(1)] [--attachment-action-radius:max(0px,calc(var(--attachment-radius)-var(--attachment-action-inset)))] [--attachment-action-width:--spacing(9)] [--attachment-sleeve-width:calc(var(--attachment-action-width)+2*var(--attachment-action-inset))]',
+          variant === 'inline' ? 'w-72' : 'w-66',
         )}
+        onClickCapture={event => {
+          // Releasing a long press must not also activate the underlying file.
+          if (menuOpen && !actionSelected.current) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onKeyDown={event => {
+          // Portalled preview dialogs also bubble through this React ancestor.
+          if (!(event.target instanceof HTMLElement) || !event.currentTarget.contains(event.target)) return;
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault();
+            openMenu(event.target);
+          }
+        }}
       >
-        <Icon size="sm" aria-hidden="true">
+        <div
+          data-slot="composer-attachment-cover"
+          className={cn(
+            attachmentSurfaceStyle,
+            surfaceStateLayerStyle,
+            'absolute inset-0 z-10 flex min-w-0 items-center overflow-hidden rounded-[inherit]',
+            'motion-safe:transition-[right,border-radius] motion-safe:duration-normal motion-safe:ease-out-custom',
+            'group-focus-within/attachment:right-(--attachment-sleeve-width) group-data-popup-open/attachment:right-(--attachment-sleeve-width) group-[:hover]/attachment:right-(--attachment-sleeve-width)',
+            // Tighten the facing edge so two large curves do not widen the visible gutter.
+            'group-focus-within/attachment:rounded-r-(--attachment-action-inset) group-data-popup-open/attachment:rounded-r-(--attachment-action-inset) group-[:hover]/attachment:rounded-r-(--attachment-action-inset)',
+            'max-sm:rounded-r-[inherit]! pointer-coarse:rounded-r-[inherit]!',
+            'max-sm:right-0! max-sm:pr-[calc(--spacing(11)+2*var(--attachment-action-inset))]',
+            'pointer-coarse:right-0! pointer-coarse:pr-[calc(--spacing(11)+2*var(--attachment-action-inset))]',
+          )}
+        >
+          <ComposerAttachmentContext.Provider value={name}>{children}</ComposerAttachmentContext.Provider>
+        </div>
+        <div
+          data-slot="composer-attachment-actions"
+          className={cn(
+            'absolute inset-y-(--attachment-action-inset) right-(--attachment-action-inset) flex w-(--attachment-action-width) flex-col gap-(--attachment-action-inset)',
+            'translate-x-2 opacity-0 motion-safe:transition-[translate,opacity] motion-safe:duration-normal motion-safe:ease-out-custom',
+            'group-[:hover]/attachment:translate-x-0 group-[:hover]/attachment:opacity-100',
+            'group-focus-within/attachment:translate-x-0 group-focus-within/attachment:opacity-100',
+            'group-data-popup-open/attachment:translate-x-0 group-data-popup-open/attachment:opacity-100',
+            'max-sm:hidden pointer-coarse:hidden',
+          )}
+        >
+          <Button
+            type="button"
+            variant="destructive-ghost"
+            size="icon-sm"
+            className="h-auto w-full flex-1 rounded-(--attachment-action-radius)"
+            onClick={onRemove}
+            aria-label={`Remove ${name}`}
+            title={`Remove ${name}`}
+          >
+            <X />
+          </Button>
+          {onEdit && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-auto w-full flex-1 rounded-(--attachment-action-radius)"
+              onClick={onEdit}
+              aria-label={`Edit ${name}`}
+              title={`Edit ${name}`}
+            >
+              <Pencil />
+            </Button>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute inset-y-(--attachment-action-inset) right-(--attachment-action-inset) z-20 hidden h-auto w-11 rounded-(--attachment-action-radius) max-sm:flex pointer-coarse:flex"
+          aria-label={`Actions for ${name}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={event => openMenu(event.currentTarget)}
+        >
+          <Ellipsis />
+        </Button>
+      </ContextMenu.Trigger>
+      <ContextMenu.Content ref={menuContentRef} anchor={menuAnchor} collisionPadding={8} finalFocus={returnFocus}>
+        {onPreview && (
+          <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onPreview)}>
+            <Eye />
+            <span>Preview</span>
+          </ContextMenu.Item>
+        )}
+        {onEdit && (
+          <ContextMenu.Item className="min-h-11" onSelect={() => runMenuAction(onEdit)}>
+            <Pencil />
+            <span>Edit</span>
+          </ContextMenu.Item>
+        )}
+        {(onPreview || onEdit) && <ContextMenu.Separator />}
+        <ContextMenu.Item className="min-h-11" variant="destructive" onSelect={() => runMenuAction(onRemove)}>
           <X />
-        </Icon>
-      </button>
-    </div>
+          <span>Remove</span>
+        </ContextMenu.Item>
+      </ContextMenu.Content>
+    </ContextMenu>
   );
 }

@@ -1,5 +1,25 @@
 {
   "attachment": ["subconscious/deepseek-v4.1-flash-marathon"],
   "temperature": ["subconscious/deepseek-v4.1-flash-marathon", "subconscious/glm-5.3-marathon"],
-  "structuredOutput": ["subconscious/deepseek-v4.1-flash-marathon", "subconscious/glm-5.3-marathon"]
+  "structuredOutput": ["subconscious/deepseek-v4.1-flash-marathon", "subconscious/glm-5.3-marathon"],
+  "reasoning": {
+    "subconscious/deepseek-v4.1-flash-marathon": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "subconscious/glm-5.3-marathon": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
 }

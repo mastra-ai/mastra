@@ -40,7 +40,7 @@ export async function runClassifierEntry<QUESTIONS extends ClassifierQuestions>(
   }
 
   const result = await (
-    classifier.evaluate as unknown as (options: {
+    classifier.decide as unknown as (options: {
       state: ClassifierState;
       abortSignal?: AbortSignal;
       maxRetries?: number;

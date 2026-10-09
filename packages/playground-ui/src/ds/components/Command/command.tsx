@@ -8,6 +8,7 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -175,6 +176,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
       <Search className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
+      {/* cmdk renders autocomplete="off" itself; a command search is never a credential field. */}
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
@@ -185,6 +187,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
           className,
         )}
         {...props}
+        {...passwordManagerOptOutProps}
       />
       {rightSlot && (
         <div data-slot="command-input-right-slot" className="ml-2 flex shrink-0 items-center text-muted-foreground">

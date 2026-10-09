@@ -449,14 +449,14 @@ describe('addUserMessage', () => {
 
     const notification = state.messageComponentsById.get('notification-quiet') as NotificationComponent;
     const rendered = notification.render(100).map(line => stripAnsi(line));
-    // Same bordered box: top, title, 2 message lines, bottom — no details row.
-    expect(rendered).toHaveLength(5);
-    expect(rendered[0]).toContain('╭');
-    expect(rendered[1]).toContain('notification from github');
+    // Same left-bar card: title and 2 message lines, no details row.
+    expect(rendered).toHaveLength(3);
+    expect(rendered.every(line => line.startsWith('▎'))).toBe(true);
+    expect(rendered[0]).toContain('notification from github');
     expect(rendered.join('\n')).not.toContain('high · ci-status');
-    expect(rendered.join('\n')).toContain('detail line 2…');
+    expect(rendered[1]).toContain('detail line 1');
+    expect(rendered[2]).toContain('detail line 2…');
     expect(rendered.join('\n')).not.toContain('detail line 3');
-    expect(rendered[4]).toContain('╰');
 
     const summary = state.messageComponentsById.get('notification-summary-quiet') as NotificationSummaryComponent;
     const summaryLines = summary.render(100).map(line => stripAnsi(line));
@@ -492,10 +492,12 @@ describe('addUserMessage', () => {
     const width = 60;
     const notification = state.messageComponentsById.get('notification-narrow') as NotificationComponent;
     const rendered = notification.render(width).map(line => stripAnsi(line));
-    expect(rendered).toHaveLength(4);
-    expect(rendered[2]).toContain('…');
-    expect(rendered[2]).toContain('x'.repeat(55));
-    expect(rendered[2]).not.toContain('x'.repeat(56));
+    // Title row and one message row on the left-bar card.
+    expect(rendered).toHaveLength(2);
+    expect(rendered[1]).toMatch(/^▎ x+…$/);
+    // Content width is width - 2 (bar + space), so the ellipsis replaces the last column.
+    expect(rendered[1]).toContain('x'.repeat(width - 3));
+    expect(rendered[1]).not.toContain('x'.repeat(width - 2));
     for (const line of rendered) {
       expect(visibleWidth(line)).toBeLessThanOrEqual(width);
     }
@@ -1027,7 +1029,7 @@ describe('addUserMessage', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('steer · ');
   });
 
   it('renders schedule fires as a system entry with a compact header, even when delivered while active', () => {
@@ -1104,7 +1106,7 @@ describe('addUserMessage', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('steer · ');
   });
 
   it('replaces a pending signal with the echoed user message once the stream is settled', () => {
@@ -1214,7 +1216,7 @@ describe('renderExistingMessages signals', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('steer · ');
     expect(rendered).toContain('continue from history');
     expect(rendered).not.toContain('stale preview');
   });
@@ -1497,7 +1499,9 @@ describe('renderExistingMessages subagents', () => {
     } as unknown as TUIState['session'];
     await renderExistingMessages(state);
     expect(state.pendingSubagents.has('plugin-call')).toBe(enabled === true);
-    expect(state.chatContainer.render(120).join('\n').includes('background · visible-demo-123')).toBe(enabled === true);
+    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
   });
 
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {

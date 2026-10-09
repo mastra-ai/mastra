@@ -424,7 +424,7 @@ async function askModifiedBuiltinPackAction(
 async function askCustomPackEditTarget(
   ctx: SlashCommandContext,
   pack: ModePack,
-): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save' | null> {
+): Promise<'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-auto' | 'memory-clear' | 'save' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', `Edit custom pack: ${pack.name}`)), 0, 0));
@@ -438,14 +438,19 @@ async function askCustomPackEditTarget(
       {
         value: 'memory',
         label: `  ${chalk.hex(mastra.pink)('memory')} → ${
-          pack.models.memory
-            ? theme.fg('text', pack.models.memory)
-            : theme.fg('dim', 'not set (uses standalone OM config)')
+          pack.models.memory === 'auto'
+            ? theme.fg('text', 'Auto')
+            : pack.models.memory
+              ? theme.fg('text', pack.models.memory)
+              : theme.fg('dim', 'not set (uses /om settings)')
         }`,
       },
     ];
+    if (pack.models.memory !== 'auto') {
+      items.push({ value: 'memory-auto', label: `  ${chalk.hex(mastra.pink)('Use Auto memory model')}` });
+    }
     if (pack.models.memory) {
-      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model')}` });
+      items.push({ value: 'memory-clear', label: `  ${theme.fg('warning', 'Clear memory model (use /om settings)')}` });
     }
     items.push({ value: 'save', label: `  ${theme.fg('success', 'Save')}` });
 
@@ -458,7 +463,7 @@ async function askCustomPackEditTarget(
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-clear' | 'save');
+      resolve(item.value as 'rename' | 'plan' | 'build' | 'fast' | 'memory' | 'memory-auto' | 'memory-clear' | 'save');
     };
 
     selectList.onCancel = () => {
@@ -476,7 +481,7 @@ async function askCustomPackEditTarget(
   });
 }
 
-async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'skip' | null> {
+async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' | 'auto' | 'skip' | null> {
   return new Promise(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
     container.addChild(new Text(theme.bold(theme.fg('accent', 'Observational memory model (optional)')), 0, 0));
@@ -484,7 +489,7 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
       new Text(
         theme.fg(
           'dim',
-          'Drives the OM observer/reflector for this pack. Skipped packs fall back to your standalone OM configuration.',
+          'Drives the OM observer/reflector while this pack is active. Skipped packs use your /om settings.',
         ),
         0,
         0,
@@ -495,9 +500,10 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
     const selectList = new SelectList(
       [
         { value: 'choose', label: `  ${chalk.hex(mastra.pink)('Choose model…')}` },
-        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use standalone OM config')}` },
+        { value: 'auto', label: `  ${chalk.hex(mastra.pink)('Auto — follow the main model')}` },
+        { value: 'skip', label: `  ${theme.fg('dim', 'Skip — use /om settings')}` },
       ],
-      2,
+      3,
       getSelectListTheme(),
     );
 
@@ -508,7 +514,7 @@ async function askOptionalOmChoice(ctx: SlashCommandContext): Promise<'choose' |
 
     selectList.onSelect = item => {
       closeOverlay();
-      resolve(item.value as 'choose' | 'skip');
+      resolve(item.value as 'choose' | 'auto' | 'skip');
     };
 
     selectList.onCancel = () => {
@@ -562,12 +568,13 @@ async function runCustomFlow(
 
   const omChoice = await askOptionalOmChoice(ctx);
   if (omChoice === null) return null;
+  if (omChoice === 'auto') models.memory = 'auto';
   if (omChoice === 'choose') {
     const memoryModelId = await selectModel(
       ctx,
       'Select observational memory model',
       mastra.pink,
-      models.memory || undefined,
+      models.memory && models.memory !== 'auto' ? models.memory : undefined,
     );
     if (!memoryModelId) return null;
     models.memory = memoryModelId;
@@ -612,6 +619,11 @@ async function runCustomPackEditFlow(
       continue;
     }
 
+    if (editTarget === 'memory-auto') {
+      workingPack = { ...workingPack, models: { ...workingPack.models, memory: 'auto' } };
+      continue;
+    }
+
     if (editTarget === 'memory-clear') {
       const models = { ...workingPack.models };
       delete models.memory;
@@ -624,7 +636,7 @@ async function runCustomPackEditFlow(
         ctx,
         'Select observational memory model',
         mastra.pink,
-        workingPack.models.memory,
+        workingPack.models.memory === 'auto' ? undefined : workingPack.models.memory,
       );
       if (!memoryModelId) continue;
       workingPack = { ...workingPack, models: { ...workingPack.models, memory: memoryModelId } };

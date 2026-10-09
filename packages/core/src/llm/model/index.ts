@@ -6,6 +6,8 @@ export {
   type Provider,
   type ModelForProvider,
   type AttachmentCapabilities,
+  type ModelReasoningOption,
+  getModelReasoningOptions,
   modelSupportsAttachments,
   modelSupportsStructuredOutput,
   modelSupportsTemperature,

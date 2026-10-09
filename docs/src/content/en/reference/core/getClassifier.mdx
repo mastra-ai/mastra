@@ -16,7 +16,7 @@ import { mastra } from './mastra'
 
 const safety = mastra.getClassifier('safety')
 
-const result = await safety.evaluate({
+const result = await safety.decide({
   state: { content: 'A message to evaluate' },
 })
 ```

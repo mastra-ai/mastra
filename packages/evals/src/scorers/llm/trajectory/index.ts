@@ -91,7 +91,7 @@ function formatExpectedSteps(steps: ExpectedStep[], indent: number = 0): string 
  *
  * @example
  * ```ts
- * import { createTrajectoryAccuracyScorerLLM } from '@mastra/evals/scorers';
+ * import { createTrajectoryAccuracyScorerLLM } from '@mastra/evals/scorers/prebuilt';
  *
  * // Without expected trajectory (evaluates quality based on task)
  * const scorer = createTrajectoryAccuracyScorerLLM({

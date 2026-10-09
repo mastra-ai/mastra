@@ -69,7 +69,10 @@ function makeMessageList() {
     updateToolInvocation: vi.fn().mockReturnValue(true),
     updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(true),
     add: vi.fn(),
-    get: { all: { db: vi.fn().mockReturnValue([]) } },
+    get: {
+      all: { db: vi.fn().mockReturnValue([]) },
+      input: { aiV5: { model: vi.fn().mockReturnValue([]) } },
+    },
   };
 }
 

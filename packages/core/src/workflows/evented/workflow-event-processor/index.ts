@@ -913,6 +913,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
         parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
+        // The nested run's final state replaces the parent's: the parent's
+        // `__state` predates this iteration and would win over `state`.
+        const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: finalState };
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
           {
@@ -921,7 +924,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             prevResult,
             runId: parentWorkflow.runId,
             executionPath: parentWorkflow.executionPath,
-            stepResults: parentWorkflow.stepResults,
+            stepResults: loopStepResults,
+            state: finalState,
             activeStepsPath: parentWorkflow.activeStepsPath,
             resumeSteps: parentWorkflow.resumeSteps,
             resumeData: parentWorkflow.resumeData,
@@ -1361,6 +1365,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
+          workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
           step,
         },
       );
@@ -1388,6 +1393,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
+          workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
           step,
         },
       );
@@ -2512,8 +2518,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    // All branches finished: drop the internal per-branch deltas and forward the
-    // merged state so downstream steps resolve it from stepResults.__state.
+    // All branches finished: record the merged state (branches skip recording their
+    // full state), drop the internal per-branch deltas and forward the merged state
+    // so downstream steps resolve it from stepResults.__state.
+    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowResults({
+      workflowName: workflow.id,
+      runId,
+      stepId: '__state',
+      result: currentState as any,
+      requestContext,
+    });
     const cleanedStepResults: Record<string, any> = { ...stepResults, __state: currentState };
     for (const [key, res] of Object.entries(cleanedStepResults)) {
       if (res && typeof res === 'object' && '__stateDelta' in res) {
@@ -2715,29 +2730,20 @@ export class WorkflowEventProcessor extends EventProcessor {
           newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
         }
       }
+      // Persist (and thread forward) any state changes made inside the foreach body,
+      // in the same write as the iteration result. Each iteration is a separate event
+      // in the evented engine, so unless we write the updated state back here, the
+      // next iteration / the step after the foreach would re-read the stale `__state`
+      // from storage instead of `state` (see resolveCurrentState's priority order).
+      // This is what makes setState() inside a foreach body propagate across iterations.
       const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId: getEntryId(step.step),
         result: newResult,
         requestContext,
+        state: currentState,
       });
-
-      // Persist (and thread forward) any state changes made inside the foreach body.
-      // Each iteration is a separate event in the evented engine, so unless we write
-      // the updated state back here, the next iteration / the step after the foreach
-      // would re-read the stale `__state` from storage instead of `state` (see
-      // resolveCurrentState's priority order). This is what makes setState() inside a
-      // foreach body propagate across iterations.
-      if (currentState) {
-        await workflowsStore?.updateWorkflowResults({
-          workflowName: workflow.id,
-          runId,
-          stepId: '__state',
-          result: currentState as any,
-          requestContext,
-        });
-      }
 
       // Same fallback as the regular step path: when no run record was
       // persisted (shouldPersistSnapshot opted out of running) the store
@@ -2999,12 +3005,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       // surfaced to users.
       const storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
 
+      // Record the workflow state in the same write as a sequential step's result, so a
+      // restart after this point resumes with the state this step produced. Branches of a
+      // parallel/conditional entry skip it: their full state would clobber sibling updates;
+      // aggregateBranchResults records the merged state instead.
       const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId,
         result: storedResult,
         requestContext,
+        ...(isParallelBranch ? {} : { state: currentState }),
       });
 
       // When the Mastra has no storage configured, workflowsStore is undefined

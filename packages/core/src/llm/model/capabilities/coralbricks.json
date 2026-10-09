@@ -1,17 +1,31 @@
 {
-  "attachment": ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash-fast-fp4", "glm-5.3-flash-fp4"],
-  "temperature": [
-    "deepseek-v4.1-flash-fast",
-    "deepseek-v4.1-flash-fast-fp4",
-    "glm-5.3-fast",
-    "glm-5.3-flash-fp4",
-    "glm-5.3-fp4"
-  ],
-  "structuredOutput": [
-    "deepseek-v4.1-flash-fast",
-    "deepseek-v4.1-flash-fast-fp4",
-    "glm-5.3-fast",
-    "glm-5.3-flash-fp4",
-    "glm-5.3-fp4"
-  ]
+  "attachment": ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash-fast-fp4"],
+  "temperature": ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash-fast-fp4", "glm-5.3-fast", "glm-5.3-fp4"],
+  "structuredOutput": ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash-fast-fp4", "glm-5.3-fast", "glm-5.3-fp4"],
+  "reasoning": {
+    "glm-5.3-fp4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-fast-fp4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ]
+  }
 }

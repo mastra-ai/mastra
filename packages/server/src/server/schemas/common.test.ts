@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createCombinedPaginationSchema, createPagePaginationSchema } from './common';
+import { agentExecutionBodySchema } from './agents';
+import { createCombinedPaginationSchema, createPagePaginationSchema, tracingOptionsSchema } from './common';
+import { startAsyncWorkflowBodySchema } from './workflows';
 
 /**
  * Regression tests for GitHub Issue #21006
@@ -105,5 +107,22 @@ describe('pagination query schemas', () => {
         expect(result.data).toEqual({});
       }
     });
+  });
+});
+
+describe('tracingOptionsSchema', () => {
+  const tracingOptions = {
+    traceId: '0123456789abcdef0123456789abcdef',
+    parentSpanId: '0123456789abcdef',
+    nestUnderParent: true,
+  };
+
+  it('keeps nestUnderParent', () => {
+    expect(tracingOptionsSchema.parse(tracingOptions)).toEqual(tracingOptions);
+  });
+
+  it('keeps nestUnderParent in agent and workflow request bodies', () => {
+    expect(agentExecutionBodySchema.parse({ messages: 'hi', tracingOptions }).tracingOptions).toEqual(tracingOptions);
+    expect(startAsyncWorkflowBodySchema.parse({ tracingOptions }).tracingOptions).toEqual(tracingOptions);
   });
 });

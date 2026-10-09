@@ -27,7 +27,7 @@ For straightforward semantic search without relationship traversal, use [standar
 GraphRAG combines vector similarity with knowledge graph traversal:
 
 1. Initial vector search retrieves relevant chunks based on semantic similarity
-1. A knowledge graph is constructed from the retrieved chunks
+1. On the tool's first execution, a knowledge graph is constructed from the retrieved chunks. Later queries reuse this graph
 1. The graph is traversed to find connected information
 1. Results include both directly relevant chunks and related content
 

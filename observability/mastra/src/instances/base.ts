@@ -41,7 +41,7 @@ import { resolveExportedSpanId } from '../ids';
 import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
-import { NoOpSpan } from '../spans';
+import { BaseSpan, NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
 import { isMastraBuiltInStorageExporter, isMastraPlatformDeployment } from './platform-policy';
@@ -288,6 +288,25 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       requestContext,
     });
 
+    // nestUnderParent only holds when the run really joined the requested trace
+    // under the requested parent. The span drops invalid ids and a bridge can
+    // pick its own trace; the run then owns its trace and keeps its summary.
+    if (
+      !options.parent &&
+      traceState?.nestedUnderParent &&
+      (!tracingOptions?.traceId ||
+        span.traceId !== tracingOptions.traceId ||
+        !tracingOptions.parentSpanId ||
+        !(span instanceof BaseSpan) ||
+        span.externalParentSpanId !== tracingOptions.parentSpanId)
+    ) {
+      const { nestedUnderParent: _ignored, ...ownTraceState } = traceState;
+      span.traceState = ownTraceState;
+      this.logger.debug(
+        '[Observability] Ignoring tracingOptions.nestUnderParent: the run did not join the requested trace under the requested parent',
+      );
+    }
+
     // For excluded MODEL_GENERATION spans the constructor clears attributes,
     // losing provider/model needed for cost estimation. Stash them from the
     // original creation options so captureExcludedModelUsage can use them.
@@ -333,6 +352,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceId: cached.traceId,
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
+      externalParentSpanId: cached.externalParentSpanId,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
       attributes: cached.attributes,
@@ -341,6 +361,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityId: cached.entityId,
       entityName: cached.entityName,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
+      traceState: cached.nestedUnderParent ? { requestContextKeys: [], nestedUnderParent: true } : undefined,
     });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
@@ -657,8 +678,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;
 
+    // startSpan() drops this again when the span does not end up under the
+    // requested parent.
+    const nestedUnderParent = tracingOptions?.nestUnderParent === true;
+
     // Return undefined if no TraceState properties are needed
-    if (allKeys.length === 0 && !hideInput && !hideOutput) {
+    if (allKeys.length === 0 && !hideInput && !hideOutput && !nestedUnderParent) {
       return undefined;
     }
 
@@ -666,6 +691,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       requestContextKeys: allKeys,
       ...(hideInput !== undefined && { hideInput }),
       ...(hideOutput !== undefined && { hideOutput }),
+      ...(nestedUnderParent && { nestedUnderParent }),
     };
   }
 

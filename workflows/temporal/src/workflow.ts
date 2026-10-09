@@ -1,6 +1,7 @@
 import { Workflow, createStep } from '@mastra/core/workflows';
 import type { Step, WorkflowConfig } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
+import type { ActivityOptions } from '@temporalio/workflow';
 import { TemporalRun } from './run';
 import type { TemporalEngineType } from './types';
 
@@ -8,6 +9,7 @@ export type TemporalWorkflowParams = {
   client: Client;
   taskQueue: string;
   startToCloseTimeout?: string;
+  retry?: ActivityOptions['retry'];
 };
 
 export class TemporalWorkflow<

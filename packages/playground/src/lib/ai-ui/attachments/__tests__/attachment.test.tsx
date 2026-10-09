@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { AttachFilePopover } from '../attach-file-popover';
@@ -29,7 +29,15 @@ describe('composer attachment previews', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Remove discard.txt' }));
       expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
-      fireEvent.click(await screen.findByRole('button', { name: 'Preview leads.csv' }));
+      const preview = await screen.findByRole('button', { name: 'Preview leads.csv' });
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for leads.csv' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Preview' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog.textContent).toContain('name,score\nZoë,12');
+
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      await waitFor(() => expect(document.activeElement).toBe(preview));
+      fireEvent.click(preview);
       expect(screen.getByRole('dialog').textContent).toContain('name,score\nZoë,12');
     });
   });

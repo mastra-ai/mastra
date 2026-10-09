@@ -79,6 +79,7 @@ export {
   getTraceQueryDeltaWatermark,
   planTraceQuerySelectionPredicate,
   normalizeTraceQueryPath,
+  normalizeTraceQueryText,
 } from './trace-query';
 export type {
   TraceQueryLiteral,

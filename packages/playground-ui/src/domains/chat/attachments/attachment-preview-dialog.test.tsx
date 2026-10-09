@@ -1,10 +1,42 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileChipEntry, ImageEntry, PdfEntry, TxtEntry } from './attachment-preview-dialog';
+import type { AttachmentPreviewProps } from './use-attachment-preview';
 
 afterEach(() => cleanup());
+
+describe('Attachment previews', () => {
+  describe('when the composer controls whether the dialog is open', () => {
+    it.each([
+      {
+        name: 'image',
+        Entry: (props: AttachmentPreviewProps) => <ImageEntry src="https://example.com/cat.png" {...props} />,
+      },
+      {
+        name: 'PDF',
+        Entry: (props: AttachmentPreviewProps) => <PdfEntry data="data:application/pdf;base64,AA==" {...props} />,
+      },
+      { name: 'text', Entry: (props: AttachmentPreviewProps) => <TxtEntry data="Attached notes" {...props} /> },
+    ])('keeps the $name preview synchronized with its owner', ({ Entry }) => {
+      const onOpenChange = vi.fn();
+      const { rerender } = render(<Entry open={false} onOpenChange={onOpenChange} />);
+
+      fireEvent.click(screen.getByRole('button'));
+      expect(onOpenChange).toHaveBeenCalledWith(true);
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      rerender(<Entry open onOpenChange={onOpenChange} />);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+
+      rerender(<Entry open={false} onOpenChange={onOpenChange} />);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+});
 
 describe('ImageEntry', () => {
   it('renders a thumbnail and opens a preview dialog on click', () => {

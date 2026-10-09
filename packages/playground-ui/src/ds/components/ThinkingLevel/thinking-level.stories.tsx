@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '../Button';
 import { ButtonsGroup } from '../ButtonsGroup';
 import { TooltipProvider } from '../Tooltip';
+import { Txt } from '../Txt';
 import { ThinkingLevelPicker } from './thinking-level-picker';
 import { ThinkingLevelRamp } from './thinking-level-ramp';
 import { ThinkingLevelSlider } from './thinking-level-slider';
@@ -76,6 +77,36 @@ export const PickerUnavailable: Story = {
       onChange={() => {}}
     />
   ),
+};
+
+function InheritingPicker() {
+  const inherited: Level = 'medium';
+  const [override, setOverride] = useState<Level>();
+  return (
+    <ThinkingLevelPicker
+      options={ALL_LEVELS}
+      value={override ?? inherited}
+      label="Thinking"
+      origin={override ? 'this session' : 'build mode default'}
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <Txt as="p" variant="caption" tone="muted">
+            {override ? 'Set for this session.' : 'Follows the build mode default.'}
+          </Txt>
+          {override ? (
+            <Button variant="ghost" size="sm" onClick={() => setOverride(undefined)}>
+              Use default
+            </Button>
+          ) : null}
+        </div>
+      }
+      onChange={setOverride}
+    />
+  );
+}
+
+export const PickerFollowingADefault: Story = {
+  render: () => <InheritingPicker />,
 };
 
 function ControlledRamp() {

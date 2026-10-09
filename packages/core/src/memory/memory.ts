@@ -1,8 +1,6 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
-import { MastraFGAPermissions } from '../auth/ee';
-import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -37,6 +35,8 @@ import {
   getMemoryTokenBoundary,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
+import { checkThreadFGA } from './thread-fga';
+import type { CheckThreadFGAOptions } from './thread-fga';
 
 import type {
   SharedMemoryConfig,
@@ -659,46 +659,8 @@ https://mastra.ai/en/docs/memory/overview`,
    * Static helper to check FGA authorization for thread access.
    * Can be called from HTTP handlers and agent execution paths.
    */
-  static async checkThreadFGA(options: {
-    mastra?: Mastra;
-    user?: Record<string, unknown>;
-    threadId: string;
-    resourceId?: string;
-    requestContext?: RequestContext;
-    permission?: MastraFGAPermissionInput;
-    actor?: ActorSignal;
-  }): Promise<void> {
-    const {
-      mastra,
-      user,
-      threadId,
-      resourceId,
-      requestContext,
-      permission = MastraFGAPermissions.MEMORY_READ,
-      actor,
-    } = options;
-    const fgaProvider = mastra?.getServer()?.fga;
-    if (!fgaProvider) return;
-
-    const { requireFGA } = await import('../auth/ee/fga-check');
-    await requireFGA({
-      fgaProvider,
-      user,
-      resource: { type: 'thread', id: threadId },
-      permission,
-      requestContext,
-      actor,
-      context:
-        resourceId || requestContext
-          ? {
-              resourceId,
-            }
-          : undefined,
-      metadata: {
-        threadId,
-        resourceId,
-      },
-    });
+  static async checkThreadFGA(options: CheckThreadFGAOptions): Promise<void> {
+    return checkThreadFGA(options);
   }
 
   /**
@@ -743,6 +705,27 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
     observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
+
+  /**
+   * Whether `mergeWorkingMemory` is available (atomic merge supported by storage).
+   */
+  async supportsAtomicWorkingMemoryMerge(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Atomically deep-merges a partial JSON object into resource-scoped working memory.
+   * Implementations without atomic merge support throw.
+   */
+  async mergeWorkingMemory(_: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string | Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<void> {
+    throw new Error(`Atomic working memory merge is not supported by ${this.constructor.name}`);
+  }
 
   /**
    * @warning experimental! can be removed or changed at any time
@@ -855,6 +838,10 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            readOnly:
+              effectiveConfig.readOnly ||
+              (typeof effectiveConfig.workingMemory === 'object' &&
+                effectiveConfig.workingMemory.agentManaged === false),
           }),
         );
       }

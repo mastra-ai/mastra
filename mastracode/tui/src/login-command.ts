@@ -4,7 +4,6 @@ import type { Readable } from 'node:stream';
 import { parseArgs } from 'node:util';
 import { AuthStorage, getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import type { OAuthProviderInterface } from '@mastra/code-sdk/auth/types';
-import { seedProviderOMDefault } from '@mastra/code-sdk/onboarding/om-settings';
 import { openUrlInBrowser } from '@mastra/code-sdk/utils/open-url';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 
@@ -52,7 +51,6 @@ async function signIn(
     onPrompt: ({ message, placeholder }) => ask(`${message}${placeholder ? ` (${placeholder})` : ''} `),
     onProgress: say,
   });
-  seedProviderOMDefault(provider.id);
   say(`Signed in to ${provider.name}`);
 }
 

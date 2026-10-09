@@ -27,6 +27,18 @@ export const settingsDefaultModel: DefaultModelResponse = {
 };
 
 export const settingsMemory: OMConfigInfo = {
+  observer: {
+    model: 'openai/gpt-4o-mini',
+    effectiveModelId: 'openai/gpt-4o-mini',
+    effectiveModelSource: 'explicit',
+    providerStatus: 'available',
+  },
+  reflector: {
+    model: 'openai/gpt-4o-mini',
+    effectiveModelId: 'openai/gpt-4o-mini',
+    effectiveModelSource: 'explicit',
+    providerStatus: 'available',
+  },
   observerModelId: 'openai/gpt-4o-mini',
   reflectorModelId: 'openai/gpt-4o-mini',
   observationThreshold: 1000,

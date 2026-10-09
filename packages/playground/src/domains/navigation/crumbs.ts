@@ -4,7 +4,6 @@ import { DatasetCrumb, DatasetSwitcher } from '@/domains/datasets/dataset-crumb'
 import { McpServerCrumb, McpServerSwitcher } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb, ProcessorSwitcher } from '@/domains/processors/processor-crumb';
 import { ScorerCrumb, ScorerSwitcher } from '@/domains/scores/scorer-crumb';
-import { ToolCrumb, ToolSwitcher } from '@/domains/tools/tool-crumb';
 import { WorkflowCrumb, WorkflowSwitcher } from '@/domains/workflows/workflow-crumbs';
 import { findNavItem } from '@/lib/nav/nav-items';
 
@@ -59,11 +58,6 @@ export const scorerCrumb = {
   id: 'scorer',
   Component: ScorerCrumb,
   Switcher: ScorerSwitcher,
-} satisfies CrumbDef;
-export const toolCrumb = {
-  id: 'tool',
-  Component: ToolCrumb,
-  Switcher: ToolSwitcher,
 } satisfies CrumbDef;
 export const processorCrumb = {
   id: 'processor',

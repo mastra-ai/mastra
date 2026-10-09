@@ -129,7 +129,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     // AWAIT subscription first - ensures listener is registered before any events fire
     try {
-      await pubsub.subscribe('workflows-finish', finishCb);
+      // Live-tail: persistent pubsubs replay retained events from 'earliest', which
+      // would hand this waiter stale finish events (e.g. this run's own prior suspend).
+      // Safe because we subscribe before publishing the start/resume event below.
+      await pubsub.subscribe('workflows-finish', finishCb, { startFrom: 'latest' });
     } catch (err) {
       releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);

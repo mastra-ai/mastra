@@ -58,8 +58,6 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     followUpComponents: [],
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
-    pendingFollowUpMessages: [],
-    pendingQueuedActions: [],
     pendingSlashCommands: [],
     pendingSlashCommandMessageIds: [],
     pendingTools: new Map(),
@@ -181,8 +179,6 @@ describe('MastraTUI queueing', () => {
       editor,
       session: { run: { isRunning: vi.fn(() => true) } },
       pendingSlashCommands: [],
-      pendingQueuedActions: [],
-      pendingFollowUpMessages: [],
       pendingImages: [],
       ui: { requestRender: vi.fn() },
       chatContainer: {},
@@ -228,8 +224,6 @@ describe('MastraTUI queueing', () => {
       editor,
       session: { run: { isRunning: vi.fn(() => true) } },
       pendingSlashCommands: [],
-      pendingQueuedActions: [],
-      pendingFollowUpMessages: [],
       pendingImages: [],
       ui: { requestRender: vi.fn() },
       chatContainer: {},
@@ -273,8 +267,6 @@ describe('MastraTUI queueing', () => {
       activeGoalJudge: { modelId: '__GATEWAY_OPENAI_MODEL__' },
       session: { run: { isRunning: vi.fn(() => false) } },
       pendingSlashCommands: [],
-      pendingQueuedActions: [],
-      pendingFollowUpMessages: [],
       pendingImages: [],
       ui: { requestRender: vi.fn() },
       chatContainer: {},
@@ -524,16 +516,20 @@ describe('MastraTUI queueing', () => {
     });
   });
 
-  it('queues follow-up messages with images in FIFO order metadata', () => {
+  it('routes follow-up messages to the core queue and keeps slash commands local', async () => {
+    const queueMessage = vi.fn().mockResolvedValue(undefined);
     const tui = Object.create(MastraTUI.prototype) as {
       state: any;
       queueFollowUpMessage: (text: string) => void;
+      createPendingNewThread: () => Promise<void> | undefined;
     };
+    tui.createPendingNewThread = () => undefined;
+    (tui as any).getEventContext = () => ({ state: tui.state });
     tui.state = {
+      session: { queueMessage, stream: { isActive: () => true } },
+      pendingQueueSubmissions: 0,
       pendingSlashCommands: [],
       pendingSlashCommandMessageIds: [],
-      pendingQueuedActions: [],
-      pendingFollowUpMessages: [],
       pendingImages: [{ data: 'img-1', mimeType: 'image/png' }],
       pendingSignalMessageComponentsById: new Map(),
       ui: { requestRender: vi.fn() },
@@ -551,17 +547,92 @@ describe('MastraTUI queueing', () => {
     tui.queueFollowUpMessage('review this [image]');
     tui.queueFollowUpMessage('/help');
     tui.queueFollowUpMessage('second message');
+    await Promise.resolve();
 
-    expect(tui.state.pendingQueuedActions).toEqual(['message', 'slash', 'message']);
-    expect(tui.state.pendingFollowUpMessages).toEqual([
-      { content: 'review this', images: [{ data: 'img-1', mimeType: 'image/png' }] },
-      { content: 'second message', images: undefined },
+    expect(queueMessage.mock.calls).toEqual([
+      [{ content: 'review this', files: [{ data: 'img-1', mediaType: 'image/png' }] }],
+      [{ content: 'second message', files: undefined }],
     ]);
     expect(tui.state.pendingSlashCommands).toEqual(['/help']);
     expect(tui.state.pendingSlashCommandMessageIds).toHaveLength(1);
-    expect(tui.state.pendingSignalMessageComponentsById.size).toBe(1);
-    expect(tui.state.chatContainer.children).toHaveLength(1);
-    expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares one pending thread creation across queued follow-ups and tracks in-flight submissions', async () => {
+    let resolveCreate!: () => void;
+    const create = vi.fn(() => new Promise<void>(resolve => (resolveCreate = resolve)));
+    const queueMessage = vi.fn().mockResolvedValue(undefined);
+    const tui = Object.create(MastraTUI.prototype) as { state: any; queueFollowUpMessage: (text: string) => void };
+    tui.state = {
+      session: { queueMessage, thread: { create }, stream: { isActive: () => true } },
+      pendingNewThread: true,
+      pendingQueueSubmissions: 0,
+      pendingSlashCommands: [],
+      pendingSlashCommandMessageIds: [],
+      pendingImages: [],
+      ui: { requestRender: vi.fn() },
+    };
+
+    (tui as any).getEventContext = () => ({ state: tui.state });
+    tui.queueFollowUpMessage('first');
+    tui.queueFollowUpMessage('second');
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(queueMessage).not.toHaveBeenCalled();
+    expect(tui.state.pendingQueueSubmissions).toBe(2);
+
+    resolveCreate();
+    await vi.waitFor(() => expect(tui.state.pendingQueueSubmissions).toBe(0));
+    expect(queueMessage.mock.calls.map(([arg]) => arg.content)).toEqual(['first', 'second']);
+    expect(tui.state.pendingNewThreadCreation).toBeUndefined();
+  });
+
+  it('runs held slash commands when the last queued submission fails while idle', async () => {
+    const handleSlashCommand = vi.fn().mockResolvedValue(undefined);
+    const queueMessage = vi.fn().mockRejectedValue(new Error('queue failed'));
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: any;
+      queueFollowUpMessage: (text: string) => void;
+      getEventContext: () => any;
+    };
+    tui.state = {
+      session: {
+        queueMessage,
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ queuedFollowUps: 0 }) },
+      },
+      pendingNewThread: false,
+      pendingQueueSubmissions: 0,
+      pendingSlashCommands: ['/help'],
+      pendingSlashCommandMessageIds: [],
+      pendingSignalMessageComponentsById: new Map(),
+      pendingImages: [],
+      ui: { requestRender: vi.fn() },
+      chatContainer: { children: [], addChild: vi.fn(), removeChild: vi.fn(), invalidate: vi.fn() },
+    };
+    tui.getEventContext = () => ({
+      state: tui.state,
+      updateStatusLine: vi.fn(),
+      handleSlashCommand,
+      showError: vi.fn(),
+    });
+
+    tui.queueFollowUpMessage('will fail');
+
+    await vi.waitFor(() => expect(handleSlashCommand).toHaveBeenCalledWith('/help'));
+    expect(tui.state.pendingSlashCommands).toEqual([]);
+  });
+
+  it('keeps queued slash commands while follow-up submissions are still reaching the core queue', () => {
+    const state = createQueueState();
+    state.pendingSlashCommands = ['/help'];
+    state.pendingSlashCommandMessageIds = ['queued-slash-1'];
+    state.pendingQueueSubmissions = 1;
+    const ctx = createQueueContext(state);
+
+    handleAgentEnd(ctx);
+
+    expect(ctx.handleSlashCommand).not.toHaveBeenCalled();
+    expect(state.pendingSlashCommands).toEqual(['/help']);
   });
 
   it('does not notify agent_done from the queued handler (#20860 — moved to receipt-time tap)', () => {
@@ -593,42 +664,6 @@ describe('MastraTUI queueing', () => {
     expect(ctx.handleSlashCommand).toHaveBeenCalledWith('/help');
     expect(state.pendingSignalMessageComponentsById.size).toBe(0);
     expect(state.chatContainer.children).toHaveLength(0);
-  });
-
-  it('drains queued messages and slash commands in FIFO order on agent end', async () => {
-    const state = createQueueState({
-      pendingQueuedActions: ['message', 'slash', 'message'],
-      pendingFollowUpMessages: [{ content: 'first' }, { content: 'third' }],
-      pendingSlashCommands: ['/second'],
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-    expect(ctx.addUserMessage).toHaveBeenCalledWith({
-      id: expect.stringMatching(/^user-/),
-      role: 'user',
-      content: { format: 2, parts: [{ type: 'text', text: 'first' }] },
-      createdAt: expect.any(Date),
-    });
-    expect(ctx.fireMessage).toHaveBeenCalledWith('first', undefined);
-    expect(ctx.handleSlashCommand).not.toHaveBeenCalled();
-
-    handleAgentEnd(ctx);
-    expect(ctx.handleSlashCommand).toHaveBeenCalledWith('/second');
-
-    handleAgentEnd(ctx);
-    expect(ctx.addUserMessage).toHaveBeenLastCalledWith({
-      id: expect.stringMatching(/^user-/),
-      role: 'user',
-      content: { format: 2, parts: [{ type: 'text', text: 'third' }] },
-      createdAt: expect.any(Date),
-    });
-    expect(ctx.fireMessage).toHaveBeenLastCalledWith('third', undefined);
-
-    expect(state.pendingQueuedActions).toEqual([]);
-    expect(state.pendingFollowUpMessages).toEqual([]);
-    expect(state.pendingSlashCommands).toEqual([]);
-    expect(ctx.updateStatusLine).toHaveBeenCalledTimes(6);
   });
 
   it('adds goal activity to the active judge display while pending', () => {
@@ -766,16 +801,14 @@ describe('MastraTUI queueing', () => {
   it('waits for controller-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
       session: { displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 1 })) } } as any,
-      pendingQueuedActions: ['message'],
-      pendingFollowUpMessages: [{ content: 'queued' }],
+      pendingSlashCommands: ['/help'],
     });
     const ctx = createQueueContext(state);
 
     handleAgentEnd(ctx);
 
-    expect(ctx.fireMessage).not.toHaveBeenCalled();
-    expect(state.pendingQueuedActions).toEqual(['message']);
-    expect(state.pendingFollowUpMessages).toEqual([{ content: 'queued' }]);
+    expect(ctx.handleSlashCommand).not.toHaveBeenCalled();
+    expect(state.pendingSlashCommands).toEqual(['/help']);
   });
 });
 

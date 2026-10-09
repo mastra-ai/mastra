@@ -99,4 +99,67 @@ describe('fetchWithRetry', () => {
     await fetchWithRetry('https://example.com', opts);
     expect(mockFetch).toHaveBeenCalledWith('https://example.com', opts);
   });
+
+  describe('abort signal', () => {
+    it('rejects immediately without fetching when the signal is already aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(fetchWithRetry('https://example.com', { signal: controller.signal })).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('stops waiting and does not retry when aborted during backoff', async () => {
+      const controller = new AbortController();
+      mockFetch.mockResolvedValue(new Response('', { status: 503 }));
+
+      const promise = fetchWithRetry('https://example.com', { signal: controller.signal });
+      const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(250);
+      expect(vi.getTimerCount()).toBe(1);
+
+      controller.abort();
+      await assertion;
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not retry when fetch rejects because the signal was aborted', async () => {
+      const controller = new AbortController();
+      mockFetch.mockImplementation(async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      });
+
+      await expect(fetchWithRetry('https://example.com', { signal: controller.signal })).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('propagates a custom abort reason', async () => {
+      const controller = new AbortController();
+      const reason = new Error('custom cancel');
+      controller.abort(reason);
+
+      await expect(fetchWithRetry('https://example.com', { signal: controller.signal })).rejects.toBe(reason);
+    });
+
+    it('removes the abort listener after a completed backoff', async () => {
+      const controller = new AbortController();
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      const ok = new Response('ok', { status: 200 });
+      mockFetch.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(ok);
+
+      const promise = fetchWithRetry('https://example.com', { signal: controller.signal });
+      await flush();
+      await expect(promise).resolves.toBe(ok);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+  });
 });

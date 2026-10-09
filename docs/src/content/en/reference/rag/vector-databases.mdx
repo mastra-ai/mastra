@@ -255,7 +255,7 @@ After generating embeddings, you need to store them in a database that supports 
 
   <TabItem value="libsql" label="libSQL">
     ```ts title="vector-store.ts"
-    import { LibSQLVector } from '@mastra/core/vector/libsql'
+    import { LibSQLVector } from '@mastra/libsql'
 
     const store = new LibSQLVector({
       id: 'libsql-vector',

@@ -322,7 +322,7 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
         }
       }
 
-      return {
+      const result = {
         id: user.id,
         email: user.email,
         name: user.name,
@@ -330,6 +330,20 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
         roles,
         permissions,
       };
+
+      // This route is public, so the auth middleware doesn't run and can't
+      // forward a session cookie the provider renewed while verifying.
+      // Best-effort: never fail the request over header forwarding.
+      try {
+        const pending = (
+          auth as { consumePendingResponseHeaders?: (r: Request) => Record<string, string> | undefined }
+        ).consumePendingResponseHeaders?.(request);
+        if (pending && Object.keys(pending).length > 0) (result as any).__refreshHeaders = pending;
+      } catch {
+        // ignore
+      }
+
+      return result;
     } catch (error) {
       return handleError(error, 'Error getting current user');
     }

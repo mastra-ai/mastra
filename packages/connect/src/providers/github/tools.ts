@@ -43,6 +43,9 @@ import { listWorkflowRunsTool } from './tools/list-workflow-runs.js';
 import { listWorkflowsTool } from './tools/list-workflows.js';
 import { mergePullRequestTool } from './tools/merge-pull-request.js';
 import { rerunWorkflowRunTool } from './tools/rerun-workflow-run.js';
+import { searchCodeTool } from './tools/search-code.js';
+import { searchIssuesTool } from './tools/search-issues.js';
+import { searchRepositoriesTool } from './tools/search-repositories.js';
 import { submitPullRequestReviewTool } from './tools/submit-pull-request-review.js';
 import { updateIssueTool } from './tools/update-issue.js';
 import { updateLabelTool } from './tools/update-label.js';
@@ -93,6 +96,9 @@ export function createGithubTools(options?: ProviderToolsOptions) {
     github_list_workflows: listWorkflowsTool(platformProxy),
     github_merge_pull_request: mergePullRequestTool(platformProxy),
     github_rerun_workflow_run: rerunWorkflowRunTool(platformProxy),
+    github_search_code: searchCodeTool(platformProxy),
+    github_search_issues: searchIssuesTool(platformProxy),
+    github_search_repositories: searchRepositoriesTool(platformProxy),
     github_submit_pull_request_review: submitPullRequestReviewTool(platformProxy),
     github_update_issue: updateIssueTool(platformProxy),
     github_update_label: updateLabelTool(platformProxy),

@@ -461,10 +461,12 @@ Poll for completion using [`getExperiment()`](/reference/datasets/getExperiment)
 
 ```typescript
 let experiment = await dataset.getExperiment({ experimentId })
+if (!experiment) throw new Error('Experiment not found')
 
 while (experiment.status === 'pending' || experiment.status === 'running') {
   await new Promise(resolve => setTimeout(resolve, 5000))
   experiment = await dataset.getExperiment({ experimentId })
+  if (!experiment) throw new Error('Experiment not found')
 }
 
 console.log(experiment.status) // 'completed' | 'failed'
@@ -636,6 +638,7 @@ for (const exp of experiments) {
 const experiment = await dataset.getExperiment({
   experimentId: 'exp-abc-123',
 })
+if (!experiment) throw new Error('Experiment not found')
 
 console.log(experiment.status)
 console.log(experiment.startedAt)

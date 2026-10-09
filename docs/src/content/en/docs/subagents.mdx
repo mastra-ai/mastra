@@ -178,7 +178,7 @@ The `context` object includes:
 | Property | Description |
 | - | - |
 | `primitiveId` | The ID of the subagent that ran |
-| `result` | The subagent's response, including `text`, `usage`, `finishReason`, `subAgentToolResults`, `subAgentThreadId`, and `subAgentResourceId` when available |
+| `result` | The subagent's response, including `text`, `usage`, `finishReason`, `subAgentToolResults`, `subAgentPendingToolCalls`, `subAgentThreadId`, and `subAgentResourceId` when available |
 | `success` | Whether the delegation succeeded |
 | `error` | The original error if the delegation failed |
 | `messages` | The collected subagent transcript, including partial messages when available |
@@ -272,6 +272,8 @@ When a subagent completes, the parent agent's model receives the subagent's text
 Application code and UI integrations can still inspect `subAgentToolResults` and the rest of the raw delegation result in the tool result payload.
 
 This keeps debugging and display data available without sending nested tool arguments or outputs back into the parent agent's next model call.
+
+Subagents can't run client tools (tools without an `execute` function). If a subagent calls one, its run stops at that step with `finishReason: 'tool-calls'`. The delegation result lists the unresolved calls in `subAgentPendingToolCalls`, the parent agent's model is told which tools were never run, and Mastra logs a warning. Give client tools to the parent agent, or use [`suspend()`](/docs/agents/human-in-the-loop#use-suspend-in-supervisor-agents) in the subagent's tool when it needs input from the user.
 
 Set `includeSubAgentToolResultsInModelContext` to include the full subagent result, including nested tool results and subagent metadata, in the parent agent's model context.
 

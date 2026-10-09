@@ -281,7 +281,8 @@ export class BraintrustExporter extends TrackingExporter<
    * run to rejoin the trace of its suspended half, which was exported by an
    * earlier process. Genuine roots keep empty `span_parents` so Braintrust
    * still treats them as trace roots; only a resumed continuation (marked by
-   * core with `resumedFromSpanId`) links to its persisted parent span. Roots
+   * core with `resumedFromSpanId`) or a run the caller nested with
+   * `tracingOptions.nestUnderParent` links to its parent span. Roots
    * with other parent IDs (e.g. an ambient OTEL span from the bridge) are not
    * linked — their parent was never exported to Braintrust.
    *
@@ -299,6 +300,11 @@ export class BraintrustExporter extends TrackingExporter<
     }
     if (span.parentSpanId && span.parentSpanId === span.metadata?.resumedFromSpanId) {
       return { spanId: span.parentSpanId, rootSpanId: span.traceId };
+    }
+    // The caller declared the parent to be a span of this trace
+    // (tracingOptions.nestUnderParent), so link to it by id as well.
+    if (span.nestedUnderParent && span.externalParentSpanId) {
+      return { spanId: span.externalParentSpanId, rootSpanId: span.traceId };
     }
     return { parentSpanIds: [], rootSpanId: span.traceId };
   }

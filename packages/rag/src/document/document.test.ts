@@ -4152,3 +4152,31 @@ function findCommonSubstring(str1: string, str2: string): string {
 
   return longest;
 }
+
+describe('MDocument.chunk tracing', () => {
+  it('records chunkSize and chunkOverlap on the chunk span', async () => {
+    const spans: any[] = [];
+    const span: any = {
+      createChildSpan: (opts: any) => {
+        spans.push(opts);
+        return span;
+      },
+      end: vi.fn(),
+      error: vi.fn(),
+      update: vi.fn(),
+    };
+    const doc = MDocument.fromText('Hello world. '.repeat(20));
+
+    await doc.chunk(
+      { strategy: 'recursive', maxSize: 50, overlap: 10 },
+      { observabilityContext: { tracingContext: { currentSpan: span } } as any },
+    );
+
+    expect(spans[0].attributes).toMatchObject({
+      action: 'chunk',
+      strategy: 'recursive',
+      chunkSize: 50,
+      chunkOverlap: 10,
+    });
+  });
+});

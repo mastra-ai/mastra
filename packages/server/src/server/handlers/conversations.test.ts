@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -113,6 +114,45 @@ describe('Conversation Handlers', () => {
         resourceId: 'conv_123',
       },
     });
+  });
+
+  it('rejects creating a conversation with an id owned by a different resource', async () => {
+    await memory.createThread({
+      threadId: 'support',
+      resourceId: 'user-b',
+      title: 'User B thread',
+      metadata: { plan: 'pro' },
+    });
+
+    const ctx = createTestServerContext({ mastra });
+    ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
+
+    await expect(
+      CREATE_CONVERSATION_ROUTE.handler({
+        ...ctx,
+        agent_id: 'test-agent',
+        conversation_id: 'support',
+      }),
+    ).rejects.toMatchObject({ status: 403, message: 'Access denied: thread belongs to a different resource' });
+
+    const thread = await memory.getThreadById({ threadId: 'support' });
+    expect(thread).toMatchObject({ resourceId: 'user-b', title: 'User B thread', metadata: { plan: 'pro' } });
+  });
+
+  it('allows re-creating a conversation with an id owned by the same resource', async () => {
+    await memory.createThread({ threadId: 'support', resourceId: 'user-a', title: 'Old title' });
+
+    const ctx = createTestServerContext({ mastra });
+    ctx.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-a');
+
+    const conversation = await CREATE_CONVERSATION_ROUTE.handler({
+      ...ctx,
+      agent_id: 'test-agent',
+      conversation_id: 'support',
+      title: 'New title',
+    });
+
+    expect(conversation.thread).toMatchObject({ id: 'support', resourceId: 'user-a', title: 'New title' });
   });
 
   it('generates a UUID for a conversation without an explicit id', async () => {

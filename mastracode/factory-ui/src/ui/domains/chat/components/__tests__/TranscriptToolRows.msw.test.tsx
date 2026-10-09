@@ -249,7 +249,7 @@ describe('TranscriptEntries tool rows', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('group', { name: 'Question from the agent' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Which auth flow?' })).toBeInTheDocument();
     expect(screen.getByText('Both are supported.')).toBe(settledText);
   });
 
@@ -268,7 +268,7 @@ describe('TranscriptEntries tool rows', () => {
   });
 
   it.each([
-    ['ask_user', 'Question from the agent', { question: 'Which file should I edit?' }],
+    ['ask_user', 'Which file should I edit?', { question: 'Which file should I edit?' }],
     ['submit_plan', 'Plan approval', { plan: { title: 'Ship the fix', content: 'Step one' } }],
     ['skill', 'Skill: understand-issue', { name: 'understand-issue' }],
   ])('breaks a run on %s so its card is never swallowed by a group', (toolName, promptLabel, args) => {
@@ -347,7 +347,7 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
-    const question = screen.getByRole('group', { name: 'Question from the agent' });
+    const question = screen.getByRole('group', { name: 'Which file should I edit?' });
     expect(within(question).getByText('Which file should I edit?')).toBeInTheDocument();
   });
 
@@ -362,7 +362,7 @@ describe('TranscriptEntries tool rows', () => {
     const { rerender } = renderEntries([message]);
 
     expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Question from the agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Which file should I edit?' })).not.toBeInTheDocument();
 
     rerender(
       <MemoryRouter>
@@ -385,7 +385,7 @@ describe('TranscriptEntries tool rows', () => {
     );
 
     expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Question from the agent' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Which file should I edit?' })).toBeInTheDocument();
   });
 
   it('trusts the persisted result over a stale running overlay — a lost tool_end must not spin forever', () => {

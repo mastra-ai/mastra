@@ -312,6 +312,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "modelSettings",
+      "providerOptions",
       "requestContext",
       "runId",
       "toolCallId"
@@ -332,6 +334,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "format",
       "model",
+      "modelSettings",
+      "providerOptions",
       "reason",
       "requestContext",
       "runId",
@@ -1417,6 +1421,7 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "memoryConfig",
+      "mode",
       "resourceId",
       "workingMemory"
     ],

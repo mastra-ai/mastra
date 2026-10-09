@@ -224,3 +224,6 @@ export type {
 // surface stays additive at patch level. Removed in v2.
 export { executeDurableToolCalls } from './workflows/deprecated-tool-execution';
 export type { ToolExecutionContext, ToolExecutionError } from './workflows/deprecated-tool-execution';
+
+// Snapshot pruning hook shared with external durable engines (e.g. Inngest)
+export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';

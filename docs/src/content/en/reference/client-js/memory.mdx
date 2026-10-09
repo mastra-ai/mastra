@@ -207,7 +207,7 @@ const workingMemory = await mastraClient.getWorkingMemory({
 
 The response includes:
 
-- `workingMemory`: The current working memory content (string or null)
+- `workingMemory`: The current working memory content (a string or `null`). When using a JSON or schema-based working memory template, the content is a JSON-encoded string
 - `source`: Whether the memory is from `"thread"` or `"resource"` scope
 - `workingMemoryTemplate`: The template used for working memory (if configured)
 - `threadExists`: Whether the thread exists
@@ -232,6 +232,18 @@ await mastraClient.updateWorkingMemory({
 ```
 
 For resource-scoped working memory, you must provide the `resourceId` parameter. It allows the memory to persist across all conversation threads for that user.
+
+By default the call replaces the whole record. For schema-based, resource-scoped working memory, pass `mode: 'merge'` with a JSON object string to deep-merge only the provided fields atomically. The server returns `400` if the storage adapter doesn't support atomic merges (currently only `@mastra/pg` does).
+
+```typescript
+await mastraClient.updateWorkingMemory({
+  agentId: 'agent-1',
+  threadId: 'thread-1',
+  resourceId: 'user-123',
+  workingMemory: JSON.stringify({ city: 'Berlin' }),
+  mode: 'merge',
+})
+```
 
 ### Get Memory Status
 

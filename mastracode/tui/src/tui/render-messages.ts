@@ -363,11 +363,12 @@ export function removeUserMessage(state: TUIState, messageId: string): void {
   state.ui.requestRender();
 }
 
-export function clearPendingUserMessages(state: TUIState): void {
-  for (const pending of state.pendingSignalMessageComponentsById.values()) {
+export function clearPendingUserMessages(state: TUIState, keepIds: readonly string[] = []): void {
+  for (const [id, pending] of state.pendingSignalMessageComponentsById) {
+    if (keepIds.includes(id)) continue;
     state.chatContainer.removeChild(pending.component as never);
+    state.pendingSignalMessageComponentsById.delete(id);
   }
-  state.pendingSignalMessageComponentsById.clear();
   state.ui.requestRender();
 }
 
@@ -762,18 +763,6 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
   }
 
   if (confirmMatchingPendingUserMessage(state, message.id, displayText, attachments)) {
-    return;
-  }
-
-  // Suppress subscription echo of locally-rendered queued messages (Ctrl+F queue).
-  // drainQueuedAction already rendered the message with a local ID; the subscription
-  // echoes it back with a different signal ID which would otherwise create a duplicate.
-  const dedupKey = displayText.trim();
-  const pendingEchoCounts = state.firedQueuedMessageTexts;
-  const dedupCount = pendingEchoCounts?.get(dedupKey) ?? 0;
-  if (dedupCount > 0) {
-    if (dedupCount === 1) pendingEchoCounts!.delete(dedupKey);
-    else pendingEchoCounts!.set(dedupKey, dedupCount - 1);
     return;
   }
 

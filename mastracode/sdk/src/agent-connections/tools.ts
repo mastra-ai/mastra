@@ -451,6 +451,24 @@ The target must already be saved and freshly advertise the same exact thread end
             accepted = { action: 'persist' };
           } else if (notification.decision.action === 'discard') {
             accepted = { action: 'discard' };
+          } else if (notification.record.status === 'pending') {
+            // Direct delivery failed, but the notification is saved in the
+            // target's inbox and stays pending for redelivery. Skip sent
+            // history so a retry with the same messageId can still deliver it.
+            const reason = notification.record.lastDeliveryError ?? 'the target thread owner did not acknowledge it';
+            return {
+              content: expectsReply
+                ? `Failed to establish a reply obligation: the signal was queued for ${untrustedPeerLabel(target)} but not delivered directly (${reason}). Retry with the same messageId when a reply is required.`
+                : `Queued for ${untrustedPeerLabel(target)}: direct delivery failed (${reason}), so the signal waits in their notification inbox. Retry with the same messageId to deliver it now.`,
+              target,
+              priority: priority as AgentSignalPriority,
+              expectsReply,
+              messageId,
+              replyTo,
+              returnPeerId,
+              routingAction: 'persist',
+              isError: expectsReply,
+            };
           } else {
             return {
               content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,

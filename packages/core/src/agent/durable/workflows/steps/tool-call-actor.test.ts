@@ -90,6 +90,7 @@ describe('durable tool-call context forwarding', () => {
         get: {
           response: { db: () => [message] },
           all: { db: () => [message] },
+          input: { aiV5: { model: () => [] } },
         },
       };
       globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);
@@ -160,6 +161,7 @@ describe('durable tool-call context forwarding', () => {
       get: {
         response: { db: () => [message] },
         all: { db: () => [message] },
+        input: { aiV5: { model: () => [] } },
       },
     };
     globalRunRegistry.set(runId, { tools: { 'workflow-sub': { execute } }, messageList } as any);

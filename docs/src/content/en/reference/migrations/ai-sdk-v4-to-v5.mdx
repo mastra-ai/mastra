@@ -31,10 +31,10 @@ import { convertMessages } from '@mastra/core/agent'
 const aiv5Messages = convertMessages(aiv4Messages).to('AIV5.UI')
 
 // Convert Mastra messages to AI SDK v5
-const aiv5Messages = convertMessages(mastraMessages).to('AIV5.Core')
+const aiv5ModelMessages = convertMessages(mastraMessages).to('AIV5.Model')
 
 // Supported output formats:
-// 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
+// 'Mastra.V2', 'AIV4.UI', 'AIV4.Core', 'AIV5.UI', 'AIV5.Model', 'AIV6.UI'
 ```
 
 This utility is helpful when you want to fetch messages directly from your storage DB and convert them for use in AI SDK.

@@ -33,6 +33,7 @@ export const stripeScenario: Scenario = {
           ['stripe_get_account_info', {}],
           ['stripe_retrieve_balance', {}],
           ['stripe_list_customers', { limit: 5 }],
+          ['stripe_search_customers', { query: 'email~"mastra-smoke.invalid"', limit: 5 }],
           ['stripe_list_products', { limit: 5 }],
           ['stripe_list_prices', { limit: 5 }],
           ['stripe_list_invoices', { limit: 5 }],

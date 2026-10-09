@@ -117,6 +117,8 @@ export interface ButtonProps
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** Side of the trigger the tooltip opens on. Defaults to `top`. */
+  tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
   /** @deprecated Pass the element through `render` instead: `render={<Link href="/x" />}`. */
   as?: React.ElementType;
   /** @deprecated Set it on the element passed to `render`. */
@@ -203,6 +205,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       children,
       icon,
       tooltip,
+      tooltipPosition,
       'aria-label': ariaLabelProp,
       type,
       ...props
@@ -303,7 +306,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       return (
         <Tooltip>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
+          <TooltipContent side={tooltipPosition}>{tooltip}</TooltipContent>
         </Tooltip>
       );
     }

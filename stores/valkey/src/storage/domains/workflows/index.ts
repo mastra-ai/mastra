@@ -64,12 +64,14 @@ export class WorkflowsValkey extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<unknown, unknown, unknown, unknown>;
     requestContext: Record<string, unknown>;
+    state?: Record<string, unknown>;
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     try {
       const existingRecord = await this.db.get<{
@@ -109,6 +111,9 @@ export class WorkflowsValkey extends WorkflowsStorage {
       }
 
       snapshot.context[stepId] = result;
+      if (state !== undefined) {
+        (snapshot.context as Record<string, unknown>).__state = state;
+      }
       snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
       await this.persistWorkflowSnapshot({

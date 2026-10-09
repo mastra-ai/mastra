@@ -251,6 +251,66 @@ export default function Chat() {
 
 Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
+### Client tools with `useChat()`
+
+A tool without an `execute` function runs on the client. When the model calls it, the agent's run ends at that step and the stream finishes with a `tool-{toolKey}` part in the `input-available` state. To let the agent continue, run the tool in the browser, add its result with `addToolOutput()`, and send the conversation back. `sendAutomaticallyWhen` sends the next request once every tool call in the last assistant message has a result:
+
+```tsx title="src/components/chat.tsx" oxfmt:false
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
+
+export default function Chat() {
+  const { messages, sendMessage, addToolOutput } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    async onToolCall({ toolCall }) {
+      if (toolCall.toolName === 'addToCart') {
+        const input = toolCall.input as { productId: string }
+        const cart = await addToCartInBrowser(input.productId)
+
+        // Don't await addToolOutput inside onToolCall to avoid deadlocks
+        addToolOutput({ tool: 'addToCart', toolCallId: toolCall.toolCallId, output: cart })
+      }
+    },
+  })
+
+  // ...render messages and call sendMessage()
+}
+```
+
+If the client only needs to render the tool call and the model doesn't need a result, give the tool an `execute` that returns a short acknowledgement instead. The agent then keeps generating in the same request. See [tools that run on the client](/docs/agents/tools#tools-that-run-on-the-client).
+
+Subagents can't run client tools: the browser never sees a subagent's tool calls. Define client tools on the agent the chat route talks to.
+
+### Resuming a suspended tool from `useChat()`
+
+When a tool calls `suspend()`, the stream includes a `data-tool-call-suspended` part with the `runId`, `toolCallId`, and `suspendPayload`. To resume, send `resumeData` (matching the tool's `resumeSchema`) and the `runId` in the request body. `handleChatStream()` and `chatRoute()` then call `agent.resumeStream()` instead of starting a new run:
+
+```tsx title="src/components/chat.tsx" oxfmt:false
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    prepareSendMessagesRequest: ({ messages, body }) => {
+      const resume = body?.resume as { runId: string; resumeData: unknown } | undefined
+      if (resume) {
+        return { body: { messages, runId: resume.runId, resumeData: resume.resumeData } }
+      }
+      return { body: { messages } }
+    },
+  }),
+})
+
+// When the user confirms the suspended tool call:
+sendMessage(
+  { text: 'Confirmed' },
+  { body: { resume: { runId: suspended.runId, resumeData: { confirmed: true } } } },
+)
+```
+
+`suspended` is the `data` of the latest `data-tool-call-suspended` part in `messages`.
+
 ## Using Mastra Memory
 
 When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.

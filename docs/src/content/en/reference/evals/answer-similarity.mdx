@@ -86,7 +86,7 @@ The `createAnswerSimilarityScorer()` function creates a scorer that evaluates ho
 ]}
 />
 
-This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but **requires ground truth** to be provided in the run object.
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but expects ground truth to be provided in the run object. When `options.requireGroundTruth` is `true` (the default), a run without ground truth throws an error. Set it to `false` to score runs without ground truth as 0.
 
 ## `.run()` returns
 

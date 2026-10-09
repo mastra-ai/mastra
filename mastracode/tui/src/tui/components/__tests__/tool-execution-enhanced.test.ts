@@ -53,11 +53,18 @@ describe('completed shell/process background status', () => {
     }
   });
 
+  it('colors the status dot red when a shell command exits nonzero', () => {
+    const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'cat CHANGELOG.md' }, {}, ui);
+    component.updateResult({ content: [{ type: 'text', text: 'No such file\n\nExit code: 1' }], isError: false });
+    const title = component.render(120).find(line => stripAnsi(line).includes('cat CHANGELOG.md'))!;
+    expect(title).toContain(theme.fg('error', '•'));
+  });
+
   it('does not treat error-looking output from a successful command as a failure', () => {
     const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'grep -n error src' }, {}, ui);
     component.updateResult({ content: [{ type: 'text', text: '12:  ? { error: envelope.error }' }], isError: false });
     const output = stripAnsi(component.render(120).join('\n'));
-    expect(output).toContain('✓');
+    expect(output).toContain('•');
     expect(output).not.toContain('✗');
   });
 });
@@ -681,7 +688,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('Mastra Docs (1 week ago)');
     expect(output).toContain('https://mastra.ai/docs');
     expect(output).toContain('Mastra Reference');
-    expect(output).toContain('╰── web_search "mastra docs" ✓');
+    expect(output).toContain('• web_search "mastra docs"');
     expect(output).not.toContain('encryptedContent');
     expect(output).not.toContain('do-not-render-this-blob');
   });
@@ -709,7 +716,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('Release notes');
     expect(output).toContain('https://mastra.ai/changelog');
     expect(output).toContain('https://github.com/mastra-ai/mastra/releases');
-    expect(output).toContain('╰── web_search "latest mastra release" ✓');
+    expect(output).toContain('• web_search "latest mastra release"');
     expect(output).not.toContain('sources');
     expect(output).not.toContain('action');
   });
@@ -731,7 +738,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).toContain('Answer: Mastra is an agent framework.');
     expect(output).toContain('## Mastra');
     expect(output).toContain('https://mastra.ai');
-    expect(output).toContain('╰── web_search "agent frameworks" ✓');
+    expect(output).toContain('• web_search "agent frameworks"');
     expect(output).not.toContain('"Answer:');
   });
 
@@ -903,6 +910,19 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(lines[3]!)).toContain('╰──');
     expect(stripAnsi(lines.join('\n'))).not.toContain('old value');
     expect(stripAnsi(lines.join('\n'))).not.toContain('(2 lines)');
+  });
+
+  it('keeps leading numbers in written file content (no view line-number stripping)', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: '/tmp/plan.md', content: '# Plan\n\n1. First step\n2. Second step\n' },
+      {},
+      ui,
+    );
+    component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('1. First step');
+    expect(visible).toContain('2. Second step');
   });
 
   it('renders quiet write tools with path and content preview lines', () => {
@@ -1802,7 +1822,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(boxLines.every(line => /[╮│┤╯]$/.test(stripAnsi(line).trimEnd()))).toBe(true);
   });
 
-  it('keeps quiet shell box borders aligned for multiline command input', () => {
+  it('wraps multiline command input in the title without truncating it', () => {
     const command = `gh pr create --base main --head fix/mastracode-visible-width-truncation --title "fix(mastracode): use visible width for terminal output" --body "This follows up on the quiet-mode terminal rendering work.
 
 It makes ANSI truncation and bordered command output measure terminal display width instead of raw string length, so wide characters and ANSI/OSC closers do not throw off alignment.
@@ -1817,17 +1837,14 @@ Test plan:
     );
 
     const rendered = component.render(100);
-    const topWidth = visibleWidth(rendered[0]!);
-    const boxLines = rendered.filter(line => /^[╭│╰]/.test(stripAnsi(line)));
-
     const visible = stripAnsi(rendered.join('\n'));
-    expect(visible).toContain('This follows up on the');
-    expect(visible).toContain('quiet-mode');
-    expect(visible).toContain('rendering work.');
+    const compact = visible.replace(/\s+/g, '');
+    expect(compact).toContain('Thisfollowsuponthe');
+    expect(compact).toContain('quiet-mode');
+    expect(compact).toContain('renderingwork.');
     expect(visible).not.toContain('…');
-    expect(boxLines.length).toBeGreaterThan(3);
-    expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
-    expect(boxLines.every(line => /[╮│╯]$/.test(stripAnsi(line).trimEnd()))).toBe(true);
+    expect(rendered.length).toBeGreaterThan(3);
+    expect(rendered.every(line => visibleWidth(line) <= 100)).toBe(true);
   });
 
   it('keeps quiet detail lines visible after completion', () => {
@@ -1847,7 +1864,7 @@ Test plan:
     expect(lines[1]).toContain('│');
   });
 
-  it('does not add an output section to a shell box without output and keeps the prompt orange', () => {
+  it('does not add an output panel to a shell call without output and keeps the prompt bold', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },
@@ -1857,10 +1874,10 @@ Test plan:
 
     const output = component.render(100).join('\n');
     const visible = stripAnsi(output);
-    expect(output).toContain('\u001b[93m$');
+    expect(visible).toContain('$ printf lines');
     expect(output).not.toContain('⟶');
-    expect(visible).not.toContain('├');
-    expect(visible.split('\n')).toHaveLength(3);
+    expect(visible).not.toContain('▄');
+    expect(visible.trimEnd().split('\n')).toHaveLength(1);
   });
 
   it('syntax highlights shell command footers as bash', () => {
@@ -1958,10 +1975,10 @@ Test plan:
     );
 
     const output = component.render(80).join('\n');
-    const footerLines = stripAnsi(output)
+    const titleLines = stripAnsi(output)
       .split('\n')
-      .filter(line => line.startsWith('│') && line.trim() !== '│');
-    expect(footerLines.length).toBeGreaterThan(1);
+      .filter(line => line.trim() !== '');
+    expect(titleLines.length).toBeGreaterThan(1);
     expect(stripAnsi(output)).toContain('then');
     expect(stripAnsi(output)).toContain('fi"');
     expect(output).not.toContain(chalk.blue('then'));
@@ -1992,13 +2009,13 @@ Test plan:
       ui,
     );
 
-    const output = stripAnsi(component.render(60).join('\n'));
-    const footerLines = output.split('\n').filter(line => line.startsWith('│') && line.trim() !== '│');
-    expect(output).not.toContain('…');
-    expect(output).toContain('--reporter=dot');
-    expect(footerLines.length).toBeGreaterThan(1);
-    expect(footerLines[0]).toContain('│ $ pnpm');
-    expect(footerLines[1]).toMatch(/^│   \S/);
+    const lines = stripAnsi(component.render(60).join('\n')).split('\n');
+    const unwrapped = lines.map(line => line.trim()).join('');
+    expect(lines.join('\n')).not.toContain('…');
+    expect(unwrapped).toContain('--reporter=dot');
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines[0]).toContain('• $ pnpm');
+    expect(lines[1]).toMatch(/^    \S/);
   });
 
   it('keeps base shell command color on wrapped continuation lines', () => {

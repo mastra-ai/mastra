@@ -153,7 +153,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Parent span within this Mastra trace: a span Mastra created (the span-tree parent, or a prior Mastra span such as the suspended run a resume links back to) */
   protected parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
-  protected externalParentSpanId?: string;
+  public externalParentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -533,6 +533,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Check if input/output should be hidden based on traceState
     const hideInput = this.traceState?.hideInput ?? false;
     const hideOutput = this.traceState?.hideOutput ?? false;
+    const nestedUnderParent = this.traceState?.nestedUnderParent ?? false;
 
     return {
       id: this.id,
@@ -555,8 +556,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...(this.isInternal ? { isInternal: true } : {}),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
-      // Tags are only included for root spans
-      ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
+      ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
+      // Tags are only included for root spans, and a nested run does not own the trace
+      ...(this.isRootSpan && !nestedUnderParent && this.tags?.length ? { tags: this.tags } : {}),
     };
   }
 
@@ -572,7 +574,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContext) {
-      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      const bridgeContextSpan = this.isInternal || this.isExcluded ? this.getParentSpan(false) : this;
       return bridge.executeInContext(bridgeContextSpan?.id ?? this.id, fn);
     }
 
@@ -587,7 +589,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const bridge = this.observabilityInstance.getBridge();
 
     if (bridge?.executeInContextSync) {
-      const bridgeContextSpan = this.isInternal ? this.getParentSpan(false) : this;
+      const bridgeContextSpan = this.isInternal || this.isExcluded ? this.getParentSpan(false) : this;
       return bridge.executeInContextSync(bridgeContextSpan?.id ?? this.id, fn);
     }
 

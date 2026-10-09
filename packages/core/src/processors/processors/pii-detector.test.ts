@@ -1,6 +1,6 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
@@ -2926,5 +2926,150 @@ describe('PIIDetector', () => {
       expect(consoleSpy).toHaveBeenCalledWith('[PIIDetector] onDetection callback failed:', expect.any(Error));
       consoleSpy.mockRestore();
     });
+  });
+
+  describe('redact strategy with no usable redaction', () => {
+    const ssn = '123-45-6789';
+    const wholeMessageSSN = (): PIIDetection => ({
+      type: 'ssn',
+      value: ssn,
+      confidence: 0.9,
+      start: 0,
+      end: ssn.length,
+      redacted_value: null,
+    });
+    const methods = ['processInput', 'processOutputResult'] as const;
+    const roleFor = (method: (typeof methods)[number]) => (method === 'processOutputResult' ? 'assistant' : 'user');
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it.each(methods)('%s drops a message that remove redaction leaves as whitespace only', async method => {
+      const second = '987-65-4321';
+      const text = `${ssn} ${second}`;
+      const model = setupMockModel(
+        createMockPIIResult(
+          ['ssn'],
+          [
+            wholeMessageSSN(),
+            {
+              type: 'ssn',
+              value: second,
+              confidence: 0.9,
+              start: ssn.length + 1,
+              end: text.length,
+              redacted_value: null,
+            },
+          ],
+        ),
+      );
+      const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod: 'remove' });
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await detector[method]({
+        messages: [createTestMessage(text, roleFor(method))],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual([]);
+      for (const call of [...infoSpy.mock.calls, ...warnSpy.mock.calls]) {
+        expect(JSON.stringify(call)).not.toContain(ssn);
+        expect(JSON.stringify(call)).not.toContain(second);
+      }
+    });
+
+    it.each(methods)('%s drops a message that remove redaction leaves empty', async method => {
+      const model = setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()]));
+      const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod: 'remove' });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await detector[method]({
+        messages: [createTestMessage(ssn, roleFor(method))],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual([]);
+      for (const call of warnSpy.mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(ssn);
+      }
+    });
+
+    it.each(methods)('%s drops a message flagged by category with no spans', async method => {
+      const model = setupMockModel([createMockPIIResult(), createMockPIIResult(['ssn'])]);
+      const detector = new PIIDetector({ model, strategy: 'redact' });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await detector[method]({
+        messages: [
+          createTestMessage('hello', roleFor(method), 'keep'),
+          createTestMessage(`my number is ${ssn}`, roleFor(method), 'drop'),
+        ],
+        abort: vi.fn() as any,
+      });
+
+      expect(result.map(m => m.id)).toEqual(['keep']);
+      expect(JSON.stringify(result)).not.toContain(ssn);
+    });
+
+    it.each(methods)('%s keeps the remaining text when remove redaction is partial', async method => {
+      const text = `my number is ${ssn}`;
+      const detection: PIIDetection = { ...wholeMessageSSN(), start: 13, end: 13 + ssn.length };
+      const model = setupMockModel(createMockPIIResult(['ssn'], [detection]));
+      const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod: 'remove' });
+
+      const result = await detector[method]({
+        messages: [createTestMessage(text, roleFor(method))],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toHaveLength(1);
+      expect((result[0]!.content.parts[0] as TextPart).text).toBe('my number is ');
+    });
+
+    it.each(['mask', 'hash', 'placeholder'] as const)(
+      'still redacts a whole-message match with %s',
+      async redactionMethod => {
+        for (const method of methods) {
+          const model = setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()]));
+          const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod });
+
+          const result = await detector[method]({
+            messages: [createTestMessage(ssn, roleFor(method))],
+            abort: vi.fn() as any,
+          });
+
+          expect(result).toHaveLength(1);
+          const text = (result[0]!.content.parts[0] as TextPart).text;
+          expect(text).not.toBe('');
+          expect(text).not.toContain(ssn);
+        }
+      },
+    );
+
+    it.each(methods)(
+      '%s returns the same shape as the filter strategy when the only message is dropped',
+      async method => {
+        const redactDetector = new PIIDetector({
+          model: setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()])),
+          strategy: 'redact',
+          redactionMethod: 'remove',
+        });
+        const filterDetector = new PIIDetector({
+          model: setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()])),
+          strategy: 'filter',
+        });
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+
+        const args = () => ({ messages: [createTestMessage(ssn, roleFor(method))], abort: vi.fn() as any });
+        const redacted = await redactDetector[method](args());
+        const filtered = await filterDetector[method](args());
+
+        expect(redacted).toEqual(filtered);
+        expect(redacted).toEqual([]);
+      },
+    );
   });
 });

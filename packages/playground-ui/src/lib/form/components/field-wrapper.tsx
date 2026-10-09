@@ -40,7 +40,12 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, fie
 
   return (
     <Field invalid={Boolean(error)} className="pb-4 last:pb-0">
-      {!rendersOwnLabel && <FieldLabel required={field.required}>{label}</FieldLabel>}
+      {!rendersOwnLabel && (
+        // A block label keeps the required asterisk right after the text when a long label wraps.
+        <FieldLabel required={field.required} className="block">
+          {label}
+        </FieldLabel>
+      )}
 
       {children}
 

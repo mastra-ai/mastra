@@ -420,3 +420,24 @@ describe('prompt-derived authority is scoped to the gate owner', () => {
     expect(session.resolveToolApproval('read_file', 'thread-b')).toBe('allow');
   });
 });
+
+describe('tool approvals keep the run step budget', () => {
+  // Regression: approve/decline resumed the run without maxSteps, so it fell back
+  // to the agent's default (~5 steps) and ended mid-task as "complete".
+  it.each([
+    ['approve', (session: Session<any>) => session.approveToolCall({ toolCallId: 'tool-call-1', runId: 'run-a' })],
+    ['decline', (session: Session<any>) => session.declineToolCall({ toolCallId: 'tool-call-1', runId: 'run-a' })],
+  ])('forwards maxSteps when the user chooses %s', async (_decision, resolve) => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    await resolve(session);
+
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.maxSteps).toBe(1000);
+    expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.savePerStep).toBe(false);
+  });
+});

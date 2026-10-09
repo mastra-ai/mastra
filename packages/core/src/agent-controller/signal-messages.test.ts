@@ -797,6 +797,37 @@ describe('AgentController signal messages', () => {
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
   });
 
+  it('does not tie a message queued behind an active run to that run abort signal', async () => {
+    const agent = new Agent({
+      id: 'queue-abort-agent',
+      name: 'queue-abort-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const { session } = await createController(new InMemoryStore(), agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued' }),
+    } as any);
+    await session.thread.create();
+    const activeSignal = session.run.ensureAbortController().signal;
+
+    await session.queueMessage({ content: 'queued' });
+    session.abort();
+
+    expect(activeSignal.aborted).toBe(true);
+    const queuedSignal = (queueMessage.mock.calls[0]?.[1] as any)?.ifIdle?.streamOptions?.abortSignal as AbortSignal;
+    expect(queuedSignal).toBeDefined();
+    expect(queuedSignal).not.toBe(activeSignal);
+    expect(queuedSignal.aborted).toBe(false);
+  });
+
   it('updates queued display state from Agent snapshots before queue acceptance resolves', async () => {
     const { session } = await createController(new InMemoryStore());
     const accepted = Promise.withResolvers<any>();

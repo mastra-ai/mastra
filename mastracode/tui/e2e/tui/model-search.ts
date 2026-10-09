@@ -46,7 +46,7 @@ export const modelSearchScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
-    await runtime.waitForScreenText(/▐build▌model-search-e2e\/old-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bbuild · model-search-e2e\/old-model/i, terminal, 8_000);
 
     terminal.submit('/model');
     await runtime.waitForScreenText(/Select Model/i, terminal, 8_000);
@@ -56,7 +56,7 @@ export const modelSearchScenario = {
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Switched build mode to model-search-e2e\/new-model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/▐build▌model-search-e2e\/new-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bbuild · model-search-e2e\/new-model/i, terminal, 8_000);
 
     terminal.submit('/model');
     await runtime.waitForScreenText(/Select Model/i, terminal, 8_000);
@@ -66,7 +66,7 @@ export const modelSearchScenario = {
     await runtime.waitForScreenText(/API Key Required/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/API Key Required/i, terminal, 8_000);
-    await runtime.waitForScreenText(/▐build▌model-search-e2e\/new-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bbuild · model-search-e2e\/new-model/i, terminal, 8_000);
 
     terminal.submit(
       '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="Model Search E2E"); console.log("MODEL_CANCELLED_BUILD="+p.models.build);\'',

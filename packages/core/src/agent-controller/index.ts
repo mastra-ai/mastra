@@ -53,6 +53,8 @@ export type {
   ModelAuthStatus,
   ModelUseCountProvider,
   ModelUseCountTracker,
+  OMModel,
+  ResolveAutoOMModelArgs,
   OMBufferedStatus,
   OMProgressState,
   OMStatus,

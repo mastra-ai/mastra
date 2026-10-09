@@ -89,10 +89,8 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
 
     const border = (char: string) => chalk.hex(JUDGE_COLOR)(char);
     const title = chalk.hex(JUDGE_COLOR).bold('Goal');
-    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
-    const horizontal = '─'.repeat(innerWidth + 1);
+    const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 2);
 
-    this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
     this.addChild(new Text(this.renderRow(this.renderHeader(title), innerWidth, border), BOX_INDENT, 0));
 
     if (!this.result && this.activity.length === 0 && !this.streamingReason) {
@@ -114,8 +112,6 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
         this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
       }
     }
-
-    this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
   }
 
   private renderActivityLine(line: string): string {
@@ -144,9 +140,9 @@ export class JudgeDisplayComponent extends WidthAwareContainer {
     return `${title}  ${decisionIcon} ${decisionText}${turnInfo ? `  ${turnInfo}` : ''}`;
   }
 
+  /** A row of the left-bar card (`width` is the room for text after the bar). */
   private renderRow(text: string, width: number, border: (char: string) => string): string {
-    const content = this.padLine(text, width);
-    return `${border('│')} ${content}${border('│')}`;
+    return text ? `${border('▎')} ${this.padLine(text, width)}` : border('▎');
   }
 
   private wrapLine(text: string, width: number): string[] {

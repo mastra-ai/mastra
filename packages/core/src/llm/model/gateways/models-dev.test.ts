@@ -358,6 +358,58 @@ describe('ModelsDevGateway', () => {
       expect(gateway.getStructuredOutputCapabilities().groq).toContain('legacy-model');
     });
 
+    it('keeps each model reasoning options and drops entries it cannot read', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          anthropic: {
+            id: 'anthropic',
+            name: 'Anthropic',
+            models: {
+              'claude-opus-4-6': {
+                reasoning: true,
+                reasoning_options: [
+                  { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+                  { type: 'budget_tokens', min: 1024 },
+                ],
+              },
+              'claude-sonnet-5': {
+                reasoning: true,
+                reasoning_options: [
+                  { type: 'toggle' },
+                  { type: 'adaptive_v2', values: ['auto'] },
+                  { type: 'effort', values: [] },
+                  { type: 'effort', values: [null] },
+                  { type: 'budget_tokens', min: '1024' },
+                ],
+              },
+              'claude-opus-4-7': {
+                reasoning: true,
+                reasoning_options: [{ type: 'effort', values: [null, 'low', 'medium', 'high'] }],
+              },
+              'claude-haiku-4-5': { reasoning: true, reasoning_options: [] },
+              'claude-3-haiku': { reasoning: false },
+            },
+            env: ['ANTHROPIC_API_KEY'],
+            npm: '@ai-sdk/anthropic',
+          },
+        }),
+      });
+
+      await gateway.fetchProviders();
+
+      expect(gateway.getReasoningCapabilities()).toEqual({
+        anthropic: {
+          'claude-opus-4-6': [
+            { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+            { type: 'budget_tokens', min: 1024 },
+          ],
+          'claude-sonnet-5': [{ type: 'toggle' }],
+          'claude-opus-4-7': [{ type: 'effort', values: ['low', 'medium', 'high'] }],
+        },
+      });
+    });
+
     it('should extract model IDs from each provider', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

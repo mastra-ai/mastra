@@ -5,6 +5,8 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import { FGADeniedError } from '../../auth/ee/fga-check';
+import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -424,6 +426,49 @@ describe('AgentControllerChannels', () => {
    * possible.
    */
   describe('session resolver', () => {
+    it('requires execute permission before invoking a custom resolver', async () => {
+      const resolveSession = vi.fn();
+      const { adapter, controller, mastra, channels } = await createSetup({ resolveSession });
+      const provider: IFGAProvider = {
+        check: vi.fn().mockResolvedValue(false),
+        require: vi
+          .fn()
+          .mockRejectedValue(
+            new FGADeniedError(
+              { id: 'user-1' },
+              { type: 'agent-controller', id: 'ctrl-1' },
+              'agent-controller:execute',
+            ),
+          ),
+        filterAccessible: vi.fn(),
+      };
+      controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+      requestContext.set('actor', { type: 'user', id: 'user-1', organizationId: 'org-1' });
+      const chatThread = createChatThread(adapter, 'chan-1:t-fga-denied');
+
+      await expect(
+        (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, requestContext),
+      ).rejects.toBeInstanceOf(FGADeniedError);
+
+      expect(resolveSession).not.toHaveBeenCalled();
+      expect(await controller.getSessionByResource('channel:chan-1:t-fga-denied')).toBeUndefined();
+      expect(provider.require).toHaveBeenCalledTimes(1);
+      const [user, authorization] = vi.mocked(provider.require).mock.calls[0]!;
+      expect(user).toEqual({ id: 'user-1', organizationMembershipId: 'om-1' });
+      expect(authorization).toMatchObject({
+        resource: { type: 'agent-controller', id: 'ctrl-1' },
+        permission: 'agent-controller:execute',
+        context: { resourceId: 'channel:chan-1:t-fga-denied' },
+      });
+      expect((authorization.context as any).requestContext.get('actor')).toEqual({
+        type: 'user',
+        id: 'user-1',
+        organizationId: 'org-1',
+      });
+    });
+
     it('creates the session in place of the default, with the inbound requestContext', async () => {
       const calls: Array<{ resourceId: string; tenant: unknown }> = [];
       const { adapter, controller, mastra, channels } = await createSetup({

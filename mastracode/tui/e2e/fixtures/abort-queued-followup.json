@@ -1,0 +1,39 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start a slow run before queueing a follow-up.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Initial queued run text that should be interrupted before completing the full slow response."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Second sent message before abort.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Sent messages answered after abort."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Queued follow-up survives abort.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Queued follow-up after abort completed."
+      }
+    }
+  ]
+}

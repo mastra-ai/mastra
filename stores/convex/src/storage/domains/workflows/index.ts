@@ -43,6 +43,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     return this.#db.mergeWorkflowStepResult(args);
   }

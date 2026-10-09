@@ -55,6 +55,14 @@ import {
   validateToolSuspendData,
 } from '../validation';
 
+// Built once: `.describe()` registers schemas in Zod's global registry, which is a
+// strong Map under zod@3.25.x's `zod/v4` shim, so per-build copies would leak.
+const resumeFieldsZodShape = {
+  suspendedToolCallId: z.string().describe('The toolCallId of the suspended tool to resume').nullable().optional(),
+  suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+  resumeData: z.any().describe('The resumeData object created from the resumeSchema of suspended tool').optional(),
+};
+
 /**
  * Merge two RequestContexts so non-serializable values survive the evented
  * workflow engine's toJSON/reconstruct cycle.
@@ -332,18 +340,7 @@ export class CoreToolBuilder extends MastraBase {
             });
           }
           if (this.isResumableTool) {
-            nextSchema = safeExtendZodObject(nextSchema, {
-              suspendedToolCallId: z
-                .string()
-                .describe('The toolCallId of the suspended tool to resume')
-                .nullable()
-                .optional(),
-              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-              resumeData: z
-                .any()
-                .describe('The resumeData object created from the resumeSchema of suspended tool')
-                .optional(),
-            });
+            nextSchema = safeExtendZodObject(nextSchema, resumeFieldsZodShape);
           }
           this.injectedInputSchema = toStandardSchema(nextSchema);
         } else {

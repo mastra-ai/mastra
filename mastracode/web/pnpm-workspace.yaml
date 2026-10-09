@@ -6,7 +6,7 @@
 packages:
   - '.'
 overrides:
-  hono@<4.12.34: 4.12.34
+  hono@<4.13.11: 4.13.11
   postcss@<8.5.23: 8.5.23
   # Vanta 2026-09-28: undici 5/6 floor (Dependabot/Aikido)
 # Share pnpm's machine-global virtual store (same setting as the monorepo

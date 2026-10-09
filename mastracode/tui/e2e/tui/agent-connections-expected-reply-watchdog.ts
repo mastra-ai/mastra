@@ -128,8 +128,8 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('Connect to the expected reply peer.');
-    await runtime.waitForScreenText(/agent_connections_list ✓/i, terminal, 20_000);
-    await runtime.waitForScreenText(/agent_connect .*✓/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_connections_list\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/• agent_connect\b/i, terminal, 20_000);
     await runtime.waitForScreenText(/Expected reply peer connected/i, terminal, 20_000);
 
     // The notification is sent during the active stream (when the user submits the next prompt).
@@ -138,7 +138,7 @@ export const agentConnectionsExpectedReplyWatchdogScenario = {
     shouldSendExpectedReplySignal = true;
     terminal.submit('Process any pending notifications.');
     await runtime.waitForScreenText(/expected-reply-reminder/i, terminal, 30_000);
-    await runtime.waitForScreenText(/agent_signal_send .*✓/i, terminal, 30_000);
+    await runtime.waitForScreenText(/• agent_signal_send\b/i, terminal, 30_000);
     await runtime.waitForScreenText(/Expected reply watchdog completed/i, terminal, 30_000);
     await expect(
       terminal.getByText(

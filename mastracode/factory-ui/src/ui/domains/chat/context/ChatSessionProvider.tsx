@@ -14,6 +14,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
+import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
@@ -214,7 +215,9 @@ export function ChatSessionBoundary({
       >
         <ChatModesProvider>
           <ChatModelsProvider>
-            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+            <ChatThinkingProvider>
+              <ChatCommandsProvider>{children}</ChatCommandsProvider>
+            </ChatThinkingProvider>
           </ChatModelsProvider>
         </ChatModesProvider>
       </ChatTranscriptProvider>

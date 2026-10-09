@@ -1,0 +1,1070 @@
+---
+title: "Reference: Provider toolsets | Connect"
+description: "Documented provider toolsets in @mastra/connect: provider IDs and the full tool list for each listed provider."
+packages:
+  - "@mastra/connect"
+---
+
+import { ProviderLogo } from '@site/src/components/connect/provider-logo';
+
+# Provider toolsets
+
+This page documents generated toolsets for 21 providers (883 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+
+Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
+
+MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/docs/mastra-platform/connect/providers#mcp-providers) for the list and links to each provider's MCP documentation.
+
+| Provider | Provider ID | Tools |
+| - | - | - |
+| <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
+| <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
+| <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
+| <ProviderLogo slug="googlecalendar" /> [Google Calendar](#google-calendar) | `google-calendar` | 43 |
+| <ProviderLogo slug="googledocs" /> [Google Docs](#google-docs) | `google-docs` | 37 |
+| <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 30 |
+| <ProviderLogo slug="gmail" /> [Gmail](#gmail) | `google-mail` | 52 |
+| <ProviderLogo slug="googlesheets" /> [Google Sheets](#google-sheets) | `google-sheet` | 18 |
+| <ProviderLogo slug="hubspot" /> [HubSpot](#hubspot) | `hubspot` | 50 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> [incident.io](#incidentio) | `incident-io` | 66 |
+| <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
+| <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
+| <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
+| <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
+| <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
+| <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
+| <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 52 |
+| <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
+| <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
+| <ProviderLogo src="https://svgl.app/library/workos.svg" /> [WorkOS](#workos) | `workos` | 40 |
+
+## Clerk
+
+Provider ID: `clerk` · 42 tools
+
+| Tool | Description |
+| - | - |
+| `clerk_assign_organization_role_permission` | Assign a permission to a Clerk organization role. |
+| `clerk_create_email_address` | Create a Clerk email address. |
+| `clerk_create_organization` | Create an organization in Clerk. |
+| `clerk_create_organization_domain` | Create a verified domain for a Clerk organization. |
+| `clerk_create_organization_invitation` | Create an invitation for a Clerk organization. |
+| `clerk_create_organization_membership` | Create a membership in a Clerk organization. |
+| `clerk_create_organization_role` | Create a Clerk organization role. |
+| `clerk_create_phone_number` | Create a Clerk phone number. |
+| `clerk_create_user` | Create a user in Clerk. |
+| `clerk_delete_email_address` | Delete a Clerk email address. |
+| `clerk_delete_organization` | Delete a Clerk organization. |
+| `clerk_delete_organization_domain` | Delete a verified domain from a Clerk organization. |
+| `clerk_delete_organization_membership` | Delete a membership from a Clerk organization. |
+| `clerk_delete_organization_role` | Delete a Clerk organization role. |
+| `clerk_delete_phone_number` | Delete a Clerk phone number. |
+| `clerk_delete_user` | Delete a Clerk user. |
+| `clerk_get_email_address` | Get a Clerk email address. |
+| `clerk_get_organization` | Retrieve a Clerk organization by ID. |
+| `clerk_get_organization_invitation` | Get a Clerk organization invitation. |
+| `clerk_get_organization_role` | Get a Clerk organization role. |
+| `clerk_get_phone_number` | Get a Clerk phone number. |
+| `clerk_get_session` | Get a Clerk session. |
+| `clerk_get_user` | Retrieve a Clerk user by ID. |
+| `clerk_list_organization_domains` | List verified domains for a Clerk organization. |
+| `clerk_list_organization_invitations` | List invitations for a Clerk organization. |
+| `clerk_list_organization_memberships` | List memberships for a Clerk organization. |
+| `clerk_list_organization_roles` | List Clerk organization roles. |
+| `clerk_list_organizations` | List organizations from Clerk. |
+| `clerk_list_sessions` | List Clerk sessions. |
+| `clerk_list_users` | List users from Clerk. |
+| `clerk_remove_organization_role_permission` | Remove a permission from a Clerk organization role. |
+| `clerk_revoke_organization_invitation` | Revoke a Clerk organization invitation. |
+| `clerk_revoke_session` | Revoke a Clerk session. |
+| `clerk_update_email_address` | Update a Clerk email address. |
+| `clerk_update_organization` | Update a Clerk organization. |
+| `clerk_update_organization_domain` | Update a verified domain for a Clerk organization. |
+| `clerk_update_organization_membership` | Update a Clerk organization membership role. |
+| `clerk_update_organization_membership_metadata` | Update metadata for a Clerk organization membership. |
+| `clerk_update_organization_role` | Update a Clerk organization role. |
+| `clerk_update_phone_number` | Update a Clerk phone number. |
+| `clerk_update_user` | Update a Clerk user. |
+| `clerk_verify_organization_domain` | Verify ownership of a Clerk organization domain. |
+
+## Discord
+
+Provider ID: `discord` · 34 tools
+
+| Tool | Description |
+| - | - |
+| `discord_add_guild_member_role` | Assign a role to a guild member. |
+| `discord_create_channel` | Create a channel in Discord |
+| `discord_create_message` | Create a message in Discord. |
+| `discord_create_reaction` | Add a reaction to a Discord message. |
+| `discord_create_role` | Create a role in Discord |
+| `discord_create_thread_from_message` | Start a Discord thread from an existing message |
+| `discord_create_webhook` | Create a webhook in a Discord channel |
+| `discord_delete_channel` | Delete or archive a channel in Discord |
+| `discord_delete_guild` | Leave a guild in Discord. Note: Discord does not allow bots to delete guilds via the API; use this action to have the bot leave a guild instead. |
+| `discord_delete_guild_member` | Delete or archive a guild member in Discord |
+| `discord_delete_message` | Delete or archive a message in Discord |
+| `discord_delete_reaction` | Remove a reaction from a Discord message. |
+| `discord_delete_role` | Delete a role in a Discord guild |
+| `discord_delete_webhook` | Delete a webhook in Discord permanently |
+| `discord_get_channel` | Retrieve a single channel from Discord |
+| `discord_get_guild` | Retrieve a single guild from Discord. |
+| `discord_get_guild_member` | Retrieve a single guild member from Discord |
+| `discord_get_message` | Retrieve a single message from Discord. |
+| `discord_get_role` | Retrieve a single role from Discord |
+| `discord_get_webhook` | Retrieve a single webhook from Discord. |
+| `discord_list_channels` | List channels from a Discord guild (server) |
+| `discord_list_guild_members` | List guild members from Discord. |
+| `discord_list_guilds` | List guilds from Discord. |
+| `discord_list_messages` | List messages from a Discord channel with optional pagination filters |
+| `discord_list_roles` | List roles from Discord. |
+| `discord_list_webhooks` | List webhooks from a Discord channel |
+| `discord_remove_guild_member_role` | Remove a role from a guild member |
+| `discord_search_members` | Search guild members whose username or nickname starts with the query, instead of paging the full member list. |
+| `discord_update_channel` | Update a Discord channel. |
+| `discord_update_guild` | Update a guild in Discord |
+| `discord_update_guild_member` | Update a guild member in Discord |
+| `discord_update_message` | Update a message in Discord. |
+| `discord_update_role` | Update a role in Discord |
+| `discord_update_webhook` | Update a webhook in Discord. |
+
+## Fireflies.ai
+
+Provider ID: `fireflies` · 27 tools
+
+| Tool | Description |
+| - | - |
+| `fireflies_add_to_live` | Add Fireflies bot to a live meeting by URL. |
+| `fireflies_continue_askfred_thread` | Continue an existing AskFred conversation thread. |
+| `fireflies_create_askfred_thread` | Start a new AskFred AI conversation thread |
+| `fireflies_create_bite` | Create a soundbite clip from a transcript segment |
+| `fireflies_create_live_action_item` | Create a live action item during an active meeting. |
+| `fireflies_create_live_soundbite` | Create a soundbite/clip during an active live meeting |
+| `fireflies_delete_askfred_thread` | Delete an AskFred conversation thread and all its messages. |
+| `fireflies_delete_transcript` | Permanently delete a transcript by ID. |
+| `fireflies_get_analytics` | Get conversation analytics for a date range. |
+| `fireflies_get_askfred_thread` | Retrieve an AskFred conversation thread with all messages. |
+| `fireflies_get_bite` | Retrieve a specific bite/soundbite by ID. |
+| `fireflies_get_channel` | Retrieve a specific channel by ID. |
+| `fireflies_get_transcript` | Retrieve a single transcript by ID including sentences, summary, speakers, and metadata. |
+| `fireflies_get_user` | Retrieve a specific user by ID. |
+| `fireflies_list_active_meetings` | List currently active/live meetings |
+| `fireflies_list_askfred_threads` | List AskFred AI conversation threads, optionally filtered by transcript. |
+| `fireflies_list_bites` | List soundbite clips with optional filters. |
+| `fireflies_list_contacts` | List all contacts in the workspace. |
+| `fireflies_list_transcripts` | List transcripts with optional filters. |
+| `fireflies_list_user_groups` | List user groups, optionally filtered to mine. |
+| `fireflies_list_users` | List all users in the workspace. |
+| `fireflies_revoke_shared_meeting_access` | Revoke a previously shared meeting access. |
+| `fireflies_share_meeting` | Share a meeting transcript via email with optional expiry |
+| `fireflies_update_meeting_channel` | Assign transcripts to a channel |
+| `fireflies_update_meeting_privacy` | Update the privacy setting of a meeting transcript. |
+| `fireflies_update_meeting_state` | Pause or resume a live meeting recording. |
+| `fireflies_upload_audio` | Submit an audio file URL for transcription. |
+
+## GitHub
+
+Provider ID: `github` · 49 tools
+
+| Tool | Description |
+| - | - |
+| `github_add_issue_comment` | Create a new comment on an issue or pull request discussion thread |
+| `github_create_branch` | Create a branch ref from an existing commit SHA |
+| `github_create_issue` | Open a new GitHub issue in a repository. |
+| `github_create_label` | Create a repository label with name, color, and description |
+| `github_create_or_update_file` | Create a new file or update existing repository contents in a branch. |
+| `github_create_pull_request` | Open a pull request from one branch into another. |
+| `github_create_release` | Publish a Git tag release for a repository. |
+| `github_create_review_request` | Request reviewers or teams on an open pull request |
+| `github_create_tag_object` | Create an annotated Git tag object for a commit or object SHA. |
+| `github_delete_file` | Delete a file from a repository branch. |
+| `github_delete_label` | Delete a repository label by name |
+| `github_delete_release` | Delete a release by release ID. |
+| `github_get_branch` | Retrieve branch metadata and protection status. |
+| `github_get_commit` | Retrieve a commit with changed files and stats |
+| `github_get_file_contents` | Retrieve a file or directory entry from repository contents. |
+| `github_get_issue` | Fetch a single issue or pull request issue record by number. |
+| `github_get_label` | Retrieve a single repository label by name. |
+| `github_get_pull_request` | Fetch a single pull request by number. |
+| `github_get_release` | Retrieve a single release by release ID. |
+| `github_get_repository` | Retrieve repository metadata, visibility, default branch, and owner info. |
+| `github_get_review` | Retrieve a pull request review by review ID. |
+| `github_get_tag_ref` | Retrieve a tag ref or branch-style Git reference |
+| `github_get_tree` | Get a git tree for a repository, optionally recursively, listing the files and directories it contains. |
+| `github_get_workflow` | Retrieve metadata for a GitHub Actions workflow. |
+| `github_get_workflow_run` | Retrieve a workflow run with status and conclusion details. |
+| `github_list_branches` | List branches for a repository with optional pagination and protected filtering. |
+| `github_list_commits` | List commits for a repository or branch with common filters |
+| `github_list_issue_comments` | List comments attached to an issue or pull request thread |
+| `github_list_issues` | List repository issues with state, assignee, label, and pagination filters. |
+| `github_list_labels` | List repository labels with pagination |
+| `github_list_pull_request_files` | List files changed by a pull request |
+| `github_list_pull_request_reviews` | List reviews submitted on a pull request |
+| `github_list_pull_requests` | List pull requests for a repository with state and branch filters |
+| `github_list_release_assets` | List assets uploaded to a repository release. |
+| `github_list_releases` | List published and draft releases for a repository. |
+| `github_list_tags` | List tags for a repository with optional pagination. |
+| `github_list_workflow_jobs` | List jobs in a workflow run attempt |
+| `github_list_workflow_runs` | List workflow runs for a repository or a specific workflow |
+| `github_list_workflows` | List GitHub Actions workflows configured in a repository. |
+| `github_merge_pull_request` | Merge an open pull request using the selected merge method. |
+| `github_rerun_workflow_run` | Rerun a completed or failed workflow run. |
+| `github_search_code` | Search file contents across GitHub repositories. The query must be scoped with a repo:, org:, or user: qualifier. |
+| `github_search_issues` | Search issues and pull requests across GitHub with the search API instead of paging repository listings. Supports the full GitHub search query syntax. |
+| `github_search_repositories` | Search repositories across GitHub by name, organization, language, or topic instead of needing to know the exact owner/repo up front. |
+| `github_submit_pull_request_review` | Create a pull request review with approval, comment, or change request. |
+| `github_update_issue` | Edit an issue's title, body, state, assignees, labels, or milestone. |
+| `github_update_label` | Update a repository label's name, color, or description. |
+| `github_update_pull_request` | Edit a pull request's title, body, base branch, or state. |
+| `github_update_release` | Edit release metadata such as name, notes, or draft state. |
+
+## Google Calendar
+
+Provider ID: `google-calendar` · 43 tools
+
+| Tool | Description |
+| - | - |
+| `google_calendar_add_attendee` | Fetch an event, append an attendee, and patch the attendee list |
+| `google_calendar_clear_calendar` | Clear the primary calendar by deleting all events. |
+| `google_calendar_create_acl_rule` | Create an access control rule |
+| `google_calendar_create_all_day_event` | Create an all-day calendar event using start and end dates |
+| `google_calendar_create_calendar` | Create a new secondary Google Calendar with the specified title. |
+| `google_calendar_create_event` | Create a calendar event |
+| `google_calendar_create_recurring_event` | Create a recurring event with supplied start, end, and RRULE values |
+| `google_calendar_delete_acl_rule` | Delete an access control rule |
+| `google_calendar_delete_calendar` | Delete a calendar |
+| `google_calendar_delete_event` | Delete a calendar event |
+| `google_calendar_find_free_slots` | Query free/busy data and return gaps meeting a minimum duration. |
+| `google_calendar_get_acl_rule` | Get an access control rule by ID |
+| `google_calendar_get_calendar` | Get a calendar by ID |
+| `google_calendar_get_calendar_list_entry` | Retrieve a calendar list entry with access role and colors |
+| `google_calendar_get_colors` | Return available calendar and event color definitions |
+| `google_calendar_get_event` | Get an event by ID |
+| `google_calendar_get_setting` | Retrieve a single Google Calendar user setting by ID |
+| `google_calendar_import_event` | Import an event as a private copy using an iCalendar UID. |
+| `google_calendar_insert_calendar_to_list` | Add an existing calendar to the user's list with optional colors |
+| `google_calendar_list_acl_rules` | List ACL rules for a calendar with pagination support |
+| `google_calendar_list_calendar_list` | List calendars in the user's calendar list |
+| `google_calendar_list_event_instances` | List instances of a recurring event |
+| `google_calendar_list_events` | List events on a calendar |
+| `google_calendar_list_settings` | List calendar settings |
+| `google_calendar_list_upcoming_events` | List upcoming events from now, ordered by start time |
+| `google_calendar_move_event` | Move an event to another calendar, changing its organizer. |
+| `google_calendar_patch_event` | Partially update only provided event fields like time, location, or description |
+| `google_calendar_query_free_busy` | Return free/busy blocks for one or more calendars in a time range |
+| `google_calendar_quick_add_event` | Create an event from a text string |
+| `google_calendar_remove_attendee` | Remove an attendee from a Google Calendar event by email |
+| `google_calendar_remove_calendar_from_list` | Remove a calendar from the user's calendar list |
+| `google_calendar_search_events` | Search a calendar's events by text query and optional time bounds |
+| `google_calendar_settings` | Fetch all user settings across pages from Google Calendar |
+| `google_calendar_stop_channel` | Stop push notifications for a channel |
+| `google_calendar_update_acl_rule` | Update an access control rule |
+| `google_calendar_update_attendee_response` | Fetch an event and update one attendee's response status |
+| `google_calendar_update_calendar` | Update a calendar's metadata |
+| `google_calendar_update_calendar_list_entry` | Update a calendar list entry's settings |
+| `google_calendar_update_event` | Update a calendar event |
+| `google_calendar_watch_calendar_list` | Subscribe to changes in the calendar list |
+| `google_calendar_watch_events` | Subscribe to event changes on a calendar |
+| `google_calendar_watch_settings` | Subscribe to changes in calendar settings |
+| `google_calendar_whoami` | Return the current user's Google account ID and email |
+
+## Google Docs
+
+Provider ID: `google-docs` · 37 tools
+
+| Tool | Description |
+| - | - |
+| `google_docs_add_document_tab` | Add a new document tab to an existing Google Doc. |
+| `google_docs_create_document` | Create a blank Google Doc with a title |
+| `google_docs_create_footer` | Create a footer in a document section |
+| `google_docs_create_footnote` | Insert a footnote at a body location. |
+| `google_docs_create_header` | Create a header in a document section. |
+| `google_docs_create_named_range` | Create a named range over a text range. |
+| `google_docs_create_paragraph_bullets` | Apply a bullet or numbered list preset to paragraphs in a range. |
+| `google_docs_delete_content_range` | Delete text or other removable content from a range in a Google Doc. The range must be structurally valid: it cannot span table cells, section breaks, or the final newline of a segment (body, header, or footer). |
+| `google_docs_delete_document_tab` | Delete a document tab by tab ID. |
+| `google_docs_delete_footer` | Delete a footer by footer ID. |
+| `google_docs_delete_header` | Delete a header by header ID. |
+| `google_docs_delete_named_range` | Delete a named range by ID or by name. |
+| `google_docs_delete_paragraph_bullets` | Remove bullets or numbering from paragraphs in a range. |
+| `google_docs_delete_table_column` | Delete a table column using a reference cell. |
+| `google_docs_delete_table_row` | Delete a table row using a reference cell. |
+| `google_docs_export_document` | Export a Google Doc to PDF, DOCX, HTML, or plain text. |
+| `google_docs_insert_inline_image` | Insert an inline image from a public URL. |
+| `google_docs_insert_page_break` | Insert a page break in the document body. |
+| `google_docs_insert_section_break` | Insert a section break in the document body. |
+| `google_docs_insert_table` | Insert a table with a given row and column count. |
+| `google_docs_insert_table_column` | Insert a table column to the left or right of a reference cell. |
+| `google_docs_insert_table_row` | Insert a table row above or below a reference cell. |
+| `google_docs_insert_text` | Insert text at an index or at the end of a segment. |
+| `google_docs_list_revisions` | List the revision history for a Google Doc. |
+| `google_docs_merge_table_cells` | Merge a rectangular range of table cells in a Google Doc |
+| `google_docs_pin_table_header_rows` | Pin or unpin a number of rows as frozen headers in a table. |
+| `google_docs_replace_all_text` | Replace all matches of a string or regex in a document. |
+| `google_docs_replace_image` | Replace an existing inline or positioned image with a new image from a URL. |
+| `google_docs_replace_named_range_content` | Replace the contents of a named range in a Google Doc. |
+| `google_docs_unmerge_table_cells` | Unmerge previously merged table cells in a Google Doc. |
+| `google_docs_update_document_style` | Update document-level page and margin styling. |
+| `google_docs_update_document_tab_properties` | Rename or move a document tab. |
+| `google_docs_update_paragraph_style` | Update alignment, heading, spacing, or indentation for paragraphs in a range. |
+| `google_docs_update_section_style` | Update section-level layout settings. |
+| `google_docs_update_table_cell_style` | Update background, borders, padding, or alignment for table cells. |
+| `google_docs_update_table_row_style` | Update minimum height or related row styling for table rows. |
+| `google_docs_update_text_style` | Update bold, italic, links, colors, font, or size for text in a range. |
+
+## Google Drive
+
+Provider ID: `google-drive` · 30 tools
+
+| Tool | Description |
+| - | - |
+| `google_drive_copy_file` | Copy a file to a destination |
+| `google_drive_create_comment` | Add a comment to a file |
+| `google_drive_create_folder` | Create a new folder in Google Drive |
+| `google_drive_create_shared_drive` | Create a shared drive |
+| `google_drive_delete_comment` | Delete a comment from a file |
+| `google_drive_delete_file` | Delete a file or folder from Google Drive |
+| `google_drive_delete_permission` | Remove a permission from a file |
+| `google_drive_delete_shared_drive` | Delete a shared drive |
+| `google_drive_empty_trash` | Permanently delete all trashed files |
+| `google_drive_find_file` | Search for files by name or query in Google Drive |
+| `google_drive_find_folder` | Search for a folder by name or query |
+| `google_drive_get_about` | Get the user's drive info and storage quota |
+| `google_drive_get_changes_start_page_token` | Get the starting token for listing future changes |
+| `google_drive_get_comment` | Get a comment by ID |
+| `google_drive_get_permission` | Get a permission by ID |
+| `google_drive_get_revision` | Get a file revision by ID |
+| `google_drive_get_shared_drive` | Get a shared drive by ID |
+| `google_drive_hide_shared_drive` | Hide a shared drive from the default view |
+| `google_drive_list_changes` | List changes to files and shared drives |
+| `google_drive_list_comments` | List comments on a file |
+| `google_drive_list_drives` | List shared drives the user can access, with cursor pagination and drive metadata like hidden, capabilities, and restrictions. |
+| `google_drive_list_files_non_unified` | List immediate files and folders for a folder ID, or root when omitted, with cursor pagination and shared-drive support. |
+| `google_drive_list_permissions` | List permissions on a file |
+| `google_drive_move_file` | Move a file to a different folder |
+| `google_drive_unhide_shared_drive` | Restore a hidden shared drive to default view |
+| `google_drive_update_comment` | Update a comment on a file |
+| `google_drive_update_file` | Update a file's metadata |
+| `google_drive_update_permission` | Update a permission on a file |
+| `google_drive_update_shared_drive` | Update a shared drive's metadata |
+| `google_drive_upload_document` | Upload plain text or base64 file content up to 5 MB, optionally into a folder with a description; defaults to root |
+
+## Gmail
+
+Provider ID: `google-mail` · 52 tools
+
+| Tool | Description |
+| - | - |
+| `google_mail_batch_delete_messages` | Permanently delete multiple Gmail messages by ID |
+| `google_mail_batch_modify_messages` | Add and remove labels on multiple Gmail messages at once. |
+| `google_mail_create_draft` | Create a Gmail draft message from RFC 2822 MIME content. |
+| `google_mail_create_filter` | Create a mailbox filter with match criteria and label actions. |
+| `google_mail_create_label` | Create a new user label with visibility settings. |
+| `google_mail_create_send_as_alias` | Create a custom send-as alias for the mailbox |
+| `google_mail_delete_draft` | Delete an existing draft by draft ID |
+| `google_mail_delete_filter` | Delete a mailbox filter by filter ID |
+| `google_mail_delete_forwarding_address` | Delete a forwarding address from Gmail settings. |
+| `google_mail_delete_label` | Delete a user-created label |
+| `google_mail_delete_message` | Permanently delete a Gmail message by ID. |
+| `google_mail_delete_thread` | Permanently delete a Gmail thread and its messages. |
+| `google_mail_get_attachment` | Retrieve a specific message attachment payload by attachment ID. |
+| `google_mail_get_auto_forwarding_settings` | Retrieve the mailbox auto-forwarding configuration. |
+| `google_mail_get_draft` | Retrieve a draft and its embedded message payload. |
+| `google_mail_get_filter` | Retrieve a mailbox filter by filter ID. |
+| `google_mail_get_forwarding_address` | Retrieve a forwarding address configured for the mailbox. |
+| `google_mail_get_imap_settings` | Retrieve IMAP settings for the mailbox |
+| `google_mail_get_label` | Retrieve a single Gmail label by label ID. |
+| `google_mail_get_language_settings` | Retrieve Gmail language settings for the mailbox. |
+| `google_mail_get_message` | Retrieve a specific Gmail message with optional format selection. |
+| `google_mail_get_pop_settings` | Retrieve POP settings for the mailbox. |
+| `google_mail_get_send_as_alias` | Retrieve a configured send-as alias |
+| `google_mail_get_thread` | Retrieve a Gmail thread and its messages. |
+| `google_mail_get_vacation_settings` | Retrieve the mailbox vacation responder settings. |
+| `google_mail_list_drafts` | List drafts in the mailbox with pagination support. |
+| `google_mail_list_filters` | List mailbox filters configured for the authenticated user |
+| `google_mail_list_forwarding_addresses` | List forwarding addresses configured for the mailbox. |
+| `google_mail_list_labels` | List built-in and user-created mailbox labels. |
+| `google_mail_list_messages` | List messages matching Gmail query and label filters. |
+| `google_mail_list_send_as_aliases` | List send-as aliases available for the mailbox. |
+| `google_mail_list_threads` | List conversation threads matching Gmail query and label filters. |
+| `google_mail_list_watch_history` | List mailbox history records after a given history ID |
+| `google_mail_modify_message` | Add and remove labels on a Gmail message |
+| `google_mail_modify_thread` | Add and remove labels across a Gmail thread. |
+| `google_mail_send_draft` | Send an existing draft message |
+| `google_mail_send_message` | Send an email message through Gmail using raw MIME content. |
+| `google_mail_stop_watch` | Stop Gmail push notification watch state for the mailbox. |
+| `google_mail_trash_message` | Move a Gmail message to trash |
+| `google_mail_trash_thread` | Move a Gmail thread to trash. |
+| `google_mail_untrash_message` | Restore a trashed Gmail message to the mailbox. |
+| `google_mail_untrash_thread` | Restore a trashed Gmail thread to the mailbox. |
+| `google_mail_update_auto_forwarding_settings` | Update Gmail auto-forwarding behavior and disposition |
+| `google_mail_update_draft` | Replace an existing draft with new MIME content. |
+| `google_mail_update_imap_settings` | Update IMAP enablement and visibility settings. |
+| `google_mail_update_label` | Update a user-created label's name or visibility settings. |
+| `google_mail_update_language_settings` | Update the mailbox display language |
+| `google_mail_update_pop_settings` | Update POP access settings for the mailbox |
+| `google_mail_update_send_as_alias` | Update send-as alias settings such as display name or reply-to. |
+| `google_mail_update_send_as_smtp_msa` | Update the SMTP MSA settings for a send-as alias. |
+| `google_mail_update_vacation_settings` | Update the mailbox vacation responder configuration. |
+| `google_mail_watch_mailbox` | Start Gmail push notifications for mailbox changes. |
+
+## Google Sheets
+
+Provider ID: `google-sheet` · 18 tools
+
+| Tool | Description |
+| - | - |
+| `google_sheet_append_values_to_spreadsheet` | Append values to the end of a spreadsheet table |
+| `google_sheet_batch_clear_values` | Clear values from one or more ranges in a spreadsheet, preserving formatting |
+| `google_sheet_batch_clear_values_by_data_filter` | Clear values from ranges matching data filters, preserving formatting |
+| `google_sheet_batch_get_values` | Get values from multiple ranges |
+| `google_sheet_batch_get_values_by_data_filter` | Get values from ranges matching data filters |
+| `google_sheet_batch_update_spreadsheet` | Apply multiple updates to a spreadsheet in a single request |
+| `google_sheet_clear_values` | Clear values from a range, preserving formatting |
+| `google_sheet_copy_sheet` | Copy a sheet to another spreadsheet |
+| `google_sheet_create_column` | Insert a new column into a sheet |
+| `google_sheet_create_spreadsheet` | Create a new spreadsheet |
+| `google_sheet_create_spreadsheet_row` | Insert a new row at a given index in a Google Sheet |
+| `google_sheet_delete_worksheet` | Delete a worksheet by name from a Google Spreadsheet |
+| `google_sheet_get_spreadsheet_by_data_filter` | Get spreadsheet data matching data filters |
+| `google_sheet_get_values` | Get values from a spreadsheet range |
+| `google_sheet_search_developer_metadata` | Search developer metadata by criteria |
+| `google_sheet_update_conditional_format_rule` | Update or move a conditional format rule |
+| `google_sheet_update_values` | Update values in a spreadsheet range |
+| `google_sheet_upsert_row` | Append or update a row of values in a Google Sheet |
+
+## HubSpot
+
+Provider ID: `hubspot` · 50 tools
+
+| Tool | Description |
+| - | - |
+| `hubspot_batch_create_companies` | Create multiple companies at once |
+| `hubspot_batch_update_companies` | Update multiple companies at once |
+| `hubspot_change_user_role` | Update a HubSpot user's role and team assignments |
+| `hubspot_clone_marketing_email` | Clone an existing marketing email |
+| `hubspot_create_association` | Associate two records together |
+| `hubspot_create_company` | Create a company record |
+| `hubspot_create_contact` | Create a contact record |
+| `hubspot_create_deal` | Create a deal record in HubSpot |
+| `hubspot_create_marketing_email` | Create a marketing email in HubSpot |
+| `hubspot_create_note` | Create a HubSpot note with body, timestamp, owner, optional attachments, and an explicit association to a contact, company, deal, or ticket. |
+| `hubspot_create_property` | Create a custom CRM property for a specified HubSpot object type |
+| `hubspot_create_task` | Create a HubSpot task with type, title, priority, assignee, due date, notes, and optional associations to contacts, companies, or deals |
+| `hubspot_create_ticket` | Create a support ticket in HubSpot CRM |
+| `hubspot_create_user` | Provision a HubSpot user with email, role, and team assignments |
+| `hubspot_delete_a_workflow` | Delete an automation workflow |
+| `hubspot_delete_company` | Delete a company record |
+| `hubspot_delete_contact` | Delete a contact record |
+| `hubspot_delete_deal` | Delete a deal record |
+| `hubspot_delete_marketing_email` | Delete a marketing email |
+| `hubspot_delete_task` | Delete a HubSpot task by record ID |
+| `hubspot_delete_ticket` | Delete a support ticket |
+| `hubspot_delete_user` | Delete a HubSpot provisioned user by ID |
+| `hubspot_fetch_account_information` | Retrieve portal account details, currency settings, timezone, and hosting region |
+| `hubspot_fetch_pipelines` | List pipelines and stages for an object type, defaulting to deals |
+| `hubspot_fetch_properties` | List CRM property metadata for a specified HubSpot object type |
+| `hubspot_fetch_roles` | List available user roles for a HubSpot enterprise account |
+| `hubspot_get_company` | Get a company by ID |
+| `hubspot_get_contact` | Get a contact by ID |
+| `hubspot_get_deal` | Get a deal by ID |
+| `hubspot_get_marketing_email` | Get a marketing email by ID |
+| `hubspot_get_owner` | Get an owner by ID |
+| `hubspot_get_ticket` | Get a ticket by ID |
+| `hubspot_list_companies` | List company records |
+| `hubspot_list_contacts` | List contact records |
+| `hubspot_list_deals` | List deal records from HubSpot CRM |
+| `hubspot_list_forms` | List forms |
+| `hubspot_list_marketing_emails` | List marketing emails |
+| `hubspot_list_tickets` | List support tickets |
+| `hubspot_search_companies` | Search companies by criteria |
+| `hubspot_search_contacts` | Search contacts by free-text query or property filters instead of paging the full contact list. |
+| `hubspot_search_deals` | Search deals by criteria |
+| `hubspot_search_tickets` | Search tickets by criteria |
+| `hubspot_submit_form` | Submit a HubSpot form on behalf of a visitor, using the authenticated form submission endpoint. |
+| `hubspot_update_company` | Update a company record |
+| `hubspot_update_contact` | Update a contact record |
+| `hubspot_update_deal` | Update a deal record in HubSpot CRM |
+| `hubspot_update_marketing_email` | Update a marketing email |
+| `hubspot_update_task` | Update a HubSpot task's fields, owner, due date, and associations |
+| `hubspot_update_ticket` | Update a support ticket |
+| `hubspot_whoami` | Retrieve the current authenticated HubSpot user's ID and email |
+
+## incident.io
+
+Provider ID: `incident-io` · 66 tools
+
+| Tool | Description |
+| - | - |
+| `incident_io_add_alert_tags` | Add alert tags in incident.io. |
+| `incident_io_connect_follow_up_external_issue` | Connect a follow-up to an external issue in incident.io. |
+| `incident_io_create_action` | Create action in incident.io. |
+| `incident_io_create_follow_up` | Create follow up in incident.io. |
+| `incident_io_create_incident` | Create incident in incident.io. |
+| `incident_io_create_incident_alert` | Create incident alert in incident.io. |
+| `incident_io_create_incident_timeline_item` | Create incident timeline item in incident.io. |
+| `incident_io_create_incident_update` | Create incident update in incident.io. |
+| `incident_io_delete_action` | Delete action in incident.io. |
+| `incident_io_delete_follow_up` | Delete follow up in incident.io. |
+| `incident_io_get_action` | Get action in incident.io. |
+| `incident_io_get_alert` | Get alert in incident.io. |
+| `incident_io_get_catalog_entry` | Get catalog entry in incident.io. |
+| `incident_io_get_catalog_type` | Get catalog type in incident.io. |
+| `incident_io_get_follow_up` | Get follow up in incident.io. |
+| `incident_io_get_incident` | Get incident in incident.io. |
+| `incident_io_get_incident_role` | Get incident role in incident.io. |
+| `incident_io_get_incident_status` | Get incident status in incident.io. |
+| `incident_io_get_incident_timestamp` | Get incident timestamp in incident.io. |
+| `incident_io_get_incident_type` | Get incident type in incident.io. |
+| `incident_io_get_postmortem_document` | Get postmortem document in incident.io. |
+| `incident_io_get_postmortem_document_content` | Get postmortem document content in incident.io. |
+| `incident_io_get_schedule` | Get schedule in incident.io. |
+| `incident_io_get_schedule_override` | Get schedule override in incident.io. |
+| `incident_io_get_schedule_replica` | Get schedule replica in incident.io. |
+| `incident_io_get_schedule_sync_rule` | Get schedule sync rule in incident.io. |
+| `incident_io_get_severity` | Get severity in incident.io. |
+| `incident_io_get_team` | Get team in incident.io. |
+| `incident_io_get_user` | Get user in incident.io. |
+| `incident_io_get_user_paging_provider` | Get a user paging provider in incident.io. |
+| `incident_io_list_actions` | List actions in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_alert_tags` | List alert tags in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_alerts` | List alerts in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_catalog_entries` | List catalog entries in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_catalog_resources` | List catalog resources in incident.io. |
+| `incident_io_list_catalog_types` | List catalog types in incident.io. |
+| `incident_io_list_follow_ups` | List follow ups in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_incident_alerts` | List incident alerts in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_incident_participant_workloads` | List incident participant workloads in incident.io. |
+| `incident_io_list_incident_participants` | List incident participants in incident.io. |
+| `incident_io_list_incident_roles` | List incident roles in incident.io. |
+| `incident_io_list_incident_statuses` | List incident statuses in incident.io. |
+| `incident_io_list_incident_timeline_items` | List incident timeline items in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_incident_timestamps` | List incident timestamps in incident.io. |
+| `incident_io_list_incident_types` | List incident types in incident.io. |
+| `incident_io_list_incident_updates` | List incident updates in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_incidents` | List incidents in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_postmortem_documents` | List postmortem documents in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_schedule_entries` | List schedule entries in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_schedule_overrides` | List schedule overrides in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_schedule_replicas` | List schedule replicas in incident.io. |
+| `incident_io_list_schedule_sync_rules` | List schedule sync rules in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_schedules` | List schedules in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_severities` | List severities in incident.io. |
+| `incident_io_list_teams` | List teams in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_user_notification_methods` | List user notification methods in incident.io. |
+| `incident_io_list_user_notification_rules` | List user notification rules in incident.io. |
+| `incident_io_list_users` | List users in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_remove_alert_tags` | Remove alert tags in incident.io. |
+| `incident_io_resolve_alert` | Resolve alert in incident.io. |
+| `incident_io_set_alert_tags` | Set alert tags in incident.io. |
+| `incident_io_transition_incident_alert` | Transition incident alert in incident.io. |
+| `incident_io_update_action` | Update action in incident.io. |
+| `incident_io_update_follow_up` | Update follow up in incident.io. |
+| `incident_io_update_incident` | Update incident in incident.io. |
+| `incident_io_update_incident_timeline_item` | Update incident timeline item in incident.io. |
+
+## Jira
+
+Provider ID: `jira` · 38 tools
+
+| Tool | Description |
+| - | - |
+| `jira_add_comment` | Add a comment to a Jira issue. |
+| `jira_add_worklog` | Log time against a Jira issue. |
+| `jira_create_issue` | Create a Jira issue in a project. |
+| `jira_create_issue_link` | Link two Jira issues with a relationship type |
+| `jira_delete_attachment` | Delete an attachment from a Jira issue |
+| `jira_delete_comment` | Delete a comment from a Jira issue |
+| `jira_delete_issue` | Delete a Jira issue by ID or key |
+| `jira_delete_issue_link` | Delete a link between Jira issues |
+| `jira_delete_worklog` | Delete a worklog from a Jira issue. |
+| `jira_get_create_issue_metadata` | Retrieve project and issue type metadata for issue creation. |
+| `jira_get_edit_issue_metadata` | Retrieve editable field metadata for an existing Jira issue |
+| `jira_get_field` | Retrieve Jira field metadata by field ID |
+| `jira_get_issue` | Retrieve a Jira issue by ID or key |
+| `jira_get_issue_changelog` | Retrieve the changelog for a Jira issue |
+| `jira_get_issue_type` | Retrieve Jira issue type metadata by issue type ID. |
+| `jira_get_myself` | Retrieve the currently authenticated Jira user. |
+| `jira_get_priority` | Retrieve a Jira priority by priority ID. |
+| `jira_get_project` | Retrieve a Jira project by ID or key. |
+| `jira_get_status` | Retrieve a Jira status by status ID or name. |
+| `jira_get_user` | Retrieve a Jira user by account ID |
+| `jira_list_fields` | List Jira field metadata available to the user. |
+| `jira_list_issue_comments` | List comments on a Jira issue with pagination |
+| `jira_list_issue_types` | List Jira issue types available to the user. Pass projectId to list only the issue types available in that project (recommended before creating an issue). |
+| `jira_list_priorities` | List Jira priorities available to the user. |
+| `jira_list_project_components` | List components for a Jira project |
+| `jira_list_project_versions` | List versions for a Jira project |
+| `jira_list_projects` | List Jira projects accessible to the authenticated user. |
+| `jira_list_statuses` | List Jira statuses available to the user |
+| `jira_list_transitions` | List available workflow transitions for a Jira issue |
+| `jira_list_users` | Search Jira users visible to the authenticated account. |
+| `jira_list_watchers` | List watchers on a Jira issue |
+| `jira_list_worklogs` | List worklogs on a Jira issue |
+| `jira_remove_watcher` | Remove a watcher from a Jira issue |
+| `jira_search_issues` | Search Jira issues using JQL. |
+| `jira_transition_issue` | Move a Jira issue through a workflow transition. |
+| `jira_update_comment` | Update a comment on a Jira issue |
+| `jira_update_issue` | Update issue fields on an existing Jira issue |
+| `jira_update_worklog` | Update a worklog on a Jira issue. |
+
+## Linear
+
+Provider ID: `linear` · 46 tools
+
+| Tool | Description |
+| - | - |
+| `linear_add_issue_label` | Attach a label to a Linear issue. |
+| `linear_archive_cycle` | Archive a Linear cycle. |
+| `linear_archive_issue` | Archive a Linear issue so it is removed from active workflows. |
+| `linear_create_attachment` | Create an attachment on a Linear issue. |
+| `linear_create_comment` | Create a comment on a Linear issue. |
+| `linear_create_cycle` | Create a cycle for a Linear team. |
+| `linear_create_issue` | Create a new Linear issue. |
+| `linear_create_issue_label` | Create a Linear issue label. |
+| `linear_create_issue_relation` | Create a relationship between two Linear issues. |
+| `linear_create_project` | Create a Linear project. |
+| `linear_delete_attachment` | Delete an attachment from a Linear issue. |
+| `linear_delete_comment` | Delete a comment from a Linear issue. |
+| `linear_delete_issue` | Delete a Linear issue. |
+| `linear_delete_issue_label` | Delete a Linear issue label. |
+| `linear_delete_issue_relation` | Delete a relationship between two Linear issues. |
+| `linear_get_attachment` | Retrieve a Linear attachment by attachment ID. |
+| `linear_get_comment` | Retrieve a Linear comment by comment ID. |
+| `linear_get_cycle` | Retrieve a Linear cycle by cycle ID. |
+| `linear_get_issue` | Retrieve a Linear issue by issue ID. |
+| `linear_get_issue_label` | Retrieve a Linear issue label by label ID. |
+| `linear_get_project` | Retrieve a Linear project by project ID. |
+| `linear_get_team` | Retrieve a Linear team by team ID. |
+| `linear_get_user` | Retrieve a Linear user by user ID. |
+| `linear_get_viewer` | Retrieve the currently authenticated Linear user. |
+| `linear_get_workflow_state` | Retrieve a Linear workflow state by state ID. |
+| `linear_list_attachments` | List Linear attachments with filtering and pagination. |
+| `linear_list_comments` | List Linear comments with filtering and pagination. |
+| `linear_list_cycles` | List Linear cycles with filtering and pagination. |
+| `linear_list_issue_labels` | List Linear issue labels with filtering and pagination. |
+| `linear_list_issues` | List Linear issues with filtering and pagination. |
+| `linear_list_projects` | List Linear projects with filtering and pagination. |
+| `linear_list_teams` | List Linear teams available to the authenticated user. |
+| `linear_list_users` | List Linear users with filtering and pagination. |
+| `linear_list_workflow_states` | List Linear workflow states across teams. |
+| `linear_remove_issue_label` | Remove a label from a Linear issue. |
+| `linear_resolve_comment` | Resolve a Linear comment thread. |
+| `linear_search_issues` | Search Linear issues with full-text query support. |
+| `linear_unarchive_issue` | Restore an archived Linear issue. |
+| `linear_unarchive_project` | Restore an archived Linear project. |
+| `linear_unresolve_comment` | Reopen a previously resolved Linear comment thread. |
+| `linear_update_comment` | Update a comment on a Linear issue. |
+| `linear_update_cycle` | Update an existing Linear cycle. |
+| `linear_update_issue` | Update fields on an existing Linear issue |
+| `linear_update_issue_label` | Update an existing Linear issue label. |
+| `linear_update_issue_relation` | Update fields on an existing Linear issue relation. |
+| `linear_update_project` | Update an existing Linear project. |
+
+## Notion
+
+Provider ID: `notion` · 44 tools
+
+| Tool | Description |
+| - | - |
+| `notion_append_block_children` | Append new child blocks to an existing block or page. |
+| `notion_append_bulleted_list` | Adds bulleted list items to a page. |
+| `notion_append_callout_block` | Adds a callout block with icon to a page. |
+| `notion_append_code_block` | Adds a code block with syntax highlighting to a page. |
+| `notion_append_divider` | Adds a horizontal divider to a page. |
+| `notion_append_heading_block` | Adds a heading block to a page. |
+| `notion_append_todo_block` | Adds a to-do/checkbox item to a page. |
+| `notion_archive_page` | Archive a page so it is removed from active workspace views. |
+| `notion_create_comment` | Create a comment on a page, block, or discussion thread |
+| `notion_create_data_source` | Create a Notion data source in its supported parent container. |
+| `notion_create_database` | Creates a new database as subpage with defined properties schema. |
+| `notion_create_page` | Create a new Notion page with properties and optional children. |
+| `notion_delete_block` | Delete or archive a block by ID. |
+| `notion_duplicate_page` | Duplicate a Notion page and its content |
+| `notion_get_bot_user` | Retrieve the bot user associated with the current integration token. |
+| `notion_get_page_as_markdown` | Retrieve a page in the current markdown export format if available. |
+| `notion_get_page_property_item` | Retrieve a single property item value from a page. |
+| `notion_get_user` | Retrieve a Notion user or bot by user ID |
+| `notion_list_block_children` | List child blocks for a page or block with pagination. |
+| `notion_list_comments` | List comments for a page or discussion thread. |
+| `notion_list_data_source_templates` | List templates available for a data source. |
+| `notion_list_users` | List Notion users and bots available to the integration. |
+| `notion_move_page` | Move a Notion page to a new parent location (under another page or into a database). |
+| `notion_query_data_source` | Query entries in a Notion data source using filters and sorts. |
+| `notion_query_database` | Retrieves filtered and sorted pages from a database with pagination. |
+| `notion_query_database_filtered` | Retrieves pages from database matching filter conditions. |
+| `notion_query_database_sorted` | Retrieves pages from database in sorted order. |
+| `notion_restore_page` | Restore a page from trash so it returns to active workspace views. |
+| `notion_retrieve_block` | Retrieve a single block by block ID. |
+| `notion_retrieve_block_children` | Gets paginated list of child blocks within a block or page. |
+| `notion_retrieve_comment` | Retrieve a Notion comment by comment ID |
+| `notion_retrieve_data_source` | Retrieve a Notion data source definition and schema. |
+| `notion_retrieve_database` | Gets database schema and column structure. |
+| `notion_retrieve_page` | Retrieve a Notion page and its property values. |
+| `notion_retrieve_page_property` | Gets a specific property value from a page with pagination support. |
+| `notion_retrieve_user` | Gets a single user by their ID. |
+| `notion_search` | Search pages, data sources, and other searchable Notion objects. |
+| `notion_search_databases` | Searches only databases shared with the integration. |
+| `notion_search_pages` | Searches only pages shared with the integration. |
+| `notion_update_block` | Update a block's supported fields or rich text content. |
+| `notion_update_data_source` | Update a Notion data source's title, description, or schema properties. |
+| `notion_update_database` | Modifies database title, description, or properties schema. |
+| `notion_update_page` | Update page properties and other mutable page fields. |
+| `notion_update_page_markdown` | Update page content using markdown commands. Supports targeted edits, full replacement, insertion, and range replacement. |
+
+## OpenAI
+
+Provider ID: `openai` · 26 tools
+
+| Tool | Description |
+| - | - |
+| `openai_add_vector_store_file` | Attach a file to a vector store for indexing |
+| `openai_cancel_fine_tuning_job` | Cancel an OpenAI fine-tuning job. |
+| `openai_create_batch` | Create a batch in OpenAI |
+| `openai_create_chat_completion` | Create a Chat Completions API response for compatibility workflows |
+| `openai_create_embedding` | Create embeddings for text inputs. |
+| `openai_create_image` | Generate an image from a prompt. |
+| `openai_create_moderation` | Classify whether text or images violate OpenAI usage policies |
+| `openai_create_response` | Create a model response with text, image, file, or tool inputs |
+| `openai_create_vector_store` | Create a vector store in OpenAI |
+| `openai_delete_response` | Delete a stored OpenAI response |
+| `openai_delete_vector_store` | Delete a vector store from OpenAI |
+| `openai_delete_vector_store_file` | Remove a file from a vector store (does not delete the underlying file object) |
+| `openai_get_batch` | Retrieve a single batch from OpenAI |
+| `openai_get_file` | Retrieve a single file metadata from OpenAI |
+| `openai_get_model` | Retrieve a single model from OpenAI. |
+| `openai_get_response` | Retrieve a stored OpenAI response by ID. |
+| `openai_get_vector_store` | Retrieve a single vector store from OpenAI |
+| `openai_get_vector_store_file` | Retrieve a single file attached to a vector store. |
+| `openai_list_batches` | List batches from OpenAI |
+| `openai_list_files` | List files from OpenAI |
+| `openai_list_fine_tuning_jobs` | List fine-tuning jobs from OpenAI |
+| `openai_list_models` | List all models available to the authenticated organization |
+| `openai_list_vector_store_files` | List files attached to a vector store |
+| `openai_list_vector_stores` | List vector stores from OpenAI. |
+| `openai_search_vector_store` | Search a vector store for semantically matching content chunks |
+| `openai_update_vector_store` | Update a vector store in OpenAI |
+
+## PostHog
+
+Provider ID: `posthog` · 67 tools
+
+| Tool | Description |
+| - | - |
+| `posthog_capture_event` | Capture a PostHog event. |
+| `posthog_create_action` | Create an action (saved event pattern) in PostHog. |
+| `posthog_create_alert` | Create an alert on an insight in PostHog. |
+| `posthog_create_annotation` | Create an annotation in PostHog. |
+| `posthog_create_cohort` | Create a cohort in PostHog. |
+| `posthog_create_dashboard` | Create a dashboard in PostHog. |
+| `posthog_create_early_access_feature` | Create an early access feature in PostHog. |
+| `posthog_create_experiment` | Create an A/B experiment in PostHog. |
+| `posthog_create_feature_flag` | Create a feature flag in PostHog. |
+| `posthog_create_insight` | Create a insight in PostHog. |
+| `posthog_create_person` | Create a person in PostHog. |
+| `posthog_create_survey` | Create a survey in PostHog. |
+| `posthog_delete_action` | Delete an action in PostHog. |
+| `posthog_delete_alert` | Delete an alert in PostHog. |
+| `posthog_delete_annotation` | Delete or archive an annotation in PostHog by setting it as deleted. |
+| `posthog_delete_cohort` | Delete or archive a cohort in PostHog. |
+| `posthog_delete_dashboard` | Delete or archive a dashboard in PostHog. |
+| `posthog_delete_early_access_feature` | Delete an early access feature in PostHog. |
+| `posthog_delete_feature_flag` | Delete or archive a feature flag in PostHog |
+| `posthog_delete_insight` | Delete or archive an insight in PostHog. |
+| `posthog_delete_person` | Delete or archive a person in PostHog. |
+| `posthog_delete_survey` | Delete a survey in PostHog. |
+| `posthog_get_action` | Retrieve a single action from PostHog. |
+| `posthog_get_alert` | Retrieve a single alert from PostHog. |
+| `posthog_get_annotation` | Retrieve a single annotation from PostHog. |
+| `posthog_get_cohort` | Retrieve a single cohort from PostHog. |
+| `posthog_get_dashboard` | Retrieve a single dashboard from PostHog. |
+| `posthog_get_early_access_feature` | Retrieve a single early access feature from PostHog. |
+| `posthog_get_event` | Retrieve a single event from PostHog. |
+| `posthog_get_event_definition` | Retrieve a single event definition from PostHog. |
+| `posthog_get_experiment` | Retrieve a single experiment from PostHog. |
+| `posthog_get_feature_flag` | Retrieve a single feature flag from PostHog. |
+| `posthog_get_insight` | Retrieve a single insight from PostHog. |
+| `posthog_get_person` | Retrieve a single person from PostHog. |
+| `posthog_get_project` | Retrieve a single project from PostHog. |
+| `posthog_get_property_definition` | Retrieve a single property definition from PostHog. |
+| `posthog_get_survey` | Retrieve a single survey from PostHog. |
+| `posthog_identify_person` | Identify or update a PostHog person. |
+| `posthog_list_actions` | List actions (saved event patterns) from PostHog. |
+| `posthog_list_alerts` | List alerts from PostHog. |
+| `posthog_list_annotations` | List annotations from PostHog. |
+| `posthog_list_cohorts` | List cohorts from PostHog. |
+| `posthog_list_dashboards` | List dashboards from PostHog. |
+| `posthog_list_early_access_features` | List early access features from PostHog. |
+| `posthog_list_event_definitions` | List event definitions (auto-detected event schemas) from PostHog. |
+| `posthog_list_events` | List events from PostHog. |
+| `posthog_list_experiments` | List experiments from PostHog. |
+| `posthog_list_feature_flags` | List feature flags from PostHog. |
+| `posthog_list_insights` | List insights from PostHog. |
+| `posthog_list_persons` | List persons from PostHog. |
+| `posthog_list_projects` | List projects from PostHog |
+| `posthog_list_property_definitions` | List property definitions from PostHog. |
+| `posthog_list_session_recordings` | List session recordings from PostHog. |
+| `posthog_list_surveys` | List surveys from PostHog. |
+| `posthog_run_query` | Execute a HogQL (SQL) query against PostHog and return the result rows. |
+| `posthog_update_action` | Update an action in PostHog. |
+| `posthog_update_alert` | Update an alert in PostHog. |
+| `posthog_update_annotation` | Update an annotation in PostHog |
+| `posthog_update_cohort` | Update a cohort in PostHog. |
+| `posthog_update_dashboard` | Update a dashboard in PostHog |
+| `posthog_update_early_access_feature` | Update an early access feature in PostHog. |
+| `posthog_update_experiment` | Update an experiment in PostHog |
+| `posthog_update_feature_flag` | Update a feature flag in PostHog. |
+| `posthog_update_insight` | Update a insight in PostHog. |
+| `posthog_update_person` | Update a person in PostHog. |
+| `posthog_update_property_definition` | Update a property definition in PostHog. |
+| `posthog_update_survey` | Update a survey in PostHog. |
+
+## Resend
+
+Provider ID: `resend` · 80 tools
+
+| Tool | Description |
+| - | - |
+| `resend_add_contact_to_segment` | Add a contact to a segment in Resend. |
+| `resend_cancel_broadcast` | Cancel a broadcast in Resend. |
+| `resend_cancel_email` | Cancel email in Resend. |
+| `resend_create_audience` | Create an audience in Resend. |
+| `resend_create_broadcast` | Create a broadcast in Resend. |
+| `resend_create_contact` | Create a new contact in Resend. |
+| `resend_create_contact_import` | Create a contact import in Resend from CSV contents. |
+| `resend_create_contact_property` | Create a new contact property in Resend. |
+| `resend_create_domain` | Create domain in Resend. |
+| `resend_create_domain_claim` | Claim a domain in Resend. |
+| `resend_create_segment` | Create a new segment in Resend. |
+| `resend_create_template` | Create a template in Resend. |
+| `resend_create_topic` | Create a new topic in Resend. |
+| `resend_create_webhook` | Create a new webhook in Resend. |
+| `resend_delete_audience` | Remove an existing audience in Resend. |
+| `resend_delete_broadcast` | Remove an existing broadcast that is in the draft status in Resend. |
+| `resend_delete_contact` | Remove an existing contact by ID or email in Resend. |
+| `resend_delete_contact_property` | Remove an existing contact property in Resend. |
+| `resend_delete_domain` | Remove an existing domain in Resend. |
+| `resend_delete_segment` | Remove an existing segment in Resend. |
+| `resend_delete_template` | Remove an existing template in Resend. |
+| `resend_delete_topic` | Remove an existing topic in Resend. |
+| `resend_delete_webhook` | Remove an existing webhook in Resend. |
+| `resend_duplicate_template` | Duplicate a template in Resend. |
+| `resend_get_audience` | Retrieve a single audience in Resend. |
+| `resend_get_broadcast` | Retrieve a single broadcast in Resend. |
+| `resend_get_contact` | Retrieve a single contact by ID or email in Resend. |
+| `resend_get_contact_import` | Retrieve a single contact import in Resend. |
+| `resend_get_contact_property` | Retrieve a single contact property in Resend. |
+| `resend_get_domain` | Get domain in Resend. |
+| `resend_get_domain_claim` | Retrieve a domain claim in Resend. |
+| `resend_get_email` | Get email in Resend. |
+| `resend_get_email_attachment` | Retrieve a single attachment for a sent email in Resend. |
+| `resend_get_email_metrics` | Retrieve account-level email metrics in Resend. |
+| `resend_get_received_email` | Retrieve a single received email in Resend. |
+| `resend_get_received_email_attachment` | Retrieve a single attachment for a received email in Resend. |
+| `resend_get_segment` | Retrieve a single segment in Resend. |
+| `resend_get_template` | Retrieve a single template in Resend. |
+| `resend_get_topic` | Retrieve a single topic in Resend. |
+| `resend_get_webhook` | Retrieve a single webhook in Resend. |
+| `resend_get_webhook_event` | Retrieve a single webhook event in Resend. |
+| `resend_list_audiences` | Retrieve a list of audiences in Resend. Deprecated by the provider in favour of Segments: prefer list-segments. The endpoint still works but will be removed in the future. |
+| `resend_list_broadcast_clicked_links` | Retrieve a broadcast's clicked links in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_broadcast_recipients` | Retrieve broadcast recipients in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_broadcasts` | Retrieve a list of broadcasts in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_imports` | Retrieve a list of contact imports in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_properties` | Retrieve a list of contact properties in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_segments` | Retrieve a list of segments for a contact in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_topics` | Retrieve topics for a contact in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contacts` | Retrieve a list of contacts in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_domains` | List domains in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_email_attachments` | Retrieve a list of attachments for a sent email in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_emails` | List emails in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_received_email_attachments` | Retrieve a list of attachments for a received email in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_received_emails` | Retrieve a list of received emails in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_segments` | Retrieve a list of segments in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_templates` | Retrieve a list of templates in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_topics` | Retrieve a list of topics in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_webhook_event_attempts` | Retrieve a list of webhook event attempts in Resend. Returns one page; pass next\_cursor as after to continue. |
+| `resend_list_webhook_events` | Retrieve a list of webhook events in Resend. Returns one page; pass next\_cursor as after to continue. |
+| `resend_list_webhooks` | Retrieve a list of webhooks in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_publish_template` | Publish a template in Resend. |
+| `resend_remove_contact_from_segment` | Remove a contact from a segment in Resend. |
+| `resend_replay_webhook_event` | Replay a webhook event in Resend. |
+| `resend_send_broadcast` | Send or schedule a broadcast in Resend. |
+| `resend_send_email` | Send email in Resend. |
+| `resend_send_email_batch` | Trigger up to 100 batch emails at once in Resend. |
+| `resend_share_email` | Create a shareable link for a sent or received email in Resend. |
+| `resend_update_broadcast` | Update an existing broadcast in Resend. |
+| `resend_update_contact` | Update a single contact by ID or email in Resend. |
+| `resend_update_contact_property` | Update an existing contact property in Resend. |
+| `resend_update_contact_topics` | Update topics for a contact in Resend. |
+| `resend_update_domain` | Update an existing domain in Resend. |
+| `resend_update_email` | Update a single email in Resend. |
+| `resend_update_segment` | Update an existing segment in Resend. |
+| `resend_update_template` | Update an existing template in Resend. |
+| `resend_update_topic` | Update an existing topic in Resend. |
+| `resend_update_webhook` | Update an existing webhook in Resend. |
+| `resend_verify_domain` | Verify domain in Resend. |
+| `resend_verify_domain_claim` | Verify a domain claim in Resend. |
+
+## Slack
+
+Provider ID: `slack` · 52 tools
+
+| Tool | Description |
+| - | - |
+| `slack_add_reaction` | Add an emoji reaction to a specific Slack message |
+| `slack_archive_channel` | Archive a Slack channel |
+| `slack_create_channel` | Create a new public or private Slack channel by name; does not create DMs or other conversation types. |
+| `slack_create_reminder` | Create a reminder for a user |
+| `slack_delete_message` | Delete a message from a channel |
+| `slack_delete_scheduled_message` | Cancel a scheduled message |
+| `slack_get_channel_info` | Retrieve conversation details including topic, purpose, and membership state |
+| `slack_get_channel_members` | List members in a Slack channel |
+| `slack_get_conversation_history` | Fetch paginated message history for a conversation within optional time bounds |
+| `slack_get_dnd_info` | Get a user's Do Not Disturb status and next scheduled DND window |
+| `slack_get_message_permalink` | Get a permanent URL for a message |
+| `slack_get_reactions` | Retrieve all reactions attached to a specific message |
+| `slack_get_team_info` | Retrieve workspace details such as name, domain, and icon |
+| `slack_get_thread_replies` | Fetch paginated thread replies and parent message for a conversation thread |
+| `slack_get_upload_url` | Generate an external upload URL and file ID for Slack uploads |
+| `slack_get_user_info` | Retrieve a user's account details, including profile and avatar fields |
+| `slack_get_user_presence` | Check if a user is online or away |
+| `slack_get_user_profile` | Retrieve a user's detailed profile, status, and custom fields |
+| `slack_invite_shared` | Invite external people to a channel via Slack Connect (shared channels), by email or Slack user ID. |
+| `slack_invite_to_channel` | Invite users to a Slack channel |
+| `slack_join_channel` | Join a public or private channel and return its conversation details |
+| `slack_leave_channel` | Leave a channel |
+| `slack_list_channels` | List Slack conversations with optional type filters and cursor pagination. |
+| `slack_list_custom_emoji` | List workspace custom emoji mappings, including alias-based emoji entries |
+| `slack_list_files` | List files shared in the workspace |
+| `slack_list_pins` | List all items pinned in a specific channel |
+| `slack_list_scheduled_messages` | List pending scheduled messages |
+| `slack_list_user_group_members` | List member user IDs for a specific Slack user group |
+| `slack_list_user_groups` | List workspace user groups with optional disabled and membership counts |
+| `slack_list_user_reactions` | List items the user reacted to with cursor-based pagination |
+| `slack_list_users` | List all users in the workspace |
+| `slack_lookup_user_by_email` | Look up a user by email address |
+| `slack_mark_as_read` | Move a conversation's read cursor to a specific message timestamp |
+| `slack_open_dm` | Open a direct or multi-person DM for specified users |
+| `slack_pin_message` | Pin a specific message in a channel |
+| `slack_post_message` | Post a message to a channel, DM, or thread |
+| `slack_remove_from_channel` | Remove a user from a channel |
+| `slack_remove_reaction` | Remove an emoji reaction from a specific message |
+| `slack_rename_channel` | Rename a Slack channel |
+| `slack_schedule_message` | Schedule a Slack message to a channel or thread, subject to Slack's 120-day scheduling limit. |
+| `slack_search_channels` | Find Slack channels by name without paging manually. Scans conversations.list and returns channels whose name contains the query (case-insensitive). |
+| `slack_search_files` | Search workspace files with pagination |
+| `slack_search_messages` | Search for messages matching a query |
+| `slack_send_ephemeral_message` | Send a message visible only to one user in a channel |
+| `slack_send_message` | Send a message to a channel |
+| `slack_set_channel_purpose` | Update a channel's purpose text for a conversation |
+| `slack_set_channel_topic` | Set the topic of a channel |
+| `slack_set_status` | Set a user's status |
+| `slack_set_user_presence` | Set a user's presence to online or away |
+| `slack_unarchive_channel` | Restore an archived conversation so members can use it again |
+| `slack_unpin_message` | Remove a pinned message from a channel |
+| `slack_update_message` | Edit an existing message in a Slack channel |
+
+## Snowflake
+
+Provider ID: `snowflake` · 15 tools
+
+| Tool | Description |
+| - | - |
+| `snowflake_cancel_statement` | Cancel a running Snowflake SQL statement. |
+| `snowflake_execute_statement` | Submit a SQL statement to Snowflake. |
+| `snowflake_get_statement_result` | Fetch a Snowflake SQL statement result partition. |
+| `snowflake_get_statement_status` | Get Snowflake SQL statement execution status and inline results. |
+| `snowflake_list_columns` | List columns in a Snowflake table with data types, nullability, and defaults. |
+| `snowflake_list_databases` | List Snowflake databases. |
+| `snowflake_list_roles` | List Snowflake roles with hierarchy and assignment counts. |
+| `snowflake_list_schemas` | List schemas in a Snowflake database |
+| `snowflake_list_stages` | List Snowflake stages in a database. |
+| `snowflake_list_streams` | List Snowflake streams (change data capture) in a database. |
+| `snowflake_list_tables` | List tables in a Snowflake schema |
+| `snowflake_list_tasks` | List Snowflake tasks in a database |
+| `snowflake_list_users` | List Snowflake users with login, email, role, and auth details. |
+| `snowflake_list_views` | List views in a Snowflake schema. |
+| `snowflake_list_warehouses` | List Snowflake warehouses with size, state, and resource usage. |
+
+## Supabase
+
+Provider ID: `supabase` · 27 tools
+
+| Tool | Description |
+| - | - |
+| `supabase_copy_storage_object` | Copy a storage object within or between buckets in Supabase. |
+| `supabase_create_auth_user` | Create an auth user in Supabase. |
+| `supabase_create_signed_upload_url` | Generate a signed URL that allows a client to upload a file directly to Supabase Storage without exposing the service role key. |
+| `supabase_create_signed_url` | Generate a time-limited signed URL for accessing a private storage object. |
+| `supabase_create_storage_bucket` | Create a storage bucket in Supabase. |
+| `supabase_create_storage_object` | Upload a storage object to Supabase Storage. |
+| `supabase_delete_auth_factor` | Delete an MFA factor for a user in Supabase. |
+| `supabase_delete_auth_user` | Delete or archive a auth user in Supabase. |
+| `supabase_delete_storage_bucket` | Delete or archive a storage bucket in Supabase. |
+| `supabase_delete_storage_object` | Delete or archive a storage object in Supabase. |
+| `supabase_delete_table_rows` | Delete rows from a Supabase table. |
+| `supabase_generate_auth_link` | Generate a magic link, OTP, invite, signup, or recovery link for a user. |
+| `supabase_get_auth_user` | Retrieve a single auth user from Supabase. |
+| `supabase_get_storage_bucket` | Retrieve a single storage bucket from Supabase. |
+| `supabase_get_storage_object` | Retrieve metadata for a single storage object from Supabase. |
+| `supabase_insert_table_row` | Insert a row into a Supabase table. |
+| `supabase_invoke_rpc` | Call a Supabase Postgres function via PostgREST. |
+| `supabase_list_auth_factors` | List MFA factors enrolled for a specific user in Supabase. |
+| `supabase_list_auth_users` | List auth users from Supabase. |
+| `supabase_list_storage_buckets` | List storage buckets from Supabase. |
+| `supabase_list_storage_objects` | List storage objects from Supabase. |
+| `supabase_query_table_rows` | Query rows from a Supabase table through PostgREST. |
+| `supabase_update_auth_user` | Update an auth user in Supabase. |
+| `supabase_update_storage_bucket` | Update a storage bucket in Supabase. |
+| `supabase_update_storage_object` | Update a storage object in Supabase. |
+| `supabase_update_table_rows` | Update rows in a Supabase table. |
+| `supabase_upsert_table_row` | Insert or update a row in a Supabase table, merging on conflict. |
+
+## WorkOS
+
+Provider ID: `workos` · 40 tools
+
+| Tool | Description |
+| - | - |
+| `workos_create_connection` | Create a WorkOS SSO connection. |
+| `workos_create_invitation` | Create a WorkOS user invitation. |
+| `workos_create_organization` | Create an organization in WorkOS. |
+| `workos_create_organization_domain` | Create a WorkOS organization domain. |
+| `workos_create_organization_membership` | Create a WorkOS organization membership. |
+| `workos_create_user` | Create a user in WorkOS User Management. |
+| `workos_deactivate_organization_membership` | Deactivate a WorkOS organization membership. |
+| `workos_delete_connection` | Delete a WorkOS SSO connection. |
+| `workos_delete_directory` | Delete a WorkOS directory. |
+| `workos_delete_organization` | Permanently delete a WorkOS organization. |
+| `workos_delete_organization_domain` | Delete a WorkOS organization domain. |
+| `workos_delete_organization_membership` | Delete a WorkOS organization membership. |
+| `workos_delete_user` | Permanently delete a WorkOS user. |
+| `workos_get_connection` | Get a WorkOS SSO connection. |
+| `workos_get_directory` | Get a WorkOS directory. |
+| `workos_get_directory_group` | Get a WorkOS directory group. |
+| `workos_get_directory_user` | Get a WorkOS directory user and their groups. |
+| `workos_get_invitation` | Get a WorkOS user invitation. |
+| `workos_get_organization` | Retrieve a WorkOS organization by ID. |
+| `workos_get_organization_domain` | Get a WorkOS organization domain. |
+| `workos_get_organization_membership` | Get a WorkOS organization membership. |
+| `workos_get_user` | Retrieve a WorkOS user by ID. |
+| `workos_list_connections` | List WorkOS SSO connections. |
+| `workos_list_directories` | List WorkOS directories. |
+| `workos_list_directory_groups` | List directory groups from WorkOS Directory Sync. |
+| `workos_list_directory_users` | List directory users from WorkOS Directory Sync. |
+| `workos_list_events` | List WorkOS events. |
+| `workos_list_invitations` | List WorkOS user invitations. |
+| `workos_list_organization_membership_groups` | List groups assigned to a WorkOS organization membership. |
+| `workos_list_organization_memberships` | List WorkOS organization memberships. |
+| `workos_list_organizations` | List organizations from WorkOS. |
+| `workos_list_users` | List users from WorkOS User Management. |
+| `workos_reactivate_organization_membership` | Reactivate a WorkOS organization membership. |
+| `workos_resend_invitation` | Resend a WorkOS user invitation. |
+| `workos_revoke_invitation` | Revoke a WorkOS user invitation. |
+| `workos_update_connection` | Update a WorkOS SSO connection. |
+| `workos_update_organization` | Update a WorkOS organization. |
+| `workos_update_organization_membership` | Update roles for a WorkOS organization membership. |
+| `workos_update_user` | Update a WorkOS user. |
+| `workos_verify_organization_domain` | Verify a WorkOS organization domain. |

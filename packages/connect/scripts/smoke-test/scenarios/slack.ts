@@ -252,6 +252,34 @@ export const slackScenario: Scenario = {
         steps.push(makeStep('list files', 'slack_list_files', 'fail', errorMessage(error)));
       }
     }
+    if (tools['slack_search_channels']) {
+      try {
+        // Follow next_cursor until the created channel is found or the scan
+        // is exhausted; one bounded scan can miss it in large workspaces.
+        let hit = false;
+        let searchCursor: string | undefined;
+        do {
+          const found = await call<{ conversations: Array<{ id: string }>; next_cursor?: string }>(
+            'slack_search_channels',
+            { query: channelName, ...(searchCursor && { cursor: searchCursor }) },
+          );
+          hit = found.conversations.some(conversation => conversation.id === channelId);
+          searchCursor = found.next_cursor;
+        } while (!hit && searchCursor);
+        steps.push(
+          makeStep(
+            'search channels',
+            'slack_search_channels',
+            hit ? 'pass' : 'fail',
+            hit ? channelId : 'created channel missing from search results',
+          ),
+        );
+      } catch (error) {
+        steps.push(makeStep('search channels', 'slack_search_channels', 'fail', errorMessage(error)));
+      }
+    } else {
+      steps.push(makeStep('search channels', 'slack_search_channels', 'skip', 'missing tool slack_search_channels'));
+    }
     if (tools['slack_search_files']) {
       try {
         await call('slack_search_files', { query: runId, count: 1 });

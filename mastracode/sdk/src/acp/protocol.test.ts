@@ -188,7 +188,8 @@ describe('ACP JSON-RPC conversation', () => {
     await client.authenticate({ methodId: 'openai-codex' });
     expect(login).toHaveBeenCalledWith('openai-codex', expect.objectContaining({ authMode: 'browser' }));
     expect(openUrlInBrowser).toHaveBeenCalledWith('https://auth.openai.com/oauth/authorize?state=abc');
-    expect(seedProviderOMDefault).toHaveBeenCalledWith('openai-codex');
+    // Signing in changes reachability, not memory selection: Auto roles stay Auto.
+    expect(seedProviderOMDefault).not.toHaveBeenCalled();
   });
 
   it('fails sign-in that needs typed input and points to terminal login', async () => {

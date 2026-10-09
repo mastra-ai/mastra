@@ -1,5 +1,7 @@
 # workspace-compat-e2e-test
 
+## 0.0.87
+
 ## 0.0.86
 
 ## 0.0.85

@@ -283,12 +283,12 @@ export const accountRotationScenario: McE2eScenario = {
 
     // A14: a second turn in the same thread starts on the account the pool is
     // currently on (B) instead of re-trying the account that just rate limited.
-    // The `Starting on …` notice is the transcript proof; the outbound list is
-    // the wire proof that account A was never contacted again.
+    // The outbound list is the proof that account A was never contacted again;
+    // starting on an account is not announced in the transcript.
     const requestsBeforeFollowup = outbound.length;
     terminal.submit(FOLLOWUP_PROMPT);
     await runtime.waitForScreenText(new RegExp(FOLLOWUP_RESPONSE_TEXT), terminal, 30_000);
-    await runtime.waitForScreenText(/Starting on Kimi account: Kimi Account B/i, terminal, 10_000);
+    await runtime.waitForScreenTextAbsent(/Starting on Kimi account/i, terminal, 2_000);
     runtime.printScreen('after second turn', terminal);
     const followupRequests = outbound.slice(requestsBeforeFollowup);
     if (followupRequests.length === 0 || followupRequests[0]!.bearer !== ACCOUNT_B_ACCESS) {

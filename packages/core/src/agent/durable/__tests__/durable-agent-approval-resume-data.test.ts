@@ -14,10 +14,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
+import { globalRunRegistry } from '../run-registry';
 
 /** Creates a model that requests one tool call, then completes after the tool resumes. */
 function createToolCallThenTextModel(
@@ -175,6 +178,7 @@ describe('DurableAgent approval resume data', () => {
   });
 
   afterEach(async () => {
+    globalRunRegistry.clear();
     await pubsub.close();
   });
 
@@ -191,6 +195,72 @@ describe('DurableAgent approval resume data', () => {
   it('merges the separate approval decision into custom sendToolApproval resume data', async () => {
     const seen = await runApprovalGatedTool(pubsub, { note: 'hello' }, true);
     expect(seen).toEqual([{ approved: true, note: 'hello' }]);
+  });
+
+  it('does not recreate the registry key when an evented approval stream is cleaned up before FINISH completes', async () => {
+    const memory = new MockMemory();
+    memory.getMergedThreadConfig = () => ({ generateTitle: true });
+
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'approval-gated tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'evented-approval-cleanup-agent',
+      name: 'Evented Approval Cleanup Agent',
+      instructions: 'Use the approval tool.',
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
+      memory,
+      tools: { approvalTool },
+    });
+    let resolveTitle!: (title: string) => void;
+    const titlePending = new Promise<string>(resolve => {
+      resolveTitle = resolve;
+    });
+    const generateTitle = vi.spyOn(baseAgent, 'genTitle').mockReturnValue(titlePending);
+    const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { eventedApprovalCleanupAgent: eventedAgent },
+    });
+
+    let suspendedData: unknown;
+    const initial = await eventedAgent.stream('Run the approval tool', {
+      memory: { thread: 'evented-approval-cleanup-thread', resource: 'evented-approval-cleanup-resource' },
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toMatchObject({ type: 'approval', toolCallId: 'call-1' }));
+
+    let finishData: unknown;
+    const resumed = await eventedAgent.resume(
+      initial.runId,
+      { approved: true },
+      {
+        onFinish: data => {
+          finishData = data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(finishData).toBeDefined());
+    expect(generateTitle).toHaveBeenCalledTimes(1);
+
+    const workflowExecution = globalRunRegistry.get(initial.runId)?.workflowExecution;
+    expect(workflowExecution).toBeDefined();
+
+    resumed.cleanup();
+    initial.cleanup();
+    expect([...globalRunRegistry.keys()]).not.toContain(initial.runId);
+
+    resolveTitle('Generated title');
+    await workflowExecution;
+
+    expect([...globalRunRegistry.keys()]).not.toContain(initial.runId);
   });
 
   it('invokes onAbort when a resumed run is aborted', async () => {
