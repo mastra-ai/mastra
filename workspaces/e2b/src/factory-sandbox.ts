@@ -66,10 +66,14 @@ const SETTINGS_SCHEMA = {
  * is what clients show as placeholders, so it must match what the provider
  * applies when a setting is unset.
  */
-function settingsSchema(
-  defaults: Partial<E2BFactorySandboxSettings> | undefined,
-): PublicSchema<E2BFactorySandboxSettings> {
-  const effective = { ...DEFAULT_SETTINGS, ...defaults };
+function settingsSchema(options: E2BFactorySandboxOptions): PublicSchema<E2BFactorySandboxSettings> {
+  const { defaults, timeout } = options;
+  const effective = {
+    ...DEFAULT_SETTINGS,
+    // The host's own `timeout` (ms) is what applies when no minutes are set, so advertise it.
+    ...(timeout !== undefined ? { idleTimeoutMinutes: Math.ceil(timeout / 60_000) } : {}),
+    ...defaults,
+  };
   const properties = Object.fromEntries(
     Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
       key,
@@ -83,6 +87,9 @@ export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' |
   /** Provider-side defaults used when a setting is unset. Never stored by factory. */
   defaults?: Partial<E2BFactorySandboxSettings>;
 }
+
+/** Log entries E2B returns per build-status call. */
+const BUILD_LOG_PAGE = 100;
 
 /** The id of a build that needed no build: the sha-tagged template already existed. */
 const EXISTING_BUILD = 'existing';
@@ -105,7 +112,7 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
   constructor(options: E2BFactorySandboxOptions = {}) {
     super();
     this.#options = options;
-    this.settings = settingsSchema(options.defaults);
+    this.settings = settingsSchema(options);
     this.#connection = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -173,9 +180,18 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
     if (buildId === EXISTING_BUILD) {
       return { buildId: compositeId, templateId, status: 'ready' };
     }
-    const response = await Template.getBuildStatus({ templateId, buildId }, this.#connection);
-    const logs = response.logEntries?.length
-      ? response.logEntries.map(entry => entry.toString())
+    // E2B returns at most BUILD_LOG_PAGE entries per status call; drain them by offset.
+    let response = await Template.getBuildStatus({ templateId, buildId }, this.#connection);
+    const entries = [...(response.logEntries ?? [])];
+    while (response.logEntries && response.logEntries.length >= BUILD_LOG_PAGE) {
+      response = await Template.getBuildStatus(
+        { templateId, buildId },
+        { ...this.#connection, logsOffset: entries.length },
+      );
+      entries.push(...(response.logEntries ?? []));
+    }
+    const logs = entries.length
+      ? entries.map(entry => entry.toString())
       : response.logs?.length
         ? response.logs
         : undefined;
