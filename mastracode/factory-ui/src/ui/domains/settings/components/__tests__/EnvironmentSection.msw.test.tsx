@@ -334,6 +334,8 @@ describe('Environment settings', () => {
       settings: { region: 'eu', image: 'node:22' },
     });
     useEnvironment(environment);
+    // The e2b provider keeps history, so the page asks for it.
+    server.use(http.get(`${ENVIRONMENT_URL}/builds`, () => HttpResponse.json({ builds: [] })));
     const patches = recordPatches(environment);
     const user = userEvent.setup();
 

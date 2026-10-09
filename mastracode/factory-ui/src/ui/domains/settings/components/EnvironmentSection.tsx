@@ -5,9 +5,18 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useFactoryEnvironmentQuery, useSaveFactoryEnvironmentMutation } from '../../../../hooks/useFactoryEnvironment';
+import {
+  useEnvironmentBuildQuery,
+  useEnvironmentBuildsQuery,
+  useFactoryEnvironmentQuery,
+  useRequestEnvironmentBuildMutation,
+  useSaveFactoryEnvironmentMutation,
+} from '../../../../hooks/useFactoryEnvironment';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../workspaces/services/environment';
 import { settingsSectionPath } from '../settingsSections';
+import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
+import { BuildStatusBlock } from './environment/BuildStatusBlock';
+import { BuildTriggersBlock } from './environment/BuildTriggersBlock';
 import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
@@ -85,7 +94,7 @@ function EnvironmentBlocks({
       .mutateAsync(
         { factoryId, input },
         {
-          onSuccess: () => toast.success('Environment saved'),
+          onSuccess: saved => toast.success(saved.environment.buildRequested ? 'Build queued' : 'Environment saved'),
           onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
         },
       )
@@ -107,6 +116,64 @@ function EnvironmentBlocks({
         onSave={save}
       />
       <WorkspaceSetupBlock value={environment.workspaceSetupCommand} disabled={saveMutation.isPending} onSave={save} />
+      {environment.sandbox.capabilities.builds.available && environment.buildTriggers && (
+        <BuildBlocks factoryId={factoryId} environment={environment} disabled={saveMutation.isPending} onSave={save} />
+      )}
     </div>
+  );
+}
+
+/** Build status, triggers and history; mounted only when the sandbox can build. */
+function BuildBlocks({
+  factoryId,
+  environment,
+  disabled,
+  onSave,
+}: {
+  factoryId: string;
+  environment: FactoryEnvironmentPayload;
+  disabled: boolean;
+  onSave: (input: FactoryEnvironmentPatch) => Promise<boolean>;
+}) {
+  const requestBuild = useRequestEnvironmentBuildMutation();
+  const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);
+  const history = environment.sandbox.capabilities.builds.history;
+  const buildsQuery = useEnvironmentBuildsQuery(factoryId, history);
+
+  const buildNow = () =>
+    requestBuild.mutate(
+      { factoryId },
+      {
+        onSuccess: started => {
+          if (started.outcome === 'started') toast.success('Build started');
+          else toast.error(`Build not started: ${started.reason ?? started.outcome}`);
+        },
+        onError: err => toast.error(err instanceof Error ? err.message : 'Failed to start the build'),
+      },
+    );
+
+  return (
+    <>
+      <BuildStatusBlock
+        lastBuild={environment.build}
+        build={buildQuery.data}
+        activeTemplateId={environment.activeTemplateId}
+        requesting={requestBuild.isPending}
+        onBuildNow={buildNow}
+      />
+      <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={onSave} />
+      {history && (
+        <BuildHistoryBlock
+          builds={buildsQuery.data}
+          error={
+            buildsQuery.isError
+              ? buildsQuery.error instanceof Error
+                ? buildsQuery.error.message
+                : 'Failed to load builds'
+              : undefined
+          }
+        />
+      )}
+    </>
   );
 }

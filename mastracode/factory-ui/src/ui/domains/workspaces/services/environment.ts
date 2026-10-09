@@ -32,6 +32,43 @@ export interface FactoryEnvironmentSandbox {
   capabilities: { template: boolean; builds: { available: boolean; history: boolean } };
 }
 
+/** When the environment builds on its own; present only when the sandbox can build. */
+export interface FactoryEnvironmentBuildTriggers {
+  schedule: {
+    enabled: boolean;
+    cron: string | null;
+    timezone: string | null;
+    /** False when the host's storage has no schedules domain; the cron trigger cannot be enabled then. */
+    scheduleAvailable: boolean;
+  };
+  push: { enabled: boolean; debounceMinutes: number };
+}
+
+/** The last build factory asked the provider for; its status is read live by id. */
+export interface FactoryEnvironmentLastBuild {
+  buildId: string;
+  attemptedAt: string | null;
+}
+
+export type FactoryEnvironmentBuildStatus = 'pending' | 'building' | 'ready' | 'failed' | 'unknown';
+
+export interface FactoryEnvironmentBuild {
+  buildId: string;
+  status: FactoryEnvironmentBuildStatus;
+  templateId?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  error?: string;
+  logs?: string;
+}
+
+export interface FactoryEnvironmentBuildStart {
+  outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
+  buildId?: string;
+  templateId?: string;
+  reason?: string;
+}
+
 export interface FactoryEnvironmentPayload {
   sandbox: FactoryEnvironmentSandbox;
   /** Provider settings the user set; absent keys use the provider default. */
@@ -41,6 +78,10 @@ export interface FactoryEnvironmentPayload {
   activeTemplateId: string | null;
   activeTemplateHeads: Record<string, string> | null;
   repositories: FactoryEnvironmentRepository[];
+  buildTriggers?: FactoryEnvironmentBuildTriggers;
+  build?: FactoryEnvironmentLastBuild | null;
+  /** On a PATCH response: this update changed the template and a build was started for it. */
+  buildRequested?: boolean;
 }
 
 export interface FactoryEnvironmentResponse {
@@ -60,6 +101,11 @@ export interface FactoryEnvironmentPatch {
   /** Merged onto the stored settings; null removes a key. */
   settings?: Record<string, unknown | null>;
   workspaceSetupCommand?: string | null;
+  /** Only accepted when the sandbox can build. */
+  buildTriggers?: {
+    schedule?: { enabled: boolean; cron?: string; timezone?: string };
+    push?: { enabled?: boolean; debounceMinutes?: number };
+  };
   /** Positions, when given, must be a permutation of 1..n over the listed repositories. */
   repositories?: FactoryEnvironmentRepositoryPatch[];
 }
@@ -92,4 +138,42 @@ export async function patchFactoryEnvironment(
     body: JSON.stringify(input),
   });
   return readJsonOrThrow<FactoryEnvironmentResponse>(res, 'Failed to save environment');
+}
+
+export async function requestEnvironmentBuild(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<FactoryEnvironmentBuildStart> {
+  const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/build`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  return readJsonOrThrow<FactoryEnvironmentBuildStart>(res, 'Failed to start the build');
+}
+
+export async function listEnvironmentBuilds(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<FactoryEnvironmentBuild[]> {
+  const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/builds`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  const { builds } = await readJsonOrThrow<{ builds: FactoryEnvironmentBuild[] }>(res, 'Failed to load builds');
+  return builds;
+}
+
+/** The build id may be composite (E2B: `<templateId>:<buildId>`), so it travels encoded. */
+export async function getEnvironmentBuild(
+  baseUrl: string,
+  factoryProjectId: string,
+  buildId: string,
+): Promise<FactoryEnvironmentBuild> {
+  const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/builds/${encodeURIComponent(buildId)}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  const { build } = await readJsonOrThrow<{ build: FactoryEnvironmentBuild }>(res, 'Failed to load the build');
+  return build;
 }
