@@ -94,7 +94,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
         aria-expanded={isExpanded}
         className="flex w-full items-center gap-2 px-3 py-0.5 text-left hover:bg-fill-subtle"
       >
-        <DisclosureChevron direction="right" className="h-3 w-3 text-muted-foreground" />
+        <DisclosureChevron direction="right" className="size-3 text-muted-foreground" />
 
         <StatusDot status={entry.status} />
 

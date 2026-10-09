@@ -35,7 +35,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         aria-expanded={isExpanded}
         className="flex w-full shrink-0 items-center gap-2 px-3 py-1 text-left hover:bg-fill-subtle"
       >
-        <DisclosureChevron className="h-3.5 w-3.5 text-muted-foreground" />
+        <DisclosureChevron className="size-3.5 text-muted-foreground" />
         <Txt as="span" variant="column" tone="muted">
           Browser Actions ({toolCalls.length})
         </Txt>
