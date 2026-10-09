@@ -906,6 +906,64 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       started.cleanup();
     });
 
+    it('a resume() that fails to read the suspended run after claiming it releases the run, so a retry resumes it', async () => {
+      const storage = createStorage(backend);
+      const model = toolCallThenTextModel('lookup', { query: 'the answer' }, 'looked it up');
+      const execute = vi.fn(async () => ({ found: true }));
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: true,
+        execute,
+      });
+      const durableAgent = buildAgent({ model: model.model, storage, tools: { lookup } });
+
+      let suspended = false;
+      const started = await durableAgent.stream('Look it up', {
+        requireToolApproval: true,
+        onSuspended: () => {
+          suspended = true;
+        },
+      });
+      const { runId } = started;
+      const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+      const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+      await vi.waitFor(() => expect(suspended).toBe(true));
+      await suspendedFence.whenSettled;
+
+      // ---- The first snapshot read made while resume() holds the run fails.
+      const workflows = storage.stores.workflows!;
+      const getWorkflowRunById = workflows.getWorkflowRunById.bind(workflows);
+      let failedRead = false;
+      vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
+        if (!failedRead && ExecutionFence.getLocalActive(runId)) {
+          failedRead = true;
+          throw new Error('storage unavailable');
+        }
+        return getWorkflowRunById(args);
+      });
+
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow('storage unavailable');
+      expect(failedRead).toBe(true);
+      expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+      expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
+      expect(execute).not.toHaveBeenCalled();
+
+      // ---- A retry claims the run and finishes it.
+      const resumed = await durableAgent.resume(runId, { approved: true });
+      const resumedFence = ExecutionFence.getLocalActive(runId)!;
+      const chunks = await drain(resumed.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(model.calls()).toBe(2);
+      await resumedFence.whenSettled;
+      expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
+
+      resumed.cleanup();
+      started.cleanup();
+    });
+
     it('recover() of a run this process is still executing rejects with RUN_ACTIVE_LOCALLY and leaves it running', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });

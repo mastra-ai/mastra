@@ -2855,6 +2855,19 @@ export class DurableAgent<
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
     const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
+    let initialToolCalls: ToolCallChunk[];
+    let resumeOffset: number | 'latest';
+    try {
+      initialToolCalls = await this.#loadSuspendedToolCalls(runId);
+      // Skip events already broadcast by the original run (e.g. the SUSPENDED
+      // chunk that paused it). Without this, a resume that closes on suspend
+      // (resumeGenerate) would immediately close on the replayed SUSPENDED.
+      resumeOffset = await this.#getPubsubOffset(runId);
+    } catch (error) {
+      // The segment never started: release the run so it can be resumed again.
+      await executionFence.settle(async () => {});
+      throw error;
+    }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, globalRunRegistry.get(runId)]) {
       if (reg) reg.executionFence = executionFence;
@@ -2936,13 +2949,6 @@ export class DurableAgent<
 
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
-
-    const initialToolCalls = await this.#loadSuspendedToolCalls(runId);
-
-    // Skip events already broadcast by the original run (e.g. the SUSPENDED
-    // chunk that paused it). Without this, a resume that closes on suspend
-    // (resumeGenerate) would immediately close on the replayed SUSPENDED.
-    const resumeOffset = await this.#getPubsubOffset(runId);
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
