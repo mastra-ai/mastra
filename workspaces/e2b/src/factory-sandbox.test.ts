@@ -127,6 +127,13 @@ describe('E2BFactorySandbox', () => {
     const defaulted = new E2BFactorySandbox({ defaults: { idleTimeoutMinutes: 10 } }).create(context(), {});
     expect(defaulted.timeout).toBe(10 * 60_000);
     expect(new E2BFactorySandbox({}).create(context(), {}).timeout).toBe(5 * 60_000);
+
+    // The advertised default is what applies when the setting is unset: the host timeout in whole minutes.
+    const advertised = (sandbox: E2BFactorySandbox) =>
+      (describeFactorySandbox(sandbox).settingsSchema.properties as any).idleTimeoutMinutes.default;
+    expect(advertised(new E2BFactorySandbox({ timeout: 90_000 }))).toBe(2);
+    expect(advertised(new E2BFactorySandbox({ timeout: 90_000, defaults: { idleTimeoutMinutes: 10 } }))).toBe(10);
+    expect(advertised(new E2BFactorySandbox({}))).toBe(5);
   });
 
   describe('builds', () => {
