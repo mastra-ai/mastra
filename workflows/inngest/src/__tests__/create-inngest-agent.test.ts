@@ -2303,6 +2303,17 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     expect(closeOnSuspendSet(opts as object)).toBe(true);
   });
 
+  it('resumeStream forwards an external abortSignal to resume()', async () => {
+    const durableAgent = makeDurable('resume-stream-abort-signal');
+    const { output, resumeSpy } = spyResume(durableAgent);
+    const abortSignal = new AbortController().signal;
+
+    const result = await durableAgent.resumeStream({ approved: true }, { runId: 'r1', abortSignal });
+
+    expect(result).toBe(output);
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({ abortSignal });
+  });
+
   it('resumeStream throws without a runId', async () => {
     const durableAgent = makeDurable('resume-stream-no-run');
     await expect(durableAgent.resumeStream({ approved: true })).rejects.toThrow(/requires a runId/);
