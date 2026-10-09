@@ -910,6 +910,111 @@ describe('MastraStorageExporter', () => {
       });
     });
 
+    describe('In-flight batches', () => {
+      async function startHeldWrite() {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 1, // every event writes a batch right away
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        let releaseWrite!: () => void;
+        mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            releaseWrite = resolve;
+          }),
+        );
+
+        const exportPromise = exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        await vi.waitFor(() => expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1));
+        return { exporter, exportPromise, releaseWrite };
+      }
+
+      async function isSettled(promise: Promise<unknown>): Promise<boolean> {
+        let settled = false;
+        void promise.then(() => (settled = true));
+        await new Promise(resolve => setImmediate(resolve));
+        return settled;
+      }
+
+      it('flush() waits for a batch that is already writing', async () => {
+        const { exporter, exportPromise, releaseWrite } = await startHeldWrite();
+
+        const flushPromise = exporter.flush();
+        expect(await isSettled(flushPromise)).toBe(false);
+
+        releaseWrite();
+        await flushPromise;
+        await exportPromise;
+      });
+
+      it('flush() waits for a batch that is already writing while also flushing new events', async () => {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        let releaseWrite!: () => void;
+        mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            releaseWrite = resolve;
+          }),
+        );
+
+        // The flush timer takes the first event out of the buffer and starts a held write
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        timers.shift().fn();
+        await vi.waitFor(() => expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1));
+
+        // A second event stays in the live buffer
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-2', 'span-2'));
+
+        const flushPromise = exporter.flush();
+        await vi.waitFor(() => expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2));
+        expect(await isSettled(flushPromise)).toBe(false);
+
+        releaseWrite();
+        await flushPromise;
+      });
+
+      it('shutdown() waits for a batch that is already writing', async () => {
+        const { exporter, exportPromise, releaseWrite } = await startHeldWrite();
+
+        const shutdownPromise = exporter.shutdown();
+        expect(await isSettled(shutdownPromise)).toBe(false);
+
+        releaseWrite();
+        await shutdownPromise;
+        await exportPromise;
+      });
+
+      it('flush() does not reject when a batch it joins fails', async () => {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 1,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        let failWrite!: (error: Error) => void;
+        mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(
+          new Promise<void>((_, reject) => {
+            failWrite = reject;
+          }),
+        );
+        const exportPromise = exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        await vi.waitFor(() => expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1));
+
+        const flushPromise = exporter.flush();
+        failWrite(new Error('storage down'));
+        await expect(flushPromise).resolves.toBeUndefined();
+        await exportPromise.catch(() => {});
+      });
+    });
+
     describe('Shutdown', () => {
       it('should flush remaining events on shutdown', async () => {
         const exporter = new MastraStorageExporter({

@@ -86,6 +86,8 @@ export class MastraStorageExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  /** Batch writes in progress, so flush() can wait for batches already taken out of the buffer */
+  #inFlightFlushes = new Set<Promise<void>>();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -416,14 +418,27 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
-   * Flushes the current buffer to storage.
+   * Flushes the current buffer to storage, tracking the write until it settles.
+   */
+  private flushBuffer(): Promise<void> {
+    const flush = this.writeBuffer();
+    this.#inFlightFlushes.add(flush);
+    const done = () => {
+      this.#inFlightFlushes.delete(flush);
+    };
+    flush.then(done, done);
+    return flush;
+  }
+
+  /**
+   * Writes the current buffer to storage.
    *
    * Creates are flushed first, then their span keys are added to allCreatedSpans.
    * Updates are checked against allCreatedSpans — those whose span hasn't been
    * created yet are re-inserted into the live buffer for the next flush.
    * Completed spans (SPAN_ENDED) are cleaned up from allCreatedSpans after success.
    */
-  private async flushBuffer(): Promise<void> {
+  private async writeBuffer(): Promise<void> {
     if (!this.#observabilityStorage) {
       this.logger.debug('Cannot flush. Observability storage is not initialized');
       return;
@@ -609,14 +624,22 @@ export class MastraStorageExporter extends BaseExporter {
    * Force flush any buffered spans without shutting down the exporter.
    * This is useful in serverless environments where you need to ensure spans
    * are exported before the runtime instance is terminated.
+   *
+   * Also waits for batches that were already taken out of the buffer and are
+   * still being written, so storage can be closed once this resolves.
    */
   async flush(): Promise<void> {
+    // Batches already writing; their errors are reported by whoever started them
+    const inFlight = Promise.allSettled([...this.#inFlightFlushes]);
+
     if (this.#eventBuffer.totalSize > 0) {
       this.logger.debug('Flushing buffered events', {
         bufferedEvents: this.#eventBuffer.totalSize,
       });
       await this.flushBuffer();
     }
+
+    await inFlight;
   }
 
   async shutdown(): Promise<void> {
