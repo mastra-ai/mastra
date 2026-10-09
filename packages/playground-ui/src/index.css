@@ -168,6 +168,13 @@
     outline-offset: 0;
   }
 
+  /* Keep the app shell still when a scroll runs past the page edge. Inner
+     scroll areas keep their own bounce, and the x axis stays free for
+     swipe-to-navigate. */
+  html {
+    overscroll-behavior-y: none;
+  }
+
   body {
     background-color: var(--sidebar);
     color: var(--foreground);
