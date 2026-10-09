@@ -53,6 +53,7 @@ describe('SettingsNavigation', () => {
       'Skills',
       'Behavior',
       'Repositories',
+      'Environment',
       'Work Intake',
       'Manage Factory',
     ]);
@@ -71,6 +72,10 @@ describe('SettingsNavigation', () => {
     expect(within(factory).getByRole('link', { name: 'Factory memory' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/factory-memory',
+    );
+    expect(within(factory).getByRole('link', { name: 'Environment' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/environment',
     );
   });
 
