@@ -229,4 +229,59 @@ describe('static Knowledge importer operations', () => {
       }),
     ).rejects.toThrow('is not active');
   });
+
+  describe('stable record ids', () => {
+    it('treats an identical re-emission as a no-op', async () => {
+      const { knowledge, operations } = await createFixture();
+      const node = await operations.upsertNode('event:42', { name: 'Planning' });
+      const input = { id: 'event-42-time', text: '10:00-11:00', metadata: { tz: 'UTC' } };
+      const first = await node.appendKnowledge(input);
+
+      await expect(node.appendKnowledge(input)).resolves.toEqual(first);
+      expect(await knowledge.getRecord({ id: input.id })).toEqual(first);
+    });
+
+    it('compares re-emitted metadata independent of key order', async () => {
+      const { operations } = await createFixture();
+      const node = await operations.upsertNode('event:42', { name: 'Planning' });
+      const first = await node.appendKnowledge({
+        id: 'event-42-time',
+        text: '10:00-11:00',
+        metadata: { zeta: 1, tz: 'UTC', alpha: { b: 2, a: 1 } },
+      });
+
+      await expect(
+        node.appendKnowledge({
+          id: 'event-42-time',
+          text: '10:00-11:00',
+          metadata: { alpha: { a: 1, b: 2 }, tz: 'UTC', zeta: 1 },
+        }),
+      ).resolves.toEqual(first);
+    });
+
+    it('does not resurrect an imported record someone deleted', async () => {
+      const { knowledge, operations } = await createFixture();
+      const node = await operations.upsertNode('event:42', { name: 'Planning' });
+      await node.appendKnowledge({ id: 'event-42-time', text: '10:00-11:00' });
+      await knowledge.deleteRecord({ id: 'event-42-time', deletedBy: 'reviewer' });
+
+      await node.appendKnowledge({ id: 'event-42-time', text: '10:00-11:00' });
+
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toBeNull();
+      expect(await knowledge.getRecord({ id: 'event-42-time', includeDeleted: true })).toMatchObject({
+        deletedAt: expect.any(Date),
+      });
+    });
+
+    it('rejects different content for an existing record id without overwriting it', async () => {
+      const { knowledge, operations } = await createFixture();
+      const node = await operations.upsertNode('event:42', { name: 'Planning' });
+      const first = await node.appendKnowledge({ id: 'event-42-time', text: '10:00-11:00' });
+
+      await expect(node.appendKnowledge({ id: 'event-42-time', text: '14:00-15:00' })).rejects.toThrow(
+        'Knowledge record event-42-time already exists with different content',
+      );
+      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+    });
+  });
 });
