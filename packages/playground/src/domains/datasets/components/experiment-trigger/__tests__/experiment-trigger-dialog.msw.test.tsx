@@ -109,9 +109,9 @@ const scorersListbox = () => screen.getByRole('listbox', { name: 'Select scorers
 const selectedScorerValues = () => getMultiSelectValues('Select scorers...');
 const selectScorers = (values: string[]) => setMultiSelectValues('Select scorers...', values);
 
-const runButton = () => screen.getByRole('button', { name: 'Run' });
+const runButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Run' });
 
-const nameInput = () => screen.getByLabelText(/^Name/) as HTMLInputElement;
+const nameInput = () => screen.getByLabelText<HTMLInputElement>(/^Name/);
 const descriptionInput = () => screen.getByLabelText('Description') as HTMLInputElement;
 const typeName = (value: string) => fireEvent.change(nameInput(), { target: { value } });
 
@@ -131,7 +131,7 @@ describe('ExperimentTriggerDialog', () => {
       expect((datasetCombobox as HTMLSelectElement).value).toBe('');
       expect(screen.getByText('Scorers (Optional)')).toBeDefined();
       expect(scorersListbox()).toBeDefined();
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
+      expect(runButton().disabled).toBe(true);
     });
 
     it('runs against the selected dataset and reports the experiment id', async () => {
@@ -257,7 +257,7 @@ describe('ExperimentTriggerDialog', () => {
 
       // Then the name is filled in and Run is enabled without typing
       expect(nameInput().value).toMatch(/^agent-one-[0-9a-f]{4}$/);
-      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+      expect(runButton().disabled).toBe(false);
     });
 
     it('should update the default name when the target changes', async () => {
@@ -316,7 +316,7 @@ describe('ExperimentTriggerDialog', () => {
 
       // When the user clears the name and runs
       typeName('');
-      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+      expect(runButton().disabled).toBe(false);
       fireEvent.click(runButton());
 
       // Then the default name is sent
@@ -415,7 +415,7 @@ describe('ExperimentTriggerDialog', () => {
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
 
       expect(status().textContent).toContain('Missing dataset, target');
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
+      expect(runButton().disabled).toBe(true);
 
       await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
       selectOption('Select a dataset...', 'dataset-1');
@@ -423,7 +423,7 @@ describe('ExperimentTriggerDialog', () => {
 
       await pickAgentTarget();
       expect(status().textContent).toContain('Ready');
-      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+      expect(runButton().disabled).toBe(false);
     });
 
     it('should submit on Ctrl+Enter only when the form is ready', async () => {

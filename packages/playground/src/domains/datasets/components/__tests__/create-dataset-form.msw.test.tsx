@@ -41,7 +41,7 @@ async function renderForm() {
   return { onSuccess };
 }
 
-const nameInput = () => screen.getByLabelText(/^Name/) as HTMLInputElement;
+const nameInput = () => screen.getByLabelText<HTMLInputElement>(/^Name/);
 const typeName = (value: string) => fireEvent.change(nameInput(), { target: { value } });
 const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
 

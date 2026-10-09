@@ -1,8 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { useTargetOptions } from './use-target-options';
+import type { TargetType } from './use-target-options';
 
-export type TargetType = 'agent' | 'workflow' | 'scorer';
+export type { TargetType };
 
 export interface TargetSelectorProps {
   targetType: TargetType | '';

@@ -28,7 +28,7 @@ export interface CreateDatasetFormProps {
 
 export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }: CreateDatasetFormProps) {
   const nextDatasetName = useNextDatasetName();
-  const [typedName, setTypedName] = useState<string | null>(null);
+  const [typedName, setTypedName] = useState<string>();
   const name = typedName ?? nextDatasetName;
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);

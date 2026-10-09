@@ -28,11 +28,10 @@ import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
-import { buildDefaultExperimentName, createExperimentNameSuffix } from './default-experiment-name';
 import { ScorerSelector } from './scorer-selector';
-import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { useTargetOptions } from './use-target-options';
+import { useExperimentName } from './use-experiment-name';
+import type { TargetType } from './use-target-options';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -131,8 +130,6 @@ export function ExperimentTriggerDialog({
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [typedName, setTypedName] = useState<string | null>(initialName ?? null);
-  const [nameSuffix, setNameSuffix] = useState(createExperimentNameSuffix);
   const [description, setDescription] = useState(initialDescription ?? '');
   const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
@@ -143,11 +140,7 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
-  const { targetOptions } = useTargetOptions(targetType);
-  const targetName = targetOptions.find(option => option.value === targetId)?.label;
-  const defaultName = targetName ? buildDefaultExperimentName(targetName, nameSuffix) : '';
-  const name = typedName ?? defaultName;
-  const runName = name.trim() || defaultName;
+  const { name, defaultName, runName, setName, resetName } = useExperimentName(targetType, targetId, initialName);
   const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { total: itemCount } = useDatasetItems({
     datasetId: datasetId,
@@ -178,8 +171,7 @@ export function ExperimentTriggerDialog({
   };
 
   const resetState = () => {
-    setTypedName(initialName ?? null);
-    setNameSuffix(createExperimentNameSuffix());
+    resetName();
     setDescription(initialDescription ?? '');
     setDatasetId(initialDatasetId ?? '');
     setVersion(initialDatasetVersion ?? null);
@@ -273,7 +265,7 @@ export function ExperimentTriggerDialog({
               <FieldLabel>Name</FieldLabel>
               <Input
                 value={name}
-                onChange={e => setTypedName(e.target.value)}
+                onChange={e => setName(e.target.value)}
                 placeholder={defaultName || 'Enter experiment name'}
                 autoFocus
                 disabled={isRunning}
