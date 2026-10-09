@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { ProcessorContext } from '@mastra/core/processors';
-import type { KnowledgeScope } from '@mastra/core/storage';
+import type { KnowledgeScopeIds } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -106,7 +106,7 @@ function passiveCheck(
 export function createReminderAgent(options: {
   model: SubconsciousModel;
   memory: Memory;
-  scope: KnowledgeScope;
+  scopeIds: KnowledgeScopeIds;
   threadId: string;
   resourceId: string;
   parentThreadId: string;
@@ -231,7 +231,7 @@ export function createReminderAgent(options: {
     mastra: options.parentAgent?.getMastraInstance?.(),
     pubsub: options.parentAgent?.getPubSub?.(),
     tools: {
-      ...createKnowledgeTools(options.memory, options.scope),
+      ...createKnowledgeTools(options.memory, options.scopeIds),
       ...options.additionalTools,
       send_reminder: sendReminder,
     },

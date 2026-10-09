@@ -22,7 +22,16 @@ import type {
   ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
-import type { KnowledgeActivityEvent, KnowledgeRecord, KnowledgeNode, KnowledgeSemanticOutboxEntry } from './knowledge';
+import type {
+  KnowledgeActivityEvent,
+  KnowledgeImportRun,
+  KnowledgeImportState,
+  KnowledgeNodeAddress,
+  KnowledgeRecord,
+  KnowledgeNode,
+  KnowledgeScopeGrant,
+  KnowledgeSemanticOutboxEntry,
+} from './knowledge';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
@@ -102,9 +111,16 @@ export class InMemoryDB {
   // Knowledge domain
   readonly knowledgeNodes = new Map<string, KnowledgeNode>();
   readonly knowledgeNodeKeys = new Map<string, string>();
+  readonly knowledgeNodeAddresses = new Map<string, KnowledgeNodeAddress>();
+  readonly knowledgeScopeAddresses = new Map<string, string>();
+  readonly knowledgeScopeGrants = new Map<string, KnowledgeScopeGrant>();
   readonly knowledgeRecords = new Map<string, KnowledgeRecord>();
+  readonly knowledgeNodeScopes = new Map<string, Set<string>>();
+  readonly knowledgeRecordScopes = new Map<string, Set<string>>();
   readonly knowledgeMentions = new Map<string, Set<string>>();
   readonly knowledgeActivity: KnowledgeActivityEvent[] = [];
+  readonly knowledgeImportState = new Map<string, KnowledgeImportState>();
+  readonly knowledgeImportRuns = new Map<string, KnowledgeImportRun>();
   readonly knowledgeSemanticOutbox = new Map<string, KnowledgeSemanticOutboxEntry>();
   readonly knowledgeSemanticIdempotency = new Map<string, string>();
 
@@ -164,9 +180,16 @@ export class InMemoryDB {
     this.backgroundTasks.clear();
     this.knowledgeNodes.clear();
     this.knowledgeNodeKeys.clear();
+    this.knowledgeNodeAddresses.clear();
+    this.knowledgeScopeAddresses.clear();
+    this.knowledgeScopeGrants.clear();
     this.knowledgeRecords.clear();
+    this.knowledgeNodeScopes.clear();
+    this.knowledgeRecordScopes.clear();
     this.knowledgeMentions.clear();
     this.knowledgeActivity.length = 0;
+    this.knowledgeImportState.clear();
+    this.knowledgeImportRuns.clear();
     this.knowledgeSemanticOutbox.clear();
     this.knowledgeSemanticIdempotency.clear();
     this.schedules.clear();

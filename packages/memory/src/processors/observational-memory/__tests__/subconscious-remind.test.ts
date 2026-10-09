@@ -1,4 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,7 @@ import { Memory } from '../../..';
 import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
 import { SubconsciousRemindExtractor } from '../subconscious';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import {
   getRemindMessageMetadata,
   getRemindMessageText,
@@ -70,7 +72,7 @@ function createModel(response: string, prompts?: string[], repeatToolCall = fals
 function createContext(response: string, storage = new InMemoryStore()) {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
-  const memory = new Memory({ storage });
+  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'remind', storage }) });
   const sendSignal = vi.fn(async () => undefined) as any;
   return {
     threadId: 'alpha',
@@ -96,6 +98,14 @@ function createContext(response: string, storage = new InMemoryStore()) {
     sendSignal,
     sendStateSignal: vi.fn(async () => ({ skipped: false })) as any,
   };
+}
+
+async function getResourceScopeIds(context: ReturnType<typeof createContext>) {
+  const scopeIds = await resolveKnowledgeScopeIds(context.memory, {
+    agent: { threadId: context.threadId, resourceId: context.resourceId },
+    requestContext: context.requestContext,
+  });
+  return [scopeIds[1]!];
 }
 
 describe('Subconscious remind', () => {
@@ -135,19 +145,18 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
-    const scope = ['org:acme', 'resource:user-42'];
+    const scope = await getResourceScopeIds(context);
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: scope,
+      scopeIds: scope,
     });
-    const record = await store.appendKnowledge({
+    const record = await store.createRecord({
       node,
       text: 'Project Atlas launches January 15.',
-      scope: scope,
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: scope,
+      scopeIds: scope,
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
     context.mainAgent.getModel = vi.fn(async () =>
       createModel(`Project Atlas launches January 15. Source: ${record.id}`, undefined, true),
@@ -190,15 +199,14 @@ describe('Subconscious remind', () => {
       const node = await store.createNode({
         name: 'Project Atlas',
         kind: 'project',
-        scope: ['org:acme', 'resource:user-42'],
+        scopeIds: await getResourceScopeIds(context),
       });
-      await store.appendKnowledge({
+      await store.createRecord({
         node,
         text: 'Project Atlas launches January 15.',
-        scope: ['org:acme', 'resource:user-42'],
-        sourceThreadId: 'alpha',
-        resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-        defaultScope: ['org:acme', 'resource:user-42'],
+        scopeIds: await getResourceScopeIds(context),
+        source: 'alpha',
+        metadata: { sourceThreadId: 'alpha' },
       });
 
       const result = await applyExtractorHooks({
@@ -243,16 +251,15 @@ describe('Subconscious remind', () => {
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
-    const item = await store.appendKnowledge({
+    const item = await store.createRecord({
       id: recordId,
       node: node.id,
       text: 'Project Atlas launches January 15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
 
     const result = await applyExtractorHooks({
@@ -280,16 +287,15 @@ describe('Subconscious remind', () => {
     const node = await store.createNode({
       name: 'Zeta initiative',
       kind: 'program',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
     // Captured by THIS thread, moments ago: the reminder must not whisper it back.
-    await store.appendKnowledge({
+    await store.createRecord({
       node: node.id,
       text: 'The launch happens January 15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'alpha',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'alpha',
+      metadata: { sourceThreadId: 'alpha' },
     });
 
     const result = await applyExtractorHooks({
@@ -314,16 +320,15 @@ describe('Subconscious remind', () => {
     const node = await store.createNode({
       name: 'Zeta initiative',
       kind: 'program',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
     // Written moments ago by this thread's own curator sub-thread.
-    await store.appendKnowledge({
+    await store.createRecord({
       node: node.id,
       text: 'The launch happens January 15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'subconscious:alpha:curate',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'subconscious:alpha:curate',
+      metadata: { sourceThreadId: 'subconscious:alpha:curate' },
     });
 
     const result = await applyExtractorHooks({
@@ -350,15 +355,14 @@ describe('Subconscious remind', () => {
       const node = await store.createNode({
         name: 'Zeta initiative',
         kind: 'program',
-        scope: ['org:acme', 'resource:user-42'],
+        scopeIds: await getResourceScopeIds(context),
       });
-      const item = await store.appendKnowledge({
+      const item = await store.createRecord({
         node: node.id,
         text: 'The launch happens January 15.',
-        scope: ['org:acme', 'resource:user-42'],
-        sourceThreadId: 'alpha',
-        resolutionScope: ['org:acme', 'resource:user-42', 'thread:alpha'],
-        defaultScope: ['org:acme', 'resource:user-42'],
+        scopeIds: await getResourceScopeIds(context),
+        source: 'alpha',
+        metadata: { sourceThreadId: 'alpha' },
       });
       context.mainAgent.getModel = vi.fn(async () => createModel(`The launch happens January 15. Source: ${item.id}`));
       vi.advanceTimersByTime(31 * 60 * 1000);
@@ -393,15 +397,14 @@ describe('Subconscious remind', () => {
     const node = await store.createNode({
       name: 'Moon weather',
       kind: 'topic',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
-    await store.appendKnowledge({
+    await store.createRecord({
       node: node.id,
       text: 'The moon has no weather to speak of.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
 
     await applyExtractorHooks({
@@ -435,19 +438,19 @@ describe('Subconscious remind', () => {
   it('reuses durable sidekick history across reconstructed Memory instances', async () => {
     const storage = new InMemoryStore();
     const first = createContext('unused', storage);
+    const context = first;
     const knowledge = await storage.getStore('knowledge');
     const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
-    const record = await knowledge.appendKnowledge({
+    const record = await knowledge.createRecord({
       node,
       text: 'Project Atlas launches January 15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
     const prompts: string[] = [];
     first.mainAgent.getModel = vi.fn(async () =>
@@ -501,15 +504,14 @@ describe('Subconscious remind', () => {
       const node = await knowledge.createNode({
         name: 'Moon weather',
         kind: 'topic',
-        scope: ['org:acme', 'resource:user-42'],
+        scopeIds: await getResourceScopeIds(context),
       });
-      await knowledge.appendKnowledge({
+      await knowledge.createRecord({
         node,
         text: 'The moon has no weather.',
-        scope: ['org:acme', 'resource:user-42'],
-        sourceThreadId: 'beta',
-        resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-        defaultScope: ['org:acme', 'resource:user-42'],
+        scopeIds: await getResourceScopeIds(context),
+        source: 'beta',
+        metadata: { sourceThreadId: 'beta' },
       });
 
       await applyExtractorHooks({
@@ -555,15 +557,14 @@ describe('Subconscious remind', () => {
     const node = await knowledge.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
-    await knowledge.appendKnowledge({
+    await knowledge.createRecord({
       node,
       text: 'Project Atlas launches January 15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
 
     const result = await applyExtractorHooks({
@@ -664,15 +665,14 @@ describe('Subconscious remind', () => {
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
     });
-    await store.appendKnowledge({
+    await store.createRecord({
       node: node.id,
       text: 'Project Atlas launches January 15.',
-      scope: ['org:acme', 'resource:user-42'],
-      sourceThreadId: 'beta',
-      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      scopeIds: await getResourceScopeIds(context),
+      source: 'beta',
+      metadata: { sourceThreadId: 'beta' },
     });
 
     const result = await applyExtractorHooks({

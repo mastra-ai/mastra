@@ -43,6 +43,8 @@ import {
 } from '@mastra/core/storage';
 import type { ClickhouseReplicationConfig } from './replication';
 
+// Tables whose name constants are newer than the `@mastra/core` peer floor use literal keys; the record type still
+// enforces that every table is listed.
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
@@ -90,6 +92,16 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_KNOWLEDGE_MENTIONS]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_ACTIVITY]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: `ReplacingMergeTree()`,
+  mastra_knowledge_node_scopes: `ReplacingMergeTree()`,
+  mastra_knowledge_record_scopes: `ReplacingMergeTree()`,
+  mastra_knowledge_scope_grants: `ReplacingMergeTree()`,
+  mastra_knowledge_access_state: `ReplacingMergeTree()`,
+  mastra_knowledge_scope_addresses: `ReplacingMergeTree()`,
+  mastra_knowledge_node_addresses: `ReplacingMergeTree()`,
+  mastra_knowledge_import_state: `ReplacingMergeTree()`,
+  mastra_knowledge_import_runs: `ReplacingMergeTree()`,
+  mastra_knowledge_proposals: `ReplacingMergeTree()`,
+  mastra_knowledge_schema: `ReplacingMergeTree()`,
 };
 
 /**

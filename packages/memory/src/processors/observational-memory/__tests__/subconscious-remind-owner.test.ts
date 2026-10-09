@@ -1,5 +1,6 @@
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Memory } from '../../..';
 import { applyExtractorHooks } from '../extracted-values';
 import { SubconsciousRemindExtractor } from '../subconscious';
+import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 import {
   getRemindMessageText,
   getRemindThreadId,
@@ -61,7 +63,7 @@ function textStopStream(text: string) {
 
 function createHarness(options: { knowledgeResourceId?: string }) {
   const storage = new InMemoryStore();
-  const memory = new Memory({ storage });
+  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
   const requestContext = new RequestContext();
   requestContext.set('organizationId', ORG);
   if (options.knowledgeResourceId) requestContext.set('knowledgeResourceId', options.knowledgeResourceId);
@@ -141,17 +143,19 @@ function createHarness(options: { knowledgeResourceId?: string }) {
 async function runScenario(knowledgeResourceId: string | undefined) {
   const harness = createHarness({ knowledgeResourceId });
   const scopeResource = knowledgeResourceId ?? SESSION;
-  const scope = [`org:${ORG}`, `resource:${scopeResource}`];
-
-  const knowledgeStore = await harness.memory.storage.getStore('knowledge');
-  const node = await knowledgeStore.createNode({ name: 'Project Atlas', kind: 'project', scope });
-  const record = await knowledgeStore.appendKnowledge({
+  const scopeIds = await resolveKnowledgeScopeIds(harness.memory, {
+    agent: { threadId: 'beta', resourceId: scopeResource },
+    requestContext: harness.requestContext,
+  });
+  const knowledgeStore = await harness.memory.getKnowledgeStore();
+  const node = await knowledgeStore.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[1]!] });
+  const record = await knowledgeStore.createRecord({
     node,
     text: 'Project Atlas launches January 15.',
-    scope,
-    sourceThreadId: 'beta',
-    resolutionScope: [...scope, 'thread:beta'],
-    defaultScope: scope,
+    scopeIds: [scopeIds[1]!],
+    source: 'beta',
+    metadata: { sourceThreadId: 'beta' },
+    resolutionScopeIds: scopeIds,
   });
   harness.setSourceRecordId(record.id);
 

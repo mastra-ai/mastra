@@ -4,7 +4,6 @@ import type {
   KnowledgeStructurePlan,
   KnowledgeStructureScope,
 } from '../storage/domains/knowledge';
-import { assertKnowledgeDescriptionWithinBound } from '../storage/domains/knowledge/base';
 
 export interface KnowledgeScopeAccessConfig {
   principal: 'self' | 'parent' | string;
@@ -45,7 +44,7 @@ export interface MaterializeKnowledgeScopeInput {
 const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
   'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
   'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },
-  'thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
+  'resource:$resourceId:thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
   custom: { access: [{ principal: 'self', role: 'owner' }] },
 };
 
@@ -54,11 +53,11 @@ export function validateKnowledgeScopeTypes(
 ): KnowledgeScopeTypesConfig {
   const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
   for (const [pattern, config] of Object.entries(types)) {
-    assertKnowledgeDescriptionWithinBound(config?.description);
+    assertScopeDescriptionWithinBound(config?.description);
     for (const child of config?.children ?? []) {
       if (!child.address.trim()) throw new Error(`Knowledge child scope template in ${pattern} must have an address`);
       if (!child.name.trim()) throw new Error(`Knowledge child scope ${child.address} in ${pattern} must have a name`);
-      assertKnowledgeDescriptionWithinBound(child.description);
+      assertScopeDescriptionWithinBound(child.description);
       for (const access of child.access ?? []) {
         if (access.role === 'mirror' && access.canSuggest !== undefined) {
           throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
@@ -83,12 +82,23 @@ export function validateKnowledgeScopeTypes(
   return types;
 }
 
+/** Scope descriptions share the node description bound, counted in UTF-16 code units. */
+const MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH = 400;
+
+function assertScopeDescriptionWithinBound(description: unknown): void {
+  if (typeof description === 'string' && description.length > MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH) {
+    throw new Error(
+      `Knowledge node description exceeds the ${MAX_KNOWLEDGE_SCOPE_DESCRIPTION_LENGTH} UTF-16 code unit limit`,
+    );
+  }
+}
+
 export function validateKnowledgeStructurePlan(plan: KnowledgeStructurePlan): KnowledgeStructurePlan {
   const addresses = new Set<string>();
   for (const scope of plan.scopes) {
     assertAddress(scope.address);
     if (!scope.name.trim()) throw new Error(`Knowledge scope ${scope.address} must have a name`);
-    assertKnowledgeDescriptionWithinBound(scope.description);
+    assertScopeDescriptionWithinBound(scope.metadata?.description);
     if (addresses.has(scope.address)) throw new Error(`Duplicate Knowledge scope address: ${scope.address}`);
     addresses.add(scope.address);
     const parents = new Set<string>();
@@ -165,7 +175,7 @@ export function materializeKnowledgeScopePlan(
   const children = (config.children ?? []).map<KnowledgeStructureScope>(child => ({
     address: assertChildAddress(substituteParameters(child.address, childParameters), types),
     name: child.name.trim(),
-    description: child.description,
+    metadata: child.description ? { description: child.description } : undefined,
     parentAddresses: [input.address],
     grants: (child.access ?? [{ principal: 'self', role: 'owner' }]).map<KnowledgeStructureGrant>(access => ({
       scopeRefAddress:
@@ -178,21 +188,26 @@ export function materializeKnowledgeScopePlan(
   }));
 
   return validateKnowledgeStructurePlan({
+    retrofit: false,
     scopes: [
       {
         address: input.address,
         name: input.name?.trim() || input.address.split(':').at(-1)!,
-        description: config.description,
+        metadata: config.description ? { description: config.description } : undefined,
         parentAddresses: input.parentAddresses,
         grants,
       },
       ...children,
     ],
-    retrofit: false,
   });
 }
 
-const IDENTITY_SCOPE_PATTERNS = ['org:$orgId', 'resource:$resourceId', 'thread:$threadId'];
+const IDENTITY_SCOPE_PATTERNS = [
+  'org:$orgId',
+  'resource:$resourceId',
+  'resource:$resourceId:thread:$threadId',
+  'thread:$threadId',
+];
 
 /**
  * Child templates must not mint identity scopes (those are host-vouched) or addresses owned by

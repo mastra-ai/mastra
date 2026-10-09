@@ -4,14 +4,18 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore, MastraCompositeStore } from '../../storage';
 import { Knowledge } from '../index';
 
-const scope = ['org:acme', 'resource:mastra'];
+const scopeIds = ['10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002'];
 
 describe('Knowledge', () => {
   it('rejects over-long scope descriptions at construction', () => {
     const storage = new InMemoryStore({ id: 'bounded' });
     const description = 'x'.repeat(401);
     expect(
-      () => new Knowledge({ storage, structure: { scopes: [{ address: 'scope:a', name: 'A', description }] } }),
+      () =>
+        new Knowledge({
+          storage,
+          structure: { scopes: [{ address: 'scope:a', name: 'A', metadata: { description } }] },
+        }),
     ).toThrow('Knowledge node description exceeds the 400 UTF-16 code unit limit');
     expect(() => new Knowledge({ storage, scopes: { 'team:$teamId': { description } } })).toThrow(
       'Knowledge node description exceeds the 400 UTF-16 code unit limit',
@@ -22,10 +26,9 @@ describe('Knowledge', () => {
     const storage = new InMemoryStore({ id: 'structured' });
     const domain = storage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 2,
-      schemaVersion: 2,
-      supportsV2: true,
-      supportsExplicitReset: true,
+      contractVersion: 1,
+      schemaVersion: 1,
+      supported: true,
     });
     const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
     const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
@@ -86,7 +89,7 @@ describe('Knowledge', () => {
     expect(lazy).toMatchObject({ changed: true, accessEpoch: 2 });
   });
 
-  it('applies rules added to static structure after first boot', async () => {
+  it('adds parent edges declared after first boot to existing static scopes', async () => {
     const storage = new InMemoryStore({ id: 'static-structure-growth' });
     const org = { address: 'org:acme', name: 'Acme' };
     const firstBoot = await new Knowledge({
@@ -96,22 +99,13 @@ describe('Knowledge', () => {
 
     const secondBoot = await new Knowledge({
       storage,
-      structure: {
-        scopes: [
-          org,
-          {
-            address: 'team',
-            name: 'Team',
-            parentAddresses: ['org:acme'],
-            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' }],
-          },
-        ],
-      },
+      structure: { scopes: [org, { address: 'team', name: 'Team', parentAddresses: ['org:acme'] }] },
     }).reconcile();
 
-    expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [], accessEpoch: firstBoot.accessEpoch + 1 });
-    const team = (await storage.stores.knowledge!.listScopeNodes({ addresses: ['team'] })).scopes[0];
-    expect(team?.parentIds).toEqual([firstBoot.scopes['org:acme']]);
+    expect(secondBoot).toMatchObject({ changed: true, createdScopeIds: [] });
+    expect(await storage.stores.knowledge!.getNodeScopeIds(firstBoot.scopes.team!)).toEqual([
+      firstBoot.scopes['org:acme'],
+    ]);
   });
 
   it('keeps materialized scopes as created when their scope type template changes', async () => {
@@ -152,17 +146,23 @@ describe('Knowledge', () => {
 
     expect(a.createdScopeIds).toHaveLength(3);
     expect(b.createdScopeIds).toHaveLength(3);
-    const { scopes } = await storage.stores.knowledge!.listScopeNodes({
-      addresses: ['org:a:about-me', 'machines:a', 'org:b:about-me', 'machines:b'],
-    });
-    const parentsByAddress = Object.fromEntries(scopes.map(scope => [scope.address, scope.parentIds]));
+    const store = storage.stores.knowledge!;
+    const parentsByAddress = Object.fromEntries(
+      await Promise.all(
+        ['org:a:about-me', 'machines:a', 'org:b:about-me', 'machines:b'].map(async address => {
+          const scope = await store.getScopeAddress(address);
+          return [address, scope ? await store.getNodeScopeIds(scope.scopeNodeId) : undefined];
+        }),
+      ),
+    );
     expect(parentsByAddress).toEqual({
       'org:a:about-me': [a.scopes['org:a']],
       'machines:a': [a.scopes['org:a']],
       'org:b:about-me': [b.scopes['org:b']],
       'machines:b': [b.scopes['org:b']],
     });
-    expect(scopes.find(scope => scope.address === 'machines:b')?.name).toBe('Machines');
+    const machines = await store.getScopeAddress('machines:b');
+    expect((await store.getNode(machines!.scopeNodeId))?.name).toBe('Machines');
 
     const again = await knowledge.materializeScope({ address: 'org:a', contextualScopeAddress: 'org:a' });
     expect(again).toMatchObject({ changed: false, createdScopeIds: [] });
@@ -179,7 +179,7 @@ describe('Knowledge', () => {
     }).materializeScope(input);
 
     expect(later).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
-    expect((await storage.stores.knowledge!.listScopeNodes({ addresses: ['org:a:shared'] })).scopes).toEqual([]);
+    await expect(storage.stores.knowledge!.getScopeAddress('org:a:shared')).resolves.toBeNull();
   });
 
   it('keeps same-named scopes from different sources distinct by address across replays', async () => {
@@ -206,10 +206,9 @@ describe('Knowledge', () => {
     const storage = new InMemoryStore({ id: 'lazy-structured' });
     const domain = storage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 2,
-      schemaVersion: 2,
-      supportsV2: true,
-      supportsExplicitReset: true,
+      contractVersion: 1,
+      schemaVersion: 1,
+      supported: true,
     });
     const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
     const reconcile = vi.spyOn(domain, 'reconcileStructure').mockResolvedValue(result);
@@ -264,11 +263,15 @@ describe('Knowledge', () => {
   it('keeps instances with separate storage backends isolated', async () => {
     const first = new Knowledge({ storage: new InMemoryStore({ id: 'first' }) });
     const second = new Knowledge({ storage: new InMemoryStore({ id: 'second' }) });
+    const firstStorage = await first.getStorage();
+    await firstStorage.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
+    await firstStorage.createNode({ id: scopeIds[1], name: 'Mastra', isScope: true, scopeIds: [scopeIds[0]!] });
 
-    const node = await first.createNode({ id: 'shared-id', name: 'First', kind: 'topic', scope });
+    const nodeId = '10000000-0000-4000-8000-000000000003';
+    const node = await first.createNode({ id: nodeId, name: 'First', kind: 'topic', scopeIds });
 
-    expect(node.id).toBe('shared-id');
-    await expect(second.getNode('shared-id')).resolves.toBeNull();
+    expect(node.id).toBe(nodeId);
+    await expect(second.getNode(nodeId)).resolves.toBeNull();
   });
 
   it('inherits Mastra storage only when the instance has no storage', async () => {
@@ -467,7 +470,7 @@ describe('Knowledge', () => {
     expect(init).toHaveBeenCalledTimes(2);
   });
 
-  it('respects disableInit and reports adapters without v2 capability', async () => {
+  it('respects disableInit and rejects unsupported adapters', async () => {
     const disabledStorage = new InMemoryStore();
     disabledStorage.disableInit = true;
     const disabledInit = vi.spyOn(disabledStorage, 'init');
@@ -477,15 +480,13 @@ describe('Knowledge', () => {
     const unsupportedStorage = new InMemoryStore();
     const domain = unsupportedStorage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 2,
-      schemaVersion: 1,
-      supportsV2: false,
-      supportsSchemaInspection: false,
-      supportsExplicitReset: false,
+      contractVersion: 1,
+      schemaVersion: null,
+      supported: false,
     });
 
     await expect(new Knowledge({ storage: unsupportedStorage }).getStorage()).rejects.toThrow(
-      'supports schema version 1, but Knowledge requires schema version 2',
+      'InMemoryKnowledgeStorage does not support Knowledge.',
     );
   });
 });

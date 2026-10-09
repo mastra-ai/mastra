@@ -301,10 +301,7 @@ describe('getDynamicMemory', () => {
 
     expect(config.vector).toBe(vector);
     expect(config.embedder).toBe('fastembed-small');
-    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
-      defaultScope: 'resource',
-      pins: true,
-    });
+    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({ pins: true });
     expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
@@ -476,7 +473,6 @@ describe('getDynamicMemory', () => {
       vector,
     );
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
-      defaultScope: 'resource',
       pins: true,
       maxSteps: 25,
     });
