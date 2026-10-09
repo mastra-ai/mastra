@@ -199,6 +199,31 @@ describe('UpstashTransport', () => {
       await expect(transport._flush()).rejects.toThrow('Network error');
       expect(transport.logBuffer.length).toBeGreaterThan(0);
     });
+
+    it('should keep the buffer bounded during an outage', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        fetchMock.mockRejectedValue(new Error('Network error'));
+        const boundedTransport = new UpstashTransport({
+          ...defaultOptions,
+          batchSize: 2,
+          maxBufferSize: 3,
+        });
+
+        for (let index = 1; index <= 20; index++) {
+          boundedTransport._transform({ msg: `message${index}` } as any, 'utf8', vi.fn());
+        }
+
+        await vi.waitFor(() => expect(boundedTransport.getDroppedLogCount()).toBe(17));
+        expect(boundedTransport.logBuffer.map(log => log.msg)).toEqual(['message18', 'message19', 'message20']);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        consoleErrorSpy.mockRestore();
+        consoleWarnSpy.mockRestore();
+      }
+    });
   });
 
   describe('listLogs and listLogsByRunId', () => {

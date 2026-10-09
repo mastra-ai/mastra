@@ -9,6 +9,10 @@ export class UpstashTransport extends LoggerTransport {
   batchSize: number;
   flushInterval: number;
   logBuffer: any[];
+  private maxBufferSize: number;
+  private droppedLogCount = 0;
+  private flushPromise: Promise<void> | null = null;
+  private flushRequested = false;
   lastFlush: number;
   flushIntervalId: NodeJS.Timeout;
 
@@ -16,6 +20,7 @@ export class UpstashTransport extends LoggerTransport {
     listName?: string;
     maxListLength?: number;
     batchSize?: number;
+    maxBufferSize?: number;
     upstashUrl: string;
     flushInterval?: number;
     upstashToken: string;
@@ -30,18 +35,24 @@ export class UpstashTransport extends LoggerTransport {
     this.upstashToken = opts.upstashToken;
     this.listName = opts.listName || 'application-logs';
     this.maxListLength = opts.maxListLength || 10000;
-    this.batchSize = opts.batchSize || 100;
+    this.batchSize = opts.batchSize ?? 100;
     this.flushInterval = opts.flushInterval || 10000;
+
+    if (!Number.isInteger(this.batchSize) || this.batchSize < 1) {
+      throw new Error('UpstashTransport batchSize must be a positive integer');
+    }
+
+    const maxBufferSize = opts.maxBufferSize ?? 10_000;
+    if (!Number.isInteger(maxBufferSize) || maxBufferSize < 1) {
+      throw new Error('UpstashTransport maxBufferSize must be a positive integer');
+    }
+    this.maxBufferSize = Math.max(maxBufferSize, this.batchSize);
 
     this.logBuffer = [];
     this.lastFlush = Date.now();
 
     // Start flush interval
-    this.flushIntervalId = setInterval(() => {
-      this._flush().catch(err => {
-        console.error('Error flushing logs to Upstash:', err);
-      });
-    }, this.flushInterval);
+    this.flushIntervalId = setInterval(() => this.requestFlush(), this.flushInterval);
   }
 
   private async executeUpstashCommands(commands: any[][]): Promise<any> {
@@ -61,11 +72,59 @@ export class UpstashTransport extends LoggerTransport {
     return response.json();
   }
 
-  async _flush() {
-    if (this.logBuffer.length === 0) {
+  private enforceBufferLimit(): void {
+    const overflow = this.logBuffer.length - this.maxBufferSize;
+    if (overflow <= 0) {
       return;
     }
 
+    this.logBuffer.splice(0, overflow);
+    if (this.droppedLogCount === 0) {
+      console.warn(
+        `UpstashTransport: buffer exceeded maxBufferSize (${this.maxBufferSize}); dropping oldest logs. Use getDroppedLogCount() to track drops.`,
+      );
+    }
+    this.droppedLogCount += overflow;
+  }
+
+  private requestFlush(): void {
+    if (this.flushPromise) {
+      this.flushRequested = true;
+      return;
+    }
+    this._flush().catch(err => {
+      console.error('Error flushing logs to Upstash:', err);
+    });
+  }
+
+  _flush(): Promise<void> {
+    if (this.flushPromise) {
+      this.flushRequested = true;
+      return this.flushPromise;
+    }
+    if (this.logBuffer.length === 0) {
+      return Promise.resolve();
+    }
+
+    this.flushRequested = false;
+    const flush = this.flushBatch().finally(() => {
+      this.flushPromise = null;
+    });
+    this.flushPromise = flush;
+    flush.then(
+      () => {
+        if (this.logBuffer.length >= this.batchSize || (this.flushRequested && this.logBuffer.length > 0)) {
+          this.requestFlush();
+        }
+      },
+      () => {
+        // The caller or requestFlush handles the rejected flush.
+      },
+    );
+    return flush;
+  }
+
+  private async flushBatch(): Promise<void> {
     const now = Date.now();
     const logs = this.logBuffer.splice(0, this.batchSize);
 
@@ -82,6 +141,7 @@ export class UpstashTransport extends LoggerTransport {
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
+      this.enforceBufferLimit();
       throw error;
     }
   }
@@ -110,12 +170,11 @@ export class UpstashTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.enforceBufferLimit();
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
-        this._flush().catch(err => {
-          console.error('Error flushing logs to Upstash:', err);
-        });
+        this.requestFlush();
       }
 
       // Pass through the log
@@ -145,6 +204,10 @@ export class UpstashTransport extends LoggerTransport {
     while (this.logBuffer.length > 0) {
       await this._flush();
     }
+  }
+
+  public getDroppedLogCount(): number {
+    return this.droppedLogCount;
   }
 
   private parseLogs(logs: unknown): BaseLogMessage[] {
