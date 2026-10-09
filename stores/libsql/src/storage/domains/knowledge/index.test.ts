@@ -67,6 +67,7 @@ describe('Knowledge v2 Core compatibility', () => {
   it('coalesces successful loads and retries a failed load', async () => {
     const storageModule = {
       assertKnowledgeDescriptionWithinBound: vi.fn(),
+      assertKnowledgeRecordTextWithinBound: vi.fn(),
       assertKnowledgeSchemaCompatible: vi.fn(),
       inspectKnowledgeSchema: vi.fn(() => ({ status: 'uninitialized', schemaVersion: null })),
     };
@@ -188,6 +189,30 @@ createKnowledgeSchemaResetTests(async () => {
     },
     cleanup: async () => client.close(),
   };
+});
+
+describe('KnowledgeLibSQL name resolution', () => {
+  it('does not load same-named nodes from scopes the caller cannot see', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      for (let index = 0; index < 20; index++) {
+        await store.createNode({ name: 'Jane', kind: 'person', scope: ['org:acme', `resource:foreign-${index}`] });
+      }
+      const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: ['org:acme', 'resource:mastra'] });
+
+      const execute = vi.spyOn(client, 'execute');
+      await expect(
+        store.resolveNode({ name: 'Jane', scope: ['org:acme', 'resource:mastra', 'thread:t1'] }),
+      ).resolves.toMatchObject({ id: jane.id });
+
+      // One candidate query plus one terminal lookup for the single visible candidate.
+      expect(execute.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      client.close();
+    }
+  });
 });
 
 describe('KnowledgeLibSQL initialization', () => {
@@ -678,6 +703,23 @@ describe('KnowledgeLibSQL initialization', () => {
       });
       expect(tables.rows).toHaveLength(1);
       expect((await client.execute('SELECT id FROM existing_domain')).rows[0]?.id).toBe('preserved');
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe('KnowledgeLibSQL indexes', () => {
+  it('resolves node names through an index instead of scanning every node', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      const plan = await client.execute(
+        `EXPLAIN QUERY PLAN SELECT id FROM mastra_knowledge_nodes WHERE type='node' AND canonicalName='jane'`,
+      );
+      expect(plan.rows.map(row => String(row.detail)).join('\n')).toContain(
+        'USING INDEX idx_knowledge_nodes_name (type=? AND canonicalName=?)',
+      );
     } finally {
       client.close();
     }

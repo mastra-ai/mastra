@@ -1,6 +1,7 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   assertKnowledgeDescriptionWithinBound,
+  assertKnowledgeRecordTextWithinBound,
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
@@ -330,12 +331,21 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     assertKnowledgeDescriptionWithinBound(input.description);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
+    // Validate structural placement before mutating anything: every address must
+    // resolve to a live reconciled scope node.
+    const placementIds = (input.scopeAddresses ?? []).map(address => {
+      const target = this.#structureScopes.get(address);
+      if (!target || target.deletedAt) throw new KnowledgeNotFoundError('scope', address);
+      return target.id;
+    });
     const existingId = this.#db.knowledgeNodeKeys.get(key);
     if (existingId) {
       const terminal = this.#resolveTerminalNode(existingId)!;
       if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
         throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
       }
+      // Writing about a node that already exists still places it where the caller asked.
+      for (const scopeId of placementIds) this.#structureParents.add(`${terminal.id}\u0000${scopeId}`);
       return cloneNode(terminal);
     }
 
@@ -358,6 +368,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#replaceMentions('node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
     this.#recordActivity('node-created', 'node', node.id, scope);
     this.#enqueue('node', node.id, 'upsert', node.version, scope);
+    // Placement edges go last so no later step can fail after they are added
+    // (#structureParents is instance state, outside the atomic #db snapshot).
+    for (const scopeId of placementIds) this.#structureParents.add(`${node.id}\u0000${scopeId}`);
     return cloneNode(node);
   }
 
@@ -379,15 +392,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   #resolveNode({ name, scope }: { name: string; scope: KnowledgeScope }): KnowledgeNode | null {
     const canonical = canonicalizeKnowledgeScope(scope);
-    for (let length = canonical.length; length > 0; length--) {
-      const id = this.#db.knowledgeNodeKeys.get(recordKey(name, canonical.slice(0, length)));
-      const node = id ? this.#db.knowledgeNodes.get(id) : undefined;
-      if (node) {
-        const terminal = this.#resolveTerminalNode(node.id)!;
-        if (isKnowledgeScopeVisible(terminal.scope, canonical)) return cloneNode(terminal);
-      }
-    }
-    return null;
+    const canonicalName = name.trim().toLocaleLowerCase();
+    // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+    // visible nodes and merged aliases (whose terminal may be visible) are candidates.
+    const visible = [...this.#db.knowledgeNodes.values()]
+      .filter(node => node.name.trim().toLocaleLowerCase() === canonicalName)
+      .filter(node => node.mergedInto || isKnowledgeScopeVisible(node.scope, canonical))
+      .map(node => this.#resolveTerminalNode(node.id)!)
+      .filter(node => isKnowledgeScopeVisible(node.scope, canonical))
+      .sort((left, right) => right.scope.length - left.scope.length);
+    return visible[0] ? cloneNode(visible[0]) : null;
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
@@ -550,6 +564,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #appendKnowledge(input: AppendKnowledgeInput): KnowledgeRecord {
+    assertKnowledgeRecordTextWithinBound(input.text);
     const node = nodeReferenceId(input.node);
     const parent = this.#resolveTerminalNode(node);
     if (!parent) throw new KnowledgeNotFoundError('node', node);
@@ -692,11 +707,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       }
       const parent = this.#resolveTerminalNode(record.node);
       if (!parent) continue;
+      const parentVisible = isKnowledgeScopeVisible(parent.scope, queryScope);
       results.push({
         type: 'record',
         id: record.id,
-        recordId: parent.id,
-        name: parent.name,
+        recordId: parentVisible ? parent.id : record.id,
+        name: parentVisible ? parent.name : '(private node)',
         text: record.text,
         scope: [...record.scope],
       });

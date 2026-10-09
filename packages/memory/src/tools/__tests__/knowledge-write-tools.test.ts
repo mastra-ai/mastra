@@ -1,4 +1,9 @@
-import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import { Knowledge } from '@mastra/core/knowledge';
+import {
+  InMemoryStore,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+} from '@mastra/core/storage';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,6 +26,36 @@ async function fixture() {
     defaultScope: 'resource',
   });
   return { memory, store, source, target, tools };
+}
+
+async function structuralFixture() {
+  const knowledge = new Knowledge({
+    id: 'mastra',
+    storage: new InMemoryStore(),
+    structure: {
+      scopes: [
+        { address: 'org:acme', name: 'acme' },
+        { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+        {
+          address: 'features:memory',
+          name: 'memory',
+          parentAddresses: ['features'],
+          description: 'Memory subsystem knowledge.',
+        },
+        { address: 'org:other', name: 'other' },
+        { address: 'other:things', name: 'things', parentAddresses: ['org:other'] },
+      ],
+    },
+  });
+  const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+  const { scopes: scopeIds } = await knowledge.reconcile();
+  const store = await knowledge.getStorage();
+  const tools = createKnowledgeWriteTools(memory, {
+    scope,
+    sourceThreadId: 'alpha',
+    defaultScope: 'resource',
+  });
+  return { memory, store, scopeIds, tools };
 }
 
 describe('Subconscious knowledge write tools', () => {
@@ -82,6 +117,278 @@ describe('Subconscious knowledge write tools', () => {
     ).rejects.toThrow('record write failed');
 
     expect(await store.resolveNode({ name: 'Partial Atlas', scope })).toBeTruthy();
+  });
+
+  it('places created nodes into visible structural scopes by address', async () => {
+    const { store, scopeIds, tools } = await structuralFixture();
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Memory Extraction',
+        kind: 'subsystem',
+        text: 'The memory subsystem extracts observations mid-conversation.',
+        nodeScope: 'features:memory',
+      },
+      {} as any,
+    )) as any;
+
+    // The structural scope hangs off the org, so the node's identity scope widens to the
+    // org: it must be readable wherever the structural scope is.
+    expect(result.node.scope).toEqual(['org:acme']);
+    expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features:memory']! })).members).toEqual([
+      expect.objectContaining({ id: result.node.id }),
+    ]);
+  });
+
+  it('places created nodes into template child scopes materialized under a held org', async () => {
+    const knowledge = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      scopes: {
+        'org:$orgId': {
+          children: [{ address: 'features:$orgId:memory', name: 'memory', description: 'Memory subsystem knowledge.' }],
+        },
+      },
+    });
+    const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+    await knowledge.materializeScope({ address: 'org:acme', contextualScopeAddress: 'org:acme' });
+    await knowledge.materializeScope({ address: 'org:other', contextualScopeAddress: 'org:other' });
+    const store = await knowledge.getStorage();
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', defaultScope: 'resource' });
+
+    // The curator's instructions list the held org's templated child, not another org's.
+    expect((await knowledge.__getDescriptionContext(scope)).scopes).toEqual([
+      { address: 'features:acme:memory', name: 'memory', description: 'Memory subsystem knowledge.' },
+    ]);
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Memory Extraction',
+        kind: 'subsystem',
+        text: 'The memory subsystem extracts observations mid-conversation.',
+        nodeScope: 'features:acme:memory',
+      },
+      {} as any,
+    )) as any;
+
+    expect(result.node.scope).toEqual(['org:acme']);
+    const {
+      scopes: [child],
+    } = await store.listScopeNodes({ addresses: ['features:acme:memory'] });
+    expect((await store.listScopeMembers({ scopeNodeId: child!.id })).members).toEqual([
+      expect.objectContaining({ id: result.node.id }),
+    ]);
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Foreign', kind: 'x', text: 'x', nodeScope: 'features:other:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:other:memory");
+  });
+
+  it('does not offer template children an org was materialized without', async () => {
+    const storage = new InMemoryStore();
+    // The org exists before its scope type gained a child template, so copy-on-create never made it.
+    await new Knowledge({ id: 'mastra', storage }).materializeScope({
+      address: 'org:acme',
+      contextualScopeAddress: 'org:acme',
+    });
+    const knowledge = new Knowledge({
+      id: 'mastra',
+      storage,
+      scopes: {
+        'org:$orgId': { children: [{ address: 'features:$orgId:memory', name: 'memory', description: 'Memory.' }] },
+      },
+    });
+    const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+    await knowledge.materializeScope({ address: 'org:acme', contextualScopeAddress: 'org:acme' });
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', defaultScope: 'resource' });
+
+    expect((await knowledge.__getDescriptionContext(scope)).scopes).toEqual([]);
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Memory Extraction', kind: 'x', text: 'x', nodeScope: 'features:acme:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:acme:memory");
+  });
+
+  it('keeps structurally placed org-level nodes readable from another resource in the org', async () => {
+    const { store, tools } = await structuralFixture();
+
+    const { node } = (await tools.knowledge_create!.execute?.(
+      { name: 'Inventory', kind: 'ref', text: 'Shared inventory service.', nodeScope: 'features:memory', scope: 'org' },
+      {} as any,
+    )) as any;
+
+    const otherProject = ['org:acme', 'resource:user-99'];
+    expect(await store.resolveNode({ name: 'Inventory', scope: otherProject })).toMatchObject({ id: node.id });
+    expect((await store.listKnowledgeAbout({ node: node.id, scope: otherProject })).records).toHaveLength(1);
+  });
+
+  it('creates a node at the first record level when no node placement is given', async () => {
+    const { tools } = await fixture();
+
+    const { node, record } = (await tools.knowledge_create!.execute?.(
+      { name: 'Thread Note', kind: 'note', text: 'Only relevant here.', scope: 'thread' },
+      {} as any,
+    )) as any;
+    expect(node.scope).toEqual(scope);
+    expect(record.scope).toEqual(scope);
+
+    const { node: orgNode } = (await tools.knowledge_create!.execute?.(
+      { name: 'Org Note', kind: 'note', text: 'Everyone should know.', scope: 'org' },
+      {} as any,
+    )) as any;
+    expect(orgNode.scope).toEqual(['org:acme']);
+  });
+
+  it('creates the session scope under its project on the first thread-level write', async () => {
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+    const store = await knowledge.getStorage();
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', defaultScope: 'resource' });
+
+    await tools.knowledge_create!.execute?.({ name: 'Resource Note', kind: 'note', text: 'Project-wide.' }, {} as any);
+    expect((await store.listScopeNodes({ addresses: ['thread:alpha'] })).scopes).toEqual([]);
+
+    await tools.knowledge_create!.execute?.(
+      { name: 'Session Note', kind: 'note', text: 'Only this session.', scope: 'thread' },
+      {} as any,
+    );
+    await tools.knowledge_append!.execute?.(
+      { node: (await store.resolveNode({ name: 'Session Note', scope }))!.id, text: 'More.', scope: 'thread' },
+      {} as any,
+    );
+
+    const { scopes } = await store.listScopeNodes({ withinAddress: 'org:acme' });
+    const byAddress = new Map(scopes.map(node => [node.address, node]));
+    expect([...byAddress.keys()].sort()).toEqual(['org:acme', 'resource:user-42', 'thread:alpha']);
+    expect(byAddress.get('thread:alpha')?.parentIds).toEqual([byAddress.get('resource:user-42')!.id]);
+    expect(byAddress.get('resource:user-42')?.parentIds).toEqual([byAddress.get('org:acme')!.id]);
+  });
+
+  it('keeps the thread-level write when vouching its session scope fails', async () => {
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+    vi.spyOn(knowledge, 'materializeScope').mockRejectedValue(new Error('vouch failed'));
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', defaultScope: 'resource' });
+
+    const result = (await tools.knowledge_create!.execute?.(
+      { name: 'Session Note', kind: 'note', text: 'Only this session.', scope: 'thread' },
+      {} as any,
+    )) as any;
+    expect(result.record.scope).toEqual(scope);
+  });
+
+  it('rejects structural placement outside the curator frontier', async () => {
+    const { tools } = await structuralFixture();
+
+    // Unreachable structural scope (different org root) and a totally unknown address
+    // are both refused before any storage write.
+    for (const nodeScope of ['other:things', 'bogus']) {
+      await expect(
+        tools.knowledge_create!.execute?.({ name: `Nope ${nodeScope}`, kind: 'x', text: 'x', nodeScope }, {} as any),
+      ).rejects.toThrow(`Structural scope is outside the curator's visible scope: ${nodeScope}`);
+    }
+  });
+
+  it('rejects structural placement when no Knowledge instance is registered', async () => {
+    const { tools } = await fixture();
+
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'No instance', kind: 'x', text: 'x', nodeScope: 'features:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:memory");
+  });
+
+  it('points the curator at similar visible nodes instead of creating a near-duplicate', async () => {
+    const { store, tools } = await fixture();
+    const existing = await store.createNode({ name: 'Payments Service', kind: 'service', scope });
+    const createNode = vi.spyOn(store, 'createNode');
+
+    for (const name of ['payments-service (2026-10-08)', 'Payments', 'Payments Service API']) {
+      await expect(
+        tools.knowledge_create!.execute?.({ name, kind: 'service', text: 'Deploys run nightly.' }, {} as any),
+      ).rejects.toThrow(`Similar nodes already exist: ${existing.id} "Payments Service"`);
+    }
+    expect(createNode).not.toHaveBeenCalled();
+
+    // The exact canonical name reuses the node; an unrelated name and a confirmed distinct node are created.
+    const reused = (await tools.knowledge_create!.execute?.(
+      { name: 'payments service', kind: 'service', text: 'Deploys run nightly.' },
+      {} as any,
+    )) as any;
+    expect(reused.node.id).toBe(existing.id);
+    const unrelated = (await tools.knowledge_create!.execute?.(
+      { name: 'Billing Ledger', kind: 'service', text: 'Ledger entries are immutable.' },
+      {} as any,
+    )) as any;
+    expect(unrelated.node.id).not.toBe(existing.id);
+    const confirmed = (await tools.knowledge_create!.execute?.(
+      { name: 'Payments', kind: 'team', text: 'The payments team owns checkout.', confirmDistinct: true },
+      {} as any,
+    )) as any;
+    expect(confirmed.node).toMatchObject({ name: 'Payments', kind: 'team' });
+    expect(confirmed.node.id).not.toBe(existing.id);
+  });
+
+  it('keeps every node at least as broad as its records', async () => {
+    const { store, tools } = await fixture();
+    const resourceScope = scope.slice(0, 2);
+
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Deploy Pipeline', kind: 'system', text: 'Builds run on merge.', nodeScope: 'thread', scope: 'resource' },
+      {} as any,
+    )) as any;
+    expect(created.node.scope).toEqual(resourceScope);
+
+    const threadNode = await store.createNode({ name: 'Release Train', kind: 'process', scope });
+    await tools.knowledge_append!.execute?.(
+      { node: threadNode.id, text: 'Releases ship every Tuesday.', scope: 'org' },
+      {} as any,
+    );
+    expect((await store.getNode(threadNode.id))?.scope).toEqual(['org:acme']);
+
+    const reused = await store.createNode({ name: 'Oncall Rotation', kind: 'process', scope });
+    const record = await store.appendKnowledge({
+      node: reused,
+      text: 'Rotation changes weekly.',
+      scope,
+      sourceThreadId: 'alpha',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'resource' }, {} as any);
+    expect((await store.getNode(reused.id))?.scope).toEqual(resourceScope);
+  });
+
+  it('rejects over-long record text on create and append before writing a node or record', async () => {
+    const { store, source, tools } = await fixture();
+    const createNode = vi.spyOn(store, 'createNode');
+    const append = vi.spyOn(store, 'appendKnowledge');
+
+    const pasted = 'x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH + 1);
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Pasted README', kind: 'doc', text: pasted },
+      {} as any,
+    )) as any;
+    expect(created?.error).toBe(true);
+    expect(created?.message).toContain('text');
+
+    // Astral characters pass the code-point schema check but exceed the UTF-16 storage bound.
+    const astral = '😀'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH / 2 + 1);
+    await expect(
+      tools.knowledge_create!.execute?.({ name: 'Astral', kind: 'doc', text: astral }, {} as any),
+    ).rejects.toThrow('Split this into separate records, one fact each, or summarize it');
+    await expect(tools.knowledge_append!.execute?.({ node: source.id, text: astral }, {} as any)).rejects.toThrow(
+      'Split this into separate records',
+    );
+    expect(createNode).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+    expect(await store.resolveNode({ name: 'Astral', scope })).toBeNull();
   });
 
   it('rejects a non-RFC 3339 `when` at schema validation for create and append, before execute', async () => {

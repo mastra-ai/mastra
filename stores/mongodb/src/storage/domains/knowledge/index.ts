@@ -63,6 +63,23 @@ async function assertKnowledgeDescriptionWithinBoundCompat(description: string |
   assertWithinBound(description);
 }
 
+let assertRecordTextWithinBound: ((text: string) => void) | undefined;
+async function assertKnowledgeRecordTextWithinBoundCompat(text: string): Promise<void> {
+  if (!assertRecordTextWithinBound) {
+    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
+    assertRecordTextWithinBound =
+      mod.assertKnowledgeRecordTextWithinBound ??
+      (value => {
+        if (value.length > 1000) {
+          throw new Error(
+            'Knowledge record text exceeds the 1000 UTF-16 code unit limit; split it into separate facts or summarize it',
+          );
+        }
+      });
+  }
+  assertRecordTextWithinBound(text);
+}
+
 type Document = Record<string, any>;
 
 const cloneScope = (scope: KnowledgeScope): KnowledgeScope => [...scope];
@@ -72,7 +89,17 @@ const sessionOptions = (session?: ClientSession) => (session ? { session } : {})
 
 function visibleScopeKeys(scope: KnowledgeScope): string[] {
   const canonical = canonicalizeKnowledgeScope(scope);
-  return canonical.map((_, index) => knowledgeScopeKey(canonical.slice(0, index + 1)));
+  const subsets: KnowledgeScope[] = [[]];
+  for (const entry of canonical) subsets.push(...subsets.map(subset => [...subset, entry]));
+  const keys = new Set<string>();
+  for (const subset of subsets.slice(1)) {
+    try {
+      keys.add(knowledgeScopeKey(subset));
+    } catch {
+      // Invalid hierarchy fragments cannot be persisted scope keys.
+    }
+  }
+  return [...keys];
 }
 
 function recordCursorFilter(cursor: string, expected: { namePrefix?: string; kind?: string; hasContent?: boolean }) {
@@ -166,11 +193,14 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     await Promise.all([
       nodes.createIndex({ type: 1, scopeKey: 1, canonicalName: 1 }, { unique: true }),
       nodes.createIndex({ scopeKey: 1, type: 1 }),
+      nodes.createIndex({ type: 1, canonicalName: 1 }),
       knowledge.createIndex({ node: 1, id: -1 }),
       knowledge.createIndex({ sourceThreadId: 1, id: -1 }),
+      knowledge.createIndex({ scopeKey: 1, id: -1 }),
       mentions.createIndex({ sourceType: 1, sourceId: 1, recordId: 1 }, { unique: true }),
       mentions.createIndex({ recordId: 1, sourceType: 1, sourceId: 1 }),
       activity.createIndex({ id: -1 }),
+      activity.createIndex({ scopeKey: 1, id: -1 }),
       outbox.createIndex({ idempotencyKey: 1 }, { unique: true }),
       outbox.createIndex({ status: 1, availableAt: 1, createdAt: 1 }),
     ]);
@@ -186,6 +216,12 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
     await assertKnowledgeDescriptionWithinBoundCompat(input.description);
+    if (input.scopeAddresses?.length) {
+      // Peer-floor safe: mirrors KnowledgeUnsupportedCapabilityError without importing it.
+      const error = new Error('This Knowledge storage adapter does not expose structural scope placement.');
+      error.name = 'KnowledgeUnsupportedCapabilityError';
+      throw error;
+    }
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#connector.withTransaction(async session => {
       const existing = await this.#getNodeByName(input.name, scope, session);
@@ -409,6 +445,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    await assertKnowledgeRecordTextWithinBoundCompat(input.text);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
     return this.#connector.withTransaction(async session => {
@@ -574,7 +611,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         results.push({
           type: 'record',
           id: record.id,
-          recordId: record.node,
+          recordId: parentVisible ? record.node : record.id,
           name: parentVisible ? parent.name : '(private node)',
           text: record.text,
           scope: cloneScope(record.scope),
@@ -748,12 +785,24 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return row ? nodeFromDocument(row) : null;
   }
   async #resolveNode(name: string, scope: KnowledgeScope, session?: ClientSession): Promise<KnowledgeNode | null> {
-    for (let length = scope.length; length > 0; length--) {
-      const node = await this.#getNodeByName(name, scope.slice(0, length), session);
-      if (node) {
-        const terminal = await this.#resolveTerminalNode(node.id, session);
-        if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
-      }
+    const rows = await (
+      await this.#nodes()
+    )
+      .find(
+        // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+        // visible-scope rows and merged aliases (whose terminal may be visible) are candidates.
+        {
+          type: 'node',
+          canonicalName: canonicalName(name),
+          $or: [{ scopeKey: { $in: visibleScopeKeys(scope) } }, { mergedInto: { $ne: null } }],
+        },
+        sessionOptions(session),
+      )
+      .toArray();
+    const candidates = rows.map(nodeFromDocument).sort((left, right) => right.scope.length - left.scope.length);
+    for (const candidate of candidates) {
+      const terminal = await this.#resolveTerminalNode(candidate.id, session);
+      if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
     }
     return null;
   }

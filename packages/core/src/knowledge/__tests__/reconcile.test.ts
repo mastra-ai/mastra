@@ -146,6 +146,40 @@ describe('Knowledge structure reconciliation', () => {
     ).toThrow('Invalid Knowledge scope address: org:a::bad');
   });
 
+  it('treats provisional companions as optional explicit host configuration', () => {
+    const input = {
+      address: 'thread:alpha:uncurated',
+      contextualScopeAddress: 'thread:alpha',
+      parentAddresses: ['thread:alpha'],
+      parameters: { threadId: 'alpha' },
+    };
+
+    const unconfigured = materializeKnowledgeScopePlan(undefined, input).scopes[0]!;
+    expect(unconfigured.description).toBeUndefined();
+    expect(unconfigured.grants).not.toContainEqual(expect.objectContaining({ role: 'mirror' }));
+
+    expect(
+      materializeKnowledgeScopePlan(
+        {
+          'thread:$threadId:uncurated': {
+            access: [{ principal: 'thread:$threadId', role: 'mirror' }],
+            description: 'Provisional session findings awaiting review.',
+          },
+        },
+        input,
+      ),
+    ).toMatchObject({
+      scopes: [
+        {
+          address: 'thread:alpha:uncurated',
+          description: 'Provisional session findings awaiting review.',
+          parentAddresses: ['thread:alpha'],
+          grants: [{ scopeRefAddress: 'thread:alpha', role: 'mirror' }],
+        },
+      ],
+    });
+  });
+
   it('rejects mismatched host-vouched parameters and ambiguous patterns', () => {
     expect(() =>
       materializeKnowledgeScopePlan(undefined, {

@@ -11,6 +11,7 @@ import {
   KnowledgeUnsupportedCapabilityError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
 } from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
@@ -29,6 +30,47 @@ describe('InMemoryKnowledgeStorage', () => {
     const second = createKnowledgeUlid(1);
 
     expect(second > first).toBe(true);
+  });
+
+  it('rejects record text over the length bound without writing it', async () => {
+    const store = createStore();
+    const node = await store.createNode({ name: 'Bounded', kind: 'service', scope: resource });
+    const append = (text: string) =>
+      store.appendKnowledge({
+        node,
+        text,
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+
+    await append('x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH));
+    await expect(append('x'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH + 1))).rejects.toThrow(
+      'split it into separate facts or summarize it',
+    );
+    expect((await store.listKnowledgeAbout({ node, scope: resource })).records).toHaveLength(1);
+  });
+
+  it('places an existing node when a write names it again with scope addresses', async () => {
+    const store = createStore();
+    const { scopes } = await store.reconcileStructure({ scopes: [{ address: 'features', name: 'features' }] });
+    const existing = await store.createNode({ name: 'Deploy', kind: 'doc', scope: resource });
+
+    const placed = await store.createNode({
+      name: 'deploy',
+      kind: 'doc',
+      scope: resource,
+      scopeAddresses: ['features'],
+    });
+
+    expect(placed.id).toBe(existing.id);
+    expect((await store.listScopeMembers({ scopeNodeId: scopes['features']! })).members).toEqual([
+      expect.objectContaining({ id: existing.id }),
+    ]);
+    await expect(
+      store.createNode({ name: 'Deploy', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+    ).rejects.toThrow(/scope/i);
   });
 
   it('lists reconciled scope nodes with parent membership edges', async () => {
@@ -367,6 +409,16 @@ describe('InMemoryKnowledgeStorage', () => {
     expect(siblingOnly.scope).toEqual(sibling);
   });
 
+  it('resolves a name through a sibling-scoped node merged into a visible node', async () => {
+    const store = createStore();
+    const alias = await store.createNode({ name: 'Janey', kind: 'person', scope: sibling });
+    const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
+    await store.mergeNodes({ sourceId: alias.id, targetId: jane.id, sourceVersion: alias.version });
+
+    // The alias itself is outside the caller's scope, but its merge terminal is visible.
+    expect((await store.resolveNode({ name: 'Janey', scope: thread }))?.id).toBe(jane.id);
+  });
+
   it('stamps provenance, derives mentions, and separates knowledge about from touching', async () => {
     const store = createStore();
     const jane = await store.createNode({ name: 'Jane', kind: 'person', scope: resource });
@@ -395,7 +447,7 @@ describe('InMemoryKnowledgeStorage', () => {
   it('applies record visibility independently from node scope', async () => {
     const store = createStore();
     const node = await store.createNode({ name: 'Resource Secret', kind: 'task', scope: resource });
-    await store.appendKnowledge({
+    const record = await store.appendKnowledge({
       node: node.id,
       text: 'org-visible wording',
       scope: org,
@@ -406,7 +458,7 @@ describe('InMemoryKnowledgeStorage', () => {
 
     expect((await store.listKnowledgeAbout({ node, scope: org })).records).toHaveLength(1);
     expect(await store.search({ query: 'org-visible', scope: org })).toEqual([
-      expect.objectContaining({ type: 'record', recordId: node.id, scope: org }),
+      expect.objectContaining({ type: 'record', recordId: record.id, name: '(private node)', scope: org }),
     ]);
     expect((await store.listKnowledgeAbout({ node, scope: thread })).records).toHaveLength(1);
   });

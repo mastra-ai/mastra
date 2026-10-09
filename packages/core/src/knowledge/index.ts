@@ -96,6 +96,115 @@ export class Knowledge extends MastraBase {
     );
   }
 
+  /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
+  async __getDescriptionContext(scope: KnowledgeScope): Promise<{
+    description?: string;
+    scopes: Array<{ address: string; name: string; description: string }>;
+  }> {
+    const visibleAddresses = new Set(scope);
+    const placementScopes = await this.#placementScopes(scope);
+    const structural = new Set(
+      this.#visibleStructureScopes(scope, placementScopes).map(visibleScope => visibleScope.address),
+    );
+    return {
+      description: this.description?.trim() || undefined,
+      scopes: placementScopes.flatMap(configuredScope => {
+        const description = configuredScope.description?.trim();
+        if (!description) return [];
+        if (!visibleAddresses.has(configuredScope.address) && !structural.has(configuredScope.address)) return [];
+        return [{ address: configuredScope.address, name: configuredScope.name, description }];
+      }),
+    };
+  }
+
+  /**
+   * Host-configured scopes a writer holding `scope` could place into: the static structure plan
+   * plus the template children of each held address. Template children are derived from the
+   * scope-type config the store materializes them from, so they are host-vouched like the plan.
+   * Children are copied on create, so only those that exist in storage are offered: a scope
+   * materialized before its template gained a child does not have that child.
+   */
+  async #placementScopes(scope: KnowledgeScope): Promise<KnowledgeStructurePlan['scopes']> {
+    const configured = this.#structure?.scopes ?? [];
+    const known = new Set(configured.map(configuredScope => configuredScope.address));
+    const templated: KnowledgeStructurePlan['scopes'] = [];
+    for (const address of scope) {
+      let plan: KnowledgeStructurePlan;
+      try {
+        plan = materializeKnowledgeScopePlan(this.#scopeTypes, { address, contextualScopeAddress: address });
+      } catch {
+        continue;
+      }
+      for (const child of plan.scopes.slice(1)) {
+        if (known.has(child.address)) continue;
+        known.add(child.address);
+        templated.push(child);
+      }
+    }
+    if (templated.length === 0) return configured;
+    const storage = await this.getStorage();
+    const { scopes: existing } = await storage.listScopeNodes({
+      addresses: templated.map(child => child.address),
+      limit: templated.length,
+    });
+    const existingAddresses = new Set(existing.map(node => node.address));
+    return [...configured, ...templated.filter(child => existingAddresses.has(child.address))];
+  }
+
+  /**
+   * Structural scopes a writer holding `scope` may place content into: every configured
+   * or held-scope template child whose ancestor chain (via parent addresses) reaches a held address.
+   * Held identity addresses themselves are excluded — those are placed via rungs. The
+   * structure plan is host configuration, so this frontier is host-vouched. @internal
+   */
+  async __getVisibleStructureScopes(
+    scope: KnowledgeScope,
+  ): Promise<Array<{ address: string; name: string; description?: string; heldAncestors: string[] }>> {
+    return this.#visibleStructureScopes(scope, await this.#placementScopes(scope));
+  }
+
+  #visibleStructureScopes(
+    scope: KnowledgeScope,
+    configured: KnowledgeStructurePlan['scopes'],
+  ): Array<{ address: string; name: string; description?: string; heldAncestors: string[] }> {
+    const held = new Set(scope);
+    const parentsByAddress = new Map(configured.map(configuredScope => [configuredScope.address, configuredScope]));
+    // Held identity addresses reachable through the scope's ancestor chain. Placing a node
+    // into the scope should keep its identity scope at one of these so the node stays
+    // readable wherever the structural scope is.
+    const heldAncestorsOf = (address: string): string[] => {
+      // DFS over all declared parents (multi-parent scopes are valid); the plan is
+      // validated acyclic, the seen set is just belt-and-braces.
+      const seen = new Set<string>();
+      const reached: string[] = [];
+      const stack = [address];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (seen.has(current)) continue;
+        seen.add(current);
+        if (held.has(current)) {
+          reached.push(current);
+          continue;
+        }
+        for (const parent of parentsByAddress.get(current)?.parentAddresses ?? []) stack.push(parent);
+      }
+      return reached;
+    };
+    const visible: Array<{ address: string; name: string; description?: string; heldAncestors: string[] }> = [];
+    for (const configuredScope of configured) {
+      if (held.has(configuredScope.address)) continue;
+      const heldAncestors = heldAncestorsOf(configuredScope.address);
+      if (heldAncestors.length === 0) continue;
+      visible.push({
+        address: configuredScope.address,
+        name: configuredScope.name,
+        ...(configuredScope.description ? { description: configuredScope.description } : {}),
+        heldAncestors,
+      });
+    }
+    return visible;
+  }
+
   /** @internal */
   setStorage(storage: MastraCompositeStore, source: MastraCompositeStore = storage): void {
     if (this.hasOwnStorage) return;

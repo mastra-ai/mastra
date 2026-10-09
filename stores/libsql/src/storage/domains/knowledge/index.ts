@@ -102,6 +102,11 @@ async function assertKnowledgeDescriptionWithinBoundCompat(description: string |
   assertKnowledgeDescriptionWithinBound(description);
 }
 
+async function assertKnowledgeRecordTextWithinBoundCompat(text: string): Promise<void> {
+  const { assertKnowledgeRecordTextWithinBound } = await loadKnowledgeV2Core();
+  assertKnowledgeRecordTextWithinBound(text);
+}
+
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
 }
@@ -124,7 +129,27 @@ function withReconcileLock<T>(key: unknown, operation: () => Promise<T>): Promis
   return result;
 }
 
-const visibleSql = `(scopeKey = ? OR substr(?, 1, length(scopeKey) + 1) = scopeKey || char(31))`;
+/**
+ * Scope keys visible to a caller holding `scope`: a row is visible when its scope is a subset of the
+ * caller's (companion entries such as `resource:x:uncurated` make this more than a prefix match).
+ * Matching rows by `scopeKey` keeps visibility filters on an index; a caller scope has only a few
+ * entries, so the list stays small.
+ */
+function visibleScopeKeys(scope: KnowledgeScope): string[] {
+  const canonical = canonicalizeKnowledgeScope(scope);
+  const keys = new Set<string>();
+  for (let mask = 1; mask < 1 << canonical.length; mask++) {
+    try {
+      keys.add(knowledgeScopeKey(canonical.filter((_, index) => mask & (1 << index))));
+    } catch {
+      // Not a valid scope, so no stored row can carry it.
+    }
+  }
+  return [...keys];
+}
+
+const visibleSql = (keys: string[], scopeKeyColumn = 'scopeKey') =>
+  `${scopeKeyColumn} IN (${keys.map(() => '?').join(',')})`;
 
 function parseJson<T>(value: unknown): T {
   if (typeof value === 'string') return JSON.parse(value) as T;
@@ -161,6 +186,7 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
     kind: row.kind == null ? '' : String(row.kind),
     content: row.content == null ? undefined : String(row.content),
     description: row.description == null ? undefined : String(row.description),
+    isScope: row.isScope === true || row.isScope === 1 ? true : undefined,
     scope: parseJson(row.scopeJson ?? row.scope),
     version: Number(row.version),
     mergedInto: row.mergedInto == null ? undefined : String(row.mergedInto),
@@ -410,10 +436,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     for (const statement of [
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_nodes_identity ON "${TABLE_KNOWLEDGE_NODES}" (type, scopeKey, canonicalName)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope ON "${TABLE_KNOWLEDGE_NODES}" (scopeKey, type)`,
+      `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (type, canonicalName)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (node, id DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_records_thread_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (sourceThreadId, id DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId, sourceType, sourceId)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON "${TABLE_KNOWLEDGE_RECORDS}" (scopeKey, id)`,
+      `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_scope ON "${TABLE_KNOWLEDGE_ACTIVITY}" (scopeKey, id DESC)`,
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (status, availableAt, createdAt)`,
       `CREATE INDEX IF NOT EXISTS idx_knowledge_node_scopes_scope ON "${TABLE_KNOWLEDGE_NODE_SCOPES}" (scopeNodeId, nodeId)`,
@@ -695,6 +724,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
           throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
         }
+        // Writing about a node that already exists still places it where the caller asked.
+        await this.#placeNodeInScopes(tx, terminal.id, input.scopeAddresses, new Date());
         return terminal;
       }
       const now = new Date();
@@ -728,6 +759,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         ],
       });
       await this.#replaceNodeScopes(tx, node.id, scope, now);
+      await this.#placeNodeInScopes(tx, node.id, input.scopeAddresses, now);
       await this.#replaceMentions(tx, 'node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
       await this.#activity(tx, 'node-created', 'node', node.id, scope);
       await this.#outbox(tx, 'node', node.id, 'upsert', node.version, scope);
@@ -749,9 +781,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
-    const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql];
-    const args: InValue[] = [key, key];
+    const keys = visibleScopeKeys(scope);
+    const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql(keys)];
+    const args: InValue[] = [...keys];
     if (input.namePrefix) {
       clauses.push("canonicalName LIKE ? ESCAPE '='");
       args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
@@ -808,7 +840,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         ],
       });
       if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
-      await this.#replaceNodeScopes(tx, input.id, scope, now);
+      if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
+        await this.#swapIdentityScopes(tx, input.id, existing.scope, scope, now);
+      }
       if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
         await this.#replaceMentions(tx, 'node', input.id, content ?? '', input.resolutionScope ?? scope, scope);
       }
@@ -925,6 +959,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    await assertKnowledgeRecordTextWithinBoundCompat(input.text);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
@@ -988,13 +1023,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
-    const args: InValue[] = [input.sourceThreadId, key, key];
+    const keys = visibleScopeKeys(scope);
+    const args: InValue[] = [input.sourceThreadId, ...keys];
     if (input.after) args.push(input.after);
     const limit = input.limit ?? 100;
     args.push(limit + 1);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
+      sql: `SELECT *,json(scope) AS scopeJson,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql(keys)}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
       args,
     });
     const records = result.rows.map(parseKnowledge);
@@ -1056,14 +1091,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const keys = visibleScopeKeys(scope);
     const normalizedQuery = input.query.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
     const query = `%${escapeLikePattern(normalizedQuery)}%`;
     const records = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql(keys)} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
 
-      args: [key, key, query, query, query, query, input.limit ?? 20],
+      args: [...keys, query, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
       type: String(row.type) as 'node',
@@ -1079,19 +1114,24 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       scope: parseJson<KnowledgeScope>(row.scopeJson),
     }));
     if (results.length < (input.limit ?? 20)) {
+      // CROSS JOIN pins SQLite's join order: start from the caller's visible records (scopeKey index)
+      // rather than scanning every node and its records.
       const knowledge = await this.#client.execute({
-        sql: `SELECT k.*,json(k.scope) AS scopeJson,json(k.metadata) AS metadataJson,n.name FROM "${TABLE_KNOWLEDGE_RECORDS}" k JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=k.node AND n.type='node' AND n.mergedInto IS NULL WHERE k.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')} AND lower(k.text) LIKE ? ESCAPE '=' ORDER BY k.id DESC LIMIT ?`,
-        args: [key, key, query, (input.limit ?? 20) - results.length],
+        sql: `SELECT k.*,json(k.scope) AS scopeJson,json(k.metadata) AS metadataJson,n.name,json(n.scope) AS parentScopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" k CROSS JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=k.node AND n.type='node' AND n.mergedInto IS NULL WHERE k.deletedAt IS NULL AND ${visibleSql(keys, 'k.scopeKey')} AND lower(k.text) LIKE ? ESCAPE '=' ORDER BY k.id DESC LIMIT ?`,
+        args: [...keys, query, (input.limit ?? 20) - results.length],
       });
       results.push(
-        ...knowledge.rows.map(row => ({
-          type: 'record' as const,
-          id: String(row.id),
-          recordId: String(row.node),
-          name: String(row.name),
-          text: String(row.text),
-          scope: parseJson<KnowledgeScope>(row.scopeJson),
-        })),
+        ...knowledge.rows.map(row => {
+          const parentVisible = isKnowledgeScopeVisible(parseJson<KnowledgeScope>(row.parentScopeJson), scope);
+          return {
+            type: 'record' as const,
+            id: String(row.id),
+            recordId: parentVisible ? String(row.node) : String(row.id),
+            name: parentVisible ? String(row.name) : '(private node)',
+            text: String(row.text),
+            scope: parseJson<KnowledgeScope>(row.scopeJson),
+          };
+        }),
       );
     }
     return results;
@@ -1123,10 +1163,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const keys = visibleScopeKeys(scope);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
-      args: [key, key, ...(input.after ? [input.after] : []), input.limit ?? 100],
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql(keys)}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
+      args: [...keys, ...(input.after ? [input.after] : []), input.limit ?? 100],
     });
     return result.rows.map(row => ({
       id: String(row.id),
@@ -1149,9 +1189,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args.push(input.status);
     }
     if (input.scope) {
-      const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
-      clauses.push(visibleSql);
-      args.push(key, key);
+      const keys = visibleScopeKeys(input.scope);
+      clauses.push(visibleSql(keys));
+      args.push(...keys);
     }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
@@ -1172,9 +1212,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       ];
       const args: InValue[] = [now.toISOString(), stale.toISOString()];
       if (input.scope) {
-        const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
-        clauses.push(visibleSql);
-        args.push(key, key);
+        const keys = visibleScopeKeys(input.scope);
+        clauses.push(visibleSql(keys));
+        args.push(...keys);
       }
       args.push(input.limit ?? 100);
       const selected = await tx.execute({
@@ -1250,12 +1290,17 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
   async #resolveNode(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeNode | null> {
-    for (let length = scope.length; length > 0; length--) {
-      const node = await this.#getNodeByName(executor, name, scope.slice(0, length));
-      if (node) {
-        const terminal = await this.#resolveTerminalNode(executor, node.id);
-        if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
-      }
+    // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+    // visible-scope rows and merged aliases (whose terminal may be visible) are candidates.
+    const keys = visibleScopeKeys(scope);
+    const result = await executor.execute({
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type='node' AND canonicalName=? AND (scopeKey IN (${keys.map(() => '?').join(',')}) OR mergedInto IS NOT NULL)`,
+      args: [canonicalName(name), ...keys],
+    });
+    const candidates = result.rows.map(parseNode).sort((left, right) => right.scope.length - left.scope.length);
+    for (const candidate of candidates) {
+      const terminal = await this.#resolveTerminalNode(executor, candidate.id);
+      if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
     }
     return null;
   }
@@ -1284,7 +1329,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const node = await this.#resolveTerminalNode(this.#client, nodeReferenceId(input.node));
     if (!node) return { records: [] };
-    const key = knowledgeScopeKey(scope);
+    const keys = visibleScopeKeys(scope);
     const includesMentions = relationship !== 'about';
     const relationSql =
       relationship === 'about'
@@ -1292,11 +1337,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         : relationship === 'mentioning'
           ? 'm.recordId=?'
           : '(k.node=? OR m.recordId=?)';
-    const args: InValue[] = [node.id, ...(relationship === 'related' ? [node.id] : []), key, key];
+    const args: InValue[] = [node.id, ...(relationship === 'related' ? [node.id] : []), ...keys];
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
     const result = await this.#client.execute({
-      sql: `SELECT DISTINCT k.*,json(k.scope) AS scopeJson,json(k.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" k${includesMentions ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=k.id` : ''} WHERE ${relationSql} AND ${visibleSql.replaceAll('scopeKey', 'k.scopeKey')}${input.includeDeleted ? '' : ' AND k.deletedAt IS NULL'}${input.after ? ' AND k.id < ?' : ''} ORDER BY k.id DESC LIMIT ?`,
+      sql: `SELECT DISTINCT k.*,json(k.scope) AS scopeJson,json(k.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" k${includesMentions ? ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=k.id` : ''} WHERE ${relationSql} AND ${visibleSql(keys, 'k.scopeKey')}${input.includeDeleted ? '' : ' AND k.deletedAt IS NULL'}${input.after ? ' AND k.id < ?' : ''} ORDER BY k.id DESC LIMIT ?`,
       args,
     });
     const limit = input.limit ?? 100;
@@ -1330,6 +1375,59 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       await executor.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
         args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  /**
+   * Move a node's identity memberships from `from` to `to` without touching structural
+   * placements added by `#placeNodeInScopes`, which a scope change must not erase.
+   */
+  async #swapIdentityScopes(
+    executor: Executor,
+    nodeId: string,
+    from: KnowledgeScope,
+    to: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    const next = await this.#resolveScopeNodeIds(executor, to);
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, from)) {
+      if (next.includes(scopeNodeId)) continue;
+      await executor.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
+        args: [nodeId, scopeNodeId],
+      });
+    }
+    for (const scopeNodeId of next) {
+      await executor.execute({
+        sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
+        args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  /**
+   * Additive structural placement: every address must resolve to a live scope node
+   * (unlike identity membership, an unknown address is a caller error, not a lazy
+   * materialization miss). Runs inside the caller's transaction, so a throw aborts
+   * the whole mutation.
+   */
+  async #placeNodeInScopes(
+    executor: Executor,
+    nodeId: string,
+    addresses: string[] | undefined,
+    addedAt: Date,
+  ): Promise<void> {
+    for (const address of addresses ?? []) {
+      const result = await executor.execute({
+        sql: `SELECT sa.scopeNodeId AS scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" sa JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=sa.scopeNodeId WHERE sa.address=? AND n.isScope AND n.deletedAt IS NULL`,
+        args: [address],
+      });
+      const scopeNodeId = result.rows[0]?.scopeNodeId;
+      if (scopeNodeId == null) throw new KnowledgeNotFoundError('scope', address);
+      await executor.execute({
+        sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?)`,
+        args: [nodeId, String(scopeNodeId), addedAt.toISOString()],
       });
     }
   }

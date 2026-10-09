@@ -77,6 +77,7 @@ function resolveAgent(
 export class Subconscious {
   readonly config: Readonly<SubconsciousConfig>;
   readonly resolved: Readonly<ResolvedSubconsciousConfig>;
+  readonly #pendingCuration = new Set<Promise<void>>();
 
   constructor(config: SubconsciousConfig = {}) {
     const observation = config.observation ?? ['remind', 'curate'];
@@ -131,6 +132,31 @@ export class Subconscious {
     });
   }
 
+  /**
+   * Resolve once every curator run this Subconscious dispatched has finished, including runs
+   * dispatched while waiting. Curation runs detached from the observation turn, so await this
+   * (after `memory.settled()`) before closing storage the curator writes to.
+   *
+   * ```ts
+   * await memory.settled();
+   * await subconscious.settled();
+   * await store.close();
+   * ```
+   */
+  async settled(): Promise<void> {
+    while (this.#pendingCuration.size) {
+      await Promise.all([...this.#pendingCuration]);
+    }
+  }
+
+  #trackCuration = (work: Promise<void>): void => {
+    this.#pendingCuration.add(work);
+    void work.then(
+      () => this.#pendingCuration.delete(work),
+      () => this.#pendingCuration.delete(work),
+    );
+  };
+
   createObservationExtractors(
     omModel: ObservationalMemoryModel | undefined,
     getCuratorMemory: () => Memory,
@@ -144,7 +170,9 @@ export class Subconscious {
       } else if (name === 'curate') {
         const resolved = this.resolved.observation.find(agent => agent.name === name);
         if (resolved)
-          extractors.push(new SubconsciousCurateExtractor(resolved, this.resolved, getCuratorMemory, omModel));
+          extractors.push(
+            new SubconsciousCurateExtractor(resolved, this.resolved, getCuratorMemory, omModel, this.#trackCuration),
+          );
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
         const custom = entry as SubconsciousCustomObservationConfig;
         extractors.push(
@@ -165,7 +193,11 @@ export class Subconscious {
   #validateObservationEntry(entry: SubconsciousObservationEntry): void {
     const name = entryName(entry);
     if (typeof entry === 'string') {
-      if (!BUILT_IN_OBSERVATION.has(name)) throw new Error(`Unknown Subconscious observation agent: ${name}`);
+      if (!BUILT_IN_OBSERVATION.has(name)) {
+        throw new Error(
+          `Unknown Subconscious observation agent: ${name}. Use "curate" for observation-time ingestion or "remind" for retrieval.`,
+        );
+      }
       return;
     }
     if (BUILT_IN_OBSERVATION.has(name)) return;

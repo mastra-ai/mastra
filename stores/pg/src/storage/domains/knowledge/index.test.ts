@@ -615,10 +615,13 @@ describe('PostgreSQL knowledge concurrency and indexes', () => {
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_nodes_identity');
     expect(result.rows.map(row => row.indexname)).toContain('idx_knowledge_outbox_idempotency');
     const ddl = KnowledgePG.getExportDDL();
-    expect(ddl).toHaveLength(KNOWLEDGE_TABLE_NAMES.length + 14);
+    expect(ddl).toHaveLength(KNOWLEDGE_TABLE_NAMES.length + 17);
     expect(ddl.join('\n')).toContain('idx_knowledge_outbox_idempotency');
     expect(ddl.join('\n')).toContain('mastra_knowledge_record_scopes');
     expect(ddl.join('\n')).toContain('idx_knowledge_activity_import_run');
+    expect(ddl.join('\n')).toContain('idx_knowledge_records_scope');
+    expect(ddl.join('\n')).toContain('idx_knowledge_activity_scope');
+    expect(ddl.join('\n')).toContain('idx_knowledge_nodes_name');
     expect(ddl.join('\n')).not.toContain('mastra_knowledge_cursors');
 
     const schemaName = 'mastra_knowledge_export_test';
