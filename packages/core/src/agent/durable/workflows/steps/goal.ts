@@ -69,14 +69,18 @@ export function createDurableGoalStep() {
         }
       }
 
-      // Rehydrate the message list lazily — only when the core actually judges
+      // No goal configured on the agent → nothing to judge.
+      if (!goalConfig) return state;
+
+      // Build the message list lazily — only when the core actually judges
       // this iteration does it read the transcript / append the feedback
       // signal. Memoized so the scorer context and signal injection share one
       // instance, which is then serialized back into state.
+      const messageListState = await readMessageListState(params, state);
       let messageList: ReturnType<ReturnType<typeof createRunMessageList>['deserialize']> | undefined;
       const list = () => {
         if (!messageList) {
-          messageList = createRunMessageList({ mastra }).deserialize(readMessageListState(params.state, state));
+          messageList = createRunMessageList({ mastra }).deserialize(messageListState);
         }
         return messageList;
       };

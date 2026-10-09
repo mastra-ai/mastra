@@ -54,6 +54,7 @@ import type {
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RECOVERY_LEASE_TTL_MS = 30_000;
@@ -993,6 +994,30 @@ export class DurableAgent<
         output: toolCall.output,
       },
     }));
+  }
+
+  /**
+   * Loads the recalled messages a persisted run keeps as refs in its transcript
+   * before resume() or recover() runs anything. A memory storage failure then
+   * rejects the call and leaves the run as it was. Failing in a step instead,
+   * after a resumed tool already ran, would end the run.
+   */
+  async #loadRecalledMessages(runId: string, snapshot?: WorkflowRunState, requestContext?: RequestContext) {
+    if (!snapshot) {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      snapshot =
+        typeof persisted?.snapshot === 'string'
+          ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+          : persisted?.snapshot;
+    }
+    if (!snapshot) return;
+    await loadMessageListStateForResume({
+      state: (snapshot.context as Record<string, unknown> | undefined)?.__state ?? snapshot.value,
+      getInitData: () => snapshot.context?.input,
+      mastra: this.#mastra,
+      requestContext,
+    });
   }
 
   /**
@@ -2536,6 +2561,7 @@ export class DurableAgent<
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
+    let coldSnapshot: WorkflowRunState | undefined;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -2554,6 +2580,7 @@ export class DurableAgent<
         typeof persisted.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
+      coldSnapshot = snapshot;
       if (snapshot?.status !== 'suspended') {
         throw new Error('This workflow run was not suspended');
       }
@@ -2722,6 +2749,15 @@ export class DurableAgent<
       actor: resolvedOptions.actor,
     });
 
+    // Settle the prior segment before reading what it persisted and, below,
+    // its event offset. Otherwise a late suspension event can be replayed into
+    // the new segment and close it early.
+    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+    await priorExecution?.catch(() => {
+      /* errors already handled by the prior segment */
+    });
+    await this.#loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
+
     // Install a fresh abort controller for the resumed segment. The original
     // controller is gone (the stream that owned it has already settled), so
     // we overwrite the registry slot. If the caller passed an external
@@ -2792,12 +2828,6 @@ export class DurableAgent<
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
 
-    // Settle the prior segment before reading its snapshot and event offset.
-    // The suspension chunk can arrive before the suspended snapshot is persisted.
-    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
-    await priorExecution?.catch(() => {
-      /* errors already handled by the prior segment */
-    });
     const initialToolCalls = await this.#loadSuspendedToolCalls(runId);
 
     // Skip events already broadcast by the original run (e.g. the SUSPENDED
@@ -3158,6 +3188,8 @@ export class DurableAgent<
       finishPublishedBeforeCrash =
         this.resolveWorkflowEngine() === 'default' &&
         loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+      // Before anything is registered, so a failed load leaves only the lease to release.
+      await this.#loadRecalledMessages(runId, loaded.snapshot);
       recoveryLease.assertOwned();
       recoveryState = await this.#rehydrateRecoveryState({
         runId,
