@@ -113,21 +113,25 @@ export abstract class ObservationStrategy {
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
-        await this.deps.reflector.maybeReflect({
-          record: { ...record, activeObservations: processed.observations },
-          observationTokens: processed.observationTokens,
-          threadId,
-          writer,
-          messageList: this.opts.messageList,
-          abortSignal,
-          mainAgent: this.opts.agent,
-          sendSignal: this.opts.sendSignal,
-          sendStateSignal: this.opts.sendStateSignal,
-          reflectionHooks,
-          trigger: this.opts.trigger,
-          requestContext,
-          observabilityContext: this.opts.observabilityContext,
-        });
+        const persistedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+        // A deleted thread must not be recreated by reflection.
+        if (persistedRecord) {
+          await this.deps.reflector.maybeReflect({
+            record: persistedRecord,
+            observationTokens: processed.observationTokens,
+            threadId,
+            writer,
+            messageList: this.opts.messageList,
+            abortSignal,
+            mainAgent: this.opts.agent,
+            sendSignal: this.opts.sendSignal,
+            sendStateSignal: this.opts.sendStateSignal,
+            reflectionHooks,
+            trigger: this.opts.trigger,
+            requestContext,
+            observabilityContext: this.opts.observabilityContext,
+          });
+        }
       }
 
       return { observed: true, usage: output.usage, providerMetadata: output.providerMetadata };
