@@ -4448,7 +4448,16 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
+        const registrationRedelivery = handledRegistrationEventIds.has(event.id);
+        handledRegistrationEventIds.add(event.id);
         noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
+        // A redelivered registration for a stream that already ended must not
+        // restore the finished run as the thread's active run.
+        if (registrationRedelivery && terminalEventStreamIds.has(data.streamId)) {
+          discardDeferredRun(data.streamId);
+          wake();
+          return;
+        }
         const localRecord = state.threadRunsByStreamId.get(data.streamId);
         if (localRecord) {
           localStreamIds.add(data.streamId);
@@ -4688,6 +4697,8 @@ export class AgentThreadStreamRuntime {
     const terminalEventStreamIds = new Set<string>();
     /** Terminal deliveries whose lifecycle side effects completed successfully. */
     const handledTerminalEventIds = new Set<string>();
+    /** Registration deliveries already handled by this subscription. */
+    const handledRegistrationEventIds = new Set<string>();
     /** Suspended halves whose run has since resumed: their prompts are already answered. */
     const answeredStreamIds = new Set<string>();
     // A run registering a later stream means its suspension was answered. A

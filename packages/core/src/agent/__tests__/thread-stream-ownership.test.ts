@@ -146,6 +146,42 @@ describe('thread ownership (#24878)', () => {
     runB.complete();
   });
 
+  it('ignores a redelivered run-registered after the run ended on an idle thread', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    pubsub.retain = true;
+    const threadId = 'idle-redelivery-thread';
+    const resourceId = 'idle-redelivery-user';
+    const topic = `agent.thread-stream.${encodeURIComponent([resourceId, threadId].join('\u0000'))}`;
+    const agent = {
+      id: 'idle-redelivery-agent',
+      getMemory: async () => ({
+        getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
+        recall: async () => ({ messages: [], hasMore: false }),
+      }),
+    } as unknown as Agent<any, any, any, any>;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const runA = registerRun(runtime, agent, pubsub, 'run-a', threadId, resourceId);
+    await runA.registered;
+    await nextTicks(20);
+    expect(subscription.activeRunId()).toBe('run-a');
+    const registeredA = pubsub
+      .retainedEvents(topic)
+      .find(event => event.data?.type === 'run-registered' && event.runId === 'run-a');
+    expect(registeredA).toBeDefined();
+
+    runA.complete();
+    await nextTicks(20);
+    expect(subscription.activeRunId()).toBeNull();
+
+    await pubsub.publish(topic, registeredA);
+    await nextTicks(20);
+
+    expect(subscription.activeRunId()).toBeNull();
+    subscription.unsubscribe();
+  });
+
   it('delivers a thread-targeted signal to an active run owned by another instance', async () => {
     const ownerRuntime = new AgentThreadStreamRuntime();
     const senderRuntime = new AgentThreadStreamRuntime();
