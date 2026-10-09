@@ -160,6 +160,10 @@ if (initialResult.status === 'suspended') {
 }
 ```
 
+:::warning
+Unlike `resume()`, which atomically claims a suspended run (concurrent resumes fail with `WORKFLOW_RESUME_ALREADY_CLAIMED`), `timeTravel()` does not claim the run. If two `timeTravel()` calls target the same suspended run concurrently, both can proceed and re-execute steps from the target onward. If operators can trigger time travel on the same run (for example, via an API endpoint), guard against concurrent calls in your application layer.
+:::
+
 ## Streaming time travel results
 
 Use `timeTravelStream()` to receive streaming events during time travel execution:
