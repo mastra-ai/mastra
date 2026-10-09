@@ -582,6 +582,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       for (const declaration of plan.scopes) {
         if (deletedScopeAddresses.has(declaration.address)) continue;
         const scopeNodeId = scopes[declaration.address]!;
+        if (plan.retrofit === false && !createdScopeIds.includes(scopeNodeId)) continue;
         const parentIds =
           declaration.parentAddresses
             ?.map(address => scopes[address])
