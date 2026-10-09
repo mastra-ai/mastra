@@ -11,7 +11,7 @@ import {
   TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { StoreOperationsMySQL } from '../operations';
 import { KnowledgeMySQL, mysqlSql } from '.';
@@ -36,7 +36,9 @@ function createStore() {
 
 createKnowledgeStorageTests(createStore);
 
+// The latch scenarios share one database and leave the marker removed, so each starts from a fresh schema.
 createKnowledgeSchemaLatchTests(async () => {
+  await dropKnowledgeTables();
   await createStore().init();
   await pool.query(`DELETE FROM \`${TABLE_KNOWLEDGE_SCHEMA}\``);
   return {
@@ -50,6 +52,11 @@ createKnowledgeSchemaLatchTests(async () => {
 });
 
 describe('MySQL canonical Knowledge support', () => {
+  beforeAll(async () => {
+    await dropKnowledgeTables();
+    await createStore().init();
+  });
+
   it('normalizes canonical SQL without rewriting string literals', () => {
     expect(mysqlSql(`SELECT nodeId FROM "mastra_knowledge_nodes" WHERE name='nodeId'`)).toBe(
       `SELECT nodeId FROM \`mastra_knowledge_nodes\` WHERE name='nodeId'`,

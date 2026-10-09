@@ -1611,7 +1611,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     ).findOne({ id: nodeId, deletedAt: { $exists: false } }, sessionOptions(session));
     if (!owner) throw new KnowledgeNotFoundError('node', nodeId);
     const scopeIds = await this.#assertScopeNodes(input.scopeIds, session);
-    if (!scopeIds.length) throw new KnowledgeNotFoundError('scope', '');
+    if (!scopeIds.length) throw new KnowledgeNotFoundError('scope', 'root');
     const now = new Date();
     const record: KnowledgeRecord = {
       id: input.id ?? createKnowledgeUlid(),
@@ -1769,7 +1769,7 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
   ): Promise<KnowledgeRecord> {
     await this.#assertExpectedAccessEpoch(session, input.expectedAccessEpoch);
     const scopeIds = await this.#assertScopeNodes(input.scopeIds, session);
-    if (!scopeIds.length) throw new KnowledgeNotFoundError('scope', '');
+    if (!scopeIds.length) throw new KnowledgeNotFoundError('scope', 'root');
     const existing = await (
       await this.#collection(TABLE_KNOWLEDGE_RECORDS)
     ).findOne({ id: input.id, deletedAt: { $exists: false } }, sessionOptions(session));
