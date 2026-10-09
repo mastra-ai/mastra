@@ -333,7 +333,9 @@ describe('Subconscious observation curator', () => {
       'anything the agent inferred, guessed, or concluded rather than observed in a tool result or stated by the user',
       'Never paste files, READMEs, command output, or logs',
       'never put dates in node names',
-      'always write a short description',
+      'call knowledge_write_node_description',
+      'A search that found nothing proves nothing',
+      'will it still be true next week?',
     ]) {
       expect(instructions).toContain(rule);
     }
