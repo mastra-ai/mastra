@@ -361,21 +361,23 @@ export const factoryConfigVersion = 'mastracode-web-v1';
 const hasPlatformSandboxEnv =
   ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
   ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
+const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+const e2bApiKey = process.env.E2B_API_KEY?.trim();
 
 /**
  * The host sandbox, chosen once at boot: local when forced, else the platform
  * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local.
  */
-function factorySandbox() {
-  const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
-  if (!useLocalSandbox && hasPlatformSandboxEnv) return new PlatformFactorySandbox({});
-  const e2bApiKey = process.env.E2B_API_KEY?.trim();
-  if (!useLocalSandbox && e2bApiKey) return new E2BFactorySandbox({ apiKey: e2bApiKey });
-  return new LocalFactorySandbox({
-    root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-    env: localSandboxEnv(),
-  });
-}
+const sandbox =
+  !useLocalSandbox && hasPlatformSandboxEnv
+    ? new PlatformFactorySandbox()
+    : !useLocalSandbox && e2bApiKey
+      ? new E2BFactorySandbox({ apiKey: e2bApiKey })
+      : new LocalFactorySandbox({
+          root: process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+          env: localSandboxEnv(),
+        });
+
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
@@ -384,7 +386,7 @@ export const factory = new MastraFactory({
   // Providers every signed-in account may run on this server's own credentials,
   // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
-  sandbox: factorySandbox(),
+  sandbox,
   // Per-replica cap on concurrent Factory background dispatches. Unset means
   // the dispatcher default; invalid and non-positive values are ignored.
   dispatcher: {
