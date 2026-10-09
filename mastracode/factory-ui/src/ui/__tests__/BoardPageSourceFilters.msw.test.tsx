@@ -7,7 +7,16 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
 import { githubIssue, linearIssue, linearIssues, linearProjects, wireSourceCards } from './fixtures/boardSourceFilters';
+import {
+  docsWatchId,
+  hostedCards,
+  hostedIssues,
+  hostedProjects,
+  hostedTeamId,
+  otherHostedTeamId,
+} from './fixtures/hostedLinearProjectFilters';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 function stubSources() {
@@ -55,6 +64,29 @@ function renderBoard(search = '') {
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
+function stubHostedSources(issues = hostedIssues) {
+  stubSources();
+  const config: Partial<IntakeConfig> = {
+    github: { enabled: false, sourceIds: [] },
+    linear: { enabled: true, sourceIds: [hostedTeamId, otherHostedTeamId] },
+  };
+  const bindings: IntakeSourceBinding[] = [hostedTeamId, otherHostedTeamId].map(sourceId => ({
+    integrationId: 'linear',
+    sourceId,
+    factoryProjectId: FACTORY_ID,
+    board: 'work',
+  }));
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
+    http.get(`${TEST_BASE_URL}/web/linear/projects`, () => HttpResponse.json({ projects: hostedProjects })),
+    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues, nextCursor: null })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: hostedCards }),
+    ),
+  );
+}
+
 async function selectMany(name: string, options: string[]) {
   if (!screen.queryByRole('combobox', { name: 'Add filter' }))
     fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
@@ -90,6 +122,50 @@ async function expectPortalView() {
 }
 
 describe('Board source and Linear project filters', () => {
+  describe('when a hosted Linear project is selected', () => {
+    it('keeps matching live and stored cards across the board after saving and reloading the view', async () => {
+      stubHostedSources();
+      const first = renderBoard();
+      await screen.findByText('DocsWatch: new documentation request');
+      await waitForMutationsIdle(first.client);
+      await selectMany('Linear project', ['DocsWatch']);
+      expect(new URLSearchParams(first.router.state.location.search).get('linearProject')).toBe(docsWatchId);
+
+      const expectDocsWatch = async () => {
+        expect(await screen.findByText('DocsWatch: new documentation request')).toBeInTheDocument();
+        expect(
+          within(screen.getByTestId('board-column-planning')).getByText('DocsWatch: legacy planning card'),
+        ).toBeInTheDocument();
+        expect(
+          within(screen.getByTestId('board-column-execute')).getByText('Portal: member permissions'),
+        ).toBeInTheDocument();
+        expect(screen.queryByText('Other workspace card')).not.toBeInTheDocument();
+        expect(screen.queryByText('Unassigned project')).not.toBeInTheDocument();
+        expect(screen.queryByText('Billing: payment history')).not.toBeInTheDocument();
+      };
+      await expectDocsWatch();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Save as view' }));
+      await user.click(screen.getByRole('button', { name: 'Save view' }));
+      const viewId = new URLSearchParams(first.router.state.location.search).get('view');
+      expect(viewId).toBeTruthy();
+      first.unmount();
+      const second = renderBoard(`?view=${viewId}`);
+      await waitForMutationsIdle(second.client);
+      await expectDocsWatch();
+    });
+  });
+
+  describe('when a hosted issue leaves its project', () => {
+    it('excludes the stale stored project membership while retaining other matching cards', async () => {
+      stubHostedSources([...hostedIssues, { ...linearIssue('ENG-104', null), sourceId: hostedTeamId }]);
+      const view = renderBoard(`?linearProject=${encodeURIComponent(docsWatchId)}`);
+      await waitForMutationsIdle(view.client);
+      expect(await screen.findByText('DocsWatch: new documentation request')).toBeInTheDocument();
+      expect(screen.queryByText('Portal: member permissions')).not.toBeInTheDocument();
+    });
+  });
+
   it('filters live Intake and stored cards across stages, then saves and reloads a project view', async () => {
     stubSources();
     const first = renderBoard();

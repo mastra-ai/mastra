@@ -91,6 +91,19 @@ describe('Workspace', () => {
   });
 
   // ===========================================================================
+  // serializeForSpan
+  // ===========================================================================
+  describe('serializeForSpan', () => {
+    it('should expose only id, name, and status', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ id: 'ws-1', name: 'My Workspace', filesystem, sandbox });
+
+      expect(workspace.serializeForSpan()).toEqual({ id: 'ws-1', name: 'My Workspace', status: 'pending' });
+    });
+  });
+
+  // ===========================================================================
   // Constructor
   // ===========================================================================
   describe('constructor', () => {
