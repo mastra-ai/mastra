@@ -24,6 +24,8 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   }
 }
 
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
 export interface IncidentioIssueIngress {
   /** Stable item reference — the prefixed incident.io follow-up id (`incidentio:follow-up:<ulid>`). */
   id: string;
@@ -112,6 +114,7 @@ export class IncidentioRules {
     input: IncidentioRulesIngress,
     issue: IncidentioIssueIngress,
     relatedItem: WorkItemRow | undefined,
+    attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `incidentio:${issue.id}:${issue.updatedAt}`;
     const actor = { type: 'human' as const, id: input.userId };
@@ -198,6 +201,15 @@ export class IncidentioRules {
       causalChain: [],
       now: new Date(),
     });
+    if (committed.status === 'stale') {
+      // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
+      if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+        throw new Error(`Factory incident.io rule evaluation for ${ingressId} kept losing revision races.`);
+      }
+      const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
+      if (relatedItem && !fresh) return 'missing';
+      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
     return committed.status;
   }
 }
