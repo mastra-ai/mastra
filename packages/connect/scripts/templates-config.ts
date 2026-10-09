@@ -50,7 +50,7 @@ const PIN_677: TemplatePin = {
  */
 const PIN_708: TemplatePin = {
   repo: 'NangoHQ/integration-templates',
-  sha: 'eb384dddf5b268d655e9b9cf98067120b88e190a',
+  sha: '36cd8a2a5759aae67a1272ce6066a18b837a5455',
 };
 
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {

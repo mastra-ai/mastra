@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ eb384dddf5b2 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 36cd8a2a5759 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -44,10 +44,13 @@ const CycleSchema = z.object({
 const ProviderResponseSchema = z.object({
   data: z
     .object({
-      cycleCreate: z.object({
-        success: z.boolean(),
-        cycle: CycleSchema.nullable().optional(),
-      }),
+      cycleCreate: z
+        .object({
+          success: z.boolean(),
+          cycle: CycleSchema.nullable().optional(),
+        })
+        .nullable()
+        .optional(),
     })
     .nullable()
     .optional(),
