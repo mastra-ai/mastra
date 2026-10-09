@@ -1940,7 +1940,10 @@ export class DurableAgent<
    * @param workflowInput - The serialized workflow input
    * @internal
    */
-  protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+  protected async executeWorkflow(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<{ status?: string } | void> {
     const workflow = this.getWorkflow();
     const entry = globalRunRegistry.get(runId);
     const requestContext = entry?.requestContext;
@@ -1972,6 +1975,7 @@ export class DurableAgent<
     if (result?.status && result.status !== 'suspended') {
       await this.deleteRunSnapshots(runId);
     }
+    return { status: result?.status };
   }
 
   /**
@@ -2356,6 +2360,7 @@ export class DurableAgent<
     const {
       output,
       cleanup: createdStreamCleanup,
+      settle,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2428,8 +2433,24 @@ export class DurableAgent<
           await stopGoalActivity({ agentId: workflowInput.agentId, runId });
         }
       })
+      .then(
+        async result => {
+          // The run finished in this process. If its terminal FINISH/ERROR
+          // event never reached the reader (dropped, failed to publish), settle
+          // the output so the thread run is released instead of hanging.
+          if (result?.status && result.status !== 'suspended') {
+            await settle(new Error(`Durable agent run ${runId} ended without a terminal stream event`));
+          }
+        },
+        async error => {
+          await this.emitError(runId, error).catch(publishError => {
+            this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError });
+          });
+          await settle(error instanceof Error ? error : new Error(String(error)));
+        },
+      )
       .catch(error => {
-        this.emitErrorInBackground(runId, error);
+        this.logger.warn(`Failed to settle durable agent stream for run ${runId}`, { runId, error });
       });
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {

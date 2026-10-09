@@ -177,6 +177,13 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   detach: () => void;
   /** Wait for pubsub events already delivered to this adapter to finish processing. */
   waitForEventDelivery: () => Promise<void>;
+  /**
+   * Terminate the stream through the ERROR path if no terminal event
+   * (FINISH/ERROR/ABORT) has been processed yet. Used by the run's producer
+   * when it finishes but the terminal event never reached this reader, so the
+   * output settles instead of hanging. No-op once terminated.
+   */
+  settle: (error: Error) => Promise<void>;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -684,7 +691,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Cleanup function - intentionally fire-and-forget for unsubscribe.
   // Sets cancelled=true so the subscribe .then() handler will unsubscribe
   // if cleanup runs before the subscription promise resolves.
+  // Closes the stream first: once unsubscribed no terminal event can arrive,
+  // so an open stream would leave the output (and the thread run waiting on
+  // it) unsettled forever.
   const cleanup = () => {
+    if (controller && !terminated) safeClose(controller);
     markTerminated();
     cancelled = true;
     if (isSubscribed) {
@@ -697,12 +708,24 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     controller = null;
   };
 
-  // Observer-only teardown: end this consumer's stream and unsubscribe. Closing
-  // the controller (rather than just nulling it in cleanup) makes a pending
-  // read resolve as done instead of hanging. Never touches run state.
-  const detach = () => {
-    if (controller) safeClose(controller);
-    cleanup();
+  // Observer-only teardown: end this consumer's stream and unsubscribe. Never
+  // touches run state.
+  const detach = cleanup;
+
+  const settle = async (error: Error) => {
+    await waitForEventDelivery();
+    if (terminated || cancelled || !controller) return;
+    safeEnqueue(controller, {
+      type: 'error',
+      payload: { error },
+    } as ChunkType<OUTPUT>);
+    safeClose(controller);
+    markTerminated();
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    }
   };
 
   // Create the MastraModelOutput.
@@ -749,6 +772,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     cleanup,
     detach,
     waitForEventDelivery,
+    settle,
     ready,
   };
 }
