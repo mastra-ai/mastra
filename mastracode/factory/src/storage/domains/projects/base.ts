@@ -29,6 +29,8 @@ export interface FactoryProject {
   activeTemplateHeads: Record<string, string> | null;
   /** Provider build id of the most recent build attempt; its status is read live from the provider. */
   lastBuildId: string | null;
+  /** Repository slug → commit the most recent build attempt pinned, so its status can be read back. */
+  lastBuildHeads: Record<string, string> | null;
   /** When the most recent build attempt started (also the leading edge of the push debounce window). */
   lastBuildAttemptedAt: Date | null;
   /** Whether a push to an environment repository's default branch starts a build. */
@@ -58,6 +60,7 @@ export interface UpdateFactoryProjectInput {
   activeTemplateId?: string | null;
   activeTemplateHeads?: Record<string, string> | null;
   lastBuildId?: string | null;
+  lastBuildHeads?: Record<string, string> | null;
   lastBuildAttemptedAt?: Date | null;
   buildOnPushEnabled?: boolean;
   buildPushDebounceMinutes?: number;
@@ -81,6 +84,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
     last_build_id: { type: 'text', nullable: true },
+    last_build_heads: { type: 'json', nullable: true },
     last_build_attempted_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
@@ -108,6 +112,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   active_template_id: string | null;
   active_template_heads: Record<string, string> | null;
   last_build_id: string | null;
+  last_build_heads: Record<string, string> | null;
   last_build_attempted_at: Date | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
@@ -133,6 +138,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     activeTemplateId: row.active_template_id ?? null,
     activeTemplateHeads: row.active_template_heads ?? null,
     lastBuildId: row.last_build_id ?? null,
+    lastBuildHeads: row.last_build_heads ?? null,
     lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
@@ -233,6 +239,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
       ...(input.activeTemplateHeads !== undefined ? { active_template_heads: input.activeTemplateHeads } : {}),
       ...(input.lastBuildId !== undefined ? { last_build_id: input.lastBuildId } : {}),
+      ...(input.lastBuildHeads !== undefined ? { last_build_heads: input.lastBuildHeads } : {}),
       ...(input.lastBuildAttemptedAt !== undefined ? { last_build_attempted_at: input.lastBuildAttemptedAt } : {}),
       ...(input.buildOnPushEnabled !== undefined ? { build_on_push_enabled: input.buildOnPushEnabled } : {}),
       ...(input.buildPushDebounceMinutes !== undefined

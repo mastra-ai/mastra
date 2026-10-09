@@ -265,6 +265,16 @@ describe('factory-environment-build workflow', () => {
     expect(stored?.settings).toEqual({ cpuCount: 4 });
     expect(stored?.ctx.sessionId).toBe(`environment-build:${project.id}`);
     await expect(stored?.ctx.resolveHead?.('https://github.com/acme/api')).resolves.toBe('b'.repeat(40));
+
+    // A build in flight was pinned to its own heads; reading its status after
+    // a restart must recompute that template, not the last ready one.
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildId: 'build-9', lastBuildHeads: { 'acme/api': 'c'.repeat(40) } },
+    });
+    const attempt = await runner.readContext(project.id);
+    await expect(attempt?.ctx.resolveHead?.('https://github.com/acme/api')).resolves.toBe('c'.repeat(40));
     await expect(runner.readContext('missing')).resolves.toBeUndefined();
   });
 

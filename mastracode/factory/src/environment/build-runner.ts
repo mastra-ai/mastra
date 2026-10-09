@@ -73,8 +73,9 @@ export class EnvironmentBuildRunner {
 
   /**
    * The context a status or history read hands the provider. Heads come from
-   * the stored active template so a read never calls GitHub; before the first
-   * ready build they are resolved live once.
+   * the stored last attempt (the build being read was pinned to them), else
+   * the active template, so a read never calls GitHub; before the first build
+   * they are resolved live once.
    */
   async readContext(projectId: string): Promise<EnvironmentBuildReadContext | undefined> {
     const sourceControl = this.#deps.sourceControl;
@@ -82,7 +83,10 @@ export class EnvironmentBuildRunner {
     const project = await this.#deps.projects.getById({ id: projectId });
     if (!project) return undefined;
     const environment = await resolveProjectEnvironment(sourceControl.storage, project);
-    const heads = project.activeTemplateHeads ?? (await resolveEnvironmentHeads(sourceControl, project, environment));
+    const heads =
+      project.lastBuildHeads ??
+      project.activeTemplateHeads ??
+      (await resolveEnvironmentHeads(sourceControl, project, environment));
     return {
       ctx: environmentBuildContext(project, environment, heads, sourceControl.versionControl),
       settings: environment.settings,

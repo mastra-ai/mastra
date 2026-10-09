@@ -161,6 +161,7 @@ export async function runEnvironmentBuild(
       id: project.id,
       input: {
         lastBuildId: started.buildId,
+        lastBuildHeads: heads,
         ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }),
       },
     });
@@ -181,7 +182,11 @@ export async function runEnvironmentBuild(
     await deps.projects.update({
       orgId: project.orgId,
       id: project.id,
-      input: { lastBuildId: null, ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }) },
+      input: {
+        lastBuildId: null,
+        lastBuildHeads: null,
+        ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }),
+      },
     });
     deps.logger?.info('environment build failed', { factoryProjectId: project.id, trigger: input.trigger, reason });
     return { outcome: 'failed', reason };

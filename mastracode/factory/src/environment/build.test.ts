@@ -164,6 +164,7 @@ describe('runEnvironmentBuild', () => {
     await expect(ctx.resolveHead?.('https://github.com/other/repo.git')).resolves.toBeUndefined();
     const stored = await seed.projects.getById({ id: project.id });
     expect(stored?.lastBuildId).toBe('build-1');
+    expect(stored?.lastBuildHeads).toEqual(expect.objectContaining({ 'acme/api': SHA_A }));
     expect(stored?.lastBuildAttemptedAt?.toISOString()).toBe(clock.toISOString());
     expect(stored?.activeTemplateId).toBeNull();
   });
