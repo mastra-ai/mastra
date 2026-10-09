@@ -679,20 +679,29 @@ describe('MastraFactory.prepare', () => {
     });
     const error = await factory.prepare().catch((e: unknown) => e as Error);
     expect(error).toBeInstanceOf(Error);
-    // Names the new shape and shows the replacement, so an existing host can
-    // fix its config from the message alone.
-    expect(error.message).toMatch(/'sandbox' is now a callback/);
-    expect(error.message).toMatch(/FactorySandboxContext/);
+    // Names both accepted shapes, instance first, so an existing host can fix
+    // its config from the message alone.
+    expect(error.message).toMatch(/'sandbox' must be a FactorySandbox instance or a callback/);
+    expect(error.message).toMatch(/sandbox: new PlatformFactorySandbox\(\)/);
     expect(error.message).toMatch(
-      /sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
+      /sandbox: ctx => new PlatformSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
     );
-    // The old options had three different fates, and a host reading this
-    // message needs all three: none of them is "pass it to the provider"
-    // unchanged.
+    // Every retired option the host passed gets its own line.
     expect(error.message).toMatch(/'machine' becomes the provider instance/);
-    expect(error.message).toMatch(/'workdir' is gone/);
+    expect(error.message).toMatch(/'workdir' becomes the workingDirectory/);
     expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
-    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
+  });
+
+  it('explains only the retired options the host actually passed', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: { machine: {} } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).not.toMatch(/'workdir'/);
+    expect(error.message).not.toMatch(/'maxSandboxes'/);
   });
 
   it('rejects an unbranded object even when it carries a create key', async () => {
@@ -700,12 +709,13 @@ describe('MastraFactory.prepare', () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
-      sandbox: { machine: {}, create: () => ({ id: 'sb' }) } as unknown as () => never,
+      sandbox: { create: () => ({ id: 'sb' }) } as unknown as () => never,
     });
     const error = await factory.prepare().catch((e: unknown) => e as Error);
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toMatch(/'machine' becomes the provider instance/);
     expect(error.message).toMatch(/FactorySandbox instance/);
+    // No retired option was passed, so no migration lines.
+    expect(error.message).not.toMatch(/retired alpha sandbox config/);
   });
 
   it('rejects a sandbox config that is neither a callback nor an object', async () => {
@@ -714,7 +724,7 @@ describe('MastraFactory.prepare', () => {
       storage: fakeStorage(),
       sandbox: 'e2b' as unknown as () => never,
     });
-    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
+    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a FactorySandbox instance or a callback/);
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {
