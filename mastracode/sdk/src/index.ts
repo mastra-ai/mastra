@@ -1874,15 +1874,29 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
     createInitialThread: config?.createInitialThread,
   });
   await wireSessionConcerns(base, session);
-  const knowledgeInspector = await base.createKnowledgeInspector(session);
+  // Knowledge is opt-in: only touch Knowledge storage when a runtime is configured, and never let
+  // an incompatible or failing Knowledge store stop the agent from starting.
+  let knowledgeInspector: Awaited<ReturnType<typeof base.createKnowledgeInspector>>;
+  let knowledgeInspectorUnavailableReason: string | undefined;
+  if (!base.knowledge) {
+    knowledgeInspectorUnavailableReason =
+      'Knowledge is off. Set MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1 or pass a `knowledge` instance to createMastraCode.';
+  } else {
+    try {
+      knowledgeInspector = await base.createKnowledgeInspector(session);
+      if (!knowledgeInspector) {
+        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured knowledge storage domain.';
+      }
+    } catch (error) {
+      knowledgeInspectorUnavailableReason = `Knowledge is unavailable: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
 
   return {
     ...base,
     session,
     knowledgeInspector,
-    knowledgeInspectorUnavailableReason: knowledgeInspector
-      ? undefined
-      : 'Knowledge inspection requires a configured knowledge storage domain.',
+    knowledgeInspectorUnavailableReason,
   };
 }
 
