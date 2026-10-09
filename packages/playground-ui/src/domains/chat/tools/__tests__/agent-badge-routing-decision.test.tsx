@@ -1,18 +1,12 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockNetworkChoiceMetadataDialogTrigger = vi.fn(() => null);
-const mockToolApprovalButtons = vi.fn(() => null);
 
 vi.mock('@/domains/chat/components/network-choice-metadata-dialog', () => ({
   NetworkChoiceMetadataDialogTrigger: mockNetworkChoiceMetadataDialogTrigger,
-}));
-
-vi.mock('@/domains/chat/tools/badges/tool-approval-buttons', () => ({
-  ToolApprovalButtons: mockToolApprovalButtons,
 }));
 
 vi.mock('@/ds/components/CodeEditor', () => ({
@@ -44,7 +38,6 @@ vi.mock('react-markdown', () => ({
 describe('AgentBadge routing decision', () => {
   beforeEach(() => {
     mockNetworkChoiceMetadataDialogTrigger.mockClear();
-    mockToolApprovalButtons.mockClear();
   });
 
   it('prefers routingDecision.selectionReason and passes the parsed decision as input', async () => {

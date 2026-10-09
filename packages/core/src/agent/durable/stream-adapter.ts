@@ -4,7 +4,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Event, EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
-import type { OutputProcessorOrWorkflow } from '../../processors';
+import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
@@ -18,6 +18,7 @@ import type {
   MastraStreamTransformOptions,
   LanguageModelUsage,
   StepStartPayload,
+  ToolCallChunk,
 } from '../../stream/types';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
@@ -69,6 +70,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   runId: string;
   /** Message ID for this execution */
   messageId: string;
+  /** Tool calls emitted before a resumed stream segment started. */
+  initialToolCalls?: ToolCallChunk[];
   /** Model information for the output */
   model: {
     modelId: string | undefined;
@@ -80,9 +83,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Start replay from this index (0-based), or live-tail from new events only.
-   * If undefined, uses full replay (subscribeWithReplay).
-   * A numeric offset uses efficient indexed replay when supported.
+   * Inclusive, zero-based PubSub event index, or `latest` to live-tail. Numeric indexes count all
+   * cached run-topic events, including lifecycle events, not chunks. Omit it to replay all available
+   * cached events; transports without numeric offsets live-tail numeric values instead. Skipping earlier
+   * text deltas produces partial text and may make structured output fail to parse; beyond retained
+   * history, a number also skips lower-index live events on numeric-offset transports. See
+   * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
    */
   offset?: number | 'latest';
   /**
@@ -141,6 +147,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Processor state map shared with the durable workflow's producer-side processing. */
+  processorStates?: Map<string, ProcessorState>;
   /** When true, `getFullOutput()` includes `scoringData` assembled from the MessageList. */
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
@@ -170,6 +178,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /** Wait for pubsub events already delivered to this adapter to finish processing. */
+  waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -188,6 +198,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     pubsub,
     runId,
     messageId,
+    initialToolCalls,
     model,
     threadId,
     resourceId,
@@ -206,6 +217,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    processorStates,
     returnScorerData,
     requestContext,
     tracingContext,
@@ -614,9 +626,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   // Every delivery has to be acked, including the events this consumer filters
   // out, or a durable backend (Redis consumer groups) keeps them pending for the
-  // life of the subscription. The EventCallback is a stable reference because
-  // `unsubscribe` has to be handed the same callback that was subscribed.
-  const subscribedCallback: EventCallback = withAck(handleEvent);
+  // life of the subscription. Track deliveries because in-process pubsub invokes
+  // callbacks synchronously but does not await their promises.
+  const inFlightDeliveries = new Set<Promise<void>>();
+  const ackingHandleEvent = withAck(handleEvent);
+  const subscribedCallback: EventCallback = (event, ack, nack) => {
+    const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
+    inFlightDeliveries.add(delivery);
+    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    return delivery;
+  };
+  const waitForEventDelivery = async () => {
+    while (inFlightDeliveries.size > 0) {
+      await Promise.allSettled([...inFlightDeliveries]);
+    }
+  };
 
   // Create the readable stream
   const stream = new ReadableStream<ChunkType<OUTPUT>>({
@@ -699,6 +723,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     stream,
     messageList,
     messageId,
+    initialToolCalls,
     finishUsageIsTotal: true,
     options: {
       runId,
@@ -715,6 +740,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
       outputProcessors,
+      processorStates,
       returnScorerData,
       requestContext,
       tracingContext,
@@ -727,6 +753,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     output,
     cleanup,
     detach,
+    waitForEventDelivery,
     ready,
   };
 }

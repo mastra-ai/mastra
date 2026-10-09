@@ -1,3 +1,4 @@
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // createMastraCode() pulls in a large module graph, so these tests routinely
@@ -133,11 +134,6 @@ vi.mock('./mcp/index.js', () => ({ createMcpManager: vi.fn() }));
 vi.mock('./onboarding/packs.js', () => ({
   getAvailableModePacks: vi.fn(() => []),
   getAvailableOmPacks: vi.fn(() => []),
-  selectPreferredOMPack: vi.fn(() => undefined),
-}));
-
-vi.mock('./onboarding/om-settings.js', () => ({
-  hasExplicitOMConfiguration: vi.fn(() => false),
 }));
 
 vi.mock('./onboarding/settings.js', () => ({
@@ -147,7 +143,6 @@ vi.mock('./onboarding/settings.js', () => ({
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
-      activeModelPackId: null,
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
@@ -219,7 +214,7 @@ vi.mock('./utils/project.js', () => ({
 }));
 
 vi.mock('./utils/storage-factory.js', () => ({
-  createStorage: vi.fn(() => ({ storage: {}, backend: 'memory' })),
+  createStorage: vi.fn(() => ({ storage: new InMemoryStore({ id: 'startup-test' }), backend: 'memory' })),
   createVectorStore: vi.fn(() => ({})),
 }));
 
@@ -248,7 +243,7 @@ describe('createMastraCode startup performance', () => {
         }),
     );
     vi.mocked(createStorage).mockReturnValue({
-      storage: {},
+      storage: new InMemoryStore({ id: 'startup-test' }),
       backend: 'memory',
       warning: 'Storage fallback warning',
     } as never);
@@ -353,9 +348,9 @@ describe('scores storage domain', () => {
 });
 
 describe('Kimi startup access', () => {
-  it('rejects stored OAuth credentials without a valid device ID', async () => {
+  it('rejects stored OAuth credentials without a valid device ID for OM pack selection', async () => {
     const previousApiKey = process.env.KIMI_API_KEY;
-    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { getAvailableOmPacks } = await import('./onboarding/packs.js');
     const { createMastraCode } = await import('./index.js');
 
     try {
@@ -366,11 +361,11 @@ describe('Kimi startup access', () => {
         refresh: 'refresh-token',
         expires: Date.now() + 60_000,
       });
-      vi.mocked(getAvailableModePacks).mockClear();
+      vi.mocked(getAvailableOmPacks).mockClear();
 
       await createMastraCode({ cwd: '/tmp/project-invalid-kimi-oauth' });
 
-      expect(getAvailableModePacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
+      expect(getAvailableOmPacks).toHaveBeenLastCalledWith(expect.objectContaining({ 'kimi-for-coding': false }));
     } finally {
       authCredentials.clear();
       if (previousApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -424,16 +419,9 @@ describe('settings.json OM seeding', () => {
     }
   });
 
-  it('seeds provider-matched OM models when settings are untouched', async () => {
-    const { selectPreferredOMPack } = await import('./onboarding/packs.js');
+  it('preserves auto OM selection when settings are untouched', async () => {
     const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
     vi.mocked(resolveOmRoleModel).mockReturnValue(null);
-    vi.mocked(selectPreferredOMPack).mockReturnValue({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: 'Via Codex subscription',
-      modelId: 'openai/gpt-5.4-mini',
-    });
     const baseSettings = vi.mocked(loadSettings)();
     const { createMastraCode } = await import('./index.js');
 
@@ -441,40 +429,27 @@ describe('settings.json OM seeding', () => {
       await createMastraCode({ cwd: '/tmp/project-provider-om-seed' });
 
       expect(controllerInitialStates).toHaveLength(1);
-      expect(controllerInitialStates[0]!.observerModelId).toBe('openai/gpt-5.4-mini');
-      expect(controllerInitialStates[0]!.reflectorModelId).toBe('openai/gpt-5.4-mini');
+      expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
+      expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
+      expect(controllerInitialStates[0]!.observerModelSelection).toBe('auto');
+      expect(controllerInitialStates[0]!.reflectorModelSelection).toBe('auto');
     } finally {
       vi.mocked(resolveOmRoleModel).mockReturnValue('');
-      vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
       vi.mocked(loadSettings).mockReturnValue(baseSettings);
     }
   });
 
-  it('leaves OM models unset when the user already configured OM', async () => {
-    const { selectPreferredOMPack } = await import('./onboarding/packs.js');
-    const { hasExplicitOMConfiguration } = await import('./onboarding/om-settings.js');
-    const { resolveOmRoleModel } = await import('./onboarding/settings.js');
-    vi.mocked(resolveOmRoleModel).mockReturnValue(null);
-    vi.mocked(hasExplicitOMConfiguration).mockReturnValue(true);
-    vi.mocked(selectPreferredOMPack).mockReturnValue({
-      id: 'openai',
-      name: 'OpenAI Mini',
-      description: 'Via Codex subscription',
-      modelId: 'openai/gpt-5.4-mini',
-    });
+  it('does not resolve model packs for startup mode defaults', async () => {
+    const { getAvailableModePacks } = await import('./onboarding/packs.js');
+    const { resolveModelDefaults } = await import('./onboarding/settings.js');
     const { createMastraCode } = await import('./index.js');
+    vi.mocked(getAvailableModePacks).mockClear();
+    vi.mocked(resolveModelDefaults).mockClear();
 
-    try {
-      await createMastraCode({ cwd: '/tmp/project-explicit-om' });
+    await createMastraCode({ cwd: '/tmp/project-no-runtime-packs' });
 
-      expect(controllerInitialStates).toHaveLength(1);
-      expect(controllerInitialStates[0]!.observerModelId).toBeUndefined();
-      expect(controllerInitialStates[0]!.reflectorModelId).toBeUndefined();
-    } finally {
-      vi.mocked(resolveOmRoleModel).mockReturnValue('');
-      vi.mocked(hasExplicitOMConfiguration).mockReturnValue(false);
-      vi.mocked(selectPreferredOMPack).mockReturnValue(undefined);
-    }
+    expect(getAvailableModePacks).not.toHaveBeenCalled();
+    expect(resolveModelDefaults).not.toHaveBeenCalled();
   });
 
   it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {

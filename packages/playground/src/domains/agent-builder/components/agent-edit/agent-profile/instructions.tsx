@@ -20,6 +20,7 @@ export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsPr
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)] px-2">
       <CodeEditor
+        font="body"
         data-testid="system-prompt-dialog-input"
         value={displayedPrompt}
         onChange={handleChange}
@@ -27,7 +28,7 @@ export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsPr
         editable={editable}
         placeholder="You are a helpful assistant that…"
         showCopyButton={false}
-        className="min-h-0 w-full rounded-none border-0 bg-transparent p-0 [&_.cm-editor]:h-full [&_.cm-line]:leading-relaxed [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:!font-body"
+        className="min-h-0 w-full rounded-none border-0 bg-transparent p-0 [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-y-auto"
       />
     </div>
   );

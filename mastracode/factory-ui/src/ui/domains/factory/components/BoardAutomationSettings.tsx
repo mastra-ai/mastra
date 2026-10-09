@@ -1,43 +1,37 @@
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Settings2 } from 'lucide-react';
 import type { UseMutationResult } from '@tanstack/react-query';
 
 import { useSetFactoryAutomationMutation } from '../../../../hooks/useFactoryAutomation';
 
 function AutomationSwitch({
   label,
-  tooltip,
+  description,
   enabled,
   mutation,
 }: {
   label: string;
-  tooltip: string;
+  description: string;
   enabled: boolean;
   mutation: UseMutationResult<unknown, Error, boolean>;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <div className="text-muted-foreground flex items-center gap-2">
-            <Txt as="span" variant="caption">
-              {label}
-            </Txt>
-            <Switch
-              aria-label={label}
-              checked={enabled}
-              disabled={mutation.isPending}
-              onCheckedChange={next => mutation.mutate(next, { onError: error => toast.error(error.message) })}
-            />
-          </div>
-        }
+    <Field orientation="horizontal" className="items-start gap-4">
+      <FieldContent>
+        <FieldLabel>{label}</FieldLabel>
+        <FieldDescription>{description}</FieldDescription>
+      </FieldContent>
+      <Switch
+        aria-label={label}
+        checked={enabled}
+        disabled={mutation.isPending}
+        onCheckedChange={next => mutation.mutate(next, { onError: error => toast.error(error.message) })}
       />
-      <TooltipContent side="bottom" className="max-w-80">
-        {tooltip}
-      </TooltipContent>
-    </Tooltip>
+    </Field>
   );
 }
 
@@ -54,19 +48,34 @@ export function BoardAutomationSettings({
   const autoApprove = useSetFactoryAutomationMutation(factoryProjectId, 'autoApprovePlans');
 
   return (
-    <div className="flex items-center gap-4">
-      <AutomationSwitch
-        label="Auto-start runs"
-        enabled={autoRunEnabled}
-        mutation={autoRun}
-        tooltip="On: the Factory starts on its own the runs it picks up (new reviews, triage, GitHub events). Off: those runs wait on their card until you click. A card you moved or started yourself never waits. A card from outside the write-access circle always waits for your first gesture."
-      />
-      <AutomationSwitch
-        label="Auto-approve plans"
-        enabled={autoApprovePlans}
-        mutation={autoApprove}
-        tooltip="On: the Factory answers a run's plan itself and work carries through to Done. Off: the plan waits for you, and an unwatched one lands in Needs attention."
-      />
-    </div>
+    <Popover>
+      <PopoverTrigger variant="default" size="icon-sm" aria-label="Automation settings" tooltip="Automation settings">
+        <Settings2 aria-hidden />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)]" aria-label="Automation settings">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-1">
+            <Txt as="h2" variant="subheading">
+              Automation
+            </Txt>
+            <Txt variant="caption" tone="muted">
+              All boards in this factory.
+            </Txt>
+          </div>
+          <AutomationSwitch
+            label="Auto-start runs"
+            enabled={autoRunEnabled}
+            mutation={autoRun}
+            description="Start incoming work automatically."
+          />
+          <AutomationSwitch
+            label="Auto-approve plans"
+            enabled={autoApprovePlans}
+            mutation={autoApprove}
+            description="Continue without waiting for approval."
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

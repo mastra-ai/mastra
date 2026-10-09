@@ -266,12 +266,14 @@ export class ConvexDB extends MastraBase {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const context = await this.client.callStorage<string>({
       op: 'mergeWorkflowStepResult',
@@ -281,6 +283,7 @@ export class ConvexDB extends MastraBase {
       stepId,
       result: JSON.stringify(result),
       requestContext: JSON.stringify(requestContext),
+      ...(state === undefined ? {} : { state: JSON.stringify(state) }),
     });
     if (!context) {
       throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
@@ -362,12 +365,14 @@ export class ConvexDB extends MastraBase {
     newNextFireAt,
     lastFireAt,
     lastRunId,
+    newStatus,
   }: {
     id: string;
     expectedNextFireAt: number;
     newNextFireAt: number;
     lastFireAt: number;
     lastRunId: string;
+    newStatus?: string;
   }): Promise<boolean> {
     return this.client.callStorage<boolean>({
       op: 'updateScheduleNextFire',
@@ -377,6 +382,7 @@ export class ConvexDB extends MastraBase {
       newNextFireAt,
       lastFireAt,
       lastRunId,
+      newStatus,
     });
   }
 

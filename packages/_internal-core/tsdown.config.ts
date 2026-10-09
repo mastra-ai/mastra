@@ -9,6 +9,7 @@ export default defineConfig({
     'src/types/index.ts',
     'src/request-context/index.ts',
     'src/routes/index.ts',
+    'src/knowledge-compat/index.ts',
   ],
   format: ['esm', 'cjs'],
   fixedExtension: false,

@@ -1,3 +1,6 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
  * as collapsible sections — Knowledge node (identity + counts), Knowledge records (the node's
@@ -10,6 +13,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { knowledgeScopes } from './knowledgeScope';
+import { getRecordBorderClass, getRecordRingClass } from './knowledgeStyles';
 
 import { useKnowledgeNode } from '../../../../../hooks/useKnowledgeGraph';
 import type { KnowledgeNodeRecord, KnowledgeRung } from '../../services/knowledge';
@@ -20,9 +27,13 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
     <CollapsibleTrigger className="group border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
-      <span className="text-foreground text-sm font-semibold">{title}</span>
+      <Txt as="span" variant="subheading" tone="ink">
+        {title}
+      </Txt>
       {count !== undefined ? (
-        <span className="bg-fill text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
+        <Txt as="span" variant="meta" tone="muted" className="bg-fill rounded-full px-1.5 py-0.5">
+          {count}
+        </Txt>
       ) : null}
       <ChevronDown
         size={14}
@@ -34,9 +45,9 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <span className="bg-badge-purple-strong text-badge-purple-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
+    <Badge variant={knowledgeScopes[rung].tone} emphasis="subtle">
       {RUNG_LABELS[rung].toLowerCase()}
-    </span>
+    </Badge>
   );
 }
 
@@ -48,13 +59,15 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
           <button
             key={index}
             type="button"
-            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1 font-medium"
+            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
             }}
           >
-            {segment.value}
+            <Txt as="span" variant="label" className="block">
+              {segment.value}
+            </Txt>
           </button>
         ) : (
           <span key={index}>{segment.value}</span>
@@ -108,19 +121,13 @@ function RecordCard({
       ref={cardRef}
       data-testid="knowledge-record"
       data-pinned={record.pinned || undefined}
-      className={[
-        'rounded-lg border transition-colors',
+      className={cn(
+        'rounded-lg border transition-colors duration-fast motion-reduce:transition-none',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
         record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
-        expanded
-          ? record.pinned
-            ? 'border-badge-amber-indicator'
-            : 'border-badge-purple-edge'
-          : record.pinned
-            ? 'border-badge-amber-edge'
-            : 'border-border',
-      ].join(' ')}
+        getRecordBorderClass(record.pinned, expanded),
+      )}
     >
       <div
         role="button"
@@ -134,22 +141,28 @@ function RecordCard({
           }
         }}
       >
-        <div className="text-foreground text-xs leading-relaxed">
+        <div className="text-foreground">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
             <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
-        <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
+        <div className="text-muted-foreground mt-1.5 flex items-center gap-2">
           <RungBadge rung={record.rung} />
-          {record.relation === 'mentions' ? <span className="text-muted-foreground">mentions</span> : null}
-          <span>captured {relativeTime(record.capturedAt)}</span>
+          {record.relation === 'mentions' ? (
+            <Txt as="span" variant="meta" tone="muted">
+              mentions
+            </Txt>
+          ) : null}
+          <Txt as="span" variant="meta">
+            captured {relativeTime(record.capturedAt)}
+          </Txt>
         </div>
       </div>
       {expanded ? (
-        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5 text-[11px]">
+        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5">
           <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
-            <dt>Captured in session</dt>
+            <dt className={textStyle({ variant: 'body-sm' })}>Captured in session</dt>
             <dd>
               {record.sourceThreadId ? (
                 <button
@@ -157,47 +170,57 @@ function RecordCard({
                   className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
-                  <span className="max-w-40 truncate">{record.sourceThreadId}</span>
+                  <Txt as="span" variant="body-sm" className="max-w-40 truncate">
+                    {record.sourceThreadId}
+                  </Txt>
                   <ExternalLink size={10} />
                 </button>
               ) : (
                 '—'
               )}
             </dd>
-            <dt>Captured at</dt>
-            <dd>{new Date(record.capturedAt).toLocaleString()}</dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>Captured at</dt>
+            <dd className={textStyle({ variant: 'body-sm' })}>{new Date(record.capturedAt).toLocaleString()}</dd>
             {record.when ? (
               <>
-                <dt>When</dt>
-                <dd>{record.when}</dd>
+                <dt className={textStyle({ variant: 'body-sm' })}>When</dt>
+                <dd className={textStyle({ variant: 'body-sm' })}>{record.when}</dd>
               </>
             ) : null}
-            <dt>Scope chain</dt>
-            <dd className="break-all">{record.scope.join(' → ')}</dd>
-            <dt>Pinned</dt>
-            <dd>{record.pinned ? 'yes' : 'no'}</dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>Scope chain</dt>
+            <dd className={cn(textStyle({ variant: 'body-sm' }), 'break-all')}>{record.scope.join(' → ')}</dd>
+            <dt className={textStyle({ variant: 'body-sm' })}>Pinned</dt>
+            <dd className={textStyle({ variant: 'body-sm' })}>{record.pinned ? 'yes' : 'no'}</dd>
           </dl>
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
               className="border-badge-amber-edge bg-badge-amber-subtle mt-2 rounded-md border p-2"
             >
-              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
-                <Sparkles size={10} /> Reasoning
+              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 uppercase">
+                <Sparkles size={10} />
+                <Txt as="span" variant="meta" className="block">
+                  {' '}
+                  Reasoning
+                </Txt>
               </div>
-              <p className="text-foreground text-[11px] leading-relaxed italic">{reason}</p>
+              <Txt as="p" variant="body-sm" tone="ink" className="italic">
+                {reason}
+              </Txt>
             </div>
           ) : (
-            <p className="text-muted-foreground mt-2 text-[10px] italic">
+            <Txt as="p" variant="meta" tone="muted" className="mt-2 italic">
               No capture reasoning was recorded for this knowledge record.
-            </p>
+            </Txt>
           )}
           {otherMetadata.length > 0 ? (
-            <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
               {otherMetadata.map(([key, value]) => (
                 <div key={key} className="contents">
-                  <dt>{key}</dt>
-                  <dd className="break-all">{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+                  <dt className={textStyle({ variant: 'meta', tone: 'muted' })}>{key}</dt>
+                  <dd className={cn(textStyle({ variant: 'meta', tone: 'muted' }), 'break-all')}>
+                    {typeof value === 'string' ? value : JSON.stringify(value)}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -211,6 +234,7 @@ function RecordCard({
 export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
   nodeId: string;
+  scopeLevel: KnowledgeRung;
   threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
@@ -224,6 +248,7 @@ export interface KnowledgeFlyoutProps {
 export function KnowledgeFlyout({
   factoryProjectId,
   nodeId,
+  scopeLevel,
   threadId,
   focusRecordId,
   onSelectRecord,
@@ -231,16 +256,18 @@ export function KnowledgeFlyout({
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, threadId);
+  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
 
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform duration-300"
+      className="border-border bg-card shadow-overlay fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t md:static md:z-auto md:max-h-none md:w-[380px] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
-        <div className="text-muted-foreground p-4 text-sm">Loading knowledge node…</div>
+        <Txt as="p" variant="body" tone="muted" className="p-4">
+          Loading knowledge node…
+        </Txt>
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>
@@ -249,32 +276,32 @@ export function KnowledgeFlyout({
         <>
           <header className="flex items-start gap-2 px-4 py-3">
             <div className="min-w-0">
-              <h2 className="text-foreground truncate text-base font-semibold">{nodeQuery.data.node.name}</h2>
+              <Txt as="h2" variant="subheading" tone="ink" className="truncate">
+                {nodeQuery.data.node.name}
+              </Txt>
               <div className="mt-1 flex items-center gap-2">
-                <span className="bg-fill text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
+                <Txt as="span" variant="meta" tone="muted" className="bg-fill rounded px-1.5 py-0.5">
                   {nodeQuery.data.node.kind}
-                </span>
+                </Txt>
                 <RungBadge rung={nodeQuery.data.node.rung} />
               </div>
             </div>
-            <button
-              type="button"
-              aria-label="Close details"
-              className="text-muted-foreground hover:text-foreground ml-auto rounded p-1"
-              onClick={onClose}
-            >
-              <X size={16} />
-            </button>
+            <Button variant="ghost" size="icon-sm" aria-label="Close details" className="ml-auto" onClick={onClose}>
+              <X />
+            </Button>
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+            {nodeQuery.data.node.description?.trim() ? (
+              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
+            ) : null}
             {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
                 <SectionHeader title="Content" />
                 <CollapsibleContent>
-                  <p className="text-foreground px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                  <Txt as="p" variant="caption" tone="ink" className="px-4 pb-3 break-words whitespace-pre-wrap">
                     <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
-                  </p>
+                  </Txt>
                 </CollapsibleContent>
               </Collapsible>
             ) : null}
@@ -282,21 +309,27 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
-                <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs">
-                  <dt>Kind</dt>
-                  <dd className="text-foreground text-right">{nodeQuery.data.node.kind}</dd>
-                  <dt>Scope</dt>
-                  <dd className="text-foreground text-right break-all">{nodeQuery.data.node.scope.join(' → ')}</dd>
-                  <dt>Created</dt>
-                  <dd className="text-foreground text-right">
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3">
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Kind</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                    {nodeQuery.data.node.kind}
+                  </dd>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Scope</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right break-all')}>
+                    {nodeQuery.data.node.scope.join(' → ')}
+                  </dd>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Created</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
                     {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
                   </dd>
-                  <dt>Updated</dt>
-                  <dd className="text-foreground text-right">
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Updated</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
                     {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
                   </dd>
-                  <dt>Knowledge records</dt>
-                  <dd className="text-foreground text-right">{nodeQuery.data.records.length}</dd>
+                  <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>Knowledge records</dt>
+                  <dd className={cn(textStyle({ tone: 'ink', variant: 'caption' }), 'text-right')}>
+                    {nodeQuery.data.records.length}
+                  </dd>
                 </dl>
               </CollapsibleContent>
             </Collapsible>
@@ -306,13 +339,15 @@ export function KnowledgeFlyout({
               <CollapsibleContent>
                 <div className="flex flex-col gap-2 px-4 pb-3">
                   {nodeQuery.data.records.length === 0 ? (
-                    <p className="text-muted-foreground text-xs">No knowledge records about this node yet.</p>
+                    <Txt as="p" variant="caption" tone="muted">
+                      No knowledge records about this node yet.
+                    </Txt>
                   ) : (
                     nodeQuery.data.records.map(record => (
                       <div
                         key={record.id}
                         className={
-                          record.id === focusRecordId ? 'ring-badge-purple-indicator rounded-lg ring-2' : undefined
+                          record.id === focusRecordId ? cn('rounded-lg', getRecordRingClass(record.pinned)) : undefined
                         }
                       >
                         <RecordCard

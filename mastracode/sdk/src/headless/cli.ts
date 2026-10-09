@@ -10,6 +10,8 @@ import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
+import { listBuiltinModePacks } from '../onboarding/packs.js';
+import { loadSettings, resolveModelDefaults } from '../onboarding/settings.js';
 import {
   createProcessMemoryDiagnosticsFromEnvironment,
   startConfiguredProcessMemoryDiagnostics,
@@ -204,7 +206,8 @@ export async function runMCCli(
   let exitCode = 1;
   try {
     boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
-    const { controller, session, mcpManager, effectiveDefaults } = boot;
+    const { controller, session, mcpManager } = boot;
+    const effectiveDefaults = resolveModelDefaults(loadSettings(args.settings), listBuiltinModePacks());
 
     if (mcpManager?.hasServers()) {
       try {
@@ -267,7 +270,13 @@ export async function runMCCli(
     if (boot) {
       // Stop plugin-contributed signal providers (and the plugin reload listener)
       // before quiescing workers: a provider that keeps polling past this point
-      // could dispatch into a controller that is shutting down.
+      // could dispatch into a controller that is shutting down. Release thread
+      // claims first so a restarted process need not wait out this teardown.
+      try {
+        boot.releaseThreadClaims();
+      } catch {
+        // Best-effort — the process is exiting.
+      }
       try {
         boot.stopPluginSignalProviders();
       } catch {

@@ -60,14 +60,47 @@ function errorText(err: unknown): string {
   return parts.join('; ');
 }
 
+/** Order two Redis stream ids (`<ms>-<seq>`). */
+function compareStreamIds(a: string, b: string): number {
+  const [aMs = '0', aSeq = '0'] = a.split('-');
+  const [bMs = '0', bSeq = '0'] = b.split('-');
+  const ms = BigInt(aMs) - BigInt(bMs);
+  if (ms !== 0n) return ms < 0n ? -1 : 1;
+  const seq = BigInt(aSeq) - BigInt(bSeq);
+  return seq === 0n ? 0 : seq < 0n ? -1 : 1;
+}
+
+/**
+ * Disconnect a client, standalone or cluster.
+ *
+ * node-redis 5 `quit()` never settles on a client that is open but waiting to
+ * reconnect: it marks the socket closed, which ends the reconnect loop before
+ * QUIT is ever written. Such a client has nothing on the wire to drain, and its
+ * offline-queued commands could not be sent after `quit()` either, so destroy
+ * it instead. A cluster's `quit()` quits every node client, so one
+ * reconnecting node is enough to hang it.
+ */
+async function disconnect(client: RedisClientType): Promise<void> {
+  const reconnecting = (c?: { isOpen: boolean; isReady?: boolean }) => !!c && c.isOpen && c.isReady === false;
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, 'masters' | 'replicas'>>;
+  const nodes = [...(cluster.masters ?? []), ...(cluster.replicas ?? [])];
+  if (reconnecting(client) || nodes.some(node => reconnecting(node.client))) {
+    client.destroy();
+    return;
+  }
+  await client.quit();
+}
+
 /**
  * Mastra PubSub backed by Redis Streams.
  *
  * - Each topic maps to a Redis stream key `<prefix>:<topic>`.
  * - Subscriptions with `options.group` use a real Redis consumer group, so
  *   competing subscribers in the same group share the work (round-robin).
- * - Subscriptions without a group create a private per-subscriber consumer
- *   group, so they get fan-out semantics (every subscriber sees every event).
+ * - Subscriptions without a group get fan-out semantics (every subscriber sees
+ *   every event). All fan-out subscribers to one topic in this instance share
+ *   one private consumer group and one reader connection; each extra callback
+ *   is dispatched locally, so it costs no Redis connection.
  * - Nack triggers redelivery by re-publishing the event with an incremented
  *   `deliveryAttempt` field, then XACK-ing the original. This trades strict
  *   FIFO ordering on retry for a simple, reliable redelivery path.
@@ -205,7 +238,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
   // unsubscribe(otherTopic, cb) would tear down the wrong subscription.
+  // Fan-out subscriptions to the same topic share one Subscription, so several
+  // keys can point at the same record.
   #subscriptions: Map<string, Subscription> = new Map();
+  // The shared fan-out reader per topic, and readers still being opened so
+  // concurrent first subscribers to a topic don't each open one.
+  #fanoutReaders: Map<string, Subscription> = new Map();
+  #pendingFanoutReaders: Map<string, Promise<Subscription>> = new Map();
   // Subscribes that are still wiring up Redis (XGROUP CREATE + reader connect).
   // `unsubscribe` and `close` await these so an unsubscribe issued while the
   // subscribe round trip is in flight tears the subscription down instead of
@@ -290,8 +329,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
-   * A fresh, unconnected client with the writer's configuration. Each
-   * subscription needs its own because XREADGROUP BLOCK holds the connection.
+   * A fresh, unconnected client with the writer's configuration. Each reader
+   * (one per fan-out topic, one per grouped subscription) needs its own
+   * because XREADGROUP BLOCK holds the connection.
    */
   #createReadClient(): RedisClientType {
     return this.#writeClient.duplicate() as RedisClientType;
@@ -470,11 +510,113 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     await this.#ensureWriterConnected();
 
-    const isGrouped = !!options?.group;
-    const group = options?.group ?? `__fanout-${globalThis.crypto.randomUUID()}`;
+    const groupAnchor = options?.startFrom === 'latest' ? '$' : '0';
+    if (options?.group) {
+      const sub = await this.#openSubscription(topic, cb, options.group, groupAnchor);
+      this.#subscriptions.set(key, sub);
+      sub.loop = this.#runReadLoop(sub);
+      this.#startReclaimLoop(sub);
+      return;
+    }
+
+    // Fan-out: every subscriber to this topic in this instance shares one
+    // consumer group and reader. Join the topic's reader if one is open (or
+    // being opened); otherwise open it.
+    for (;;) {
+      const reader = this.#fanoutReaders.get(topic);
+      if (reader) return this.#joinFanoutReader(reader, cb, key, groupAnchor);
+      const opening = this.#pendingFanoutReaders.get(topic);
+      if (!opening) break;
+      await opening.catch(() => {});
+    }
+    const opening = this.#openSubscription(topic, cb, undefined, groupAnchor);
+    this.#pendingFanoutReaders.set(topic, opening);
+    try {
+      const sub = await opening;
+      // Register in the same tick the pending entry is cleared, so a
+      // subscriber waiting on `opening` finds the reader and joins it.
+      this.#fanoutReaders.set(topic, sub);
+      this.#subscriptions.set(key, sub);
+      sub.loop = this.#runReadLoop(sub);
+      this.#startReclaimLoop(sub);
+    } finally {
+      this.#pendingFanoutReaders.delete(topic);
+    }
+  }
+
+  /**
+   * Add a callback to a topic's open fan-out reader. The reader may already
+   * have delivered entries this subscriber should see (`startFrom: 'earliest'`)
+   * or still be catching up on entries it should not (`startFrom: 'latest'`),
+   * so the new member buffers live entries while its starting point is
+   * resolved, replays what it missed, then switches to live delivery.
+   */
+  async #joinFanoutReader(sub: Subscription, cb: EventCallback, key: string, anchor: '0' | '$'): Promise<void> {
+    const member: FanoutMember = { joining: [] };
+    sub.members.set(cb, member);
+    this.#subscriptions.set(key, sub);
+    const active = () => sub.members.get(cb) === member && !sub.stopped;
+
+    try {
+      if (anchor === '$') {
+        // Skip everything already in the stream, even entries the shared
+        // reader has not reached yet.
+        const [tail] = await this.#writeClient.xRevRange(sub.streamKey, '+', '-', { COUNT: 1 });
+        member.skipThrough = tail?.id;
+      } else {
+        // Entries up to the group's last-delivered id were read before this
+        // member was buffering, so replay them; later ones arrive live.
+        let boundary: string | undefined;
+        try {
+          const groups = await this.#writeClient.xInfoGroups(sub.streamKey);
+          const info = groups.find(g => String(g.name) === sub.group);
+          boundary = info ? String(info['last-delivered-id']) : undefined;
+        } catch (err) {
+          // No stream (or group) means nothing has been delivered yet.
+          if (!errorText(err).match(/no such key|NOGROUP/i)) throw err;
+        }
+        if (boundary && boundary !== '0-0') {
+          member.skipThrough = boundary;
+          let start = '-';
+          while (active()) {
+            const page = await this.#writeClient.xRange(sub.streamKey, start, boundary, { COUNT: TRIM_PAGE_SIZE });
+            for (const entry of page) {
+              if (!active()) break;
+              this.#deliverDetached(sub, cb, entry.message);
+            }
+            if (page.length < TRIM_PAGE_SIZE) break;
+            start = `(${page[page.length - 1]!.id}`;
+          }
+        }
+      }
+    } catch (err) {
+      sub.members.delete(cb);
+      this.#subscriptions.delete(key);
+      throw err;
+    }
+
+    if (!active()) return;
+    const buffered = member.joining ?? [];
+    for (const entry of buffered) {
+      if (member.skipThrough && compareStreamIds(entry.id, member.skipThrough) <= 0) continue;
+      this.#deliverDetached(sub, cb, entry.fields);
+    }
+    // `skipThrough` stays set: the reader may still be dispatching a batch read
+    // before this member joined (already replayed), or lagging behind a
+    // `latest` member's starting point. clearTopic resets it.
+    member.joining = undefined;
+  }
+
+  async #openSubscription(
+    topic: string,
+    cb: EventCallback,
+    groupName: string | undefined,
+    groupAnchor: '0' | '$',
+  ): Promise<Subscription> {
+    const isGrouped = groupName !== undefined;
+    const group = groupName ?? `__fanout-${globalThis.crypto.randomUUID()}`;
     const consumer = `${group}-${globalThis.crypto.randomUUID()}`;
     const streamKey = this.#streamKey(topic);
-    const groupAnchor = options?.startFrom === 'latest' ? '$' : '0';
 
     // Create the consumer group if it doesn't exist. MKSTREAM creates the
     // stream if needed. BUSYGROUP means another subscriber raced us — fine.
@@ -508,14 +650,16 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       this.#logger?.debug?.('redis-streams: consumer group already exists', { topic, group });
     }
 
-    // Each subscription gets a dedicated reader connection because XREADGROUP
-    // with BLOCK > 0 holds the connection until a message arrives.
+    // Each reader (per fan-out topic, per grouped subscription) gets a
+    // dedicated connection because XREADGROUP with BLOCK > 0 holds the
+    // connection until a message arrives.
     const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
     await readClient.connect();
 
-    const sub: Subscription = {
-      cb,
+    return {
+      members: new Map([[cb, {}]]),
+      settling: new Map(),
       topic,
       streamKey,
       group,
@@ -529,9 +673,6 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       reclaimTimer: undefined,
       inFlight: new Map(),
     };
-    this.#subscriptions.set(key, sub);
-    sub.loop = this.#runReadLoop(sub);
-    this.#startReclaimLoop(sub);
   }
 
   /**
@@ -666,6 +807,19 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const sub = this.#subscriptions.get(key);
     if (!sub) return;
     if (sub.teardown) return sub.teardown;
+
+    if (sub.members.size > 1 && sub.members.delete(cb)) {
+      // Other members keep the reader. Entries handed to this member no
+      // longer wait on it.
+      this.#subscriptions.delete(key);
+      for (const settle of [...sub.settling.values()]) void settle(cb);
+      return;
+    }
+
+    // Last member: close the reader. The member stays attached so entries an
+    // already-issued read returns are still delivered to it. A subscriber
+    // arriving from now on opens a fresh reader rather than join this one.
+    if (this.#fanoutReaders.get(topic) === sub) this.#fanoutReaders.delete(topic);
     sub.stopped = true;
     if (sub.reclaimTimer) {
       clearTimeout(sub.reclaimTimer);
@@ -681,7 +835,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   async #stopSubscription(sub: Subscription): Promise<void> {
     // Cancel the in-flight blocking XREADGROUP by closing the reader.
     try {
-      await sub.readClient.quit();
+      await disconnect(sub.readClient);
     } catch (err) {
       this.#logger?.debug?.('redis-streams: reader quit failed', {
         topic: sub.topic,
@@ -754,6 +908,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         if (sub.topic === topic) {
           sub.lastId = undefined;
           sub.groupAnchor = '0';
+          for (const member of sub.members.values()) member.skipThrough = undefined;
         }
       }
     } catch (err) {
@@ -942,8 +1097,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     // Walk the actual subscriptions and pass the original topic through so
     // unsubscribe's key lookup works.
-    const subs = [...this.#subscriptions.values()];
-    await Promise.all(subs.map(sub => this.unsubscribe(sub.topic, sub.cb)));
+    const subs = new Set(this.#subscriptions.values());
+    await Promise.all([...subs].flatMap(sub => [...sub.members.keys()].map(cb => this.unsubscribe(sub.topic, cb))));
     this.#localCallbacks.clear();
 
     // Let publishes that were accepted before close() reach the stream. A
@@ -954,7 +1109,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
     if (this.#writeClient.isOpen) {
       try {
-        await this.#writeClient.quit();
+        await disconnect(this.#writeClient);
       } catch (err) {
         this.#logger?.debug?.('redis-streams: writer quit failed', {
           err: err instanceof Error ? err.message : err,
@@ -1038,18 +1193,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   async #deliverMessage(sub: Subscription, streamId: string, fields: Record<string, string>): Promise<void> {
-    let event: Event;
-    try {
-      event = JSON.parse(fields.event ?? '{}') as Event;
-      // createdAt is serialized as a string; rehydrate.
-      if (typeof event.createdAt === 'string') {
-        event.createdAt = new Date(event.createdAt);
-      }
-    } catch (err) {
+    const event = this.#parseEvent(fields);
+    if (!event) {
       this.#logger?.debug?.('redis-streams: malformed payload, dropping', {
         topic: sub.topic,
         streamId,
-        err: err instanceof Error ? err.message : err,
       });
       try {
         await this.#writeClient.xAck(sub.streamKey, sub.group, streamId);
@@ -1177,6 +1325,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const expire = async () => {
       if (settled) return;
       settled = true;
+      sub.settling.delete(streamId);
       const attempt = event.deliveryAttempt ?? 1;
       const drop = attempt >= this.#maxDeliveryAttempts;
       const payload = drop ? '' : JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event);
@@ -1194,9 +1343,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         });
         // Same recovery as a failed nack republish: the entry is still
         // pending, so let a future reclaim (or the next timeout pass, if the
-        // handler is still hung) retry it.
+        // handler is still hung) retry it. Fan-out readers have no reclaim
+        // scan, so they keep the timeout registration for the next pass.
         settled = false;
-        sub.inFlight.delete(streamId);
+        sub.settling.set(streamId, cb => settleMember(cb, false));
+        if (sub.isGrouped) sub.inFlight.delete(streamId);
+        else sub.inFlight.set(streamId, { since: Date.now(), expire });
         return;
       }
       sub.inFlight.delete(streamId);
@@ -1235,24 +1387,144 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       }
     };
 
+    // The entry is settled in Redis once, after every member it was handed to
+    // has settled: acked if all acked, nacked (one republish) if any nacked.
+    // Members joining the topic buffer the entry instead; members whose
+    // starting point is past it skip it.
+    const waiting = new Set<EventCallback>();
+    let anyNack = false;
+    const settleMember = async (cb: EventCallback, nacked: boolean) => {
+      if (settled || !waiting.delete(cb)) return;
+      if (nacked) anyNack = true;
+      if (waiting.size > 0) return;
+      sub.settling.delete(streamId);
+      await (anyNack ? nack() : ack());
+    };
+    const targets: EventCallback[] = [];
+    for (const [cb, member] of sub.members) {
+      if (member.joining) {
+        member.joining.push({ id: streamId, fields });
+        continue;
+      }
+      if (member.skipThrough) {
+        if (compareStreamIds(streamId, member.skipThrough) <= 0) continue;
+        member.skipThrough = undefined;
+      }
+      waiting.add(cb);
+      targets.push(cb);
+    }
+    if (targets.length === 0) {
+      await ack();
+      return;
+    }
+
     sub.inFlight.set(streamId, { since: Date.now(), expire });
+    sub.settling.set(streamId, cb => settleMember(cb, false));
+    for (const cb of targets) {
+      // Each member gets its own Event object so one handler mutating it
+      // can't affect another.
+      const memberEvent = targets.length === 1 ? event : this.#parseEvent(fields)!;
+      this.#invokeCallback(
+        cb,
+        memberEvent,
+        () => settleMember(cb, false),
+        () => settleMember(cb, true),
+        extend,
+      );
+    }
+  }
+
+  /**
+   * Invoke a handler without awaiting it. EventCallback is typed `=> void`
+   * but handlers commonly return a promise (TS allows Promise<void> to satisfy
+   * void); a rejection or synchronous throw routes to nack instead of silently
+   * dropping the message. We do NOT await — serializing messages on a
+   * subscription would deadlock orchestration callbacks that await their own
+   * future events.
+   */
+  #invokeCallback(
+    cb: EventCallback,
+    event: Event,
+    ack: () => Promise<void>,
+    nack: () => Promise<void>,
+    extend?: () => Promise<void>,
+  ): void {
     try {
-      // EventCallback is typed `=> void` but handlers commonly return a
-      // promise (TS allows Promise<void> to satisfy void). If we get one
-      // back, attach a catch handler so async rejections route to nack
-      // instead of silently dropping the message. We do NOT await here —
-      // serializing messages on a subscription would deadlock orchestration
-      // callbacks that await their own future events.
-      const result: unknown = sub.cb(event, ack, nack, extend);
+      const result: unknown = cb(event, ack, nack, extend);
       if (result && typeof (result as { then?: unknown; catch?: unknown }).catch === 'function') {
         (result as Promise<unknown>).catch(async () => {
           await nack();
         });
       }
     } catch {
-      // Caller threw synchronously — treat as nack.
-      await nack();
+      void nack();
     }
+  }
+
+  #parseEvent(fields: Record<string, string>): Event | undefined {
+    try {
+      const event = JSON.parse(fields.event ?? '{}') as Event;
+      // createdAt is serialized as a string; rehydrate.
+      if (typeof event.createdAt === 'string') {
+        event.createdAt = new Date(event.createdAt);
+      }
+      return event;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Deliver an entry to one fan-out member outside the shared group's PEL:
+   * entries the topic's reader handed out before the member joined. Ack is a
+   * no-op (the group settles the entry on its own); nack republishes, which
+   * redelivers to every member just as a nack on the shared entry would.
+   */
+  #deliverDetached(sub: Subscription, cb: EventCallback, fields: Record<string, string>): void {
+    const event = this.#parseEvent(fields);
+    if (!event) return;
+    let settled = false;
+    const nack = async () => {
+      if (settled) return;
+      settled = true;
+      const attempt = event.deliveryAttempt ?? 1;
+      if (attempt >= this.#maxDeliveryAttempts) {
+        this.#logger?.warn?.('redis-streams: dropping event after max delivery attempts', {
+          topic: sub.topic,
+          eventType: event.type,
+          eventId: event.id,
+          attempt,
+          max: this.#maxDeliveryAttempts,
+        });
+        return;
+      }
+      const payload = { event: JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event) };
+      try {
+        if (this.#streamIdleTtlMs > 0) {
+          await this.#writeClient
+            .multi()
+            .xAdd(sub.streamKey, '*', payload)
+            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .exec();
+        } else {
+          await this.#writeClient.xAdd(sub.streamKey, '*', payload);
+        }
+      } catch (err) {
+        this.#logger?.warn?.('redis-streams: nack republish failed for replayed event', {
+          topic: sub.topic,
+          eventId: event.id,
+          err: err instanceof Error ? err.message : err,
+        });
+      }
+    };
+    this.#invokeCallback(
+      cb,
+      event,
+      async () => {
+        settled = true;
+      },
+      nack,
+    );
   }
 
   #deliverLocal(topic: string, event: Event): void {
@@ -1292,8 +1564,25 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 }
 
+interface FanoutMember {
+  // Set while the member is resolving its starting point; live entries are
+  // buffered here until then.
+  joining?: { id: string; fields: Record<string, string> }[];
+  // Entries at or before this id were already delivered to (or are before the
+  // start of) this member, so the shared reader skips them for it.
+  skipThrough?: string;
+}
+
+/**
+ * A reader: one consumer, one connection. A grouped subscription has exactly
+ * one member; a fan-out reader is shared by every fan-out subscriber to its
+ * topic in this instance.
+ */
 interface Subscription {
-  cb: EventCallback;
+  members: Map<EventCallback, FanoutMember>;
+  // Per in-flight entry: mark a member as settled-with-ack when it leaves
+  // before settling, so the entry is not stranded.
+  settling: Map<string, (cb: EventCallback) => Promise<void>>;
   topic: string;
   streamKey: string;
   group: string;

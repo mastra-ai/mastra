@@ -104,25 +104,25 @@ describe('Composer on a lazy user-session draft', () => {
     expect(preparation.posted).toEqual(['recover this prompt']);
   });
 
-  it('applies a draft-selected pack before dispatching the first prompt', async () => {
-    const preparation = stubPreparingSession({ createdSessionTitle: 'use my pack' });
+  it('applies a draft-selected model before dispatching the first prompt', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'use my model' });
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
-        HttpResponse.json({ session: createdDraftSession('use my pack') }),
+        HttpResponse.json({ session: createdDraftSession('use my model') }),
       ),
     );
     const user = userEvent.setup();
     const { client } = renderDraft();
 
     const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Balanced')));
+    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
-    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Mine'));
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-5.4-mini'));
     expect(preparation.operations).toEqual([]);
 
     const message = screen.getByRole('textbox', { name: 'Message' });
-    await user.type(message, 'use my pack');
+    await user.type(message, 'use my model');
     await user.keyboard('{Enter}');
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
@@ -130,20 +130,18 @@ describe('Composer on a lazy user-session draft', () => {
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.delivered).toEqual(['use my pack']));
-    // Activation applies the pack's models server-side, so no separate model
-    // switch is sent for the pack-derived model.
-    expect(preparation.operations).toEqual(['mode:build', 'pack:mine', 'message']);
+    await waitFor(() => expect(preparation.delivered).toEqual(['use my model']));
+    expect(preparation.operations).toEqual(['mode:build', 'model:openai/gpt-5.4-mini', 'message']);
   });
 
-  it('still dispatches the first prompt when draft pack activation fails', async () => {
+  it('still dispatches the first prompt when the draft model switch fails', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'keep my prompt' });
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
-      http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, () =>
-        HttpResponse.json({ error: 'Pack unavailable' }, { status: 500 }),
+      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${SESSION_ID}/model`, () =>
+        HttpResponse.json({ error: 'Model unavailable' }, { status: 500 }),
       ),
     );
     const user = userEvent.setup();
@@ -151,7 +149,7 @@ describe('Composer on a lazy user-session draft', () => {
 
     const modelPicker = await screen.findByLabelText('Session model');
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
     const message = screen.getByRole('textbox', { name: 'Message' });
     await user.type(message, 'keep my prompt');
     await user.keyboard('{Enter}');
@@ -162,10 +160,6 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
-    // The user must learn the pack was not applied.
-    expect(await screen.findByText('Pack unavailable')).toBeInTheDocument();
-    // The pack failed, so its build model must not be half-applied either —
-    // the session keeps its own defaults.
     expect(preparation.operations).toEqual(['mode:build', 'message']);
   });
 

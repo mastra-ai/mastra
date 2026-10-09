@@ -116,7 +116,7 @@ export function SlackConnectionSettings() {
   return (
     <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
-        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption" role="status">
           Loading Slack connection…
         </Txt>
       ) : accountsQuery.error ? (
@@ -176,7 +176,7 @@ export function SlackConnectionSettings() {
                       </span>
                     }
                     description={
-                      <Txt as="span" variant="meta" className="text-placeholder">
+                      <Txt tone="faint" as="span" variant="meta">
                         Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
                       </Txt>
                     }
@@ -257,13 +257,13 @@ export function SlackConnectionSettings() {
                   description={
                     <span>
                       Slack messages from{' '}
-                      <strong className="font-medium">
+                      <Txt as="strong" variant="label">
                         <IdentityWithTooltip
                           label={account.externalUserName ?? account.externalUserId}
                           idLabel="Slack user ID"
                           id={account.externalUserId}
                         />
-                      </strong>{' '}
+                      </Txt>{' '}
                       will no longer start or continue Factory sessions.
                     </span>
                   }

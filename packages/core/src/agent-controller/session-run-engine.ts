@@ -7,8 +7,10 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { AgentThreadSubscription } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
+import { isLeaseProvider } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -54,7 +56,6 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'tool-call-resumed'>
   | StreamPayloadChunk<'step-output'>
   | StreamPayloadChunk<'watch'>
-  | StreamPayloadChunk<'tripwire'>
   | StreamPayloadChunk<'is-task-complete'>
   | StreamPayloadChunk<'background-task-started'>
   | StreamPayloadChunk<'background-task-completed'>
@@ -80,6 +81,7 @@ type StreamChunk =
   | StreamPayloadChunk<'tool-call-approval'>
   | StreamPayloadChunk<'tool-call-suspended'>
   | StreamPayloadChunk<'error'>
+  | StreamPayloadChunk<'tripwire'>
   | StreamPayloadChunk<'step-finish'>
   | StreamPayloadChunk<'finish'>
   | StreamPayloadChunk<'goal'>
@@ -530,6 +532,7 @@ export class SessionRunEngine {
           chunk.type === 'finish' ||
           chunk.type === 'error' ||
           chunk.type === 'abort' ||
+          chunk.type === 'tripwire' ||
           chunk.type === 'tool-call-suspended' ||
           this.#session.run.isAbortRequested()
         ) {
@@ -895,6 +898,53 @@ export class SessionRunEngine {
           abortSignal: this.#session.run.getAbortSignal(),
         };
 
+        // A retained approval prompt can be replayed after this run has already
+        // advanced to a generic tool suspension. Ignore that obsolete prompt and
+        // let the matching `tool-call-suspended` chunk restore the current gate.
+        const currentRunId = binding.runId;
+        const currentThreadId = binding.threadId;
+        const pubsub = typeof agent.getPubSub === 'function' ? agent.getPubSub() : undefined;
+        const getLeaseProvider = (pubsub as { getLeaseProvider?: () => unknown } | undefined)?.getLeaseProvider;
+        const hasPersistentLease = getLeaseProvider
+          ? getLeaseProvider.call(pubsub) !== undefined
+          : isLeaseProvider(pubsub);
+        const currentSuspension =
+          currentRunId && currentThreadId && hasPersistentLease
+            ? agentThreadStreamRuntime.getResumableThreadRunSuspension(
+                {
+                  threadId: currentThreadId,
+                  resourceId: binding.resourceId,
+                  runId: currentRunId,
+                  toolCallId,
+                },
+                pubsub,
+              )
+            : undefined;
+        let currentSuspensionRequiresApproval = currentSuspension ? currentSuspension.kind === 'approval' : undefined;
+        if (
+          currentRunId &&
+          hasPersistentLease &&
+          currentSuspensionRequiresApproval === undefined &&
+          typeof agent.listSuspendedRuns === 'function'
+        ) {
+          try {
+            const result = await agent.listSuspendedRuns({
+              threadId: currentThreadId,
+              resourceId: binding.resourceId,
+            });
+            currentSuspensionRequiresApproval = result?.runs
+              .find(run => run.runId === currentRunId)
+              ?.toolCalls.find(toolCall => toolCall.toolCallId === toolCallId)?.requiresApproval;
+          } catch (error) {
+            if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+              throw error;
+            }
+          }
+        }
+        if (currentSuspensionRequiresApproval === false) {
+          break;
+        }
+
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });
           break;
@@ -1039,9 +1089,29 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
+        if (!(streamError instanceof AgentThreadLeaseLostError)) {
+          this.retractFailedRunSuspensions({
+            runId: chunk.runId ?? this.#session.run.getRunId(),
+            reason: streamError.message,
+          });
+        }
+        break;
+      }
+
+      case 'tripwire': {
+        // A processor tripwire ends the run with no `finish` chunk. Record it as
+        // the terminal error so the run settles with a visible reason.
+        const payload = getPayload(chunk);
+        const reason = getString(payload.reason) || 'A processor stopped the run.';
+        const processorId = getString(payload.processorId);
+        const errorMessage = processorId ? `Processor "${processorId}" stopped the run: ${reason}` : reason;
+        this.setStopReason(state.currentMessage, 'error', true);
+        this.setErrorMessage(state.currentMessage, errorMessage);
+        state.terminalError = errorMessage;
+        state.terminalFinishReason = 'tripwire';
         this.retractFailedRunSuspensions({
           runId: chunk.runId ?? this.#session.run.getRunId(),
-          reason: streamError.message,
+          reason: errorMessage,
         });
         break;
       }
@@ -1271,11 +1341,15 @@ export class SessionRunEngine {
             });
           }
 
+          // A retrying marker reports one failed attempt of a cycle OM is still working on;
+          // only the cycle's final failure may stop the run.
+          const retrying = Object.hasOwn(payload, 'retrying') && payload.retrying === true;
           if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+            !retrying &&
+            (!Object.hasOwn(payload, 'failurePolicy') ||
+              !Object.hasOwn(payload, 'failureKind') ||
+              payload.failurePolicy !== 'continue' ||
+              payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model'))
           ) {
             this.abortForOmFailure({ operationType, stage: 'run', error });
             return { message: state.currentMessage };
@@ -1645,7 +1719,9 @@ export class SessionRunEngine {
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
-      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      if (!(streamError instanceof AgentThreadLeaseLostError)) {
+        this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      }
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
@@ -1695,6 +1771,7 @@ export class SessionRunEngine {
             chunk.type === 'finish' ||
             chunk.type === 'error' ||
             chunk.type === 'abort' ||
+            chunk.type === 'tripwire' ||
             chunk.type === 'tool-call-suspended'
           ) {
             const suspended =

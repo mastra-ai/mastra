@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -51,7 +50,10 @@ function makeTrace(
   };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 function headerTexts(container: HTMLElement): (string | null)[] {
   const top = container.querySelector('.data-list-top');
@@ -557,44 +559,16 @@ describe('TracesListView — custom columns', () => {
   });
 });
 
-describe('TracesListView — scrolling back to the top', () => {
-  it('re-reads the scroll position once a fresh query resolves', () => {
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-    const { rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-    dispatchEvent.mockClear();
+describe('TracesListView — scroll container', () => {
+  const gridOf = (container: HTMLElement) => container.querySelector('[style*="grid-template-columns"]');
+
+  it('keeps the same scroll container once a query resolves', () => {
+    const { container, rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    const gridBefore = gridOf(container);
 
     rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
 
-    // The list swapped its scroll container, so the virtualizer has to be told
-    // to read the new element's scrollTop rather than keep the old offset.
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(true);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone while paginating', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
-        isFetchingNextPage
-        onTraceClick={vi.fn()}
-      />,
-    );
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone when a query starts', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
+    expect(gridOf(container)).toBe(gridBefore);
   });
 });
 
@@ -684,5 +658,79 @@ describe('TracesListView — featuring by trace alone', () => {
     const rows = screen.getAllByRole('button');
     expect(rows[0]?.hasAttribute('data-featured')).toBe(true);
     expect(rows[1]?.hasAttribute('data-featured')).toBe(false);
+  });
+});
+
+describe('TracesListView column reordering', () => {
+  function dragHeader(container: HTMLElement, from: string, to: string) {
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const cells = Array.from(top.children) as HTMLElement[];
+    const source = cells.find(cell => cell.textContent === from);
+    const target = cells.find(cell => cell.textContent === to);
+    assert(source && target);
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? '',
+      types: ['application/x-mastra-data-list-column'],
+      effectAllowed: 'move',
+      dropEffect: 'move',
+    };
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+  }
+
+  function visualHeaders(container: HTMLElement): string[] {
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const cells = Array.from(top.children) as HTMLElement[];
+    const css = container.querySelector('style')?.textContent ?? '';
+    const orderOf = (index: number) =>
+      Number(new RegExp(`nth-child\\(${index + 1}\\) \\{ order: (\\d+)`).exec(css)?.[1]);
+    return cells
+      .map((cell, index) => ({ text: cell.textContent ?? '', order: orderOf(index) }))
+      .sort((a, b) => a.order - b.order)
+      .map(cell => cell.text);
+  }
+
+  describe('when every column is rendered', () => {
+    it('makes every header draggable, including the Start column', () => {
+      const { container } = render(
+        <TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />,
+      );
+      const top = container.querySelector('.data-list-top');
+      assert(top);
+      expect(Array.from(top.children).every(cell => cell.getAttribute('draggable') === 'true')).toBe(true);
+    });
+  });
+
+  describe('when a column is moved and then optional columns change', () => {
+    it('keeps the moved order by column key', () => {
+      const traces = [makeTrace({ traceId: 'trace-1' })];
+      const base = { visibleColumns: ['type', 'input', 'duration'] as const, customColumns: [], metadataKeys: [] };
+      const { container, rerender } = render(
+        <TracesListView traces={traces} columnPreferences={base} onTraceClick={vi.fn()} />,
+      );
+      dragHeader(container, 'Status', 'Start');
+      expect(visualHeaders(container)).toEqual([
+        'Status',
+        'Start',
+        'Primitive type',
+        'Primitive name',
+        'Input',
+        'Duration',
+      ]);
+
+      rerender(
+        <TracesListView
+          traces={traces}
+          columnPreferences={{ ...base, visibleColumns: ['input', 'duration'], metadataKeys: ['tenant'] }}
+          onTraceClick={vi.fn()}
+        />,
+      );
+      expect(visualHeaders(container)).toEqual(['Status', 'Start', 'Primitive name', 'Input', 'Duration', 'tenant']);
+    });
   });
 });

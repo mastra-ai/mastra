@@ -3,18 +3,18 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import {
+  useCompareExperiments,
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useScoresByExperimentId,
+} from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
 import { ScoreDelta } from './score-delta';
-import { useCompareExperiments } from '@/domains/datasets/hooks/use-compare-experiments';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useScoresByExperimentId,
-} from '@/domains/datasets/hooks/use-dataset-experiments';
 
 interface ExperimentsComparisonProps {
   datasetId: string;
@@ -30,10 +30,27 @@ const cell = 'min-w-0 px-4 py-3';
  */
 export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB }: ExperimentsComparisonProps) {
   const { Link, paths } = useLinkComponent();
-  const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
+  const {
+    data: comparison,
+    isLoading,
+    error,
+  } = useCompareExperiments({
+    datasetId: datasetId,
+    experimentIdA: experimentIdA,
+    experimentIdB: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) && Boolean(experimentIdB) },
+  });
 
-  const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
-  const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
+  const { data: expA, isLoading: isExperimentALoading } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdA,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdA) },
+  });
+  const { data: expB, isLoading: isExperimentBLoading } = useDatasetExperiment({
+    datasetId: datasetId,
+    experimentId: experimentIdB,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentIdB) },
+  });
 
   const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
 
@@ -47,16 +64,26 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
     datasetId,
     experimentId: baselineId,
     experimentStatus: baselineExperiment?.status,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(baselineId) },
   });
   const { data: contenderResults, isLoading: isContenderLoading } = useDatasetExperimentResults({
     datasetId,
     experimentId: contenderId,
     experimentStatus: contenderExperiment?.status,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(contenderId) },
   });
 
   // Scorer reasons live in the scores store, not on the result rows.
-  const { data: baselineScores } = useScoresByExperimentId(baselineId, baselineExperiment?.status);
-  const { data: contenderScores } = useScoresByExperimentId(contenderId, contenderExperiment?.status);
+  const { data: baselineScores } = useScoresByExperimentId({
+    experimentId: baselineId,
+    experimentStatus: baselineExperiment?.status,
+    queryOptions: { enabled: Boolean(baselineId) },
+  });
+  const { data: contenderScores } = useScoresByExperimentId({
+    experimentId: contenderId,
+    experimentStatus: contenderExperiment?.status,
+    queryOptions: { enabled: Boolean(contenderId) },
+  });
 
   const rows = useMemo(
     () =>
@@ -98,7 +125,7 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
     return { baseline, contender };
   }, [rows, scorerIds]);
 
-  if (isLoading) {
+  if (isLoading || isExperimentALoading || isExperimentBLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner />
@@ -115,7 +142,11 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="py-5 text-center text-body text-muted-foreground">No comparison data</div>;
+    return (
+      <Txt as="p" variant="body" tone="muted" className="py-5 text-center">
+        No comparison data
+      </Txt>
+    );
   }
 
   return (
@@ -126,12 +157,10 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
           role="row"
           className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
         >
-          <div
-            role="columnheader"
-            aria-label="Items"
-            className={`${cell} text-caption text-muted-foreground uppercase`}
-          >
-            Items
+          <div role="columnheader" aria-label="Items" className={cn('text-muted-foreground', `${cell} uppercase`)}>
+            <Txt as="span" variant="caption" className="block">
+              Items
+            </Txt>
           </div>
           <div role="columnheader" aria-label="Baseline" className={cell}>
             <ComparisonSideHeader
@@ -169,8 +198,8 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
                   href={paths.datasetItemLink(datasetId, row.itemId)}
                   aria-label={`Open item ${row.itemId}`}
                   className={cn(
-                    'flex items-start gap-1.5 text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                     row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
+                    'flex items-start gap-1.5 break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                   )}
                 >
                   <Txt as="span" variant="caption" font="mono" className="min-w-0">

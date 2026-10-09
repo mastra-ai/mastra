@@ -2,5 +2,74 @@ import { createConfig } from '@internal/lint/eslint';
 
 const config = await createConfig();
 
+// Same BDD structure enforced for playground tests: outer describe = the unit,
+// inner describe('when …') = one precondition, each it() = one outcome.
+const BDD_MESSAGE =
+  "BDD: every it()/test() must live inside a describe('when …') precondition block. " +
+  "Outer describe = the unit, inner describe('when …') = ONE precondition, each it = ONE outcome.";
+
+const testFunctionNames = new Set(['test', 'it']);
+const testModifiers = new Set(['skip', 'only', 'todo', 'fails', 'each']);
+
+function isTestCall(node) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee;
+  if (callee.type === 'Identifier') return testFunctionNames.has(callee.name);
+  return (
+    callee.type === 'MemberExpression' &&
+    callee.object.type === 'Identifier' &&
+    testFunctionNames.has(callee.object.name) &&
+    callee.property.type === 'Identifier' &&
+    testModifiers.has(callee.property.name)
+  );
+}
+
+function isDescribeCall(node) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee;
+  if (callee.type === 'Identifier') return callee.name === 'describe';
+  return callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'describe';
+}
+
+function describeTitle(node) {
+  const arg = node.arguments[0];
+  if (!arg) return null;
+  if (arg.type === 'Literal' && typeof arg.value === 'string') return arg.value;
+  if (arg.type === 'TemplateLiteral' && arg.quasis.length >= 1) return arg.quasis[0].value.cooked;
+  return null;
+}
+
+const bddPlugin = {
+  rules: {
+    'test-needs-when-describe': {
+      meta: { type: 'problem', schema: [] },
+      create(context) {
+        return {
+          CallExpression(node) {
+            if (!isTestCall(node)) return;
+            const ancestors = context.sourceCode.getAncestors(node);
+            const nearest = ancestors.findLast(isDescribeCall);
+            const title = nearest && describeTitle(nearest);
+            if (!nearest || title == null || !/^when\b/.test(title)) {
+              context.report({ node, message: BDD_MESSAGE });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
+// Tests moved from playground-ui predate this rule (it only covered Playwright
+// specs there). They are frozen here; new hook tests must follow the BDD layout.
+
 /** @type {import("eslint").Linter.Config[]} */
-export default [{ ignores: ['.storybook/**'] }, ...config];
+export default [
+  { ignores: ['.storybook/**'] },
+  ...config,
+  {
+    files: ['src/hooks/**/*.{test,spec}.{ts,tsx}'],
+    plugins: { bdd: bddPlugin },
+    rules: { 'bdd/test-needs-when-describe': 'error' },
+  },
+];

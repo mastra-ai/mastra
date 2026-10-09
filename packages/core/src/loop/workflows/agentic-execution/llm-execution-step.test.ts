@@ -3751,4 +3751,66 @@ describe('per-step modelSettings precedence (call-time < per-model < processor)'
     expect((setInferenceContext.mock.calls[0]?.[0] as any)?.parameters?.temperature).toBe(0.1);
     expect(doStream.mock.calls[0]?.[0]?.temperature).toBe(0.1);
   });
+
+  it.each([
+    { sampled: true, expectedToolNames: ['lookup'] },
+    { sampled: false, expectedToolNames: undefined },
+  ])(
+    'serializes MODEL_INFERENCE tool definitions only for a sampled trace (sampled: $sampled)',
+    async ({ sampled, expectedToolNames }) => {
+      const doStream = finishingStream();
+      const setInferenceContext = vi.fn();
+      const modelSpanTracker = {
+        // An unsampled trace still gets a tracker, backed by a no-op span.
+        getTracingContext: vi.fn(() => ({ currentSpan: { isValid: sampled } })),
+        reportGenerationError: vi.fn(),
+        endGeneration: vi.fn(),
+        updateGeneration: vi.fn(),
+        wrapStream: vi.fn(<T>(stream: T) => stream),
+        startStep: vi.fn(),
+        setInferenceContext,
+        startInference: vi.fn(),
+      };
+
+      const llmExecutionStep = baseRun({
+        modelSpanTracker: modelSpanTracker as any,
+        tools: { lookup: { description: 'Look something up', inputSchema: z.object({ query: z.string() }) } },
+        models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      });
+
+      await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+      const context = setInferenceContext.mock.calls[0]?.[0] as any;
+      expect(context?.tools?.map((tool: any) => tool.name)).toEqual(expectedToolNames);
+      // The provider still gets the tool either way.
+      expect(doStream.mock.calls[0]?.[0]?.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    },
+  );
+
+  it('records provider tools on MODEL_INFERENCE with the type a v3 model receives', async () => {
+    const doStream = finishingStream();
+    const setInferenceContext = vi.fn();
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({ currentSpan: { isValid: true } })),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+      setInferenceContext,
+      startInference: vi.fn(),
+    };
+
+    const llmExecutionStep = baseRun({
+      modelSpanTracker: modelSpanTracker as any,
+      tools: { search: { id: 'openai.web_search', type: 'provider-defined', args: {} } },
+      models: [{ id: 'test-model', maxRetries: 0, model: { ...mockModel(doStream), specificationVersion: 'v3' } }],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    const sentType = doStream.mock.calls[0]?.[0]?.tools?.[0]?.type;
+    expect(sentType).toBe('provider');
+    expect((setInferenceContext.mock.calls[0]?.[0] as any)?.tools?.[0]?.type).toBe(sentType);
+  });
 });

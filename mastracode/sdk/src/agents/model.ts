@@ -1,16 +1,15 @@
 import type { ModelWithRetries } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
+import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
-import { listBuiltinModePacks, resolveModePackFallbackChain } from '../onboarding/packs.js';
+import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
+import { toMemoryModelId } from '../onboarding/packs.js';
 import {
-  findModePackForModel,
   loadSettings,
   resolveDefaultThinkingLevel,
-  resolveModePackModels,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
@@ -194,7 +193,24 @@ export function resolveModel(
     throw new Error(`Invalid model id: ${modelId}`);
   }
 
+  // Deployed web registers a per-tenant credential store provider; when the
+  // request carries an authenticated tenant, resolve credentials through the
+  // caller's own store (user > org > env). Undefined = global AuthStorage.
+  const tenantCredentialStore = resolveCredentialStore(options?.requestContext);
+  const baseCredentialStore = tenantCredentialStore ?? getGlobalAuthStorage();
+
   if (providerId === AMAZON_BEDROCK_GATEWAY_ID) {
+    // Bedrock authenticates through the server process's AWS credential chain,
+    // never a tenant credential. A tenant store only lets it through when the
+    // operator opted the deployment in.
+    if (
+      tenantCredentialStore?.allowEnvironmentFallback === false &&
+      !tenantCredentialStore.allowsDeploymentCredentials?.(AMAZON_BEDROCK_GATEWAY_ID)
+    ) {
+      throw new ProviderAuthRequiredError(
+        'Amazon Bedrock is not enabled for this Factory deployment. The operator must provide AWS credentials to the server and set FACTORY_DEPLOYMENT_MODEL_PROVIDERS=amazon-bedrock.',
+      );
+    }
     const bedrockGateway = createAmazonBedrockGateway();
     const routerId = `${AMAZON_BEDROCK_GATEWAY_ID}/${bareModelId}`;
     const auth = bedrockGateway.resolveAuth({
@@ -216,10 +232,6 @@ export function resolveModel(
   const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-  // Deployed web registers a per-tenant credential store provider; when the
-  // request carries an authenticated tenant, resolve credentials through the
-  // caller's own store (user > org > env). Undefined = global AuthStorage.
-  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
   const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
   const gateway = createMastraCodeGateway({
     mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
@@ -280,68 +292,39 @@ export function resolveRequestThinkingLevel(
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
-/** Structural pack shape for fallback resolution (custom pack models are partial by nature). */
-export interface ResolvableModePack {
-  id: string;
-  name: string;
-  models: Record<string, string>;
-}
-
-/** All packs a fallback chain may reference: every builtin plus saved customs. */
-export function listResolvableModePacks(settings: ReturnType<typeof loadSettings>): ResolvableModePack[] {
-  return [
-    ...listBuiltinModePacks(),
-    ...settings.customModelPacks.map(pack => ({
-      id: `custom:${pack.name}`,
-      name: pack.name,
-      models: { ...pack.models },
-    })),
-  ];
-}
-
 /**
- * Dynamic model function that reads the current model from controller state.
- * This allows runtime model switching via the /models picker.
- *
- * When the session's model came from a pack with a fallback chain configured
- * (`settings.models.packFallbacks`), returns core's `ModelWithRetries[]`
- * fallback array instead of a bare model: the active pack's model first, then
- * each fallback pack's model for the same mode. Core advances the array when
- * the error processors decline to retry (pool exhausted / persistent outage —
- * see AccountRotationProcessor). Entry ids are unique per occurrence — the
- * one allowed revisit of a pack gets `<packId>#2` — because core re-resolves
- * the active fallback index by id across agentic steps.
+ * Dynamic model function that reads the current model and optional ordered
+ * fallback route from controller state. Route entry ids are opaque host-owned
+ * identifiers; repeated ids receive occurrence suffixes because core tracks the
+ * active fallback index by id across agentic steps.
  */
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-): ResolvedModel | ModelWithRetries[] {
-  const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-
-  const controllerState = agentControllerContext?.getState?.() as
+): IdentifiedModelConfig | ModelWithRetries[] {
+  const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
+  const state = controller?.getState?.() as
     | {
-        activeModelPackId?: unknown;
-        mastracodePendingPackFallback?: { toPackId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
+        modelRoute?: {
+          entries?: Array<{ id?: unknown; modelId?: unknown }>;
+        };
+        mastracodePendingModelFallback?: { toEntryId?: unknown; toModelId?: unknown; threadId?: unknown } | null;
       }
     | undefined;
-  const pendingState = controllerState?.mastracodePendingPackFallback;
+  const pendingState = state?.mastracodePendingModelFallback;
   const pendingFallback =
     pendingState &&
     (pendingState.threadId === undefined ||
-      (typeof pendingState.threadId === 'string' && pendingState.threadId === agentControllerContext?.threadId))
+      (typeof pendingState.threadId === 'string' && pendingState.threadId === controller?.threadId))
       ? pendingState
       : undefined;
   const pendingModelId =
     pendingFallback && typeof pendingFallback.toModelId === 'string' && pendingFallback.toModelId.length > 0
       ? pendingFallback.toModelId
       : undefined;
-  const modelId = pendingModelId ?? agentControllerContext?.session?.modelId;
+  const modelId = pendingModelId ?? controller?.session?.modelId;
   if (!modelId) {
-    // A missing controller context means the run was started without session
-    // request context at all (e.g. a signal delivered to an idle thread) —
-    // "use /models" would mislead there, the user's selection was never the
-    // problem.
-    if (!agentControllerContext) {
+    if (!controller) {
       throw new Error(
         'No model available: this run started without a controller session context, so no model selection could be resolved.',
       );
@@ -349,115 +332,98 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(agentControllerContext, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(controller, settingsPath);
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
-  const primary = resolveModel(modelId, resolveOptions);
+  // Label each resolved model with its full ID: the resolved gateway model only
+  // knows its bare provider model, and Memory's `'auto'` reads this label.
+  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
+  const route = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
+  const pendingEntryId =
+    pendingFallback && typeof pendingFallback.toEntryId === 'string' ? pendingFallback.toEntryId : undefined;
+  const startIndex = pendingEntryId ? route?.findIndex(entry => entry.id === pendingEntryId) : 0;
+  const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
+  if (!activeRoute || activeRoute.length < 2 || activeRoute[0]?.modelId !== modelId) return primary;
 
-  const settings = loadSettings(settingsPath);
-  // `models?` tolerates partial settings mocks; loaded settings always carry it.
-  const fallbacks = settings.models?.packFallbacks ?? {};
-  if (Object.keys(fallbacks).length === 0) return primary;
+  const firstId =
+    typeof activeRoute[0]?.id === 'string' && activeRoute[0].id.length > 0 ? activeRoute[0].id : undefined;
+  if (!firstId) return primary;
 
-  const modeId = agentControllerContext?.session?.modeId ?? 'build';
-  const packs = listResolvableModePacks(settings);
-  const pendingPackId =
-    pendingFallback && typeof pendingFallback.toPackId === 'string' && pendingFallback.toPackId.length > 0
-      ? pendingFallback.toPackId
-      : undefined;
-  const statePackId = pendingPackId ?? controllerState?.activeModelPackId ?? settings.models.activeModelPackId;
-  const activePack = findModePackForModel(
-    settings,
-    packs,
-    modelId,
-    modeId,
-    typeof statePackId === 'string' ? statePackId : undefined,
-  );
-  if (!activePack) return primary;
-
-  const chain = resolveModePackFallbackChain(fallbacks, activePack.id, settings.customModelPacks);
-  if (chain.length < 2) return primary;
-
-  const entries: ModelWithRetries[] = [{ id: activePack.id, model: primary }];
-  const appearances = new Map<string, number>([[activePack.id, 1]]);
-  for (const packId of chain.slice(1)) {
-    const pack = packs.find(candidate => candidate.id === packId);
-    if (!pack) break;
-    const entryModelId = resolveModePackModels(settings, pack)[modeId];
-    if (!entryModelId) break;
-    // Best-effort resolution: an unresolvable fallback (e.g. unconnected
-    // provider in deployed fail-closed mode) truncates the chain here rather
-    // than failing the request before the primary is ever tried.
+  const entries: ModelWithRetries[] = [{ id: firstId, model: primary }];
+  const appearances = new Map<string, number>([[firstId, 1]]);
+  for (const routeEntry of activeRoute.slice(1)) {
+    if (
+      typeof routeEntry.id !== 'string' ||
+      routeEntry.id.length === 0 ||
+      typeof routeEntry.modelId !== 'string' ||
+      routeEntry.modelId.length === 0
+    ) {
+      break;
+    }
     let entryModel: ResolvedModel;
     try {
-      entryModel = resolveModel(entryModelId, resolveOptions);
+      entryModel = resolveModel(routeEntry.modelId, resolveOptions);
     } catch {
       break;
     }
-    const occurrence = (appearances.get(packId) ?? 0) + 1;
-    appearances.set(packId, occurrence);
+    const occurrence = (appearances.get(routeEntry.id) ?? 0) + 1;
+    appearances.set(routeEntry.id, occurrence);
     entries.push({
-      id: occurrence === 1 ? packId : `${packId}#${occurrence}`,
-      model: entryModel,
+      id: occurrence === 1 ? routeEntry.id : `${routeEntry.id}#${occurrence}`,
+      model: identifyModel(routeEntry.modelId, entryModel),
     });
   }
-  // A chain that truncated to the primary alone is indistinguishable from no
-  // chain — return the bare model so core never sees a one-entry array.
-  if (entries.length < 2) return primary;
-  return entries;
+
+  return entries.length < 2 ? primary : entries;
 }
 
-/** OM fallback-chain entry: a pack's OM model resolved through the gateway. Assignable to `ModelWithRetries`. */
-export type PackMemoryModelChainEntry = { id: string; model: GatewayLanguageModel };
+function identifyModel(modelId: string, model: ResolvedModel): IdentifiedModelConfig {
+  return { model, id: toMemoryModelId(modelId) };
+}
+
+type MemoryRouteState = {
+  modelRoute?: { entries?: Array<{ id?: unknown; memoryModelId?: unknown }> };
+  mastracodePendingModelFallback?: { toEntryId?: unknown; threadId?: unknown } | null;
+};
 
 /**
- * Resolve the observational-memory model for the active mode pack, walking the
- * pack's fallback chain (`settings.models.packFallbacks`) and collecting each
- * pack's optional `models.memory` entry. Packs without an OM model are skipped
- * (the field is optional, so absence must not truncate the chain); duplicate
- * model ids collapse so an A⇄B cycle never retries an identical OM model.
- *
- * Returns a bare model for a single entry, a fallback array for multiple
- * entries (OM's internal agents run the same agentic loop, so the array gives
- * OM its own cross-pack failover), or `undefined` when no pack in the chain
- * defines an OM model — callers then fall back to the standalone OM
- * configuration.
+ * The active model route for memory: the session route, starting at a pending
+ * fallback hop captured for this thread.
  */
-export function resolvePackMemoryModelChain(
-  settings: ReturnType<typeof loadSettings>,
-  startPackId: string,
-  resolveOptions: Parameters<typeof resolveModel>[1],
-): GatewayLanguageModel | PackMemoryModelChainEntry[] | undefined {
-  const packs = listResolvableModePacks(settings);
-  if (!packs.some(pack => pack.id === startPackId)) return undefined;
+export function getActiveMemoryRoute<TEntry extends { id?: unknown; memoryModelId?: unknown }>(
+  state:
+    | {
+        modelRoute?: { entries?: TEntry[] };
+        mastracodePendingModelFallback?: MemoryRouteState['mastracodePendingModelFallback'];
+      }
+    | undefined,
+  threadId?: string | null,
+): TEntry[] {
+  const pending = state?.mastracodePendingModelFallback;
+  const sameThreadPending =
+    pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : undefined;
+  const routeEntries = state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES) ?? [];
+  const pendingIndex = sameThreadPending
+    ? routeEntries.findIndex(entry => entry.id === sameThreadPending.toEntryId)
+    : -1;
+  return pendingIndex >= 0 ? routeEntries.slice(pendingIndex) : routeEntries;
+}
 
-  const chain = resolveModePackFallbackChain(
-    settings.models?.packFallbacks ?? {},
-    startPackId,
-    settings.customModelPacks,
+/**
+ * The memory model the active route applies to both OM roles: `'auto'`, the
+ * first concrete memory model, or `undefined` when the route sets none (both
+ * roles then follow their `/om` settings).
+ */
+export function getActiveRouteMemoryModelId(
+  state: Readonly<Record<string, unknown>> | undefined,
+  threadId?: string | null,
+): string | undefined {
+  const route = getActiveMemoryRoute(state as MemoryRouteState | undefined, threadId);
+  if (route[0]?.memoryModelId === 'auto') return 'auto';
+  const entry = route.find(
+    candidate =>
+      typeof candidate.memoryModelId === 'string' && candidate.memoryModelId && candidate.memoryModelId !== 'auto',
   );
-  const seenModelIds = new Set<string>();
-  const entries: PackMemoryModelChainEntry[] = [];
-  for (const packId of chain) {
-    const pack = packs.find(candidate => candidate.id === packId);
-    if (!pack) break;
-    const memoryModelId = resolveModePackModels(settings, pack).memory;
-    if (!memoryModelId || seenModelIds.has(memoryModelId)) continue;
-    seenModelIds.add(memoryModelId);
-    // Best-effort resolution: an unresolvable OM entry (e.g. unconnected
-    // provider in deployed fail-closed mode) truncates the chain here rather
-    // than failing observation before the pack's own OM model is tried.
-    let entryModel: ResolvedModel;
-    try {
-      entryModel = resolveModel(memoryModelId, resolveOptions);
-    } catch {
-      break;
-    }
-    entries.push({ id: `${packId}:memory`, model: entryModel });
-  }
-
-  if (entries.length === 0) return undefined;
-  if (entries.length === 1) return entries[0]!.model;
-  return entries;
+  return entry?.memoryModelId as string | undefined;
 }
 
 /**

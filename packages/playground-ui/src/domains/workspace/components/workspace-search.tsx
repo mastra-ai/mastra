@@ -1,6 +1,6 @@
+import { useWorkspaceSearch } from '@mastra/react/hooks/workspace';
 import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
-import { useWorkspaceSearch } from '../hooks/use-workspace-search';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
 import { Button } from '@/ds/components/Button';
@@ -87,9 +87,12 @@ function SearchInput() {
 
 export function WorkspaceSearchResults() {
   const { workspaceId, query, activeFilePath, setActiveFilePath, searchFiles, searchSkills } = useWorkspaceContext();
-  const { data, isLoading, isError, error } = useWorkspaceSearch(workspaceId, query, {
+  const { data, isLoading, isError, error } = useWorkspaceSearch({
+    workspaceId: workspaceId,
+    query: query,
     files: searchFiles,
     skills: searchSkills,
+    queryOptions: { enabled: query.trim().length > 0 && (searchFiles || searchSkills) },
   });
 
   if (!query.trim()) {
@@ -115,12 +118,15 @@ export function WorkspaceSearchResults() {
             title={hit.path}
             onClick={() => setActiveFilePath(hit.path)}
             className={cn(
-              'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-body-sm text-muted-foreground hover:bg-fill-subtle',
-              activeFilePath === hit.path && 'bg-fill text-foreground',
+              'text-foreground',
+              'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-fill-subtle',
+              activeFilePath === hit.path && 'bg-fill',
             )}
           >
             <Icon size="sm">{hit.kind === 'skill' ? <SkillIcon /> : <FileIcon />}</Icon>
-            <span className="truncate">{hit.label}</span>
+            <Txt as="span" variant="body-sm" className="truncate">
+              {hit.label}
+            </Txt>
           </button>
         </li>
       ))}

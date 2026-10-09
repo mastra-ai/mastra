@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Panel } from 'react-resizable-panels';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
@@ -70,6 +70,8 @@ export interface TraceDataPanelViewProps {
   depth?: DataPanelProps['depth'];
   /** Rendered inside the drawer above the trace header (e.g. inbox feedback context). */
   headerSlot?: ReactNode;
+  /** Integration-specific actions shown alongside the standard trace controls. */
+  headerActionsSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   placement: TraceDataPanelPlacement;
@@ -150,6 +152,7 @@ export function TraceDataPanelView({
   size = 'wide',
   depth,
   headerSlot,
+  headerActionsSlot,
   title,
   placement,
   LinkComponent,
@@ -408,11 +411,13 @@ export function TraceDataPanelView({
                   <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
                   {traceSummary}
                 </DataPanel.HeaderContent>
-                <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
+                <DataPanel.HeaderActions>
+                  {headerActionsSlot}
+                  {traceActionsMenu}
+                </DataPanel.HeaderActions>
               </>
             ) : (
               <>
-                <DataPanel.CloseButton onClick={onClose} />
                 <DataPanel.HeaderContent>
                   <DataPanel.Heading>
                     Trace
@@ -421,6 +426,7 @@ export function TraceDataPanelView({
                   {traceSummary}
                 </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>
+                  {headerActionsSlot}
                   {onEvaluateTrace && (
                     <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
                       <CircleGaugeIcon />
@@ -436,12 +442,14 @@ export function TraceDataPanelView({
                       nextLabel="Go to next trace"
                     />
                   )}
+                  <DataPanel.CloseButton icon="x" onClick={onClose} label="Close trace" tooltip="Close trace" />
                 </DataPanel.HeaderActions>
               </>
             )}
           </DataPanel.Header>
 
           <TracePanelColumns
+            layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : undefined}
             sideColumnSlot={sideColumn}
             spanPanelSlot={spanPanelSlot}
             highlightQuery={query}
@@ -469,6 +477,7 @@ export function TraceDataPanelView({
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
+                        tooltipPosition="bottom"
                         onClick={() => setSpanView('tree')}
                       >
                         <ListTreeIcon />
@@ -477,6 +486,7 @@ export function TraceDataPanelView({
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"
+                        tooltipPosition="bottom"
                         onClick={() => setSpanView('timeline')}
                       >
                         <ChartGanttIcon />
@@ -494,6 +504,7 @@ export function TraceDataPanelView({
                   expandedSpanIds,
                   setExpandedSpanIds,
                   featuredSpanIds,
+                  revealSpanId: featuredSpanIds?.at(-1),
                   isLoading,
                 };
 
@@ -539,13 +550,40 @@ export function TraceDataPanelView({
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
+// localStorage access throws when storage is blocked (privacy modes, sandboxed iframes), and the
+// library parses stored values without a guard; fall back to defaults instead of crashing the panel.
+const safeLayoutStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const value = localStorage.getItem(key);
+      if (value !== null) JSON.parse(value);
+      return value;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Persisting is best-effort.
+    }
+  },
+};
+
 function TracePanelColumns({
+  layoutKey,
   sideColumnSlot,
   spanPanelSlot,
   highlightQuery,
   spanPanelKey,
   children,
 }: {
+  /**
+   * Root entity type of the trace; column sizes are persisted per value in localStorage.
+   * Undefined while the root span is unknown, in which case nothing is persisted.
+   */
+  layoutKey?: string;
   /** Resizable column on the left (messages / feedback / scores). */
   sideColumnSlot?: ReactNode;
   spanPanelSlot?: ReactNode;
@@ -563,9 +601,24 @@ function TracePanelColumns({
   // The timeline column must never be scrolled by this.
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
+  // One stored layout per panel combination, so opening/closing the span panel doesn't clobber the other.
+  const panelIds = [...(sideColumnSlot ? ['trace-side'] : []), 'trace-main', ...(spanPanelSlot ? ['trace-span'] : [])];
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: `mastra:trace-panel-layout:${layoutKey ?? 'unknown'}`,
+    panelIds,
+    storage: safeLayoutStorage,
+  });
+
   return (
     <div ref={highlightRef} data-trace-columns className="flex min-h-0 flex-1">
-      <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <PanelGroup
+        // defaultLayout is only read on mount: remount once the entity type is known.
+        key={layoutKey ?? 'unknown'}
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        defaultLayout={layoutKey ? defaultLayout : undefined}
+        onLayoutChanged={layoutKey ? onLayoutChanged : undefined}
+      >
         {sideColumnSlot && (
           <>
             <Panel id="trace-side" minSize={280} defaultSize="40%">

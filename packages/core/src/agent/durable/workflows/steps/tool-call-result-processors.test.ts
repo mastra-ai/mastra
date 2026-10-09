@@ -19,13 +19,8 @@
  *      continues with an error placeholder — the raw result never reaches the
  *      stream or the step output (the regular loop rethrows here, so no
  *      engine emits or persists the raw value).
- *   4. A throwing chunk-pipeline processor (processOutputStream) does not
- *      disturb the gated value: the shared ProcessorRunner logs and continues
- *      with the part as it stood after the processToolResult gate
- *      (pre-existing policy, identical in both engines) — the emitted chunk
- *      carries the gated value, never the raw one when a gate is configured.
- *      Value redaction belongs to processToolResult; processOutputStream is
- *      stream-view shaping only.
+ *   4. A throwing chunk-pipeline processor (processOutputStream) fails the
+ *      step before the gated tool-result chunk is emitted.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChunkFrom } from '../../../../stream/types';
@@ -35,16 +30,14 @@ import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { createDurableLLMMappingStep } from './llm-mapping';
 import { createDurableToolCallStep } from './tool-call';
 
 vi.mock('../../utils/resolve-runtime', async () => ({
-  restoreRequestContext: (
-    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
-  ).restoreRequestContext,
+  ...(await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')),
   resolveTool: vi.fn(),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
-  rebuildRunToolsFromMastra: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../stream-adapter', () => ({
@@ -66,10 +59,7 @@ function mockPubsub() {
   return { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() };
 }
 
-// Production always supplies a logger. An undefined logger makes the runner's
-// swallow-catch itself crash (`this.logger.error` TypeErrors), which escapes
-// processPart and lands in onProcessorError — a path processor throws never
-// take in production. The spies also let tests prove a swallow actually fired.
+// Production always supplies a logger; the spies let tests assert non-fatal warnings.
 const noopLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
 
 function makeInitData() {
@@ -110,18 +100,22 @@ function setupRegistry(processor: Record<string, unknown>, messageList: MessageL
     processorStates: new Map(),
     requestContext: new Map(),
     messageList,
+    saveQueueManager: {},
   } as any);
 }
 
-function runToolCallStep() {
+function runToolCallStep(
+  mastra: Record<string, unknown> = { getLogger: () => noopLogger },
+  requestContextEntries?: Record<string, unknown>,
+) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
-    mastra: { getLogger: () => noopLogger },
+    mastra,
     suspend: vi.fn(),
     resumeData: undefined,
     requestContext: new Map(),
-    getInitData: () => makeInitData(),
+    getInitData: () => ({ ...makeInitData(), requestContextEntries }),
     [PUBSUB_SYMBOL]: mockPubsub(),
   });
 }
@@ -139,6 +133,168 @@ afterEach(() => {
 });
 
 describe('durable tool-call: processToolResult hook (Option B)', () => {
+  it.each(['placeholder', 'empty', 'persistence-only'] as const)(
+    'rehydrates output processors before emitting a tool result from a %s registry',
+    async registryState => {
+      const seen: string[] = [];
+      const outputProcessor = {
+        id: 'resumed-tool-result-watcher',
+        name: 'resumed-tool-result-watcher',
+        processOutputStream: async ({ part, requestContext }: any) => {
+          seen.push(part.type);
+          expect(requestContext?.get('tenantId')).toBe('redacted-tenant');
+          return { ...part, payload: { ...part.payload, result: REDACTED_RESULT } };
+        },
+      };
+      const execute = vi.fn().mockResolvedValue(RAW_RESULT);
+      const agent = {
+        getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
+        getMemory: vi.fn().mockResolvedValue(registryState === 'persistence-only' ? {} : undefined),
+        getWorkspace: vi.fn().mockResolvedValue(undefined),
+        listInputProcessors: vi.fn().mockResolvedValue([]),
+        listOutputProcessors: vi.fn().mockResolvedValue([outputProcessor]),
+        __resolveRunErrorProcessors: vi.fn().mockResolvedValue({ errorProcessors: [] }),
+        __listLLMRequestProcessors: vi.fn().mockResolvedValue([]),
+      };
+      if (registryState === 'placeholder') {
+        globalRunRegistry.set(RUN_ID, {
+          isPlaceholder: true,
+          tools: {},
+          model: undefined as any,
+          requestContext: new Map(),
+        } as any);
+      }
+
+      const mastra = {
+        getAgentById: vi.fn().mockReturnValue(agent),
+        getLogger: () => noopLogger,
+        listTools: () => ({}),
+      };
+      if (registryState === 'persistence-only') {
+        await rebuildRunToolsFromMastra({
+          mastra: mastra as any,
+          runId: RUN_ID,
+          agentId: AGENT_ID,
+          state: makeInitData().state as any,
+        });
+        expect(globalRunRegistry.get(RUN_ID)?.tools?.[TOOL_NAME]).toBeDefined();
+        expect(globalRunRegistry.get(RUN_ID)?.saveQueueManager).toBeDefined();
+        expect(agent.listOutputProcessors).not.toHaveBeenCalled();
+      }
+
+      const output = await runToolCallStep(mastra, { tenantId: 'redacted-tenant' });
+
+      expect(output.result).toEqual(RAW_RESULT);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(seen).toEqual(['tool-result']);
+      expect(globalRunRegistry.get(RUN_ID)).toMatchObject({ outputProcessors: [outputProcessor] });
+      expect(globalRunRegistry.get(RUN_ID)?.processorStates).toBeInstanceOf(Map);
+      expect(vi.mocked(emitChunkEvent)).toHaveBeenCalledWith(
+        expect.anything(),
+        RUN_ID,
+        expect.objectContaining({ type: 'tool-result', payload: expect.objectContaining({ result: REDACTED_RESULT }) }),
+        true,
+      );
+      expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
+    },
+  );
+
+  it.each(['tools', 'baseTools'] as const)(
+    'preserves an authoritative empty %s snapshot while restoring processors',
+    async snapshotField => {
+      const snapshot = {};
+      const execute = vi.fn().mockResolvedValue(RAW_RESULT);
+      globalRunRegistry.set(RUN_ID, {
+        [snapshotField]: snapshot,
+        model: {} as any,
+        saveQueueManager: {},
+      } as any);
+      const agent = {
+        getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
+        listOutputProcessors: vi.fn().mockResolvedValue([]),
+      };
+      const mastra = { getAgentById: () => agent, getLogger: () => noopLogger, listTools: () => ({}) };
+
+      const first = await runToolCallStep(mastra);
+      expect(first.error).toEqual(expect.objectContaining({ name: 'ToolNotFoundError' }));
+      expect(globalRunRegistry.get(RUN_ID)?.[snapshotField]).toBe(snapshot);
+      expect(globalRunRegistry.get(RUN_ID)?.tools?.[TOOL_NAME]).toBeUndefined();
+      expect(globalRunRegistry.get(RUN_ID)?.outputProcessors).toEqual([]);
+      expect(globalRunRegistry.get(RUN_ID)?.processorStates).toBeInstanceOf(Map);
+
+      const second = await runToolCallStep(mastra);
+      expect(second.error).toEqual(expect.objectContaining({ name: 'ToolNotFoundError' }));
+      expect(agent.getToolsForExecution).toHaveBeenCalledOnce();
+      expect(execute).not.toHaveBeenCalled();
+      expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    },
+  );
+
+  it('fails closed when output processors cannot be rebuilt on a cold worker', async () => {
+    const execute = vi.fn().mockResolvedValue(RAW_RESULT);
+    const agent = {
+      getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
+      listOutputProcessors: vi.fn().mockRejectedValue(new Error('processor rebuild failed')),
+    };
+
+    await expect(
+      runToolCallStep({
+        getAgentById: () => agent,
+        getLogger: () => noopLogger,
+      }),
+    ).rejects.toThrow('processor rebuild failed');
+    expect(execute).not.toHaveBeenCalled();
+    expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+  });
+
+  it.each(['getToolsForExecution', 'getMemory', 'getWorkspace'] as const)(
+    'fails closed when %s fails before restoring a missing processor pipeline',
+    async failingMethod => {
+      const execute = vi.fn().mockResolvedValue(RAW_RESULT);
+      globalRunRegistry.set(RUN_ID, {
+        tools: { [TOOL_NAME]: { execute } },
+        saveQueueManager: {},
+      } as any);
+      const agent = {
+        getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
+        getMemory: vi.fn().mockResolvedValue(undefined),
+        getWorkspace: vi.fn().mockResolvedValue(undefined),
+        listOutputProcessors: vi.fn().mockResolvedValue([{ id: 'redactor' }]),
+      };
+      agent[failingMethod].mockRejectedValue(new Error('runtime resolution failed'));
+
+      await expect(runToolCallStep({ getAgentById: () => agent, getLogger: () => noopLogger })).rejects.toThrow(
+        'runtime resolution failed',
+      );
+      expect(execute).not.toHaveBeenCalled();
+      expect(agent.listOutputProcessors).not.toHaveBeenCalled();
+      expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    },
+  );
+
+  it('preserves live output processors and state when rebuilding only the save queue', async () => {
+    const processOutputStream = vi.fn(async ({ part }: any) => part);
+    const processor = { id: 'live-processor', processOutputStream };
+    setupRegistry(processor, seedMessageList());
+    const entry = globalRunRegistry.get(RUN_ID)!;
+    entry.saveQueueManager = undefined;
+    const processorStates = entry.processorStates;
+    const listOutputProcessors = vi.fn().mockRejectedValue(new Error('must not rebuild live processors'));
+
+    await runToolCallStep({
+      getLogger: () => noopLogger,
+      getAgentById: () => ({
+        getToolsForExecution: vi.fn().mockResolvedValue({}),
+        listOutputProcessors,
+      }),
+    });
+
+    expect(listOutputProcessors).not.toHaveBeenCalled();
+    expect(entry.outputProcessors).toEqual([processor]);
+    expect(entry.processorStates).toBe(processorStates);
+    expect(processOutputStream).toHaveBeenCalledOnce();
+  });
+
   it('provides a live conversation reader to tool execution', async () => {
     const messageList = seedMessageList();
     setupRegistry({}, messageList);
@@ -277,20 +433,18 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(JSON.stringify(toolResultChunks)).not.toContain('raw-value');
   });
 
-  it('emits the gated value when a chunk-pipeline processor throws (stream falls back to the processToolResult baseline)', async () => {
+  it('fails before emitting a gated tool-result when a chunk-pipeline processor throws', async () => {
     const messageList = seedMessageList();
     setupRegistry(
       {
         id: 'gated-stream-crasher',
         name: 'gated-stream-crasher',
-        // The authoritative value gate: runs before emission, redacts the raw result.
         processToolResult: async ({ messageList: ml, toolCallId, toolName, args }: any) => {
           ml.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: { state: 'result', toolCallId, toolName, args, result: REDACTED_RESULT },
           });
         },
-        // Stream-view shaping: crashes on the tool-result part.
         processOutputStream: async ({ part }: any) => {
           if (part.type === 'tool-result') {
             throw new Error('stream processor exploded');
@@ -301,25 +455,51 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
       messageList,
     );
 
+    await expect(runToolCallStep()).rejects.toThrow('stream processor exploded');
+    expect(emittedChunksOfType('tool-result')).toHaveLength(0);
+    expect(emittedChunksOfType('tripwire')).toHaveLength(0);
+    expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
+  });
+
+  it('keeps the step alive when publishing a processed tool-result chunk fails', async () => {
+    const messageList = seedMessageList();
+    setupRegistry(
+      {
+        id: 'passthrough',
+        name: 'passthrough',
+        processOutputStream: async ({ part }: any) => part,
+      },
+      messageList,
+    );
+    vi.mocked(emitChunkEvent).mockRejectedValueOnce(new Error('pubsub closed'));
+
     const output = await runToolCallStep();
 
-    // The value gate ran before emission: the step output (persistence channel)
-    // carries the redacted value.
     expect(output.error).toBeUndefined();
-    expect(output.resultBlocked).toBeUndefined();
-    expect(output.result).toEqual(REDACTED_RESULT);
+    expect(output.result).toEqual(RAW_RESULT);
+    expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringContaining('pubsub closed'));
+  });
 
-    // The stream hook threw, but the shared runner logs and continues with the
-    // part as it stood after the processToolResult gate: the chunk is emitted
-    // with the gated value — not raw, not dropped.
-    const toolResultChunks = emittedChunksOfType('tool-result');
-    expect(toolResultChunks).toHaveLength(1);
-    expect(toolResultChunks[0].payload.result).toEqual(REDACTED_RESULT);
+  it('keeps the step alive when publishing a processor writer chunk fails', async () => {
+    const messageList = seedMessageList();
+    setupRegistry(
+      {
+        id: 'progress-writer',
+        name: 'progress-writer',
+        processOutputStream: async ({ part, writer }: any) => {
+          await writer.custom({ type: 'data-progress', data: { step: 'redacting' } });
+          return part;
+        },
+      },
+      messageList,
+    );
+    vi.mocked(emitChunkEvent).mockRejectedValueOnce(new Error('pubsub closed'));
+
+    const output = await runToolCallStep();
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toEqual(RAW_RESULT);
+    expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringContaining('pubsub closed'));
     expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
-    expect(emittedChunksOfType('tripwire')).toHaveLength(0);
-
-    // The throw actually fired and was swallowed by the runner's catch —
-    // guards against this test silently not exercising the crash path.
-    expect(noopLogger.error).toHaveBeenCalled();
   });
 });

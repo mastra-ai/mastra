@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { thinkingConfig } from '../../__tests__/fixtures/thinkingConfig';
 import { createAppRoutes } from '../../router';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -44,6 +45,7 @@ interface DraftRoute {
 interface DraftRouteOptions {
   factoryProjectGate?: Promise<void>;
   failModeSwitch?: boolean;
+  defaultModelId?: string | null;
 }
 
 function readSentMessage(body: unknown): string {
@@ -51,7 +53,11 @@ function readSentMessage(body: unknown): string {
   return typeof body.message === 'string' ? body.message : '';
 }
 
-function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRouteOptions = {}): DraftRoute {
+function stubDraftRoute({
+  factoryProjectGate,
+  failModeSwitch = false,
+  defaultModelId = null,
+}: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
@@ -102,7 +108,13 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () => HttpResponse.json({ packs: [] })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+      HttpResponse.json({
+        models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
     http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
@@ -157,7 +169,10 @@ function stubDraftRoute({ factoryProjectGate, failModeSwitch = false }: DraftRou
         }),
     ),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
-      route.bindings.push(`model:${readBody(await request.json(), 'modelId')}`);
+      const body = await request.json();
+      const thinkingLevel = readBody(body, 'thinkingLevel');
+      const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
+      route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
       return HttpResponse.json({ ok: true });
     }),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
@@ -211,6 +226,76 @@ describe('a user session draft on the real thread route', () => {
     route.finishWorkspace();
     await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
+  });
+
+  it('does not switch models when the draft already uses the personal default', async () => {
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'keep the default');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['keep the default']));
+    expect(route.bindingsBeforePrompt).toEqual(['mode:build']);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('hands a thinking level picked in the draft to the new session with its model', async () => {
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    const ramp = screen.getByRole('slider', { name: 'Thinking' });
+    fireEvent.change(ramp, { target: { value: '3' } });
+    fireEvent.keyUp(ramp);
+    await user.type(message, 'think harder');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['think harder']));
+    expect(route.bindingsBeforePrompt).toEqual(['mode:build', 'model:openai/gpt-4o-mini thinking:high']);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('starts the session on the defaults when the draft level is reset before the first message', async () => {
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    const ramp = screen.getByRole('slider', { name: 'Thinking' });
+    fireEvent.change(ramp, { target: { value: '3' } });
+    fireEvent.keyUp(ramp);
+    await user.click(await screen.findByRole('button', { name: 'Use default' }));
+    expect(await screen.findByText('Follows the global default.')).toBeInTheDocument();
+    await user.type(message, 'use the default');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(route.posted).toEqual(['use the default']));
+    expect(route.bindingsBeforePrompt).toEqual(['mode:build']);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
   });
 
   it('keeps typing free while the draft model resolves, but holds the send', async () => {

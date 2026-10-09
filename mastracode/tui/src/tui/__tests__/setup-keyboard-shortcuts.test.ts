@@ -38,6 +38,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
   Container: class {},
   Spacer: class {},
   Text: class {},
+  visibleWidth: (s: string) => s.length,
 }));
 
 vi.mock('../components/banner.js', () => ({
@@ -55,6 +56,10 @@ vi.mock('../display.js', () => ({
 
 vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
+}));
+
+vi.mock('../model-packs/apply.js', () => ({
+  switchModeWithPack: vi.fn(),
 }));
 
 import { showError, showInfo } from '../display.js';

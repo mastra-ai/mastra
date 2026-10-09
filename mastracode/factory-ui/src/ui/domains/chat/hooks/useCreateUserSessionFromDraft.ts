@@ -8,13 +8,15 @@ import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatThinking } from '../context/useChatThinking';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { promptHandoffState } from './useHandoffPrompt';
 
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
   const { activeModeId } = useChatModes();
-  const { activeModelId, draftModelPackId, modelPacks } = useChatModels();
+  const { activeModelId, defaultModelId } = useChatModels();
+  const { override: thinkingLevelOverride } = useChatThinking();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -29,22 +31,15 @@ export function useCreateUserSessionFromDraft() {
         throw new Error('Session configuration is not ready. Try again.');
       }
 
-      // Activating the pack applies its models server-side, so only hand off a
-      // model when the draft explicitly deviated from the selected pack.
-      const modeKey =
-        activeModeId === 'build' || activeModeId === 'plan' || activeModeId === 'fast' ? activeModeId : undefined;
-      const packModelId =
-        draftModelPackId && modeKey
-          ? modelPacks.find(pack => pack.id === draftModelPackId)?.models[modeKey]
-          : undefined;
-      const handoffModelId = activeModelId === packModelId ? undefined : activeModelId;
+      const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
+      const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
 
       try {
         const session = await createUserSession(baseUrl, projectRepositoryId, {
           sessionId: draftSessionId,
           title: prompt,
         });
-        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, draftModelPackId };
+        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, thinkingLevelOverride };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Session creation failed';
         throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
@@ -57,7 +52,7 @@ export function useCreateUserSessionFromDraft() {
       projectRepositoryId,
       activeModeId,
       handoffModelId,
-      draftModelPackId,
+      thinkingLevelOverride,
     }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, projectRepositoryId, session);
@@ -75,7 +70,7 @@ export function useCreateUserSessionFromDraft() {
         state: promptHandoffState(prompt, {
           modeId: activeModeId,
           modelId: handoffModelId,
-          modelPackId: draftModelPackId,
+          thinkingLevel: thinkingLevelOverride,
         }),
       });
     },

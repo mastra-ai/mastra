@@ -4,7 +4,6 @@ packages:
 overrides:
   adm-zip@<=0.6.0: 0.6.1
   image-size@<=2.0.2: 2.0.4
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   qs@>=6.7.0 <6.16.0: 6.16.0
   proxy-addr: 2.0.8
   fast-uri: 3.1.8
@@ -29,5 +28,14 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'raw-body@<4.0.0': 4.0.0
+  'nanoid@<5.1.16': 5.1.16
+  # Vanta 2026-10-06: nested-lock security floors
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
+  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
+  'http-cache-semantics@<4.3.0': 4.3.0
 allowBuilds:
   esbuild: true
+patchedDependencies:
+  'body-parser@1.20.6': patches/body-parser@1.20.6.patch

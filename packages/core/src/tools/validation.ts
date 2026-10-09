@@ -538,12 +538,21 @@ export function validateToolInput<T = unknown>(
   // Step 4: Retry with stringified JSON values coerced (GitHub #12757)
   // LLMs like GLM4.7 send stringified JSON for array/object parameters, e.g.
   // { "args": "[\"file.py\"]" } instead of { "args": ["file.py"] }.
+  //
+  // Each fallback builds on the previous one's output so inputs needing several
+  // corrections (e.g. stringified JSON plus null optional fields) still validate
+  // (GitHub #25825).
+  let currentInput = normalizedInput;
+  let currentIssues = validation.issues;
+
   const coercedInput = coerceStringifiedJsonValues(schema, normalizedInput);
   if (coercedInput !== normalizedInput) {
     const coercedValidation = safeValidate(schema, coercedInput);
     if ('value' in coercedValidation) {
       return { data: coercedValidation.value };
     }
+    currentInput = coercedInput;
+    currentIssues = coercedValidation.issues;
   }
 
   // Step 5: Retry with null values stripped only for failing fields (GitHub #12362)
@@ -556,23 +565,30 @@ export function validateToolInput<T = unknown>(
   // This ensures we catch null values regardless of the validator's error message
   // format (e.g., "must be string", "must be object", etc.).
   const failingNullPaths = new Set(
-    validation.issues
+    currentIssues
       .filter(issue => {
         if (!issue.path || issue.path.length === 0) return false;
-        const value = getValueAtPath(normalizedInput, issue.path);
+        const value = getValueAtPath(currentInput, issue.path);
         return value === null || value === undefined;
       })
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
       .filter((p): p is string => !!p),
   );
   const strippedInput =
-    failingNullPaths.size > 0 ? stripNullishValuesAtPaths(input, failingNullPaths) : stripNullishValues(input);
+    failingNullPaths.size > 0
+      ? stripNullishValuesAtPaths(currentInput, failingNullPaths)
+      : stripNullishValues(coercedInput !== normalizedInput ? coercedInput : input);
   const normalizedStripped = normalizeNullishInput(schema, strippedInput);
   const retryValidation = safeValidate(schema, normalizedStripped);
 
   if ('value' in retryValidation) {
     return { data: retryValidation.value };
   }
+  if (failingNullPaths.size > 0) {
+    currentInput = normalizedStripped;
+  }
+
+  let aliasIssues: typeof validation.issues | undefined;
 
   // Step 6: Retry with common prompt alias normalization (GitHub #14154)
   // LLMs (especially Claude Sonnet via custom gateways) sometimes drift from
@@ -585,13 +601,8 @@ export function validateToolInput<T = unknown>(
     promptJsonSchema.properties != null &&
     'prompt' in promptJsonSchema.properties;
 
-  if (
-    schemaExpectsPrompt &&
-    normalizedInput != null &&
-    typeof normalizedInput === 'object' &&
-    !Array.isArray(normalizedInput)
-  ) {
-    const obj = normalizedInput as Record<string, unknown>;
+  if (schemaExpectsPrompt && currentInput != null && typeof currentInput === 'object' && !Array.isArray(currentInput)) {
+    const obj = currentInput as Record<string, unknown>;
     if (obj.prompt == null) {
       const alias = [obj.query, obj.message, obj.input].find((v): v is string => typeof v === 'string');
       if (alias !== undefined) {
@@ -600,6 +611,7 @@ export function validateToolInput<T = unknown>(
         if ('value' in coercedPromptValidation) {
           return { data: coercedPromptValidation.value };
         }
+        aliasIssues = coercedPromptValidation.issues;
       }
     }
   }
@@ -608,8 +620,9 @@ export function validateToolInput<T = unknown>(
   // path-stripped retry's issues: first-pass issues include nulls on optional
   // fields that stripping already resolved, hiding the real failure (GitHub #24539).
   // Otherwise the retry stripped every null (including valid .nullable() values),
-  // so the first-pass issues are the accurate ones.
-  const finalIssues = failingNullPaths.size > 0 ? retryValidation.issues : validation.issues;
+  // so the first-pass issues are the accurate ones. A failed prompt-alias retry
+  // builds on all prior corrections, so its issues take precedence.
+  const finalIssues = aliasIssues ?? (failingNullPaths.size > 0 ? retryValidation.issues : currentIssues);
   const errorMessages = finalIssues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
@@ -656,7 +669,7 @@ export function validateToolOutput<T = unknown>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
+    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(redactSensitiveKeys(output))}`,
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
@@ -673,25 +686,34 @@ const SENSITIVE_KEYS = ['password', 'secret', 'token', 'apiKey', 'api_key', 'aut
  * @param obj The object to redact
  * @returns A new object with sensitive values replaced with '[REDACTED]'
  */
-function redactSensitiveKeys(obj: unknown): unknown {
-  if (obj === null || typeof obj !== 'object') {
+function redactSensitiveKeys(obj: unknown, ancestors: WeakSet<object> = new WeakSet()): unknown {
+  // Objects with toJSON (e.g. Date) serialize themselves; walking their own keys would drop them to `{}`.
+  if (obj === null || typeof obj !== 'object' || typeof (obj as { toJSON?: unknown }).toJSON === 'function') {
     return obj;
   }
 
+  // Leave circular references in place so serialization fails the same way it would without redaction.
+  if (ancestors.has(obj)) {
+    return obj;
+  }
+  ancestors.add(obj);
+
+  let result: unknown;
   if (Array.isArray(obj)) {
-    return obj.map(redactSensitiveKeys);
+    result = obj.map(item => redactSensitiveKeys(item, ancestors));
+  } else {
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
+        redacted[key] = '[REDACTED]';
+      } else {
+        redacted[key] = redactSensitiveKeys(value, ancestors);
+      }
+    }
+    result = redacted;
   }
 
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null) {
-      result[key] = redactSensitiveKeys(value);
-    } else {
-      result[key] = value;
-    }
-  }
+  ancestors.delete(obj);
   return result;
 }
 

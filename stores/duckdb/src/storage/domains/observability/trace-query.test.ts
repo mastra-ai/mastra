@@ -56,7 +56,7 @@ describe('DuckDB advanced trace query', () => {
     await expect(getTraceQueryObservedFields({ query } as unknown as DuckDBConnection, discoveryPlan)).rejects.toEqual(
       expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
         code: 'TRACE_QUERY_RESOURCE_LIMIT',
-        message: 'The trace query exceeded its resource limit',
+        message: 'The query exceeded its resource limit',
       }),
     );
   });
@@ -240,15 +240,17 @@ describe('DuckDB advanced trace query', () => {
       }),
     );
 
-    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
+    // root_trace_ids, root_bounds and root_events each read span_events once.
+    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(3);
     expect(traceOnly.sql).not.toContain('score_events');
     expect(traceOnly.sql).not.toContain('current_spans AS');
 
-    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
+    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(3);
     expect(scoreOnly.sql.match(/current_scores AS/g)).toHaveLength(1);
     expect(scoreOnly.sql).not.toContain('current_spans AS');
 
-    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(3);
+    // Plus span_bounds and current_span_rows for the spans relation.
+    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(5);
     expect(spanOnly.sql.match(/current_spans AS/g)).toHaveLength(1);
     expect(spanOnly.sql).not.toContain('score_events');
 

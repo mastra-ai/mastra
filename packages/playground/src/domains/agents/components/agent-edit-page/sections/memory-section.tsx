@@ -3,7 +3,10 @@ import { Field, FieldContent, FieldDescription, FieldLabel } from '@mastra/playg
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { useEmbedders } from '@mastra/react/hooks/embedders';
+import { useVectors } from '@mastra/react/hooks/vectors';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
@@ -12,9 +15,7 @@ import type { UseFormSetValue, Control } from 'react-hook-form';
 import { RegisteredMemoryNotice } from '../../registered-memory-notice';
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
-import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
@@ -281,7 +282,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           <ChevronRight
                             className={`h-3 w-3 text-muted-foreground transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
                           />
-                          <span className="cursor-pointer text-label text-foreground">Observer</span>
+                          <Txt as="span" variant="label" tone="ink" className="cursor-pointer">
+                            Observer
+                          </Txt>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
@@ -472,7 +475,9 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           <ChevronRight
                             className={`h-3 w-3 text-muted-foreground transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
                           />
-                          <span className="cursor-pointer text-label text-foreground">Reflector</span>
+                          <Txt as="span" variant="label" tone="ink" className="cursor-pointer">
+                            Reflector
+                          </Txt>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">

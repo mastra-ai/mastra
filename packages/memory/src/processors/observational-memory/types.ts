@@ -1,5 +1,5 @@
 import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
-import type { WidenModelId } from '@mastra/core/llm';
+import type { MastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -84,7 +84,7 @@ export interface ParsedActivationTTLMap {
 /**
  * Configuration for the observation step (Observer agent).
  */
-export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+export type ObservationalMemoryModel = 'auto' | Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
 
 /**
  * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
@@ -113,14 +113,19 @@ export type ContinuationHintsConfig =
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
-   * a function that returns either (for dynamic model selection),
-   * a `ModelByInputTokens` selector (for token-tiered routing),
-   * or an array of ModelWithRetries for fallback support.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
+   * Can also be a model ID string
+   * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
+   * either (for dynamic model selection), a `ModelByInputTokens` selector
+   * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
 
@@ -226,8 +231,8 @@ export interface ObservationConfig {
   /**
    * Token threshold above which buffered activation is allowed to overshoot the
    * retention target. Crossing `blockAfter` does not trigger a blocking observation;
-   * a synchronous observation runs when `messageTokens` is reached and buffered
-   * activation did not happen.
+   * a synchronous observation runs when `messageTokens` is reached and activating
+   * buffered chunks does not bring pending tokens back under it.
    *
    * Accepts either:
    * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
@@ -321,14 +326,19 @@ export interface ObservationConfig {
 export interface ReflectionConfig {
   /**
    * Model for the Reflector agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
-   * a function that returns either (for dynamic model selection),
-   * a `ModelByInputTokens` selector (for token-tiered routing),
-   * or an array of ModelWithRetries for fallback support.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
+   * Can also be a model ID string
+   * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
+   * either (for dynamic model selection), a `ModelByInputTokens` selector
+   * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
 
@@ -474,6 +484,8 @@ export interface ObservationModelContext {
   provider?: string;
   modelId?: string;
   providerOptions?: ProviderOptions;
+  /** Exact effective actor model captured when the observation work was scheduled. */
+  model?: Exclude<AgentConfig['model'], undefined>;
 }
 
 /**
@@ -593,6 +605,9 @@ export interface DataOmObservationFailedPart {
 
     /** Machine-readable failure classification when the observer/provider call failed. */
     failureKind?: 'observer-model' | 'reflector-model';
+
+    /** Set when this attempt failed but the runner is retrying the same cycle, so the failure is not final. */
+    retrying?: true;
 
     /** The OM record ID */
     recordId: string;
@@ -1041,10 +1056,34 @@ export interface ObservationalMemoryConfig {
    * Model for both Observer and Reflector agents.
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
+
+  /**
+   * Per-provider low-cost models for `'auto'`, replacing the built-in picks.
+   * Keys are provider IDs, values are model IDs.
+   *
+   * @example { google: 'google/gemini-3.5-flash' }
+   */
+  autoModels?: Record<string, string>;
+
+  /**
+   * Resolves the model ID `'auto'` picks into a model. Use this when the main agent's models
+   * come from your own resolver (custom credentials, gateways, or providers) so observer and
+   * reflector calls use the same routing. Receives a concrete ID, never `'auto'`.
+   * Defaults to the standard model router.
+   */
+  resolveModel?: (
+    modelId: string,
+    context: { requestContext?: RequestContext },
+  ) => MastraModelConfig | Promise<MastraModelConfig>;
 
   /**
    * Observation step configuration.

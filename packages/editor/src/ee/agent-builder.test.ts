@@ -342,6 +342,7 @@ describe('createBuilderAgent stability processors', () => {
     expect((await agent.listErrorProcessors()).map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
   });
@@ -351,13 +352,14 @@ describe('createBuilderAgent stability processors', () => {
     const agent = createBuilderAgent({ errorProcessors: [callerRetry] });
 
     const resolved = await agent.listErrorProcessors();
-    // The caller's instance is the one that runs. Both added repairs are inserted ahead of it,
+    // The caller's instance is the one that runs. The added repairs are inserted ahead of it,
     // because a retry processor configured with broad matchers would otherwise resend a request
     // the repairs could have fixed.
-    expect(resolved[2]).toBe(callerRetry);
+    expect(resolved[3]).toBe(callerRetry);
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
   });
@@ -374,6 +376,7 @@ describe('createBuilderAgent stability processors', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
     ]);
   });
@@ -386,16 +389,25 @@ describe('createBuilderAgent stability processors', () => {
     expect(resolved.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'prefill-error-handler',
+      'unsupported-file-handler',
       'stream-error-retry-processor',
       'caller-retry',
     ]);
-    expect(resolved[3]).toBe(callerProcessor);
+    expect(resolved[4]).toBe(callerProcessor);
   });
 
   it('keeps the builder defaults when the caller list is empty', async () => {
     const agent = createBuilderAgent({ errorProcessors: [] });
 
-    expect(await agent.listErrorProcessors()).toEqual(DEFAULT_BUILDER_ERROR_PROCESSORS);
+    // The core adds its own `unsupported-file-handler` default, which the builder stack doesn't carry.
+    const resolved = await agent.listErrorProcessors();
+    expect(resolved).toEqual(expect.arrayContaining(DEFAULT_BUILDER_ERROR_PROCESSORS));
+    expect(resolved.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
+      'prefill-error-handler',
+      'unsupported-file-handler',
+      'stream-error-retry-processor',
+    ]);
   });
 
   it('runs only the caller list when errorProcessorDefaults is false', async () => {

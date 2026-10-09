@@ -1164,6 +1164,53 @@ describe('suspended-run discovery', () => {
       );
     }, 30000);
 
+    it('resumes a generic suspension with approval-shaped resume data', async () => {
+      const resumedTool = vi.fn();
+      const storage = new InMemoryStore();
+      const approvalLikeTool = createTool({
+        id: 'approval-like-tool',
+        description: 'Suspends for an approval-shaped response',
+        inputSchema: z.object({}),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (_input, context) => {
+          if (context?.agent?.resumeData === undefined) {
+            return await context?.agent?.suspend({ question: 'Continue?' });
+          }
+          resumedTool(context.agent.resumeData);
+          return context.agent.resumeData;
+        },
+      });
+      const agent = new Agent({
+        id: 'approval-shaped-suspension-agent',
+        name: 'Approval-shaped Suspension Agent',
+        instructions: 'Suspend before continuing.',
+        model: createMockModel({ toolName: 'approvalLikeTool', toolCallOnFirstCall: true }),
+        tools: { approvalLikeTool },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage });
+
+      const stream = await agent.stream('Continue after approval', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          toolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(toolCallId).toBeTruthy();
+
+      const result = await agent.sendToolApproval({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        toolCallId,
+        approved: true,
+      });
+      expect(result).toEqual({ accepted: true, runId: stream.runId, toolCallId });
+      await vi.waitFor(() => expect(resumedTool).toHaveBeenCalledWith({ approved: true }));
+    }, 30000);
+
     it('declines a suspended run after a simulated restart', async () => {
       const storage = new InMemoryStore();
       const { agent } = createSuspendedSetup({ storage });

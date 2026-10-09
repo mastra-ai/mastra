@@ -19,11 +19,10 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
-import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -98,17 +97,18 @@ function PipelineStep({
   return (
     <li className="flex gap-4">
       <div className="flex flex-col items-center">
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done
-              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
-              : 'border-border text-muted-foreground',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border',
+            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border',
           )}
         >
           {index}
-        </span>
+        </Txt>
         {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
@@ -140,8 +140,13 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
-  const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  const { total: itemCount } = useDatasetItems({
+    datasetId: datasetId,
+    search: undefined,
+    version: version,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
   const datasetDefaultScorers = dataset?.scorerIds ?? [];
   const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;

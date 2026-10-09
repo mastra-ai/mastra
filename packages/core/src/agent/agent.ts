@@ -36,6 +36,7 @@ import type {
   StreamObjectResult,
   StreamTextResult,
 } from '../llm/model/base.types';
+import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
@@ -43,6 +44,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -193,7 +195,7 @@ import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
-import type { SubAgent } from './subagent';
+import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
@@ -343,6 +345,18 @@ const createSubAgentOutputSchema = () =>
       )
       .describe("The results from the agent's tool calls")
       .optional(),
+    subAgentPendingToolCalls: z
+      .array(
+        z.object({
+          toolName: z.string().describe('The name of the tool'),
+          toolCallId: z.string().describe('The ID of the tool call'),
+          args: z.unknown().describe('The arguments of the tool call').optional(),
+        }),
+      )
+      .describe(
+        'Tool calls the agent made that were never resolved because the tool has no server-side execute (client tools)',
+      )
+      .optional(),
     ref: z.string().describe('Reference ID for this result when delegation.enableResultReferences is on').optional(),
   });
 
@@ -358,6 +372,62 @@ type SubAgentToolInput = Omit<z.infer<ReturnType<typeof createSubAgentInputSchem
   contextFromRefs?: DelegationRefInput[] | null;
 };
 type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
+
+type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
+
+const RESOLVED_TOOL_INVOCATION_STATES = new Set<string>(['result', 'output-error', 'output-denied']);
+
+/**
+ * Tool calls a sub-agent made that never got a result. A tool without a server-side
+ * `execute` (a client tool) ends the sub-agent's run at the tool-calls step, and
+ * nothing in a delegation can run it, so the call stays unresolved.
+ *
+ * Calls that failed or were declined also have no tool-result, but the loop records
+ * them in the response messages (`output-error` / `output-denied`), so those count as
+ * resolved too.
+ */
+function getPendingSubAgentToolCalls(
+  toolCalls: SubAgentToolCall[] | undefined,
+  toolResults: SubAgentToolResult[] | undefined,
+  responseMessages: MastraDBMessage[],
+): SubAgentPendingToolCall[] {
+  const resolvedIds = new Set((toolResults ?? []).map(toolResult => toolResult.payload.toolCallId));
+  for (const message of responseMessages) {
+    for (const part of message.content.parts ?? []) {
+      if (part.type === 'tool-invocation' && RESOLVED_TOOL_INVOCATION_STATES.has(part.toolInvocation.state)) {
+        resolvedIds.add(part.toolInvocation.toolCallId);
+      }
+    }
+  }
+  return (toolCalls ?? [])
+    .filter(toolCall => !toolCall.payload.providerExecuted && !resolvedIds.has(toolCall.payload.toolCallId))
+    .map(toolCall => ({
+      toolName: toolCall.payload.toolName,
+      toolCallId: toolCall.payload.toolCallId,
+      args: toolCall.payload.args,
+    }));
+}
+
+/**
+ * Note for the supervisor model when the sub-agent stopped on unresolved client tool
+ * calls, so an empty sub-agent reply is not read as a finished task.
+ */
+function formatPendingSubAgentToolCalls(pendingToolCalls: SubAgentPendingToolCall[] | undefined): string {
+  if (!pendingToolCalls?.length) return '';
+  const calls = pendingToolCalls.map(toolCall => `${toolCall.toolName}(${JSON.stringify(toolCall.args ?? {})})`);
+  return `\n\n[The sub-agent stopped before finishing: it called tools that have no server-side execute and were never run: ${calls.join(', ')}.]`;
+}
+
+function logPendingSubAgentToolCalls(
+  logger: { warn: (message: string, ...args: any[]) => void },
+  agentName: string,
+  pendingToolCalls: SubAgentPendingToolCall[],
+) {
+  logger.warn(
+    `Sub-agent "${agentName}" stopped on tool calls that have no server-side execute (client tools), which sub-agents cannot resolve. Let the supervisor own client tools, or use suspend() in the sub-agent's tool.`,
+    { tools: pendingToolCalls.map(toolCall => toolCall.toolName) },
+  );
+}
 
 type ModelFallbacks = {
   id: string;
@@ -1200,8 +1270,6 @@ export class Agent<
    * objective record; unset fields fall back to the agent's `goal` config at
    * evaluation time. A judge model (here or in `goal.judge`) is required for the
    * goal to do anything.
-   *
-   * @experimental Agent goals are experimental and may change in a future release.
    */
   async setObjective(
     objective: string,
@@ -3695,7 +3763,12 @@ export class Agent<
    * @internal
    */
   __resetToOriginalModel() {
-    this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+    const originalModel = this.#originalModel;
+    if (Array.isArray(originalModel)) {
+      this.model = [...originalModel];
+      return;
+    }
+    this.model = originalModel;
   }
 
   /**
@@ -5245,32 +5318,26 @@ export class Agent<
    * conversation context (user messages, assistant text, etc.).
    * @internal
    */
-  private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
+  private stripParentToolParts(messages: ModelMessage[]): ModelMessage[] {
     return messages
-      .map(message => {
-        if (message.id === 'om-continuation') {
+      .map((message): ModelMessage | null => {
+        if ((message as { id?: string }).id === 'om-continuation') {
           return null;
         }
 
-        if (message.role === 'assistant') {
-          const content = message.content;
-          const parts = Array.isArray(content) ? content : content?.parts;
-          if (!Array.isArray(parts)) return message;
-          const filtered = parts.filter((part: any) => part?.type !== 'tool-call');
+        if (message.role === 'tool') {
+          return null;
+        }
+
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const filtered = message.content.filter(part => part.type !== 'tool-call');
           if (filtered.length === 0) return null;
-          if (Array.isArray(content)) {
-            return { ...message, content: filtered };
-          }
-          return { ...message, content: { ...content, parts: filtered } };
-        }
-
-        if ((message as any).role === 'tool') {
-          return null;
+          return { ...message, content: filtered };
         }
 
         return message;
       })
-      .filter((message): message is MastraDBMessage => Boolean(message));
+      .filter((message): message is ModelMessage => message !== null);
   }
 
   private getSubAgentToolSchemas(variant: SubAgentToolSchemaVariant = 'default'): SubAgentToolSchemas {
@@ -5346,7 +5413,7 @@ export class Agent<
               value:
                 typeof output === 'string'
                   ? output
-                  : `${output.text ?? ''}${output.ref ? `\n\n[ref: ${output.ref}]` : ''}`,
+                  : `${output.text ?? ''}${formatPendingSubAgentToolCalls(output.subAgentPendingToolCalls)}${output.ref ? `\n\n[ref: ${output.ref}]` : ''}`,
             });
 
         const toolObj = createTool({
@@ -5364,12 +5431,13 @@ export class Agent<
             const toolCallId = context?.agent?.toolCallId || globalThis.crypto.randomUUID();
 
             // Get messages from context - available at tool execution time
-            const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
+            const contextMessages = (context?.agent?.messages || []) as ModelMessage[];
 
             // Strip tool call/result parts from the context.
             const sanitizedMessages = this.stripParentToolParts(contextMessages);
 
-            let fullSubAgentMessages: MastraDBMessage[] = sanitizedMessages;
+            // Replaced with the sub-agent transcript once it runs; until then it holds the parent context.
+            let fullSubAgentMessages = sanitizedMessages as unknown as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
             // Each iteration typically produces an assistant message
@@ -5850,7 +5918,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -5864,7 +5932,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -5924,12 +5992,22 @@ export class Agent<
                   });
                 }
 
+                const subAgentPendingToolCalls = getPendingSubAgentToolCalls(
+                  generateResult.toolCalls,
+                  generateResult.toolResults,
+                  agentResponseMessages,
+                );
+                if (subAgentPendingToolCalls.length > 0) {
+                  logPendingSubAgentToolCalls(this.logger, agentName, subAgentPendingToolCalls);
+                }
+
                 result = {
                   text: generateResult.text,
                   finishReason: generateResult.finishReason,
                   subAgentThreadId: effectiveGenerateThreadId,
                   subAgentResourceId: effectiveGenerateResourceId,
                   subAgentToolResults,
+                  ...(subAgentPendingToolCalls.length > 0 ? { subAgentPendingToolCalls } : {}),
                   usage: generateResult.usage,
                 };
               } else if (
@@ -5943,7 +6021,7 @@ export class Agent<
                   requestContext: subAgentRequestContext,
                   actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
-                  context: filteredContextMessages as unknown as CoreMessage[],
+                  context: filteredContextMessages as CoreMessage[],
                   ...subAgentAbortOptions,
                 });
                 result = {
@@ -5962,7 +6040,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -5976,7 +6054,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
+                      context: filteredContextMessages,
                       ...subAgentMemoryOption,
                       ...subAgentAbortOptions,
                       backgroundTaskPolicy: {
@@ -6018,7 +6096,8 @@ export class Agent<
                   }
                 }
 
-                const subAgentToolResults = (await streamResult.toolResults)?.map(toolResult => ({
+                const streamToolResults = await streamResult.toolResults;
+                const subAgentToolResults = streamToolResults?.map(toolResult => ({
                   toolName: toolResult.payload.toolName,
                   toolCallId: toolResult.payload.toolCallId,
                   result: toolResult.payload.result,
@@ -6066,12 +6145,23 @@ export class Agent<
                 const processedText = await streamResult.text;
                 const subAgentFinishReason = await streamResult.finishReason;
                 const subAgentUsage = await streamResult.usage;
+                // Calls that are waiting on approval or suspension also lack results, but
+                // those return through suspend() below and never reach the delegation result.
+                const isSuspending = !!(requireToolApproval || suspendedPayload || resumeSchema);
+                const subAgentPendingToolCalls = isSuspending
+                  ? []
+                  : getPendingSubAgentToolCalls(await streamResult.toolCalls, streamToolResults, agentResponseMessages);
+                if (subAgentPendingToolCalls.length > 0) {
+                  logPendingSubAgentToolCalls(this.logger, agentName, subAgentPendingToolCalls);
+                }
+
                 result = {
                   text: processedText,
                   finishReason: subAgentFinishReason,
                   subAgentThreadId: effectiveStreamThreadId,
                   subAgentResourceId: effectiveStreamResourceId,
                   subAgentToolResults,
+                  ...(subAgentPendingToolCalls.length > 0 ? { subAgentPendingToolCalls } : {}),
                   usage: subAgentUsage,
                 };
 
@@ -8761,9 +8851,6 @@ export class Agent<
     return fullOutput;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   subscribeToThread<OUTPUT = TOutput>(
     options: AgentSubscribeToThreadOptions & { withInitialHistory: true | { perPage?: number } },
   ): Promise<AgentThreadSubscription<OUTPUT, true>>;
@@ -8779,9 +8866,6 @@ export class Agent<
     return agentThreadStreamRuntime.subscribeToThread<OUTPUT>(this.#getThreadRuntimeAgent(), options, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async claimThreadOwnership<OUTPUT = TOutput>(options: {
     resourceId: string;
     threadId: string;
@@ -8807,9 +8891,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   updateThreadPeerAdvertisement(options: {
     resourceId: string;
     threadId: string;
@@ -8822,9 +8903,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async discoverThreadPeers(options?: DiscoverAgentThreadPeersOptions): Promise<AgentThreadPeerAdvertisement[]> {
     return agentThreadStreamRuntime.discoverThreadPeers(options, this.getPubSub(), this.#getThreadRuntimeAgent());
   }
@@ -8990,16 +9068,21 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    wrapperClose?.();
+    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   sendMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
@@ -9012,9 +9095,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   queueMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
@@ -9027,16 +9107,10 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
     return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
   }
 
-  /**
-   * @experimental Agent thread event APIs are experimental and may change in a future release.
-   */
   subscribeThreadEvents(scope: SubscribeAgentThreadEventsOptions, listener: AgentThreadEventListener): () => void {
     return agentThreadStreamRuntime.subscribeThreadEvents(
       this as Agent<any, any, any, any>,
@@ -9046,9 +9120,6 @@ export class Agent<
     );
   }
 
-  /**
-   * @experimental Agent state signal APIs are experimental and may change in a future release.
-   */
   sendStateSignal<OUTPUT = TOutput>(
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
@@ -9067,8 +9138,6 @@ export class Agent<
    * notification dispatch workflow, so a deferred delivery can carry
    * freshly-resolved decision fields (e.g. `streamOptions` with the request
    * context a woken idle thread needs to resolve a model).
-   *
-   * @experimental Agent notification signal APIs are experimental and may change in a future release.
    */
   resolveNotificationDeliveryDecision(input: NotificationDeliveryPolicyInput): Promise<NotificationDeliveryDecision> {
     return resolveNotificationDeliveryDecision({
@@ -9077,9 +9146,6 @@ export class Agent<
     });
   }
 
-  /**
-   * @experimental Agent notification signal APIs are experimental and may change in a future release.
-   */
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
@@ -9324,9 +9390,6 @@ export class Agent<
     return results;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   sendSignal<OUTPUT = TOutput>(
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
@@ -9386,6 +9449,7 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -9516,10 +9580,15 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed setup does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(mergedOptions.runId, threadStreamPubSub, {
-        agent: this,
-        streamOptions: preparedOptions,
-      });
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        mergedOptions.runId,
+        threadStreamPubSub,
+        {
+          agent: this,
+          streamOptions: preparedOptions,
+        },
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
   }
@@ -9874,7 +9943,12 @@ export class Agent<
     } catch (error) {
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed resume does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(runId, threadStreamPubSub);
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        runId,
+        threadStreamPubSub,
+        undefined,
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
   }
@@ -10723,6 +10797,14 @@ export class Agent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
