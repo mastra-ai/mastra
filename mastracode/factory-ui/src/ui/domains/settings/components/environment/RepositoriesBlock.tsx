@@ -1,5 +1,4 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ContentBlock, ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -71,8 +70,7 @@ export function RepositoriesBlock({
         Repositories
       </Txt>
       <Txt as="p" variant="meta" tone="muted">
-        Every session's sandbox clones these repositories into its working directory in this order and runs each one's
-        setup command.
+        Repositories cloned into each new sandbox, in this order.
       </Txt>
       <SettingsContainer className="divide-y-0 p-2">
         <ContentBlocks
@@ -113,14 +111,18 @@ export function RepositoriesBlock({
   );
 }
 
+/** How the repository's last setup went; nothing to show before the first one. */
 const STATUS_BADGE: Record<
   FactoryEnvironmentRepository['lastBuildStatus'],
-  { label: string; variant: 'neutral' | 'success' | 'destructive' }
+  { label: string; variant: 'success' | 'destructive' } | null
 > = {
-  unbuilt: { label: 'Unbuilt', variant: 'neutral' },
-  configured: { label: 'Configured', variant: 'success' },
-  failed: { label: 'Last build failed', variant: 'destructive' },
+  unbuilt: null,
+  configured: { label: 'Setup OK', variant: 'success' },
+  failed: { label: 'Setup failed', variant: 'destructive' },
 };
+
+/** Keeps a click on a control inside the header row from toggling the row. */
+const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
 function RepositoryRow({
   repository,
@@ -141,13 +143,34 @@ function RepositoryRow({
   const label = repository.slug ?? '';
   const status = STATUS_BADGE[repository.lastBuildStatus];
 
+  const toggleExpanded = () => setExpanded(v => !v);
+
   return (
     <div className="rounded-md">
-      <div className="flex w-full items-center gap-3 px-2 py-2">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? 'Hide' : 'Show'} details for ${label}`}
+        className="hover:bg-surface3 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2"
+        onClick={toggleExpanded}
+        onKeyDown={event => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggleExpanded();
+          }
+        }}
+      >
         <span
           {...dragHandleProps}
           className="text-muted-foreground flex cursor-grab items-center"
           aria-label={`Drag ${label}`}
+          onClick={stop}
+          onPointerDown={event => {
+            stop(event);
+            dragHandleProps?.onPointerDown?.(event);
+          }}
         >
           <GripVertical className="size-4" aria-hidden />
         </span>
@@ -166,27 +189,36 @@ function RepositoryRow({
             </Txt>
           )}
         </span>
-        <Badge size="sm" variant={status.variant}>
-          {status.label}
-        </Badge>
-        <Switch
-          aria-label={`Include ${label} in the environment`}
-          checked={repository.inEnvironment}
-          disabled={disabled}
-          onCheckedChange={value => onToggle(value)}
+        {status && (
+          <Badge size="sm" variant={status.variant}>
+            {status.label}
+          </Badge>
+        )}
+        <span className="flex items-center gap-2" onClick={stop}>
+          <Txt as="span" variant="caption" tone="muted">
+            {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
+          </Txt>
+          <Switch
+            aria-label={`Clone ${label} into every session`}
+            checked={repository.inEnvironment}
+            disabled={disabled}
+            onCheckedChange={value => onToggle(value)}
+          />
+        </span>
+        <ChevronDown
+          aria-hidden
+          className={`text-muted-foreground size-4 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
         />
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`${expanded ? 'Hide' : 'Show'} details for ${label}`}
-          aria-expanded={expanded}
-          onClick={() => setExpanded(v => !v)}
-        >
-          <ChevronDown aria-hidden className={expanded ? 'rotate-180 transition-transform' : 'transition-transform'} />
-        </Button>
       </div>
       {expanded && (
         <div className="flex flex-col gap-3 px-2 pt-1 pb-3 pl-9">
+          <Txt as="p" variant="meta" tone="muted">
+            {repository.inEnvironment
+              ? 'Cloned into every session and the template build.'
+              : 'Not cloned; sessions and builds skip this repository.'}
+            {repository.lastBuildStatus === 'configured' && ' Its setup command finished cleanly last time.'}
+            {repository.lastBuildStatus === 'failed' && ' Its setup command failed last time:'}
+          </Txt>
           {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
             <Txt as="p" font="mono" variant="meta" className="text-destructive whitespace-pre-wrap">
               {repository.lastBuildError}
