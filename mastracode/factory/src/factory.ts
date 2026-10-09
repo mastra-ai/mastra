@@ -616,7 +616,6 @@ export class MastraFactory {
       pubsub: eventBus,
     });
 
-    // Detect an instance by its brand, not its shape: the alpha config also had a `create` key.
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
     if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
