@@ -385,6 +385,38 @@ describe('Subconscious knowledge write tools', () => {
     expect(append).toHaveBeenCalledTimes(1);
   });
 
+  it('points the curator at similar visible nodes instead of creating a near-duplicate', async () => {
+    const { store, tools } = await fixture();
+    const existing = await store.createNode({ name: 'Payments Service', kind: 'service', scopeIds: [scopeIds[0]!] });
+    const createNodeWithRecord = vi.spyOn(store, 'createNodeWithRecord');
+
+    for (const name of ['payments-service (2026-10-08)', 'Payments', 'Payments Service API']) {
+      await expect(
+        tools.knowledge_create!.execute?.({ name, kind: 'service', text: 'Deploys run nightly.' }, {} as any),
+      ).rejects.toThrow(`Similar nodes already exist: ${existing.id} "Payments Service"`);
+    }
+    expect(createNodeWithRecord).not.toHaveBeenCalled();
+
+    // The exact name reuses the node even from another scope; unrelated and confirmed-distinct names are created.
+    const reused = (await tools.knowledge_create!.execute?.(
+      { name: 'payments service', kind: 'service', text: 'Deploys run nightly.' },
+      {} as any,
+    )) as any;
+    expect(reused.node.id).toBe(existing.id);
+    expect(reused.record.nodeId).toBe(existing.id);
+    const unrelated = (await tools.knowledge_create!.execute?.(
+      { name: 'Billing Ledger', kind: 'service', text: 'Ledger entries are immutable.' },
+      {} as any,
+    )) as any;
+    expect(unrelated.node.id).not.toBe(existing.id);
+    const confirmed = (await tools.knowledge_create!.execute?.(
+      { name: 'Payments', kind: 'team', text: 'The payments team owns checkout.', confirmDistinct: true },
+      {} as any,
+    )) as any;
+    expect(confirmed.node).toMatchObject({ name: 'Payments', kind: 'team' });
+    expect(confirmed.node.id).not.toBe(existing.id);
+  });
+
   it('rejects over-long record text on create and append before writing a node or record', async () => {
     const { store, source, tools } = await fixture();
     const createNodeWithRecord = vi.spyOn(store, 'createNodeWithRecord');
