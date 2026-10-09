@@ -2,9 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added a sandbox environment to each Factory project: the provider settings a user tunes, the workspace setup command, the working directory and the repositories in the order they are checked out. One route reads and writes it.
-
-`GET /web/factory/projects/:id/environment` returns the provider id, the JSON Schema of its settings and its capabilities (from the configured `FactorySandbox`), the stored settings and the repositories in position order. `PATCH` on the same path updates them as one unit.
+Added a sandbox environment to each Factory project. Provider settings, the workspace setup command, the working directory and the order repositories are checked out in now live on the project and are read and written through one route, `GET` and `PATCH /web/factory/projects/:id/environment`.
 
 ```json
 {
@@ -18,8 +16,8 @@ Added a sandbox environment to each Factory project: the provider settings a use
 }
 ```
 
-**Settings:** `settings` is a partial merged onto the stored document and `null` removes a key. Only keys the user set are stored; an unset key leaves the provider's default in place. The merged document is validated by the provider schema: a refusal is a 400 `invalid_environment` naming the field and writes nothing, and a factory without a sandbox answers 400 `no_sandbox`. A stored key the current provider does not declare (for example after a provider switch) is dropped and the update retried before it is refused.
+**Settings:** only the keys you set are stored; anything unset keeps the provider default. A patch is merged onto the stored settings, `null` removes a key, and the result is checked against the provider's schema before anything is written. A rejected value answers 400 `invalid_environment` naming the field; a factory without a sandbox answers 400 `no_sandbox`.
 
-**Repositories:** a body that sets positions must list every repository with positions forming a permutation of 1..n. A new link gets the next position; a second link to the same repository slug starts outside the environment.
+**Repositories:** to reorder, list every repository with positions 1 through n. A second link to the same repository starts outside the environment.
 
-**Existing projects:** an idempotent backfill on startup numbers existing links by creation time and marks duplicate slugs as outside the environment, oldest link first. Nothing is dropped or deleted.
+Existing projects keep working: their links get an order on the next start and nothing is deleted.
