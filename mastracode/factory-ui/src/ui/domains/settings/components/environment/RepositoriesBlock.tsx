@@ -163,7 +163,7 @@ function RepositoryRow({
             </Txt>
             <GripVertical className="hidden size-4 group-hover/row:block" aria-hidden />
           </TooltipTrigger>
-          <TooltipContent>Drag to reorder</TooltipContent>
+          <TooltipContent className="pointer-events-none">Drag to reorder</TooltipContent>
         </Tooltip>
         <span className="min-w-0 flex-1">
           <Txt as="span" tone={repository.inEnvironment ? 'ink' : 'muted'} className="flex items-center gap-1.5">
