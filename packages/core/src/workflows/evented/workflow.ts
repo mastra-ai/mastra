@@ -2611,11 +2611,17 @@ export class EventedRun<
     };
 
     if (this.parentWorkflow) {
-      const claimedParent = await workflowsStore.updateWorkflowState({
-        workflowName: this.parentWorkflow.workflowId,
-        runId: this.parentWorkflow.runId,
-        opts: { status: 'running', expectedStatus: 'suspended' },
-      });
+      let claimedParent;
+      try {
+        claimedParent = await workflowsStore.updateWorkflowState({
+          workflowName: this.parentWorkflow.workflowId,
+          runId: this.parentWorkflow.runId,
+          opts: { status: 'running', expectedStatus: 'suspended' },
+        });
+      } catch (error) {
+        await releaseClaimIfUnused();
+        throw error;
+      }
       if (!claimedParent) {
         await releaseClaimIfUnused();
         throw new MastraError({
