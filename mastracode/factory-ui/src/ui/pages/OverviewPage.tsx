@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { TextLink } from '@mastra/playground-ui/components/TextLink';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, ChevronDown } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -171,26 +172,19 @@ export function OverviewContent({
 
 function ViewAll({ to }: { to: string }) {
   return (
-    <Link to={to} className="text-muted-foreground hover:text-foreground">
-      <Txt as="span" variant="meta" className="block">
-        View all
-      </Txt>
-    </Link>
+    <Txt as="span" variant="meta">
+      <TextLink render={<Link to={to} />}>View all</TextLink>
+    </Txt>
   );
 }
 
 function ViewOnGithub({ slug }: { slug: string }) {
   return (
-    <a
-      href={`https://github.com/${slug}/commits`}
-      target="_blank"
-      rel="noreferrer"
-      className="text-muted-foreground hover:text-foreground"
-    >
-      <Txt as="span" variant="meta">
+    <Txt as="span" variant="meta">
+      <TextLink href={`https://github.com/${slug}/commits`} target="_blank" rel="noreferrer">
         {slug}
-      </Txt>
-    </a>
+      </TextLink>
+    </Txt>
   );
 }
 
