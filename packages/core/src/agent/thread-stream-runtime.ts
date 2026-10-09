@@ -4453,6 +4453,26 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
           if (!local) state.remoteThreadKeysByRunId.set(data.runId, key);
+          // A live new segment of a run supersedes any earlier segment of the
+          // same run that never saw a terminal event: that segment's process
+          // died (e.g. recovery took the run over), and the lease now held
+          // under the same runId would otherwise keep it looking alive and
+          // queue the new segment behind it forever.
+          for (const staleStreamId of registeredSeqsByRunId.get(data.runId)?.keys() ?? []) {
+            if (staleStreamId === data.streamId || terminalEventStreamIds.has(staleStreamId)) continue;
+            const staleRun = remoteRuns.get(staleStreamId);
+            if (!staleRun || staleRun.done) continue;
+            if (deferredRunsByStreamId.has(staleStreamId)) {
+              discardDeferredRun(staleStreamId);
+              continue;
+            }
+            stopRemoteRunLeaseWatch(staleStreamId);
+            remoteRunSuspensionPrompts.delete(staleStreamId);
+            staleRun.done = true;
+            while (staleRun.waiters.length) staleRun.waiters.shift()?.();
+            while (staleRun.finishWaiters.length) staleRun.finishWaiters.shift()?.();
+            remoteRuns.delete(staleStreamId);
+          }
         }
         // Reuse a proxy that a stream-part-first delivery already created for
         // this stream — creating a fresh record here would orphan its

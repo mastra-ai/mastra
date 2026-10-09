@@ -48,6 +48,51 @@ describe('thread stream remote-run liveness', () => {
     await consumed;
   });
 
+  it('delivers a recovered segment of the same run after its crashed segment never ended (#25891)', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('liveness-recovered');
+    const { runtime, pubsub, emit } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const recoveredStreamId = `${harness.streamId}-recovered`;
+    pubsub.owners.set(key, harness.runId);
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+
+    // Original process streams up to a tool call, then dies without a terminal event.
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: harness.streamId,
+      sourceId: 'crashed',
+      part: { type: 'tool-call', payload: { toolCallId: 'call-1', toolName: 'lookup' } },
+    });
+    // Recovery re-acquires the lease under the same runId and registers a new segment.
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: recoveredStreamId, streamSeq: 2 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: recoveredStreamId,
+      sourceId: 'recoverer',
+      part: { type: 'tool-call-approval', payload: { toolCallId: 'call-2', toolName: 'refund' } },
+    });
+    await flush();
+
+    expect(collected.map(part => part.type)).toEqual(['tool-call', 'tool-call-approval']);
+    expect(subscription.activeRunId()).toBe(harness.runId);
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+
   it('does not report a replayed suspended stream as lease loss', async () => {
     vi.useFakeTimers();
     const harness = createHarness('liveness-suspended');

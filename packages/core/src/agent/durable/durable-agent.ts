@@ -3896,7 +3896,9 @@ export class DurableAgent<
         // callers only care about counts — so we just await the workflow
         // execution promise that `recover()` parks on the registry entry,
         // capture any failure it surfaces via `onError`, and drop the
-        // stream.
+        // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
+        // suspended runs registered, so thread subscribers still see the
+        // terminal event and a later approval can resume the run (#25891).
         const { cleanup } = await this.recover(targetRunId, {
           onError: ({ error }) => {
             runError = error instanceof Error ? error : new Error(String(error));
@@ -3907,8 +3909,9 @@ export class DurableAgent<
           if (workflowExecution) {
             await workflowExecution;
           }
-        } finally {
+        } catch (error) {
           cleanup();
+          throw error;
         }
         if (runError) throw runError;
         recovered.push({ runId: targetRunId, status: 'success' });
