@@ -145,7 +145,11 @@ describe('DockerFactorySandbox', () => {
   });
 
   it('creates a DockerSandbox keyed by the session with the template and runtime options', () => {
-    const created = new DockerFactorySandbox({ env: { CI: '1' }, memory: 512 }).create(context(), {});
+    const created = new DockerFactorySandbox({ env: { CI: '1' }, memory: 512 }).create(
+      { ...context(), workingDirectory: '/srv/repos' },
+      {},
+    );
+    expect(created.workingDirectory).toBe('/srv/repos');
     expect(created).toBeInstanceOf(DockerSandbox);
     expect(created.id).toBe('sess_1');
     expect((created as any)._templateSpec).toBeTypeOf('function');

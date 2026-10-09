@@ -109,7 +109,11 @@ describe('E2BFactorySandbox', () => {
   });
 
   it('creates an E2BSandbox keyed by the session with the sandbox id and template', () => {
-    const created = new E2BFactorySandbox({ apiKey: 'e2b_test', timeout: 1234 }).create(context(), {});
+    const created = new E2BFactorySandbox({ apiKey: 'e2b_test', timeout: 1234 }).create(
+      { ...context(), workingDirectory: '/home/user/repos' },
+      {},
+    );
+    expect(created.workingDirectory).toBe('/home/user/repos');
     expect(created).toBeInstanceOf(E2BSandbox);
     expect(created.id).toBe('sess_1');
     expect((created as any)._preferredSandboxId).toBe('sbx_prev');
