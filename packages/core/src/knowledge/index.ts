@@ -127,15 +127,16 @@ export class Knowledge extends MastraBase {
    * Returns trusted placement context for the held scope addresses and the configured
    * structural scopes reachable from them. @internal
    */
-  __getDescriptionContext(heldAddresses: string[]): {
+  async __getDescriptionContext(heldAddresses: string[]): Promise<{
     description?: string;
     scopes: Array<{ address: string; name: string; description: string }>;
-  } {
+  }> {
     const visibleAddresses = new Set(heldAddresses);
-    const structural = new Set(this.__getVisibleStructureScopes(heldAddresses).map(scope => scope.address));
+    const configured = await this.#placementScopes(heldAddresses);
+    const structural = new Set(this.#visibleStructureScopes(heldAddresses, configured).map(scope => scope.address));
     return {
       description: this.description?.trim() || undefined,
-      scopes: (this.#structure?.scopes ?? []).flatMap(configuredScope => {
+      scopes: configured.flatMap(configuredScope => {
         const description = configuredScopeDescription(configuredScope);
         if (!description) return [];
         if (!visibleAddresses.has(configuredScope.address) && !structural.has(configuredScope.address)) return [];
@@ -145,13 +146,50 @@ export class Knowledge extends MastraBase {
   }
 
   /**
-   * Structural scopes a writer holding `heldAddresses` may place content into: every configured
-   * scope whose declared parent chain reaches a held address. Held addresses themselves are
-   * excluded. The structure plan is host configuration, so this frontier is host-vouched. @internal
+   * Host-configured scopes a writer holding `heldAddresses` could place into: the static structure
+   * plan plus the template children of each held address. Template children come from the
+   * scope-type config the store materializes them from, so they are host-vouched like the plan.
+   * Children are copied on create, so only those that exist in storage are offered.
    */
-  __getVisibleStructureScopes(heldAddresses: string[]): Array<{ address: string; name: string; description?: string }> {
-    const held = new Set(heldAddresses);
+  async #placementScopes(heldAddresses: string[]): Promise<KnowledgeStructurePlan['scopes']> {
     const configured = this.#structure?.scopes ?? [];
+    const known = new Set(configured.map(scope => scope.address));
+    const templated: KnowledgeStructurePlan['scopes'] = [];
+    for (const address of heldAddresses) {
+      let plan: KnowledgeStructurePlan;
+      try {
+        plan = materializeKnowledgeScopePlan(this.#scopeTypes, { address, contextualScopeAddress: address });
+      } catch {
+        continue;
+      }
+      for (const child of plan.scopes.slice(1)) {
+        if (known.has(child.address)) continue;
+        known.add(child.address);
+        templated.push(child);
+      }
+    }
+    if (templated.length === 0) return configured;
+    const storage = await this.getStorage();
+    const existing = await Promise.all(templated.map(child => storage.getScopeAddress(child.address)));
+    return [...configured, ...templated.filter((_, index) => existing[index])];
+  }
+
+  /**
+   * Structural scopes a writer holding `heldAddresses` may place content into: every configured
+   * or held-scope template child whose parent chain reaches a held address. Held addresses
+   * themselves are excluded. This frontier is host-vouched configuration. @internal
+   */
+  async __getVisibleStructureScopes(
+    heldAddresses: string[],
+  ): Promise<Array<{ address: string; name: string; description?: string }>> {
+    return this.#visibleStructureScopes(heldAddresses, await this.#placementScopes(heldAddresses));
+  }
+
+  #visibleStructureScopes(
+    heldAddresses: string[],
+    configured: KnowledgeStructurePlan['scopes'],
+  ): Array<{ address: string; name: string; description?: string }> {
+    const held = new Set(heldAddresses);
     const byAddress = new Map(configured.map(scope => [scope.address, scope]));
     const reachesHeld = (address: string): boolean => {
       const seen = new Set<string>();

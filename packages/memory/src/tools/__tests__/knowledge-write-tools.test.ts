@@ -165,6 +165,92 @@ describe('Subconscious knowledge write tools', () => {
     );
   });
 
+  async function templatedFixture(knowledge: Knowledge) {
+    const ids: string[] = [];
+    for (const [address, parent] of [
+      ['org:acme', undefined],
+      ['resource:user-42', 'org:acme'],
+      ['resource:user-42:thread:alpha', 'resource:user-42'],
+    ] as const) {
+      const { scopes } = await knowledge.materializeScope({
+        address,
+        contextualScopeAddress: address,
+        ...(parent ? { parentAddresses: [parent] } : {}),
+      });
+      ids.push(scopes[address]!);
+    }
+    const tools = createKnowledgeWriteTools(new Memory({ storage: new InMemoryStore(), knowledge }), {
+      scopeIds: ids,
+      scopeAddresses: heldAddresses,
+      sourceThreadId: 'alpha',
+    });
+    return { ids, tools, store: await knowledge.getStorage() };
+  }
+
+  it('places created nodes into template child scopes materialized under a held org', async () => {
+    const knowledge = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      scopes: {
+        'org:$orgId': {
+          children: [{ address: 'features:$orgId:memory', name: 'memory', description: 'Memory subsystem knowledge.' }],
+        },
+      },
+    });
+    await knowledge.materializeScope({ address: 'org:other', contextualScopeAddress: 'org:other' });
+    const { ids, tools, store } = await templatedFixture(knowledge);
+
+    // The curator's placement context lists the held org's templated child, not another org's.
+    expect((await knowledge.__getDescriptionContext(heldAddresses)).scopes).toEqual([
+      { address: 'features:acme:memory', name: 'memory', description: 'Memory subsystem knowledge.' },
+    ]);
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Memory Extraction',
+        kind: 'subsystem',
+        text: 'The memory subsystem extracts observations mid-conversation.',
+        nodeScope: 'features:acme:memory',
+        scope: 'org',
+      },
+      {} as any,
+    )) as any;
+
+    const child = await store.getScopeAddress('features:acme:memory');
+    expect(await store.getNodeScopeIds(result.node.id)).toEqual([ids[0], child!.scopeNodeId].sort());
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Foreign', kind: 'x', text: 'x', nodeScope: 'features:other:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:other:memory");
+  });
+
+  it('does not offer template children a held org was materialized without', async () => {
+    const storage = new InMemoryStore();
+    // The org exists before its scope type gained a child template, so copy-on-create never made it.
+    await new Knowledge({ id: 'mastra', storage }).materializeScope({
+      address: 'org:acme',
+      contextualScopeAddress: 'org:acme',
+    });
+    const knowledge = new Knowledge({
+      id: 'mastra',
+      storage,
+      scopes: {
+        'org:$orgId': { children: [{ address: 'features:$orgId:memory', name: 'memory', description: 'Memory.' }] },
+      },
+    });
+    const { tools } = await templatedFixture(knowledge);
+
+    expect((await knowledge.__getDescriptionContext(heldAddresses)).scopes).toEqual([]);
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Memory Extraction', kind: 'x', text: 'x', nodeScope: 'features:acme:memory' },
+        {} as any,
+      ),
+    ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:acme:memory");
+  });
+
   it('rejects structural placement outside the curator frontier', async () => {
     const { store, scopes, tools } = await structuralFixture();
 

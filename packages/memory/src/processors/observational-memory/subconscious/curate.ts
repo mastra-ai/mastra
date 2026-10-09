@@ -193,12 +193,15 @@ function curatorScopeAddresses(context: CuratorContext): string[] {
   return [`org:${organizationId}`, `resource:${resourceId}`, `resource:${resourceId}:thread:${context.threadId}`];
 }
 
-function createKnowledgeDescriptionInstructions(memory: Memory, context: CuratorContext): string | undefined {
+async function createKnowledgeDescriptionInstructions(
+  memory: Memory,
+  context: CuratorContext,
+): Promise<string | undefined> {
   const knowledge = memory.getKnowledgeInstance?.();
   const visibleScopeAddresses = curatorScopeAddresses(context);
   if (!knowledge || visibleScopeAddresses.length === 0) return undefined;
 
-  const descriptionContext = knowledge.__getDescriptionContext(visibleScopeAddresses);
+  const descriptionContext = await knowledge.__getDescriptionContext(visibleScopeAddresses);
   if (!descriptionContext || (!descriptionContext.description && descriptionContext.scopes.length === 0)) {
     return undefined;
   }
@@ -237,7 +240,7 @@ export async function createCuratorAgent(
     name: 'Subconscious Curate',
     instructions: [
       DEFAULT_INSTRUCTIONS,
-      createKnowledgeDescriptionInstructions(memory, context),
+      await createKnowledgeDescriptionInstructions(memory, context),
       subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
       config.instructions?.trim(),
     ]
