@@ -14,4 +14,4 @@ new MastraFactory({
 
 **Settings:** `cpuCount`, `memoryMb` and `idleTimeoutMinutes`. Unset values fall back to the `defaults` option, then to 2 CPUs, 1024 MB and 5 minutes.
 
-**Builds:** starts a template build through the platform build API and reports its status. Build history is not available yet.
+**Builds:** starts a template build through the platform build API and reports its status.
