@@ -866,6 +866,21 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * Best-effort: the local abort has already happened, and a caller asking to
    * stop a run should not get a rejection because the publish failed.
    */
+  // Forward an external signal to the local controller and also publish the
+  // abort request: the step worker may be another process that never sees
+  // this controller (mirrors `result.abort()`).
+  function forwardExternalAbort(external: AbortSignal, controller: AbortController, runId: string): void {
+    const forward = () => {
+      controller.abort((external as AbortSignal & { reason?: unknown }).reason);
+      void requestRemoteAbort(runId);
+    };
+    if (external.aborted) {
+      forward();
+    } else {
+      external.addEventListener('abort', forward, { once: true });
+    }
+  }
+
   async function requestRemoteAbort(runId: string): Promise<void> {
     try {
       await publishAbortRequest(getPubsub(), runId);
@@ -1006,18 +1021,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // controller so either source can cancel the run.
       const abortController = new AbortController();
       if (streamOptions?.abortSignal) {
-        const external = streamOptions.abortSignal;
-        // Also publish the abort request: the step worker may be another
-        // process that never sees this controller (mirrors `result.abort()`).
-        const forwardAbort = () => {
-          abortController.abort((external as AbortSignal & { reason?: unknown }).reason);
-          void requestRemoteAbort(runId);
-        };
-        if (external.aborted) {
-          forwardAbort();
-        } else {
-          external.addEventListener('abort', forwardAbort, { once: true });
-        }
+        forwardExternalAbort(streamOptions.abortSignal, abortController, runId);
       }
       registryEntry.abortController = abortController;
       registryEntry.abortSignal = abortController.signal;
@@ -1234,18 +1238,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // relevant.
       const abortController = new AbortController();
       if (resumeOptions?.abortSignal) {
-        const external = resumeOptions.abortSignal;
-        // Also publish the abort request: the step worker may be another
-        // process that never sees this controller (mirrors `result.abort()`).
-        const forwardAbort = () => {
-          abortController.abort((external as AbortSignal & { reason?: unknown }).reason);
-          void requestRemoteAbort(runId);
-        };
-        if (external.aborted) {
-          forwardAbort();
-        } else {
-          external.addEventListener('abort', forwardAbort, { once: true });
-        }
+        forwardExternalAbort(resumeOptions.abortSignal, abortController, runId);
       }
       // Ensure a registry entry exists for this resumed segment. On Inngest,
       // a resume frequently runs in a fresh process where no prior stream()
