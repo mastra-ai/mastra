@@ -202,7 +202,7 @@ describe('observation.previousObserverTokens reaches the Observer', () => {
     });
     const { storage, om, messages } = await setup('thread', 200);
     (om as any).observer.resolveModel = () => ({ model });
-    // The note sits with the prior thread metadata, so the thread needs some.
+    // With prior thread metadata in the prompt too; the notice does not depend on it (see the cases below).
     const thread = (await storage.getThreadById({ threadId }))!;
     await storage.saveThread({
       thread: { ...thread, metadata: setThreadOMMetadata(thread.metadata, { currentTask: 'Ship the budget fix' }) },
