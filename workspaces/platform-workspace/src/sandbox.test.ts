@@ -854,6 +854,39 @@ describe('PlatformSandbox', () => {
     expect(sandbox.sandboxId).toBe('sbx_same_vm');
   });
 
+  it('creates a fresh sandbox when the proxy answers 410 for the reattach id', async () => {
+    // The proxy returns 410 sandbox_destroyed for a record it has marked
+    // destroyed (idle GC, manual delete). Like a 404, that id is not
+    // reattachable; start() must fall through to a fresh provision instead
+    // of failing the resumed session.
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json(
+          { error: { message: 'Sandbox has been destroyed', type: 'sandbox_destroyed', providerStatus: 'destroyed' } },
+          { status: 410 },
+        ),
+      )
+      .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-28T00:00:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      id: 'session-1',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'sbx_destroyed',
+      fetch: fetchMock,
+    });
+
+    await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_destroyed',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject({ id: 'session-1' });
+    expect(sandbox.sandboxId).toBe('sbx_recreated');
+  });
+
   it('creates a fresh sandbox when the reattached sandbox record is destroyed', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');

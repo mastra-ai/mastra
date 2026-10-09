@@ -630,7 +630,10 @@ export class PlatformSandbox extends MastraSandbox {
         }
         this._sandboxId = undefined;
       } catch (error) {
-        if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
+        // 404: the proxy never issued this id. 410: it did, and has since
+        // marked the record destroyed (idle GC, manual delete). Neither is
+        // reattachable; both fall through to a fresh provision.
+        if (!(error instanceof PlatformApiError) || (error.status !== 404 && error.status !== 410)) throw error;
         this._sandboxId = undefined;
       }
     }
