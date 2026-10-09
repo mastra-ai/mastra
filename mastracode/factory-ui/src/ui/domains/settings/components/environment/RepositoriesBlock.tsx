@@ -138,7 +138,7 @@ function RepositoryRow({
           }
         }}
       >
-        <Tooltip hoverable={false}>
+        <Tooltip disableHoverablePopup>
           <TooltipTrigger
             render={
               <span
@@ -179,7 +179,7 @@ function RepositoryRow({
           <Txt as="span" variant="caption" tone="muted">
             {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
           </Txt>
-          <Tooltip hoverable={false}>
+          <Tooltip disableHoverablePopup>
             <TooltipTrigger
               render={
                 <Switch
