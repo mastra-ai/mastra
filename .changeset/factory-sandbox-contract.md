@@ -38,5 +38,3 @@ class MyFactorySandbox extends FactorySandbox<Settings> {
   };
 }
 ```
-
-`describeFactorySandbox(sandbox)` reports the provider, its settings as JSON Schema and which optional capabilities it has, which is what Factory serves to its clients.
