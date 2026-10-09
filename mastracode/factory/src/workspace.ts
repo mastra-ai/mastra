@@ -604,7 +604,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
-        // No stored settings yet: the provider applies its own defaults.
+        // Settings are not stored anywhere yet, so every session boots on the
+        // provider's defaults.
         const sandbox = factorySandbox.create(
           {
             sessionId: session.id,
