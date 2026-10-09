@@ -72,6 +72,7 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-flash-latest",
+    "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
     "minimax/MiniMax-M3",
     "mistral/codestral-2508",
@@ -529,6 +530,7 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-flash-latest",
+    "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
     "greenference/deepseek-v4.1-flash",
     "greenference/gpt-oss-20b",
@@ -964,12 +966,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "tencent/step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "tencent/deepseek-v4-pro-0813": [
       {
         "type": "effort",
@@ -1166,6 +1162,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-nano-banana-2.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [
@@ -1400,6 +1402,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-nano-banana-2.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "high"]
       }
     ],
     "vertex/gemini-3.1-flash-lite": [

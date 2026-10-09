@@ -234,6 +234,7 @@ function RecordCard({
 export interface KnowledgeFlyoutProps {
   factoryProjectId: string;
   nodeId: string;
+  scopeLevel: KnowledgeRung;
   threadId?: string;
   /** Highlight the knowledge record backing a clicked edge. */
   focusRecordId?: string;
@@ -247,6 +248,7 @@ export interface KnowledgeFlyoutProps {
 export function KnowledgeFlyout({
   factoryProjectId,
   nodeId,
+  scopeLevel,
   threadId,
   focusRecordId,
   onSelectRecord,
@@ -254,12 +256,12 @@ export function KnowledgeFlyout({
   onNodeRef,
   onOpenThread,
 }: KnowledgeFlyoutProps) {
-  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, threadId);
+  const nodeQuery = useKnowledgeNode(factoryProjectId, nodeId, scopeLevel, threadId);
 
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-border bg-card shadow-overlay duration-normal absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform motion-reduce:transition-none"
+      className="border-border bg-card shadow-overlay fixed inset-x-0 bottom-0 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t md:static md:z-auto md:max-h-none md:w-[380px] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
@@ -290,6 +292,9 @@ export function KnowledgeFlyout({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+            {nodeQuery.data.node.description?.trim() ? (
+              <p className="text-foreground px-4 pb-3 text-sm leading-relaxed">{nodeQuery.data.node.description}</p>
+            ) : null}
             {nodeQuery.data.node.content.trim() ? (
               <Collapsible defaultOpen>
                 <SectionHeader title="Content" />

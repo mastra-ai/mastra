@@ -112,8 +112,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');
-          store = await context.memory.storage.getStore('knowledge');
-          if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
+          store = await context.memory.getKnowledgeStore();
           const sources = await dropFreshOwnRecords(
             store,
             await findReminderSources(store, scope, context.rawObservations),
