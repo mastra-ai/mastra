@@ -87,6 +87,12 @@ const mocks = vi.hoisted(() => ({
     cloneUrl: 'https://github.com/octocat/hello.git',
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
+  /** Environment-wide grant, offered by the fake provider while `wideTokens` is true. */
+  getRepositoriesAccess: vi.fn(async ({ repositoryIds }: { repositoryIds: string[] }) => ({
+    cloneUrl: 'https://github.com/octocat/hello.git',
+    authorization: { scheme: 'bearer' as const, token: `env-token-${repositoryIds.join('+')}` },
+  })),
+  wideTokens: true,
   mintInstallationToken: vi.fn(async () => 'gh-token'),
   setEnv: vi.fn(),
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
@@ -180,6 +186,8 @@ afterEach(async () => {
   mocks.runSetupCommand.mockClear();
   mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
+  mocks.getRepositoriesAccess.mockClear();
+  mocks.wideTokens = true;
   mocks.mintInstallationToken.mockClear();
   mocks.setEnv.mockClear();
   mocks.githubPat = null;
@@ -294,6 +302,7 @@ function fakeGithubIntegration() {
     id: 'github',
     versionControl: {
       getRepositoryAccess: mocks.getRepositoryAccess,
+      ...(mocks.wideTokens ? { getRepositoriesAccess: mocks.getRepositoriesAccess } : {}),
     },
     mintInstallationToken: (...args: unknown[]) => mocks.mintInstallationToken(...(args as [])),
     getInstallationOctokit: vi.fn(),
@@ -2388,7 +2397,13 @@ describe('GitHub session workspace preparation', () => {
     const workspace = await resolver({ requestContext });
     const tools = createGithubSubscriptionTools(requestContext, integration);
 
-    expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+    // Subscriptions gate on the factory, so a factory session always has them beside refresh.
+    expect(Object.keys(tools)).toEqual([
+      'github_refresh_token',
+      'github_upsert_factory_triage_comment',
+      'github_subscribe_pr',
+      'github_unsubscribe_pr',
+    ]);
     await expect(tools.github_refresh_token!.execute!({}, {} as never)).rejects.toThrow(
       'active Factory sandbox workspace',
     );
@@ -2451,7 +2466,9 @@ describe('GitHub session workspace preparation', () => {
     const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
 
     expect(await resolver({ requestContext })).toBeUndefined();
-    expect(createGithubSubscriptionTools(requestContext, integration)).toEqual({});
+    expect(Object.keys(createGithubSubscriptionTools(requestContext, integration))).not.toContain(
+      'github_refresh_token',
+    );
   });
 
   it('refreshes a Slack-shaped GitHub session after lazy startup and on later reuse', async () => {
@@ -3170,7 +3187,7 @@ describe('factory environment sandbox context', () => {
       github: github as any,
       projects: projects as any,
     });
-    return { resolver, projects, sandbox };
+    return { resolver, projects, sandbox, github };
   }
 
   const twoLinks = [
@@ -3402,6 +3419,90 @@ describe('factory environment sandbox context', () => {
           },
         ],
       });
+    });
+
+    it('installs one GH_TOKEN covering every environment repository and re-mints it the same way on refresh', async () => {
+      const { resolver, github } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = await resolver({ requestContext });
+      await workspace.sandbox.getInfo();
+
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledWith({
+        orgId: 'org-1',
+        repositoryIds: ['repository-1', 'repository-2'],
+      });
+      expect(lastGhToken()).toBe('env-token-repository-1+repository-2');
+      expect(peekSessionEnvironment('session-a')?.note).toBeUndefined();
+
+      mocks.getRepositoriesAccess.mockResolvedValueOnce({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer', token: 'env-token-rotated' },
+      });
+      const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+      const refresh = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(lastGhToken()).toBe('env-token-rotated');
+
+      // A refresh the provider can no longer widen narrows GH_TOKEN and says so.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mocks.getRepositoriesAccess.mockResolvedValueOnce(undefined);
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
+    });
+
+    it('boots on the session repository token when the environment-wide mint fails', async () => {
+      mocks.getRepositoriesAccess.mockRejectedValueOnce(new Error('installation cannot grant octocat/docs'));
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        expect.objectContaining({
+          reason: 'provider failed to mint one token for this repository set (Error)',
+        }),
+      );
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
+    });
+
+    it('falls back to the session repository token, warns once and tells the agent when one token cannot cover the environment', async () => {
+      mocks.wideTokens = false;
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        expect.objectContaining({
+          sessionId: 'session-a',
+          repositories: ['octocat/hello', 'octocat/docs'],
+          reason: 'provider mints per-repository tokens only',
+        }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('repo-token');
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
     });
 
     it('skips setup where the template marker matches and runs it where the marker is missing', async () => {

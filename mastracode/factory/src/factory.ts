@@ -94,6 +94,7 @@ import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
+import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import { createSourceControlSessionLookup } from './session/factory-session.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
@@ -1156,7 +1157,7 @@ export class MastraFactory {
                 if (storage.isDomainReady('source-control')) {
                   mergeTools(
                     'source-control',
-                    createSourceControlTools({
+                    await createSourceControlTools({
                       requestContext,
                       providers: sourceControlToolProviders,
                       audit: auditDomain,
@@ -1296,6 +1297,16 @@ export class MastraFactory {
             await observeAgentGitAction({
               audit: auditDomain,
               toolContext: { ...toolContext, context: requestContext },
+              resolveRepositorySlugs: async sessionId => {
+                for (const provider of sourceControlToolProviders) {
+                  const session = await provider.storage.sessions.getBySessionId(sessionId);
+                  if (!session) continue;
+                  return environmentSlugs(
+                    await resolveSessionRepositories({ sourceControl: provider.storage, session }),
+                  );
+                }
+                return [];
+              },
             });
           }
           await Promise.all(
