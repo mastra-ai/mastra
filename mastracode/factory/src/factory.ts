@@ -616,11 +616,9 @@ export class MastraFactory {
       pubsub: eventBus,
     });
 
-    // The sandbox option is a FactorySandbox instance (detected by its brand,
-    // never by shape: the fleet-era options object also had a `create` key) or
-    // a bare callback, wrapped here so every consumer sees one
-    // type. Shape-only validation: probing it with a synthetic ctx at boot
-    // would construct against a fake session.
+    // Detect an instance by its brand, not its shape: the alpha config also
+    // had a `create` key. No probing at boot; that would construct a sandbox
+    // for a fake session.
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
     if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
