@@ -85,13 +85,23 @@ export abstract class MemoryStorage extends StorageDomain {
 
   /**
    * Whether this adapter implements run fencing: `raiseRunFence`, and
-   * rejecting thread, message and resource writes whose fence is no longer the
-   * run's current fence, atomically with the write. A write's fence is its
-   * `fence` argument, otherwise the one `resolveRunFence()` returns.
+   * rejecting the writes listed below when their fence is no longer the run's
+   * current fence, atomically with the write. A write's fence is its `fence`
+   * argument, otherwise the one `resolveRunFence()` returns.
    *
-   * Observational memory writes that change observations or reflections are
-   * fenced through `resolveRunFence()` only. Its flags, pending token counts
-   * and record initialization are not fenced.
+   * Fenced: `saveThread`, `updateThread`, `patchThread`,
+   * `updateThreadMetadata`, `saveMessages`, `updateMessages`,
+   * `deleteMessages` and `updateResource`. Observational memory writes that
+   * change observations or reflections, and `mergeResourceWorkingMemory` on
+   * adapters that set `supportsAtomicWorkingMemoryMerge`, are fenced through
+   * `resolveRunFence()` only.
+   *
+   * Not fenced: `deleteThread`, `copyThread`, `cloneThread`,
+   * `updateThreadResourceId`, `saveResource`, and observational memory flags,
+   * pending token counts and record initialization.
+   *
+   * Memory fences are raised only for runs claimed in a workflows store that
+   * supports run fencing, so supporting it here has no effect on its own.
    *
    * Adapters that return true must pass the run-fencing conformance suite.
    * An adapter that has to probe its backend to know returns a promise, and

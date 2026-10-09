@@ -2069,9 +2069,10 @@ export class DurableAgent<
    * Raise the memory store the run writes to to the fence's claim before the
    * run touches memory. Settles the fence if a newer claim already covers
    * memory. Memory that cannot be resolved stays unfenced: the run's own
-   * memory writes fail the same way.
+   * memory writes fail the same way. Warns about a memory store that can't
+   * fence when the run is being recovered, or when recovery is automatic.
    */
-  async #coverMemory(fence: ExecutionFence, requestContext: RequestContext): Promise<void> {
+  async #coverMemory(fence: ExecutionFence, requestContext: RequestContext, recovering = false): Promise<void> {
     if (fence.generation === undefined) return;
     let store: MemoryStorage | undefined;
     try {
@@ -2083,7 +2084,9 @@ export class DurableAgent<
         error,
       });
     }
-    if (this.#mastra?.recoveryConfig?.durableAgents === 'auto') await this.#warnIfUnfenced(store, 'memory');
+    if (recovering || this.#mastra?.recoveryConfig?.durableAgents === 'auto') {
+      await this.#warnIfUnfenced(store, 'memory');
+    }
     try {
       await fence.coverMemory(store);
     } catch (error) {
@@ -2852,6 +2855,19 @@ export class DurableAgent<
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
     const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
+    let initialToolCalls: ToolCallChunk[];
+    let resumeOffset: number | 'latest';
+    try {
+      initialToolCalls = await this.#loadSuspendedToolCalls(runId);
+      // Skip events already broadcast by the original run (e.g. the SUSPENDED
+      // chunk that paused it). Without this, a resume that closes on suspend
+      // (resumeGenerate) would immediately close on the replayed SUSPENDED.
+      resumeOffset = await this.#getPubsubOffset(runId);
+    } catch (error) {
+      // The segment never started: release the run so it can be resumed again.
+      await executionFence.settle(async () => {});
+      throw error;
+    }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, globalRunRegistry.get(runId)]) {
       if (reg) reg.executionFence = executionFence;
@@ -2933,13 +2949,6 @@ export class DurableAgent<
 
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
-
-    const initialToolCalls = await this.#loadSuspendedToolCalls(runId);
-
-    // Skip events already broadcast by the original run (e.g. the SUSPENDED
-    // chunk that paused it). Without this, a resume that closes on suspend
-    // (resumeGenerate) would immediately close on the replayed SUSPENDED.
-    const resumeOffset = await this.#getPubsubOffset(runId);
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
@@ -3238,6 +3247,7 @@ export class DurableAgent<
         details: { agentName: this.name, runId },
       });
     }
+    await this.#warnIfUnfenced(workflowsStore, 'workflows');
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
@@ -3349,7 +3359,7 @@ export class DurableAgent<
         originalSpansEnded: originalSpansEndedBeforeCrash(loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
-      await this.#coverMemory(executionFence, recoveryState.requestContext);
+      await this.#coverMemory(executionFence, recoveryState.requestContext, true);
     } catch (error) {
       await executionFence?.settle(async () => {});
       releaseLocalRecovery();

@@ -774,6 +774,11 @@ const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.
 const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
+// A re-check that throws (e.g. storage briefly unavailable) is retried after
+// this delay, doubling per consecutive failure, up to
+// DURABLE_RECOVERY_RECHECK_MAX_RETRIES times.
+const DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS = 30_000;
+const DURABLE_RECOVERY_RECHECK_MAX_RETRIES = 5;
 
 /**
  * Registers and coordinates agents, workflows, storage, and other Mastra services.
@@ -4283,9 +4288,14 @@ export class Mastra<
   /**
    * Re-check a run another execution drove when it was skipped, once that
    * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked.
+   * `retryAt` and are not re-checked. A re-check that throws is retried with
+   * backoff; `failures` counts the consecutive ones.
    */
-  #scheduleDurableRecoveryRecheck(agent: DurableAgentLike, run: { runId: string; retryAt?: number }): void {
+  #scheduleDurableRecoveryRecheck(
+    agent: DurableAgentLike,
+    run: { runId: string; retryAt?: number },
+    failures = 0,
+  ): void {
     if (run.retryAt === undefined || this.#shuttingDown) return;
     const key = JSON.stringify([agent.id, run.runId]);
     clearTimeout(this.#durableRecoveryRechecks.get(key));
@@ -4300,11 +4310,20 @@ export class Mastra<
           }
         })
         .catch(error => {
-          this.#logger.error('Failed to re-check durable agent run for recovery', {
-            agentId: agent.id,
-            runId: run.runId,
-            error,
-          });
+          const context = { agentId: agent.id, runId: run.runId, error };
+          if (failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+            this.#logger.error(
+              'Failed to re-check durable agent run for recovery; leaving it for the next boot or a manual recover()',
+              context,
+            );
+            return;
+          }
+          this.#logger.warn('Failed to re-check durable agent run for recovery; retrying', context);
+          this.#scheduleDurableRecoveryRecheck(
+            agent,
+            { runId: run.runId, retryAt: Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** failures },
+            failures + 1,
+          );
         })
         .finally(() => this.#durableRecoveryRechecksInFlight.delete(recheck));
       this.#durableRecoveryRechecksInFlight.add(recheck);
