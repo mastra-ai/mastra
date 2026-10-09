@@ -120,9 +120,17 @@ describe('Environment settings', () => {
     expect(screen.getByRole('switch', { name: 'Clone acme/link-web into every session' })).toBeChecked();
     expect(screen.getAllByText('Cloned')).toHaveLength(2);
 
-    // Every card shows its commands and the last failure inline.
+    // The card header opens its commands and the last failure; the switch inside it does not.
+    const user = userEvent.setup();
+    expect(screen.queryByText('pnpm build exited with 1')).not.toBeInTheDocument();
+    await user.click(screen.getByText('acme/link-api'));
     expect(screen.getByText('pnpm build exited with 1')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
+    await user.click(screen.getByRole('switch', { name: 'Clone acme/link-api into every session' }));
+    expect(screen.getByRole('button', { name: 'Hide commands for acme/link-api' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   });
 
   it('offers a drag handle per live repository and none for a dead link', async () => {
@@ -172,7 +180,8 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    const input = await screen.findByRole('textbox', { name: 'Setup command for acme/web' });
+    await user.click(await screen.findByRole('button', { name: 'Show commands for acme/web' }));
+    const input = screen.getByRole('textbox', { name: 'Setup command for acme/web' });
     await user.type(input, 'pnpm i{Enter}');
 
     await waitFor(() => expect(patches).toHaveLength(1));
