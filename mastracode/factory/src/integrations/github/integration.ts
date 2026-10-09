@@ -62,6 +62,7 @@ import {
 } from './session-subscriptions.js';
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
+import { getUserAccessibleRepositoryIds } from './user-repository-access.js';
 
 type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
   ? TInput
@@ -557,6 +558,41 @@ export class GithubIntegration implements FactoryIntegration {
       accountLogin: inst.account && 'login' in inst.account ? inst.account.login : null,
       accountType: inst.account && 'type' in inst.account ? inst.account.type : null,
     }));
+  }
+
+  /**
+   * Repository ids the OAuth user can reach through an installation
+   * (`GET /user/installations/{id}/repositories`) — the user's view, not the
+   * installation's full repository set.
+   */
+  async listUserInstallationRepositoryIds(userToken: string, installationId: number): Promise<number[]> {
+    const octokit = this.getUserOctokit(userToken);
+    const repos = await octokit.paginate(octokit.apps.listInstallationReposForAuthenticatedUser, {
+      installation_id: installationId,
+      per_page: 100,
+    });
+    return repos.map(repo => repo.id);
+  }
+
+  /**
+   * The installation's repositories narrowed to those `userId` could see on
+   * GitHub when they last connected. See `user-repository-access.ts`.
+   */
+  async listInstallationReposForUser(input: {
+    orgId: string;
+    userId: string;
+    installationId: number;
+    fresh?: boolean;
+  }): Promise<RepoSummary[]> {
+    const allowed = await getUserAccessibleRepositoryIds(
+      this.integrationStorage,
+      input.orgId,
+      input.userId,
+      String(input.installationId),
+    );
+    if (allowed.size === 0) return [];
+    const repos = await this.listInstallationRepos(input.installationId, { fresh: input.fresh });
+    return repos.filter(repo => allowed.has(repo.id));
   }
 
   /**

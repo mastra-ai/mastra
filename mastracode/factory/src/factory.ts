@@ -876,7 +876,13 @@ export class MastraFactory {
                   id: installationId,
                 });
                 if (!installation) return null;
-                const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
+                // Only a repository the signed-in user can see on GitHub may be
+                // connected — not anything a teammate's installation covers.
+                const repositories = await githubIntegration.listInstallationReposForUser({
+                  orgId,
+                  userId,
+                  installationId: Number(installation.externalId),
+                });
                 const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
                 if (!selected) return null;
                 return githubIntegration.sourceControlStorage.repositories.upsert({

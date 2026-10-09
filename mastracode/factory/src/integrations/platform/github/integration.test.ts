@@ -223,13 +223,89 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       'https://platform.example.com/v1/server/github-app/installations/7/repositories',
-      expect.anything(),
+      expect.objectContaining({ headers: expect.objectContaining({ 'x-acting-user-id': 'user-1' }) }),
     );
     const [storedInstallation] = await storage.installations.list({ orgId: 'org-1' });
     expect(storedInstallation).toMatchObject({ externalId: '7', accountName: 'acme' });
     await expect(
       storage.repositories.list({ orgId: 'org-1', installationId: storedInstallation!.id }),
     ).resolves.toEqual([expect.objectContaining({ externalId: '101', slug: 'acme/app' })]);
+  });
+
+  it("does not list or register a teammate's installation the user cannot reach on GitHub", async () => {
+    const repository = {
+      id: 101,
+      owner: 'acme',
+      name: 'app',
+      fullName: 'acme/app',
+      private: true,
+      defaultBranch: 'main',
+      htmlUrl: 'https://github.com/acme/app',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/github-app/installations')) {
+        return json({
+          installations: [
+            { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+            { installationId: 9, accountLogin: 'teammate', accountType: 'User', suspendedAt: null, usable: true },
+          ],
+          pendingRequests: [],
+        });
+      }
+      const actingUser = (init?.headers as Record<string, string>)['x-acting-user-id'];
+      if (url.endsWith('/installations/7/repositories') && actingUser === 'user-1') {
+        return json({ repositories: [repository] });
+      }
+      // The Platform refuses a user who can't reach the installation.
+      return json({ error: 'GitHub installation is not accessible to this user' }, 403);
+    });
+    const { sourceControl } = await createPlatformStorageForTests();
+    const integration = createIntegration(fetchImpl);
+    const storage = sourceControl.forIntegration('github');
+    integration.versionControl.initialize({ storage });
+
+    const sources = await integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+    expect(sources.map(source => source.name)).toEqual(['acme/app']);
+    const installations = await storage.installations.list({ orgId: 'org-1' });
+    expect(installations.map(installation => installation.externalId)).toEqual(['7']);
+  });
+
+  it('lists installation repositories as the signed-in user and caches per user', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      const actingUser = (init?.headers as Record<string, string>)['x-acting-user-id'];
+      if (actingUser === 'user-2') return json({ error: 'forbidden' }, 403);
+      return json({
+        repositories: [
+          { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+        ],
+      });
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const owner = await integration.listInstallationReposForUser({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installationId: 7,
+    });
+    expect(owner.map(repo => repo.fullName)).toEqual(['acme/app']);
+    // A teammate's cached-miss must not reuse user-1's listing.
+    await expect(
+      integration.listInstallationReposForUser({ orgId: 'org-1', userId: 'user-2', installationId: 7 }),
+    ).resolves.toEqual([]);
+    await integration.listInstallationReposForUser({ orgId: 'org-1', userId: 'user-1', installationId: 7 });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls.map(call => (call[1]?.headers as Record<string, string>)['x-acting-user-id'])).toEqual([
+      'user-1',
+      'user-2',
+    ]);
+  });
+
+  it('propagates non-403 Platform failures from user-scoped repository listing', async () => {
+    const integration = createIntegration(vi.fn<typeof fetch>(async () => json({ error: 'boom' }, 500)));
+    await expect(
+      integration.listInstallationReposForUser({ orgId: 'org-1', userId: 'user-1', installationId: 7 }),
+    ).rejects.toMatchObject({ status: 500 });
   });
 
   it('normalizes issue and PR resources through the shared capabilities', async () => {

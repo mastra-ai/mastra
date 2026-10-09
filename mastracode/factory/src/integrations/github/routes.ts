@@ -80,6 +80,7 @@ function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): P
   return next;
 }
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
+import { listUserAccessibleInstallations, recordUserRepositoryAccess } from './user-repository-access.js';
 import { handleGithubWebhook } from './webhook.js';
 import type { ParsedGithubWebhook } from './webhook.js';
 
@@ -510,9 +511,19 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           });
         }
 
-        const rows = options.github
-          ? await options.github.sourceControlStorage.installations.list({ orgId: tenant.orgId })
-          : [];
+        // Connected means *this user* has linked GitHub: a teammate's
+        // installation alone gives them nothing to pick, so prompt them to
+        // connect (which records their own repository view).
+        let rows: SourceControlInstallation[] = [];
+        if (options.github) {
+          const orgRows = await options.github.sourceControlStorage.installations.list({ orgId: tenant.orgId });
+          const accessible = await listUserAccessibleInstallations(
+            options.github.integrationStorage,
+            tenant.orgId,
+            tenant.userId,
+          );
+          rows = orgRows.filter(row => accessible.has(row.externalId));
+        }
 
         const connected = rows.length > 0;
         return c.json({
@@ -682,6 +693,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             // again and lands in the persist path below.
             return c.redirect(github.buildInstallUrl(signState(orgId, userId)));
           }
+          const repositoryAccess: Record<string, number[]> = {};
           for (const inst of installations) {
             // The installation is org-owned; `userId` records who connected it.
             await github.sourceControlStorage.installations.upsert({
@@ -691,7 +703,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
               accountName: inst.accountLogin,
               accountType: inst.accountType,
             });
+            repositoryAccess[inst.installationId.toString()] = await github.listUserInstallationRepositoryIds(
+              userToken,
+              inst.installationId,
+            );
           }
+          // Org members only ever see the repositories they themselves can
+          // reach on GitHub — snapshot that view while we hold their token.
+          await recordUserRepositoryAccess(github.integrationStorage, orgId, userId, repositoryAccess);
         } catch (error) {
           console.warn(
             `[GitHub] Install callback failed to persist installations for org ${orgId} / user ${userId}.`,
@@ -705,7 +724,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
-  // ── List repos across the org's installations ───────────────────────────
+  // ── List the caller's repos across the org's installations ──────────────
   routes.push(
     registerApiRoute('/web/github/repos', {
       method: 'GET',
@@ -714,7 +733,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
 
-        const orgId = resolved.tenant.orgId;
+        const { orgId, userId } = resolved.tenant;
         const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
@@ -725,7 +744,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const listed = await Promise.all(
           installs.map(async inst => {
             try {
-              return { inst, list: await github.listInstallationRepos(Number(inst.externalId), { fresh }) };
+              return {
+                inst,
+                list: await github.listInstallationReposForUser({
+                  orgId,
+                  userId,
+                  installationId: Number(inst.externalId),
+                  fresh,
+                }),
+              };
             } catch (err) {
               // 403 means this credential may not use the installation (e.g. the
               // Platform refuses personal-account installations to org API

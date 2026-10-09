@@ -1482,7 +1482,7 @@ describe('MastraFactory.prepare integrations', () => {
     const github = fakeIntegration({
       id: 'github',
       sourceControlStorage,
-      listInstallationRepos: vi.fn(async () => [
+      listInstallationReposForUser: vi.fn(async () => [
         {
           id: 456,
           fullName: 'acme/api',
@@ -1499,12 +1499,56 @@ describe('MastraFactory.prepare integrations', () => {
     const repository = await resolveRepository?.({
       integrationId: 'github',
       orgId: 'org-1',
+      userId: 'user-1',
       installationId: installation.id,
       externalId: '456',
       slug: 'acme/api',
     });
 
     expect(repository?.defaultBranch).toBe('main');
+  });
+
+  it('refuses to connect a GitHub repository the signed-in user cannot see', async () => {
+    const installation = { id: 'installation-1', externalId: '123' };
+    const upsert = vi.fn();
+    const listInstallationReposForUser = vi.fn(async ({ userId }: { userId: string }) =>
+      userId === 'owner'
+        ? [
+            {
+              id: 456,
+              fullName: 'teammate/private',
+              name: 'private',
+              owner: 'teammate',
+              defaultBranch: 'main',
+              private: true,
+            },
+          ]
+        : [],
+    );
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage: { installations: { get: vi.fn(async () => installation) }, repositories: { upsert } },
+      listInstallationReposForUser,
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage: fakeStorage(), integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const repository = await resolveRepository?.({
+      integrationId: 'github',
+      orgId: 'org-1',
+      userId: 'teammate-user',
+      installationId: installation.id,
+      externalId: '456',
+      slug: 'teammate/private',
+    });
+
+    expect(repository).toBeNull();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(listInstallationReposForUser).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      userId: 'teammate-user',
+      installationId: 123,
+    });
   });
 
   it('initializes version-control capabilities with integration-scoped storage', async () => {

@@ -5,6 +5,7 @@ import { mountApiRoutes } from '../../routes/test-utils.js';
 import { __clearSessionSandboxesForTests, getSessionSandbox } from '../../sandbox/session-sandbox.js';
 
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { GithubIntegration } from './integration.js';
 import { buildGithubRoutes } from './routes.js';
 
 // ── Phase 2 org-isolation scenario tests ─────────────────────────────────
@@ -157,14 +158,28 @@ vi.mock('./db', () => {
 });
 
 let mintCount = 0;
+const settingsRows = new Map<string, Record<string, unknown>>();
 // Stub integration instance: routes consume the injected `github` instance —
 // real DI instead of module mocking (client.ts no longer exists).
 const githubStub = {
   sourceControlStorage,
+  integrationStorage: {
+    settings: {
+      get: async (orgId: string, userId: string) => settingsRows.get(`${orgId}:${userId}`) ?? null,
+      save: async (orgId: string, userId: string, config: Record<string, unknown>) => {
+        settingsRows.set(`${orgId}:${userId}`, config);
+      },
+    },
+  },
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
+  listUserInstallationRepositoryIds: vi.fn(async (_userToken: string, _installationId: number) => [99]),
+  // The real per-user filter, run against this stub's storage + listing.
+  listInstallationReposForUser(input: { orgId: string; userId: string; installationId: number }) {
+    return GithubIntegration.prototype.listInstallationReposForUser.call(this as never, input);
+  },
   listInstallationRepos: vi.fn(
     async (): Promise<
       Array<{
@@ -358,6 +373,7 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 }
 
 beforeEach(() => {
+  settingsRows.clear();
   tables.installations = [];
   tables.repositories = [];
   tables.connections = [];
@@ -534,10 +550,22 @@ describe('cross-user session workspaces are rejected', () => {
 // ── Phase 4: org-scoped GitHub install flow ──────────────────────────────
 // The install `state` carries `(orgId, userId)`; the callback persists the
 // installation against the org and rejects a session whose org differs from
-// the signed state's org. A second user in the same org then sees the shared
-// org-level installation and can create projects from it.
+// the signed state's org. The installation row is org-level, but its
+// repositories are not: each member sees only the repositories they can reach
+// on GitHub, recorded when *they* connect. A teammate's installation alone
+// exposes nothing (it may be that teammate's personal account).
 describe('install flow binds the installation to the org', () => {
-  it('persists an org-owned installation, then a second org user can use it', async () => {
+  const helloRepo = {
+    id: 99,
+    fullName: 'octo/hello',
+    name: 'hello',
+    owner: 'octo',
+    defaultBranch: 'main',
+    private: true,
+    installationId: 7,
+  };
+
+  it("persists an org-owned installation but does not expose its repos to a teammate who hasn't connected", async () => {
     // User 1 connects: state must encode their (org, user).
     const connect = await buildApp({ workosId: 'a1', organizationId: 'orgA' }).request('/auth/github/connect');
     expect(connect.status).toBe(302);
@@ -551,24 +579,35 @@ describe('install flow binds the installation to the org', () => {
     expect(tables.installations).toHaveLength(1);
     expect(tables.installations[0]).toMatchObject({ orgId: 'orgA', externalId: '7' });
 
-    // A different user in the same org sees the org-level installation and can
-    // discover repositories from it (no second install required).
-    githubStub.listInstallationRepos.mockResolvedValueOnce([
-      {
-        id: 99,
-        fullName: 'octo/hello',
-        name: 'hello',
-        owner: 'octo',
-        defaultBranch: 'main',
-        private: false,
-        installationId: 7,
-      },
-    ]);
+    githubStub.listInstallationRepos.mockResolvedValueOnce([helloRepo]);
+
+    // User 1 sees the repository they granted.
+    const ownRepos = await buildApp({ workosId: 'a1', organizationId: 'orgA' }).request('/web/github/repos');
+    expect((await ownRepos.json()).repos).toMatchObject([{ id: 99, fullName: 'octo/hello' }]);
+
+    // A different user in the same org sees neither the installation nor its
+    // private repository until they connect GitHub themselves.
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
     const status = await user2.request('/web/github/status');
-    expect((await status.json()).connected).toBe(true);
-
+    expect((await status.json()).connected).toBe(false);
     const repos = await user2.request('/web/github/repos');
+    expect(repos.status).toBe(200);
+    expect((await repos.json()).repos).toEqual([]);
+  });
+
+  it('lets a second org user use the shared installation for repos they can reach on GitHub', async () => {
+    await buildApp({ workosId: 'a1', organizationId: 'orgA' }).request(
+      '/auth/github/callback?state=state.orgA.a1&code=abc',
+    );
+    // User 2 connects with their own GitHub account, which reaches repo 99.
+    const cb = await buildApp({ workosId: 'a2', organizationId: 'orgA' }).request(
+      '/auth/github/callback?state=state.orgA.a2&code=def',
+    );
+    expect(cb.headers.get('location')).toBe('/?github=connected');
+    expect(tables.installations).toHaveLength(1);
+
+    githubStub.listInstallationRepos.mockResolvedValueOnce([helloRepo]);
+    const repos = await buildApp({ workosId: 'a2', organizationId: 'orgA' }).request('/web/github/repos');
     expect(repos.status).toBe(200);
     expect(tables.repositories).toHaveLength(0);
     expect(await repos.json()).toMatchObject({

@@ -88,6 +88,18 @@ type PlatformGithubInstallation = {
   usable: boolean;
 };
 
+type PlatformInstallationRepository = {
+  id: number;
+  owner: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string;
+  htmlUrl: string;
+};
+
+type PlatformUserRepository = PlatformInstallationRepository & { installationId: number };
+
 type PlatformGithubUserConnection = {
   connected: boolean;
   githubUsername: string | null;
@@ -253,6 +265,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
+  /** `installationId:userId` → cached user-scoped repository listing (TTL-bounded). */
+  readonly #userInstallationReposCache = new Map<string, { repos: PlatformUserRepository[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
@@ -280,6 +294,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       );
       const repositories = await Promise.all(
         usable.map(async installation => {
+          // Sources are listed for a signed-in user: only repositories that
+          // user can see on GitHub, never the installation's full set (which
+          // may be a teammate's personal account).
+          const visible = await this.listInstallationReposForUser({
+            orgId,
+            userId,
+            installationId: installation.installationId,
+          });
+          if (visible.length === 0) return [];
           const storedInstallation = await this.versionControl.registerInstallation({
             orgId,
             userId,
@@ -289,26 +312,17 @@ export class PlatformGithubIntegration implements FactoryIntegration {
               accountType: installation.accountType,
             },
           });
-          const result = await this.#client.request<{
-            repositories: Array<{
-              id: number;
-              fullName: string;
-              private: boolean;
-              defaultBranch: string;
-              htmlUrl: string;
-            }>;
-          }>('GET', `${API_PREFIX}/github-app/installations/${installation.installationId}/repositories`);
           await this.versionControl.registerRepositories({
             orgId,
             installationId: storedInstallation.id,
-            repositories: result.repositories.map(repository => ({
+            repositories: visible.map(repository => ({
               externalId: String(repository.id),
               slug: repository.fullName,
               defaultBranch: repository.defaultBranch,
               metadata: { private: repository.private, url: repository.htmlUrl },
             })),
           });
-          return result.repositories.map(repository => ({ repository, installation }));
+          return visible.map(repository => ({ repository, installation }));
         }),
       );
       return repositories.flat().map(({ repository, installation }) => ({
@@ -1135,26 +1149,61 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async listInstallationRepos(installationId: number, options?: { fresh?: boolean }): Promise<RepoSummary[]> {
-    // Hot in two places — the repos route and token minting (which re-lists
-    // only to validate the 1–10 repo rule). A short TTL collapses repeat
-    // Platform round trips within one UI interaction; `fresh` skips it so an
-    // explicit refresh picks up repositories just granted on GitHub.
+    // Installation-wide (no acting user): only for server-side token minting,
+    // which re-lists to validate the 1–10 repo rule. Never surface this list
+    // to a user — use `listInstallationReposForUser`. A short TTL collapses
+    // repeat Platform round trips within one UI interaction; `fresh` skips it
+    // so an explicit refresh picks up repositories just granted on GitHub.
     const cached = this.#installationReposCache.get(installationId);
     if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
-    const result = await this.#client.request<{
-      repositories: Array<{
-        id: number;
-        owner: string;
-        name: string;
-        fullName: string;
-        private: boolean;
-        defaultBranch: string;
-      }>;
-    }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`);
+    const result = await this.#client.request<{ repositories: PlatformInstallationRepository[] }>(
+      'GET',
+      `${API_PREFIX}/github-app/installations/${installationId}/repositories`,
+    );
     const repos = result.repositories.map(repository => ({ ...repository, installationId }));
     setBounded(this.#installationReposCache, installationId, {
+      repos,
+      expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
+    });
+    return repos;
+  }
+
+  /**
+   * The installation's repositories as `userId` sees them on GitHub. The
+   * Platform scopes the listing to the acting user's GitHub connection and
+   * answers 403 when that user has none or can't reach the installation —
+   * either way this user may pick nothing from it.
+   */
+  async listInstallationReposForUser(input: {
+    orgId: string;
+    userId: string;
+    installationId: number;
+    fresh?: boolean;
+  }): Promise<PlatformUserRepository[]> {
+    const { userId, installationId, fresh } = input;
+    const cacheKey = `${installationId}:${userId}`;
+    if (!fresh) {
+      const cached = this.#userInstallationReposCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) return cached.repos;
+    }
+    this.#userInstallationReposCache.delete(cacheKey);
+
+    let result: { repositories: PlatformInstallationRepository[] };
+    try {
+      result = await this.#client.request<{ repositories: PlatformInstallationRepository[] }>(
+        'GET',
+        `${API_PREFIX}/github-app/installations/${installationId}/repositories`,
+        undefined,
+        { actingUserId: userId },
+      );
+    } catch (err) {
+      if (err instanceof PlatformApiError && err.status === 403) return [];
+      throw err;
+    }
+    const repos = result.repositories.map(repository => ({ ...repository, installationId }));
+    setBounded(this.#userInstallationReposCache, cacheKey, {
       repos,
       expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
     });

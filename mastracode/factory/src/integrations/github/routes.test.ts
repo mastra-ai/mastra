@@ -147,6 +147,12 @@ function subscriptionRow(row: Record<string, any>) {
 
 const settingsRows = new Map<string, Record<string, any>>();
 
+/** Seed the snapshot the install callback records for a user (installation → repo ids). */
+function grantRepositoryAccess(orgId: string, userId: string, access: Record<string, number[]>) {
+  const key = `${orgId}:${userId}`;
+  settingsRows.set(key, { ...settingsRows.get(key), repositoryAccess: access });
+}
+
 const integrationStorage = {
   settings: {
     get: vi.fn(async (orgId: string, userId: string) => settingsRows.get(`${orgId}:${userId}`) ?? null),
@@ -354,6 +360,11 @@ const githubStub = {
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   getRepositoryCollaboratorPermission: vi.fn(async () => 'write'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
+  listUserInstallationRepositoryIds: vi.fn(async (_userToken: string, _installationId: number) => [99]),
+  // The real per-user filter, run against this stub's storage + listing.
+  listInstallationReposForUser(input: { orgId: string; userId: string; installationId: number }) {
+    return GithubIntegration.prototype.listInstallationReposForUser.call(this as never, input);
+  },
   listInstallationRepos: vi.fn(async (_installationId: number) => [
     {
       id: 99,
@@ -575,6 +586,7 @@ const testAuth: RouteAuth = {
   isOrganizationAdmin: async () => true,
 };
 
+import { GithubIntegration } from './integration.js';
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
@@ -996,11 +1008,24 @@ describe('status route', () => {
         accountType: 'User',
       }),
     );
+    grantRepositoryAccess('org1', 'u1', { '7': [99] });
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     const json = await res.json();
     expect(json.enabled).toBe(true);
     expect(json.connected).toBe(true);
     expect(json.installations[0].installationId).toBe(7);
+  });
+
+  it("does not report a teammate's installation as connected for a user who never linked GitHub", async () => {
+    tables.installations.push(
+      installationRow({ orgId: 'org1', userId: 'u1', installationId: 7, accountLogin: 'octo', accountType: 'User' }),
+    );
+    grantRepositoryAccess('org1', 'u1', { '7': [99] });
+    const res = await buildApp({ workosId: 'u2' }).request('/web/github/status');
+    const json = await res.json();
+    expect(json.connected).toBe(false);
+    expect(json.installations).toEqual([]);
+    expect(json.reason).toBe('not_connected');
   });
 });
 
@@ -1134,6 +1159,58 @@ describe('repos route', () => {
   afterEach(() => {
     vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
   });
+  beforeEach(() => {
+    grantRepositoryAccess('org1', 'u1', { '7': [99], '8': [99] });
+  });
+
+  it("does not list a teammate's personal installation repos to another org member", async () => {
+    // u1 connected their personal account; its repos include a private one.
+    install(7, 'octo');
+    vi.mocked(listInstallationRepos).mockImplementation(async installationId => [
+      ...(await defaultImpl(installationId)),
+      {
+        id: 100,
+        fullName: 'octo/secret',
+        name: 'secret',
+        owner: 'octo',
+        defaultBranch: 'main',
+        private: true,
+        installationId,
+      },
+    ]);
+
+    const teammate = await buildApp({ workosId: 'u2' }).request('/web/github/repos');
+    expect(teammate.status).toBe(200);
+    expect((await teammate.json()).repos).toEqual([]);
+
+    // The connecting user still sees exactly the repos GitHub granted them.
+    grantRepositoryAccess('org1', 'u1', { '7': [99, 100] });
+    const owner = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect((await owner.json()).repos.map((repo: { fullName: string }) => repo.fullName)).toEqual([
+      'octo/hello',
+      'octo/secret',
+    ]);
+  });
+
+  it('lists only the installation repos the user could see on GitHub', async () => {
+    install(7, 'acme');
+    grantRepositoryAccess('org1', 'u2', { '7': [99] });
+    vi.mocked(listInstallationRepos).mockImplementation(async installationId => [
+      ...(await defaultImpl(installationId)),
+      {
+        id: 100,
+        fullName: 'acme/admins-only',
+        name: 'admins-only',
+        owner: 'acme',
+        defaultBranch: 'main',
+        private: true,
+        installationId,
+      },
+    ]);
+
+    const res = await buildApp({ workosId: 'u2' }).request('/web/github/repos');
+    expect((await res.json()).repos.map((repo: { fullName: string }) => repo.fullName)).toEqual(['octo/hello']);
+  });
 
   it('lists a repository once when multiple installations return it', async () => {
     install(7, 'octo');
@@ -1228,6 +1305,7 @@ describe('auth scoping', () => {
           accountType: 'User',
         }),
       );
+      grantRepositoryAccess('org1', 'u1', { '7': [99] });
       const res = await buildApp(null).request('/web/github/status');
       expect(res.status).toBe(200);
       const json = await res.json();
@@ -1313,6 +1391,17 @@ describe('connect + callback', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
     expect(res.headers.get('location')).toBe('/?github=connected');
     expect(tables.installations).toHaveLength(1);
+  });
+
+  it("records the connecting user's own repository view with their GitHub token", async () => {
+    settingsRows.set('org1:u1', { unrelated: true });
+    vi.mocked(githubStub.listUserInstallationRepositoryIds).mockResolvedValueOnce([99, 101]);
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    expect(res.headers.get('location')).toBe('/?github=connected');
+    expect(githubStub.listUserInstallationRepositoryIds).toHaveBeenCalledWith('user-token', 7);
+    expect(settingsRows.get('org1:u1')).toEqual({ unrelated: true, repositoryAccess: { '7': [99, 101] } });
+    // Nothing is recorded for teammates.
+    expect(settingsRows.has('org1:u2')).toBe(false);
   });
 
   it('does not trust an unverified installation_id without a code', async () => {
