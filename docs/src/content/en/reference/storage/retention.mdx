@@ -149,6 +149,7 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 | `memory` | `threads` | `createdAt` | Thread age |
 | `memory` | `messages` | `createdAt` | Message age |
 | `memory` | `resources` | `createdAt` | Resource age |
+| `memory` | `runFences` | `retiredAt` | Time since the durable agent execution holding the fence settled. Fences of running executions (`NULL`) are never pruned |
 | `threadState` | `threadState` | `updatedAt` | Inactivity: state for still-active threads survives |
 | `observability` | `spans` | `startedAt` | Span age |
 | `observability` | `metrics` | `timestamp` | Metric event age (vNext only) |
@@ -157,6 +158,7 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 | `observability` | `feedback` | `timestamp` | Feedback event age (vNext only) |
 | `scores` | `scorers` | `createdAt` | Score record age |
 | `workflows` | `workflowSnapshot` | `updatedAt` | Inactivity, suspended or long-running workflows survive |
+| `workflows` | `runOwnership` | `updatedAt` | Inactivity. A running durable agent execution renews its claim every 10 seconds, so keep `maxAge` well above its 30-second lease |
 | `backgroundTasks` | `backgroundTasks` | `completedAt` | Time since completion, in-flight tasks (`NULL`) are never pruned |
 | `experiments` | `experiments` | `completedAt` | Time since completion, running experiments are never pruned |
 | `notifications` | `notifications` | `createdAt` | Notification age |
@@ -167,6 +169,7 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 
 - The memory `observational_memory` table has no timestamp anchor, so it can't be age-pruned and isn't a valid retention key.
 - Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. Retention doesn't have a separate `results` key.
+- `runOwnership` and `runFences` hold the run fencing records of durable agents, one small record per run in each. If the `runOwnership` `maxAge` is too short, a running execution can lose its run, but an execution that lost a run still can't write. A fence is retired only when its execution settles, so the fence of a run that crashed or was abandoned at shutdown, and was never recovered, is never pruned.
 - For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire): schedule definitions are config and aren't pruned.
 - On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
 - DuckDB observability stores append-only events for all five signals. Its `spans` policy uses the event `timestamp` column rather than `startedAt`.
