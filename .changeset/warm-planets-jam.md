@@ -2,7 +2,9 @@
 '@mastra/mcp': minor
 ---
 
-Added a `clientInfo` option to `MCPClient` so you can set the client name and version that MCP servers see during the handshake, instead of the server key and `1.0.0`. Set it once for all servers or override it per server. Tool name prefixes are unchanged. Fixes #25473.
+Added a `clientInfo` option to `MCPClient` so you can set the client name and version that MCP servers receive on connect and with each request, instead of the server key and `1.0.0`. Set it once for all servers or override it per server. Tool name prefixes are unchanged. Fixes #25473.
+
+Also fixed `disconnect()` on a replaced `MCPClient` removing its replacement from the instance cache when both share an `id`.
 
 ```typescript
 const mcp = new MCPClient({

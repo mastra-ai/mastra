@@ -185,9 +185,9 @@ export type RequireToolApprovalFn = (ctx: RequireToolApprovalContext) => boolean
 export type RequireToolApproval = boolean | RequireToolApprovalFn;
 
 export type MCPClientInfo = {
-  /** Client name sent in the MCP `initialize` handshake. Defaults to the server key. */
+  /** Client name servers receive on connect and with each request. Defaults to the server key. */
   name?: string;
-  /** Client version sent in the MCP `initialize` handshake. Defaults to `'1.0.0'`. */
+  /** Client version servers receive on connect and with each request. Defaults to `'1.0.0'`. */
   version?: string;
 };
 
@@ -515,7 +515,7 @@ export type InternalMastraMCPClientOptions = {
   server: MastraMCPServerDefinition;
   /** Optional client version */
   version?: string;
-  /** Optional `clientInfo` override for the MCP `initialize` handshake */
+  /** Optional `clientInfo` servers receive on connect and with each request */
   clientInfo?: MCPClientInfo;
   /** Optional timeout in milliseconds */
   timeout?: number;

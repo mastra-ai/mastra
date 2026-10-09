@@ -65,7 +65,7 @@ export interface MCPClientOptions {
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
   /**
-   * Default `clientInfo` sent in the MCP `initialize` handshake to every server.
+   * Default `clientInfo` every server receives on connect and with each request.
    * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
    */
   clientInfo?: MCPClientInfo;
@@ -153,10 +153,7 @@ export class MCPClient extends MastraBase {
       this.id = args.id;
       const cached = mcpClientInstances.get(this.id);
 
-      if (
-        cached &&
-        (!equal(cached.serverConfigs, args.servers) || !equal(cached.defaultClientInfo, args.clientInfo))
-      ) {
+      if (cached && (!equal(cached.serverConfigs, args.servers) || !equal(cached.defaultClientInfo, args.clientInfo))) {
         const existingInstance = mcpClientInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect();
@@ -271,7 +268,7 @@ To fix this you have three different options:
        * const resources = await mcp.resources.list();
        * console.log(resources.weatherServer); // Array of resources
        * ```
-      */
+       */
       list: async (): Promise<Record<string, Resource[]>> => (await this.listResourcesWithErrors()).resources,
       /**
        * Lists resources while preserving per-server discovery failures.
@@ -638,7 +635,11 @@ To fix this you have three different options:
   }
 
   private makeId() {
-    const text = JSON.stringify({ servers: this.serverConfigs, clientInfo: this.defaultClientInfo }).normalize('NFKC');
+    const text = JSON.stringify(
+      this.defaultClientInfo === undefined
+        ? this.serverConfigs
+        : { servers: this.serverConfigs, clientInfo: this.defaultClientInfo },
+    ).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
 
