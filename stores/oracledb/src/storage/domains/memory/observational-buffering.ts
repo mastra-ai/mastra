@@ -1,10 +1,11 @@
-import { ErrorCategory, MastraError } from '@mastra/core/error';
 import {
-  TABLE_OBSERVATIONAL_MEMORY,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
-} from '@mastra/core/storage';
+  type UpdateBufferedObservationsResult,
+} from '@internal/core/memory';
+import { ErrorCategory, MastraError } from '@mastra/core/error';
+import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
   ObservationalMemoryRecord,
@@ -12,7 +13,6 @@ import type {
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedObservationsInput,
-  UpdateBufferedObservationsResult,
   UpdateBufferedReflectionInput,
 } from '@mastra/core/storage';
 

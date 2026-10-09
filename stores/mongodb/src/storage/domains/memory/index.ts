@@ -1,11 +1,19 @@
 import { createHash } from 'node:crypto';
+import {
+  assertActiveObservationsApplied,
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
+  type UpdateActiveObservationsResult,
+  type UpdateBufferedObservationsResult,
+} from '@internal/core/memory';
 
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  assertActiveObservationsApplied,
   createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
@@ -16,10 +24,6 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
-  isAppendOnlySince,
-  isBufferedChunkCoveredByCursor,
-  maxObservationCursor,
-  planReflectionGenerationText,
 } from '@mastra/core/storage';
 
 /**
@@ -47,9 +51,7 @@ import type {
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
-  UpdateActiveObservationsResult,
   UpdateBufferedObservationsInput,
-  UpdateBufferedObservationsResult,
   SwapBufferedToActiveInput,
   SwapBufferedToActiveResult,
   UpdateBufferedReflectionInput,

@@ -39,6 +39,7 @@
     "mongodb": "^7.5.0"
   },
   "devDependencies": {
+    "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -55,7 +56,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.76.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.68.0-0 <2.0.0-0"
   },
   "files": [
     "dist"
