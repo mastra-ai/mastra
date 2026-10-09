@@ -429,6 +429,72 @@ describe('SourceControlStorage', () => {
     expect(ids).not.toContain(privateOther.sessionId);
   });
 
+  it('transfers session ownership with CAS and preserves the creator', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000031',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-owner-transfer',
+      baseBranch: 'main',
+    });
+    expect(session.createdByUserId).toBe('user-1');
+
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'stale', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner' });
+    await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000033',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-3',
+      branch: session.branch,
+      baseBranch: 'main',
+    });
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({
+      status: 'updated',
+      session: { userId: 'user-2', createdByUserId: 'user-1' },
+    });
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });
+  });
+
+  it('reads legacy session creators from the original owner', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000032',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-legacy-creator',
+      baseBranch: 'main',
+    });
+    await backend.ops.updateMany(
+      'source_control_sessions',
+      { session_id: session.sessionId },
+      { created_by_user_id: null },
+    );
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      userId: 'user-1',
+      createdByUserId: 'user-1',
+    });
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({
+      status: 'updated',
+      session: { userId: 'user-2', createdByUserId: 'user-1' },
+    });
+  });
+
   it('records first_message_at write-once via markFirstMessage', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -523,7 +589,7 @@ describe('SourceControlStorage', () => {
   });
 });
 
-describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
+describe('SourceControlStorageInMemory sessions', () => {
   it('records materialized_at write-once', async () => {
     const store = new SourceControlStorageInMemory();
     const installation = await store.installations.upsert({
@@ -567,5 +633,61 @@ describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
     await store.sessions.markMaterialized({ id: session.id });
     const second = await store.sessions.getBySessionId(session.sessionId);
     expect(second?.materializedAt?.getTime()).toBe(first!.materializedAt!.getTime());
+  });
+
+  it('transfers ownership with CAS and preserves createdByUserId', async () => {
+    const store = new SourceControlStorageInMemory();
+    const installation = await store.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '1',
+    });
+    const repository = await store.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await store.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await store.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    const session = await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aaab',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-owner-transfer',
+      baseBranch: 'main',
+    });
+
+    await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aaac',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-3',
+      branch: session.branch,
+      baseBranch: 'main',
+    });
+    await expect(
+      store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
+    await expect(
+      store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({
+      status: 'updated',
+      session: { userId: 'user-2', createdByUserId: 'user-1' },
+    });
+    await expect(
+      store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });
   });
 });

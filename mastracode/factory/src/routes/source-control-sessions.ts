@@ -11,6 +11,7 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type {
   ProjectRepository,
@@ -45,6 +46,7 @@ export interface SourceControlSessionRoutesOptions {
   sourceControls: readonly SourceControlStorageHandle[];
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
+  audit?: AuditRecorder;
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
@@ -348,6 +350,179 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         return c.json({ session });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/owner', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const session = match?.session;
+        if (!match || !session || session.orgId !== orgId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        let body: unknown;
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isJsonObject(body) || typeof body.expectedOwnerId !== 'string' || !body.expectedOwnerId.trim()) {
+          return c.json({ error: 'Invalid expectedOwnerId' }, 400);
+        }
+        if (session.visibility === 'private' && session.userId !== userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (session.visibility === 'private') return c.json({ session });
+
+        const transferred = await match.sourceControl.sessions.transferOwner({
+          sessionId,
+          expectedUserId: body.expectedOwnerId,
+          toUserId: userId,
+        });
+        if (transferred.status === 'conflict') {
+          return c.json(
+            {
+              error: 'Session ownership conflict',
+              reason: transferred.reason,
+              currentOwnerId: transferred.session?.userId,
+            },
+            409,
+          );
+        }
+        if (body.expectedOwnerId === userId) return c.json({ session: transferred.session });
+
+        let liveSession = await options.controller?.getSessionByResource(sessionId);
+        try {
+          if (!liveSession && options.controller) {
+            const threads = await options.controller.queryThreads({ resourceId: sessionId });
+            const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+            if (thread) {
+              const requestContext = new RequestContext();
+              requestContext.set('user', { workosId: userId, organizationId: orgId });
+              liveSession = await options.controller.createSession({
+                id: sessionId,
+                resourceId: sessionId,
+                ownerId: userId,
+                threadId: thread.id,
+                requestContext,
+              });
+            }
+          }
+          if (liveSession) {
+            const mirrored = await liveSession.thread.transferOwnership({
+              threadId: liveSession.thread.getId(),
+              expectedOwnerId: session.userId,
+              toOwnerId: userId,
+            });
+            if (!mirrored.ok && mirrored.currentOwnerId !== userId) {
+              throw new Error(`Thread ownership changed concurrently for session ${sessionId}.`);
+            }
+          }
+        } catch (mirrorError) {
+          let authoritativeOwnerId: string | undefined;
+          try {
+            const rollback = await match.sourceControl.sessions.transferOwner({
+              sessionId,
+              expectedUserId: userId,
+              toUserId: session.userId,
+            });
+            authoritativeOwnerId = rollback.session?.userId;
+          } catch (rollbackError) {
+            throw new AggregateError(
+              [mirrorError, rollbackError],
+              `Factory session ${sessionId} ownership is inconsistent after a failed transfer and rollback.`,
+            );
+          }
+
+          if (!authoritativeOwnerId) {
+            try {
+              if (liveSession && options.controller) {
+                await options.controller.deleteSession({ resourceId: sessionId });
+              }
+            } catch (teardownError) {
+              throw new AggregateError(
+                [mirrorError, teardownError],
+                `Factory session ${sessionId} was deleted during a failed ownership transfer, and its live host could not be removed.`,
+              );
+            }
+            throw mirrorError;
+          }
+
+          if (liveSession) {
+            try {
+              const currentThreadOwnerId = await liveSession.thread.getOwner();
+              if (!currentThreadOwnerId) throw new Error('The live thread has no owner to reconcile.');
+              if (currentThreadOwnerId !== authoritativeOwnerId) {
+                const reconciled = await liveSession.thread.transferOwnership({
+                  expectedOwnerId: currentThreadOwnerId,
+                  toOwnerId: authoritativeOwnerId,
+                });
+                if (!reconciled.ok && reconciled.currentOwnerId !== authoritativeOwnerId) {
+                  throw new Error(`Failed to reconcile thread ownership to ${authoritativeOwnerId}.`);
+                }
+              }
+            } catch (reconciliationError) {
+              throw new AggregateError(
+                [mirrorError, reconciliationError],
+                `Factory session ${sessionId} ownership is inconsistent after a failed transfer.`,
+              );
+            }
+          }
+          throw mirrorError;
+        }
+
+        if (liveSession && options.controller) {
+          let recycleStarted = false;
+          let recycleAttempt = 0;
+          let unsubscribe = () => {};
+          const tryRecycle = async (): Promise<void> => {
+            try {
+              const currentSession = await options.controller!.getSessionByResource(sessionId);
+              if (currentSession !== liveSession) return;
+              await options.controller!.deleteSession({ resourceId: sessionId });
+            } catch (error) {
+              recycleAttempt++;
+              const delayMs = Math.min(100 * 2 ** (recycleAttempt - 1), 5_000);
+              console.error('[Factory Sessions] Failed to recycle transferred live session; retrying', {
+                sessionId,
+                attempt: recycleAttempt,
+                delayMs,
+                error,
+              });
+              const timer = setTimeout(() => void tryRecycle(), delayMs);
+              timer.unref?.();
+            }
+          };
+          const recycle = async () => {
+            if (recycleStarted) return;
+            recycleStarted = true;
+            unsubscribe();
+            await tryRecycle();
+          };
+          unsubscribe = liveSession.subscribe(event => {
+            if (event.type === 'agent_end') void recycle();
+          });
+          if (!liveSession.stream.isActive()) await recycle();
+        }
+
+        await options.audit
+          ?.record({
+            orgId,
+            actorId: userId,
+            action: 'factory.session.owner_transferred',
+            targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
+            metadata: { fromOwnerId: session.userId, toOwnerId: userId, createdByUserId: session.createdByUserId },
+            projectRepositoryId: session.projectRepositoryId,
+          })
+          .catch(error => {
+            console.error('[Factory Sessions] Failed to record ownership transfer audit event', { sessionId, error });
+          });
+        return c.json({ session: transferred.session });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
