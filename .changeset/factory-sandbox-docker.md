@@ -13,3 +13,5 @@ new MastraFactory({
 ```
 
 **Settings:** `baseImage`, the image the repository image builds from, and `owner`, the `user[:group]` that owns the checked-out repositories in it. Unset values fall back to the `defaults` option, then to `node:22-slim` and root.
+
+**Builds:** builds the repository image in the background and reports its status. Builds live in the host process, so after a restart an earlier build id reads as `unknown`. No build history.

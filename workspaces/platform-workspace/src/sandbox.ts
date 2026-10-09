@@ -738,7 +738,11 @@ export class PlatformSandbox extends MastraSandbox {
       mode,
       totalMs: Date.now() - startedAt,
       requestMs,
-      ...(this._templateDefinition ? { templateHash: templateHash(this._templateDefinition) } : {}),
+      // Only a provision ran the template; on reattach the stored definition
+      // is whatever this instance provisioned earlier, not what is running.
+      ...(mode === 'provision' && this._templateDefinition
+        ? { templateHash: templateHash(this._templateDefinition) }
+        : {}),
     });
   }
 
