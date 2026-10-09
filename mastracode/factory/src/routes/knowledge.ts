@@ -154,6 +154,11 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   /** Host-selected Knowledge key. Requests cannot override it; endpoints 503 when it does not resolve. */
   defaultKnowledgeKey?: string;
   limits?: Partial<KnowledgeRouteLimits>;
+  /**
+   * Current title of a thread, read when a session scope is listed so its label follows renames.
+   * Sessions fall back to `session <first 8 of id>` when absent or untitled.
+   */
+  threadTitle?: (threadId: string) => Promise<string | undefined>;
 }
 
 /** A graph node. `recordCount` is window-derived (records inside the snapshot window only). */
@@ -383,6 +388,17 @@ function knowledgeSearchRank(name: string, query: string): number {
   if (normalized === query) return 0;
   if (normalized.startsWith(query)) return 1;
   return 2;
+}
+
+/**
+ * What a scope node is, for labels: the rung name for vouched identity scopes, otherwise the
+ * stored kind, or "topic" for structural scopes created without one. Matches the scope list.
+ */
+function scopeKindLabel(address: string, kind: string | null | undefined): string {
+  if (address.startsWith('org:')) return 'org';
+  if (address.startsWith('resource:')) return 'project';
+  if (address.startsWith('thread:')) return 'session';
+  return kind || 'topic';
 }
 
 /** The thread id of a session (`thread:<id>`) scope node, or undefined for any other scope. */
@@ -714,6 +730,32 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return hidden;
   }
 
+  /**
+   * Display names for session scopes, resolved at read time from the thread's current title
+   * (never stored on the scope node, where it would go stale). Keyed by scope node id.
+   */
+  async #sessionNames(nodes: Array<{ id: string; address: string }>): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    const sessions = nodes.flatMap(node => {
+      const threadId = node.address.startsWith('thread:') ? node.address.slice('thread:'.length) : '';
+      return threadId ? [{ id: node.id, threadId }] : [];
+    });
+    for (let index = 0; index < sessions.length; index += SCOPE_COUNT_CONCURRENCY) {
+      await Promise.all(
+        sessions.slice(index, index + SCOPE_COUNT_CONCURRENCY).map(async ({ id, threadId }) => {
+          let title: string | undefined;
+          try {
+            title = (await this.deps.threadTitle?.(threadId))?.trim();
+          } catch {
+            // A failed title read only costs the label; fall back below.
+          }
+          names.set(id, title || `session ${threadId.slice(0, 8)}`);
+        }),
+      );
+    }
+    return names;
+  }
+
   /** Reserved `pinned` node ids at the active view's rungs (one exact-scope lookup per rung). */
   async #pinnedNodeIds(view: ResolvedView): Promise<Array<{ rung: 'resource' | 'thread'; id: string }>> {
     const out: Array<{ rung: 'resource' | 'thread'; id: string }> = [];
@@ -880,6 +922,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 )),
               );
             }
+            const sessionNames = await this.#sessionNames(scopeNodes);
+            scopeNodes = scopeNodes.map(node => ({
+              ...node,
+              kind: scopeKindLabel(node.address, node.kind),
+              ...(sessionNames.has(node.id) ? { name: sessionNames.get(node.id)! } : {}),
+            }));
           } catch (error) {
             if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
             scopeNodes = undefined;
@@ -888,6 +936,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           // canonical address, the rung entry carries the structural match so
           // the client renders one entry instead of two labels for one scope.
           const scopeNodeByAddress = new Map(storedScopeNodes.map(node => [node.address, node]));
+          const threadRoot = view.threadId ? scopeNodeByAddress.get(`thread:${view.threadId}`) : undefined;
+          const threadRootName = threadRoot ? (await this.#sessionNames([threadRoot])).get(threadRoot.id) : undefined;
           const rungs = [
             { level: 'org' as const, id: view.orgId, available: true },
             { level: 'resource' as const, id: view.factoryProjectId, available: true },
@@ -897,7 +947,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             roots: rungs.map(rung => {
               const match = scopeNodeByAddress.get(`${rung.level}:${rung.id}`);
               const name =
-                match?.address === `resource:${view.factoryProjectId}` ? view.factoryProjectName : match?.name;
+                match?.address === `resource:${view.factoryProjectId}`
+                  ? view.factoryProjectName
+                  : match && rung.level === 'thread'
+                    ? threadRootName
+                    : match?.name;
               return match ? { ...rung, scopeNodeId: match.id, name } : rung;
             }),
             defaultLevel: 'resource',
@@ -953,6 +1007,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!(error instanceof KnowledgeUnsupportedCapabilityError)) throw error;
           }
 
+          const scopeSessionNames = await this.#sessionNames(structuralScopes);
           const results: KnowledgeSearchResult[] = [
             ...structuralScopes.map(scopeNode => {
               const rung =
@@ -966,8 +1021,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               return {
                 id: scopeNode.id,
                 name:
-                  scopeNode.address === `resource:${view.factoryProjectId}` ? view.factoryProjectName : scopeNode.name,
-                kind: scopeNode.kind ?? 'scope',
+                  scopeNode.address === `resource:${view.factoryProjectId}`
+                    ? view.factoryProjectName
+                    : (scopeSessionNames.get(scopeNode.id) ?? scopeNode.name),
+                kind: scopeKindLabel(scopeNode.address, scopeNode.kind),
                 type: 'scope' as const,
                 rung,
                 address: scopeNode.address,
@@ -1043,10 +1100,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               resolved.orgId,
               limits.maxOrgScopePages,
             );
+            const rootSessionName = (await this.#sessionNames([storedRoot])).get(storedRoot.id);
             const root =
               storedRoot.address === `resource:${resolved.factoryProjectId}`
                 ? { ...storedRoot, name: resolved.factoryProjectName }
-                : storedRoot;
+                : rootSessionName
+                  ? { ...storedRoot, name: rootSessionName }
+                  : storedRoot;
             // A session lens needs the same check as the tree; other lenses never list sessions,
             // which are reached from the tree instead.
             if (storedRoot.address.startsWith('thread:')) {
@@ -1174,6 +1234,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               });
             }
 
+            const scopeAddressById = new Map(scopeNodes.map(node => [node.id, node.address]));
+            const memberSessionNames = await this.#sessionNames(
+              members.flatMap(node => {
+                const address = node.isScope ? scopeAddressById.get(node.id) : undefined;
+                return address ? [{ id: node.id, address }] : [];
+              }),
+            );
             const rootRow = await store.getNode(root.id);
             const activity = await store.listActivity({ scope: resolved.scope, limit: 1 });
 
@@ -1184,7 +1251,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 {
                   id: root.id,
                   name: root.name,
-                  kind: root.kind ?? 'scope',
+                  kind: scopeKindLabel(root.address, root.kind),
                   ...(root.description ? { description: root.description } : {}),
                   scope: null,
                   rung: null,
@@ -1198,10 +1265,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 },
                 ...members.map(node => {
                   const nodeScope = Array.isArray(node.scope) ? node.scope : null;
+                  const address = node.isScope ? scopeAddressById.get(node.id) : undefined;
                   return {
                     id: node.id,
-                    name: node.name,
-                    kind: node.kind,
+                    name: memberSessionNames.get(node.id) ?? node.name,
+                    kind: node.isScope ? scopeKindLabel(address ?? '', node.kind) : node.kind,
                     ...(node.description ? { description: node.description } : {}),
                     scope: nodeScope,
                     rung: nodeScope ? deepestRung(nodeScope) : null,

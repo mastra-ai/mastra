@@ -50,6 +50,7 @@ async function createHarness(
     knowledge?: KnowledgeStorage;
     knowledgeResolver?: (key: string) => Promise<Knowledge | undefined>;
     defaultKnowledgeKey?: string;
+    threadTitle?: (threadId: string) => Promise<string | undefined>;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -64,6 +65,7 @@ async function createHarness(
     knowledge: options.knowledgeResolver ?? (async () => instance),
     ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
+    ...(options.threadTitle ? { threadTitle: options.threadTitle } : {}),
   }).routes();
   const app = new Hono();
   const user = options.user ?? { workosId: 'user-1', organizationId: orgId };
@@ -303,7 +305,7 @@ describe('KnowledgeRoutes', () => {
       {
         id: scopes['features:memory'],
         name: 'Memory Systems',
-        kind: 'scope',
+        kind: 'topic',
         type: 'scope',
         rung: null,
         address: 'features:memory',
@@ -336,13 +338,76 @@ describe('KnowledgeRoutes', () => {
     const orgNode = body.scopeNodes?.find(node => node.address === `org:${ORG}`);
     const resourceNode = body.scopeNodes?.find(node => node.address === `resource:${h.projectId}`);
     const threadNode = body.scopeNodes?.find(node => node.address === 'thread:thread-1');
-    expect(threadNode).toMatchObject({ name: 'thread-1', parentIds: [resourceNode!.id] });
+    expect(threadNode).toMatchObject({ name: 'session thread-1', kind: 'session', parentIds: [resourceNode!.id] });
     expect(resourceNode).toMatchObject({ name: 'Graph project', parentIds: [orgNode!.id] });
     expect(body.roots).toEqual([
       { level: 'org', id: ORG, available: true, scopeNodeId: orgNode!.id, name: ORG },
       { level: 'resource', id: h.projectId, available: true, scopeNodeId: resourceNode!.id, name: 'Graph project' },
-      { level: 'thread', id: 'thread-1', available: true, scopeNodeId: threadNode!.id, name: 'thread-1' },
+      { level: 'thread', id: 'thread-1', available: true, scopeNodeId: threadNode!.id, name: 'session thread-1' },
     ]);
+  });
+
+  it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
+    const h = await createHarness();
+    await h.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        { address: 'features', name: 'features', kind: 'feature', parentAddresses: [`org:${ORG}`] },
+        { address: 'notes', name: 'notes', parentAddresses: [`org:${ORG}`] },
+      ],
+    });
+    const anchor = await node(h.knowledge, 'Session anchor', h.threadScope('thread-1'));
+    await record(h.knowledge, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes?threadId=thread-1`);
+    const body = (await response.json()) as KnowledgeScopeTreePayload;
+    const kindOf = (address: string) => body.scopeNodes?.find(node => node.address === address)?.kind;
+    expect(kindOf(`org:${ORG}`)).toBe('org');
+    expect(kindOf(`resource:${h.projectId}`)).toBe('project');
+    expect(kindOf('thread:thread-1')).toBe('session');
+    expect(kindOf('features')).toBe('feature');
+    expect(kindOf('notes')).toBe('topic');
+
+    const projectId = body.scopeNodes!.find(node => node.address === `resource:${h.projectId}`)!.id;
+    const lens = await graph(h, `?threadId=thread-1&scopeNodeId=${projectId}`);
+    expect(lens.status).toBe(200);
+    expect(lens.body.nodes.find(node => node.id === projectId)?.kind).toBe('project');
+    const sessionId = body.scopeNodes!.find(node => node.address === 'thread:thread-1')!.id;
+    const sessionLens = await graph(h, `?threadId=thread-1&scopeNodeId=${sessionId}`);
+    expect(sessionLens.status).toBe(200);
+    expect(sessionLens.body.nodes.find(node => node.id === sessionId)).toMatchObject({
+      name: 'session thread-1',
+      kind: 'session',
+    });
+  });
+
+  it('names sessions from the current thread title at read time, falling back to a short id', async () => {
+    const titles = new Map<string, string>([['thread-titled', 'Fix the login flow']]);
+    const h = await createHarness({ threadTitle: async threadId => titles.get(threadId) });
+    const vouch = async (address: string, parent: string) =>
+      h.instance.materializeScope({ address, contextualScopeAddress: parent, parentAddresses: [parent] });
+    await h.instance.materializeScope({ address: `org:${ORG}`, contextualScopeAddress: `org:${ORG}` });
+    await vouch(`resource:${h.projectId}`, `org:${ORG}`);
+    for (const threadId of ['thread-titled', '125898df-2cbb-49d6-9f54-23bc8783d68c']) {
+      await vouch(`thread:${threadId}`, `resource:${h.projectId}`);
+      const anchor = await node(h.knowledge, `Anchor ${threadId}`, h.threadScope(threadId));
+      await record(h.knowledge, anchor, `Evidence ${threadId}`, h.threadScope(threadId), threadId);
+    }
+    const sessionNames = async () => {
+      const body = (await (
+        await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/scopes`)
+      ).json()) as KnowledgeScopeTreePayload;
+      return body.scopeNodes
+        ?.filter(node => node.address.startsWith('thread:'))
+        .map(node => node.name)
+        .sort();
+    };
+    expect(await sessionNames()).toEqual(['Fix the login flow', 'session 125898df']);
+
+    // A rename shows up on the next read: nothing is stored on the scope node.
+    titles.set('thread-titled', 'Ship the login flow');
+    expect(await sessionNames()).toEqual(['Ship the login flow', 'session 125898df']);
+    const stored = await h.knowledge.listScopeNodes({ addresses: ['thread:thread-titled'] });
+    expect(stored.scopes[0]?.name).toBe('thread-titled');
   });
 
   it('lists a session under its project after a thread-level write, without a thread filter', async () => {
