@@ -1,5 +1,101 @@
 # @mastra/core
 
+## 1.76.0-alpha.4
+
+### Minor Changes
+
+- `processLLMRequest` now receives the workspace of the step, the one the agent's tools use, so a processor can work with the agent's sandbox or filesystem before a model call. ([#25814](https://github.com/mastra-ai/mastra/pull/25814))
+
+  ```ts
+  const processor: Processor = {
+    id: 'my-processor',
+    async processLLMRequest({ prompt, workspace }) {
+      if (workspace?.hasSandboxConfig()) {
+        // ...
+      }
+    },
+  };
+  ```
+
+- Agents now keep working when the model rejects a file the user sent. Before, the model call failed, and since the file stayed in the thread, every later turn failed the same way, even a text-only one. ([#25814](https://github.com/mastra-ai/mastra/pull/25814))
+
+  A new default error processor, `UnsupportedFileHandler`, takes the rejected file out of the prompt and calls the model again. When the agent's workspace has a sandbox, the file is uploaded there and the model gets its path, so the agent can still work on it with its tools. Otherwise, the model gets the `[Attachment unavailable: <name>]` placeholder Mastra already uses for attachments it can't use. Only the prompt changes: the stored message keeps the file, so a thread that already holds such a file works again on its next turn.
+
+  It handles the refusals that provider SDKs, such as OpenAI's and Anthropic's, raise before the request goes out, and the errors a provider returns over HTTP for a request that holds such a file, like Gemini's `502`. A rate limit or another error that asks to try again later keeps the file: the request is sent again unchanged. Every agent gets it, alongside the other default error processors, and `errorProcessorDefaults: false` turns it off with them. Uploaded files can be read by other threads that share the same sandbox.
+
+- Rearchitected an experimental memory feature. ([#26024](https://github.com/mastra-ai/mastra/pull/26024))
+
+- Added `FileUploadProcessor`, an input processor that uploads the files a user sends to the workspace sandbox and gives the model the sandbox path instead of the file content. ([#25814](https://github.com/mastra-ai/mastra/pull/25814))
+
+  Use it when an agent works on user files with its sandbox tools. A `filter` function decides, file by file, what is uploaded; the files it rejects, such as images, keep going to the model. Only the prompt sent to the model changes: the stored messages keep their files, so the thread and clients still have the original. Memory is optional.
+
+  Files are named after a hash of their content, so a file is written once and the next turns only check that it's still in the sandbox. Files of the thread history and files sent with signals are handled too. The processor never downloads anything itself: a link the model fetches, or a provider file ID, is left to the model.
+
+  Pass the same workspace to the agent and to the processor:
+
+  ```ts
+  import { FileUploadProcessor, FILE_UPLOAD_ERROR_CODES } from '@mastra/core/processors';
+  import type { FileUploadTripwireMetadata } from '@mastra/core/processors';
+
+  const agent = new Agent({
+    // ...
+    workspace,
+    inputProcessors: [
+      new FileUploadProcessor({
+        workspace,
+        filter: ({ mimeType, extension }) => mimeType === 'application/pdf' || extension === 'xlsx',
+        maxFileSize: () => 25 * 1024 * 1024,
+      }),
+    ],
+  });
+
+  const result = await agent.generate(messages);
+
+  if (result.tripwire?.processorId === 'file-upload') {
+    const { code } = result.tripwire.metadata as FileUploadTripwireMetadata;
+
+    if (code === FILE_UPLOAD_ERROR_CODES.FILE_TOO_LARGE) {
+      // ...
+    }
+  }
+  ```
+
+  When a file of the current turn can't be uploaded, the processor stops the turn and reports why in the tripwire metadata. `FILE_UPLOAD_ERROR_CODES` lists every code. A file of the thread history that can't be uploaded is replaced by a note in the prompt instead, so it never blocks the thread.
+
+- AgentController sessions now support automatic observational memory model selection per role. `AgentControllerOMConfig.observerModel`/`reflectorModel` and `session.om.<role>.switchModel({ modelId })` accept `'auto'` to follow the active main model, and `resolveAutoModelId` lets a consumer decide which concrete model an automatic role uses. `session.om.<role>.model()` reports the role's configured intent (`'auto'`, a model ID, or `undefined`) while `modelId()` keeps returning the effective concrete model. `defaultObserverModelId`/`defaultReflectorModelId` remain the concrete fallback, and persisted explicit selections are unchanged. ([#24508](https://github.com/mastra-ai/mastra/pull/24508))
+
+  Dynamic model functions can now return a labeled model, `{ model, id }`, so code that only sees the resolved model object still knows its full `provider/model` ID. Resolved models expose that label as a read-only `id`, and models created from a plain router ID set it automatically.
+
+  ```ts
+  const agent = new Agent({
+    model: ({ requestContext }) => ({ model: createMyModel(requestContext), id: 'openai/gpt-5.6-sol' }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed durable agents (such as Inngest agents) silently dropping call-time `toolsets` when the worker runs in a separate process. Toolset tools contain server-side code that can't be serialized, so the worker now throws an error naming the missing tools instead of running without them. To use these tools on a separate worker, register them on the agent (statically or via `requestContext`). ([#25860](https://github.com/mastra-ai/mastra/pull/25860))
+
+- Fixed channel bot tokens and other internal Mastra state leaking into traces and score records ([#25893](https://github.com/mastra-ai/mastra/issues/25893)). ([#26243](https://github.com/mastra-ai/mastra/pull/26243))
+
+  Agents with `channels` configured exported the live Telegram/Slack adapter on every span's `requestContext`, including bot and app tokens, and added hundreds of KB to each span. Delegated runs exported the parent agent's memory instance, and agent-controller runs walked the whole workspace.
+
+  **What changed**
+
+  - Reserved Mastra request-context keys (those starting with `mastra__` or `__mastra_`) are no longer exported on spans or saved on score records. The auth token is now omitted instead of shown as `[REDACTED]`. Thread and resource IDs are still recorded as span metadata.
+  - Workspaces now show as `{ id, name, status }` in traces and score records instead of exposing their configuration and providers. Score records also use `serializeForSpan()` for any other object that defines it.
+  - Request-context keys without a reserved prefix keep their existing representation. If you set your own keys starting with `mastra__` or `__mastra_`, rename them to keep them in traces.
+
+- Agent runs whose model stream stops without a finish reason now end with an error instead of being reported as complete. ([#26226](https://github.com/mastra-ai/mastra/pull/26226))
+
+- Fixed internal Agent Controller operations so configured authorization providers enforce read and execute permissions. Read routes authorize `agent-controller:read` when inspecting an existing live session. If the in-memory session is missing after a restart, they preserve recovery behavior by recreating it through the `agent-controller:execute`-authorized path. Other operations that create, resume, or mutate sessions also require `agent-controller:execute`. Applications without an authorization provider are unchanged. ([#26092](https://github.com/mastra-ai/mastra/pull/26092))
+
+- Fixed evented workflows to recover sleeps after a process restart by replaying the sleeping path without rerunning completed steps. ([#26268](https://github.com/mastra-ai/mastra/pull/26268))
+
+- Fixed agent runs stopping mid-task after a tool approval. Approving or declining a tool call now resumes the run with the controller's full step budget instead of the agent's default of 5 steps, so the run no longer ends as "complete" a few steps later with work still pending. ([#26493](https://github.com/mastra-ai/mastra/pull/26493))
+
+- Fixed internal agent memory reads and writes so configured authorization providers enforce permissions with actor and acting-agent attribution across standard, durable, and delegated execution paths. Applications without an authorization provider are unchanged. Applications with an authorization provider must grant `memory:read` and `memory:write` for the affected memory threads to users and system actors that run agents in process; otherwise those operations now fail with a 403 response. ([#26092](https://github.com/mastra-ai/mastra/pull/26092))
+
 ## 1.76.0-alpha.3
 
 ### Minor Changes
