@@ -306,6 +306,21 @@ describe('ExperimentTriggerDialog', () => {
       expect(triggerCalls[0].body.name).toBe(defaultName);
     });
 
+    it('should name the run after the target id when the target list fails to load', async () => {
+      // Given a preselected target whose list request fails
+      const { triggerCalls } = setupHandlers();
+      server.use(http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+
+      // Then the name falls back to the target id and Run still works
+      await waitFor(() => expect(nameInput().value).toMatch(/^agent-1-[0-9a-f]{4}$/));
+      const defaultName = nameInput().value;
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.name).toBe(defaultName);
+    });
+
     it('should fall back to the default name when the field is cleared', async () => {
       // Given a dataset and a target
       const { triggerCalls } = setupHandlers();

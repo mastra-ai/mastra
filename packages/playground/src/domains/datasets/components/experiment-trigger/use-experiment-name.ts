@@ -12,7 +12,8 @@ export function useExperimentName(targetType: TargetType | '', targetId: string,
   const [suffix, setSuffix] = useState(createExperimentNameSuffix);
   const { targetOptions } = useTargetOptions(targetType);
 
-  const targetName = targetOptions.find(option => option.value === targetId)?.label;
+  // Falls back to the id while the target list is loading or if it fails to load.
+  const targetName = targetOptions.find(option => option.value === targetId)?.label ?? targetId;
   const defaultName = targetName ? buildDefaultExperimentName(targetName, suffix) : '';
   const name = typedName ?? defaultName;
   // A cleared field still runs, under the default name it shows as its placeholder.
