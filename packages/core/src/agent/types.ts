@@ -208,6 +208,8 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
+      /** The caller's request context. Applies whether the thread is active or idle. */
+      requestContext?: RequestContext;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
     }
@@ -215,6 +217,8 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId?: string;
       resourceId: string;
       threadId: string;
+      /** The caller's request context. Applies whether the thread is active or idle. */
+      requestContext?: RequestContext;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
     };

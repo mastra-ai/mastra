@@ -190,6 +190,7 @@ import type {
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
+import { assertRequestContextResourceMatches, threadResourceMismatchError } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { buildResumeSpanInput } from './resume-span-input';
@@ -270,6 +271,7 @@ interface StandaloneDurableWrapper {
   resumeStream: (...args: any[]) => any;
   approveToolCall: (...args: any[]) => any;
   declineToolCall: (...args: any[]) => any;
+  resolveRunResourceForGuard: (runId: string, method: string) => Promise<{ found: boolean; resourceId?: string }>;
   streamUntilIdle: (...args: any[]) => any;
   listActiveRuns: (...args: any[]) => any;
   recoverActiveRuns: (...args: any[]) => any;
@@ -9141,6 +9143,12 @@ export class Agent<
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
   ): SendAgentMessageResult<OUTPUT> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.sendMessage<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       message,
@@ -9153,6 +9161,12 @@ export class Agent<
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
   ): QueueAgentMessageResult<OUTPUT> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.queueMessage<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       message,
@@ -9178,6 +9192,12 @@ export class Agent<
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
   ): Promise<SendAgentStateSignalResult<OUTPUT>> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.sendStateSignal<OUTPUT>(
       this.#getThreadRuntimeAgent(),
       state,
@@ -9222,6 +9242,12 @@ export class Agent<
     inputs: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
   ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
     if (!notifications) {
       throw new Error('sendNotificationSignal requires a notifications storage domain');
@@ -9448,6 +9474,12 @@ export class Agent<
     signal: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
   ): SendAgentSignalResult<OUTPUT> {
+    assertRequestContextResourceMatches({
+      requestContext: target.requestContext,
+      resourceId: target.resourceId,
+      threadId: target.threadId,
+      agentName: this.name,
+    });
     return agentThreadStreamRuntime.sendSignal<OUTPUT>(this.#getThreadRuntimeAgent(), signal, target, this.getPubSub());
   }
 
@@ -10177,6 +10209,40 @@ export class Agent<
   }
 
   /**
+   * Resolves the resource that owns a suspended run, for the caller-resource
+   * guard on tool approvals. Durable agents override this.
+   * @internal
+   */
+  protected async resolveRunResourceForGuard(
+    runId: string,
+    method: string,
+  ): Promise<{ found: boolean; resourceId?: string }> {
+    const durable = await this.#getStandaloneDurable();
+    if (durable) {
+      return durable.resolveRunResourceForGuard(runId, method);
+    }
+    const snapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method });
+    return { found: true, resourceId: this.#getSnapshotMemoryInfo(snapshot)?.resourceId };
+  }
+
+  /**
+   * Rejects a tool approval whose caller resource does not own the run.
+   * @internal
+   */
+  protected async assertToolControlCallerOwnsRun(
+    options: { runId: string; requestContext?: RequestContext },
+    method: string,
+  ) {
+    const actualResourceId = options.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    if (!actualResourceId) return;
+    const { found, resourceId } = await this.resolveRunResourceForGuard(options.runId, method);
+    if (!found) {
+      throw threadResourceMismatchError({ agentName: this.name, runId: options.runId, actualResourceId });
+    }
+    assertRequestContextResourceMatches({ requestContext: options.requestContext, resourceId, agentName: this.name });
+  }
+
+  /**
    * Approves a pending tool call and resumes execution.
    * Used when `requireToolApproval` is enabled to allow the agent to proceed with a tool call.
    *
@@ -10196,6 +10262,7 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    await this.assertToolControlCallerOwnsRun(options, 'approveToolCall');
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
     const durable = await this.#getStandaloneDurable();
@@ -10331,6 +10398,12 @@ export class Agent<
       streamOptions,
       ...executionOptions
     } = options;
+    assertRequestContextResourceMatches({
+      requestContext: options.requestContext,
+      resourceId,
+      threadId,
+      agentName: this.name,
+    });
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -10529,6 +10602,7 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    await this.assertToolControlCallerOwnsRun(options, 'declineToolCall');
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
     const durable = await this.#getStandaloneDurable();
@@ -10562,6 +10636,7 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    await this.assertToolControlCallerOwnsRun(options, 'approveToolCallGenerate');
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: true }, options);
   }
@@ -10591,6 +10666,7 @@ export class Agent<
       model?: DynamicArgument<MastraModelConfig>;
     },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    await this.assertToolControlCallerOwnsRun(options, 'declineToolCallGenerate');
     const { reason, ...resumeOptions } = options;
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
