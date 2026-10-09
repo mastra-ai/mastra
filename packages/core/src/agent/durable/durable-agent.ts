@@ -23,6 +23,7 @@ import type {
   ToolCallChunk,
 } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { CoreTool } from '../../tools/types';
 import { deepMerge } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
@@ -600,6 +601,11 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   /** Callback when the recovered run suspends again */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /**
+   * Close the recovered stream once the run suspends (e.g. awaiting tool
+   * approval) so callers can hand off to `resume()`. Defaults to `false`.
+   */
+  closeOnSuspend?: boolean;
+  /**
    * Optional abort signal for the recovered segment. Forwarded onto a fresh
    * internal `AbortController` installed on the run's registry entry, so
    * `result.abort()` and the external signal can both cancel the recovered run.
@@ -1066,8 +1072,9 @@ export class DurableAgent<
           }
         },
         onSuspended: options?.onSuspended,
-        // Keep recovered runs observable if they suspend again so a later
-        // resume or recovery can pick them up.
+        // Close (when requested) on the persisted workflow result in recover(),
+        // not on the SUSPENDED event, which can precede a resumable snapshot.
+        closeOnSuspend: false,
         messageList,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
@@ -1098,7 +1105,7 @@ export class DurableAgent<
         this.getPubSub(),
         {
           strict: true,
-          continuation: 'across-suspension',
+          ...(options?.closeOnSuspend ? {} : { continuation: 'across-suspension' as const }),
           validate: () => recoveryLease.assertOwned(),
         },
       );
@@ -1267,6 +1274,26 @@ export class DurableAgent<
     }
     recoveryLease.assertOwned();
 
+    // The entry below carries a live model, so resolveRuntimeDependencies trusts
+    // it as fully hydrated and never rebuilds tools — they must be restored here.
+    let tools: Record<string, CoreTool> = {};
+    let workspace;
+    try {
+      tools = await wrapped.getToolsForExecution({
+        runId,
+        threadId,
+        resourceId,
+        requestContext,
+        memoryConfig: workflowInput.state?.memoryConfig,
+        autoResumeSuspendedTools: workflowInput.options?.autoResumeSuspendedTools,
+        clientTools: workflowInput.options?.clientTools as ToolsInput | undefined,
+      });
+      workspace = await wrapped.getWorkspace({ requestContext });
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) tool resolution failed: ${error}`);
+    }
+    recoveryLease.assertOwned();
+
     const saveQueueManager = memory
       ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
       : undefined;
@@ -1346,6 +1373,10 @@ export class DurableAgent<
     recoveryLease.assertOwned();
 
     const registryEntry = {
+      // Call-time toolset tools died with the original process. Mark the entry
+      // as a placeholder so the first step rebuilds tools and fails loudly
+      // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.
+      isPlaceholder: (workflowInput.options?.toolsetToolNames?.length ?? 0) > 0,
       // Restore the original run's flag from the persisted snapshot so a
       // warm resume after recovery keeps returning scoringData without the
       // caller re-passing the option.
@@ -1353,6 +1384,8 @@ export class DurableAgent<
       mastra: this.#mastra,
       model,
       modelList,
+      tools,
+      workspace,
       memory,
       saveQueueManager,
       requestContext,
@@ -3269,6 +3302,14 @@ export class DurableAgent<
           recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
           await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           recoveryLease.assertOwned();
+        }
+        if (result?.status === 'suspended' && options?.closeOnSuspend) {
+          // Same contract as resume(): close on the persisted suspension,
+          // after flushing and delivering already-published events.
+          await this.pubsub.flush();
+          await stream.waitForEventDelivery();
+          recoveryLease.assertOwned();
+          stream.detach();
         }
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()

@@ -378,6 +378,8 @@ type AgentThreadRuntimeState = {
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
   threadKeysByRunId: Map<string, string>;
   remoteThreadKeysByRunId: Map<string, string>;
+  remoteAgentIdsByRunId: Map<string, string>;
+  unobservedRemoteRunIds: Set<string>;
   activeThreadRunIds: Map<string, string>;
   activeThreadStreamIds: Map<string, string>;
   streamSeqByRunId: Map<string, number>;
@@ -388,6 +390,7 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
+  pendingSignalListenersByRunId: Map<string, Set<() => void>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -463,7 +466,7 @@ export type AgentThreadRunRegistration = {
 type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
 
 type AgentThreadStreamRuntimeEvent =
-  | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string }
+  | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string; agentId?: string }
   | {
       type: 'stream-part';
       runId: string;
@@ -553,6 +556,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadRunsByStreamId: new Map(),
     threadKeysByRunId: new Map(),
     remoteThreadKeysByRunId: new Map(),
+    remoteAgentIdsByRunId: new Map(),
+    unobservedRemoteRunIds: new Set(),
     activeThreadRunIds: new Map(),
     activeThreadStreamIds: new Map(),
     streamSeqByRunId: new Map(),
@@ -561,6 +566,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     locallyQueuedSignalIdsByThread: new Map(),
+    pendingSignalListenersByRunId: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -831,6 +837,7 @@ export class AgentThreadStreamRuntime {
         queue.push(createSignal(data.signal));
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
+        this.#notifyPendingSignals(state, key);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
@@ -2633,6 +2640,8 @@ export class AgentThreadStreamRuntime {
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
     state.remoteThreadKeysByRunId.clear();
+    state.remoteAgentIdsByRunId.clear();
+    state.unobservedRemoteRunIds.clear();
     state.activeThreadRunIds.clear();
     state.approvalSuspendedRunIds.clear();
     state.suspendedRunIds.clear();
@@ -2677,6 +2686,7 @@ export class AgentThreadStreamRuntime {
     preparedRun?.cleanup();
     if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
+    state.pendingSignalListenersByRunId.delete(runId);
     state.abortedRunIds.delete(runId);
   }
 
@@ -2778,6 +2788,7 @@ export class AgentThreadStreamRuntime {
       streamId,
       streamSeq,
       sourceId: this.#getSourceId(),
+      agentId,
     });
     void registered.then(startBroadcast, startBroadcast);
     // Wait for the local stream to finish AND for every stream-part publish to
@@ -3039,6 +3050,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         sourceId: this.#getSourceId(),
+        agentId: agent.id,
       });
     })();
     // Always drive the run's stream to completion, even when no caller consumes
@@ -3180,6 +3192,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         sourceId: this.#getSourceId(),
+        agentId: agent.id,
       });
       registrationPublished = true;
       await registrationOptions.validate?.();
@@ -3859,6 +3872,34 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  /** @internal Listen only to input actually admitted to this process's owning run. */
+  subscribePendingSignals(runId: string, listener: () => void, pubsub?: PubSub): () => void {
+    const state = this.#getState(pubsub);
+    if (!state.threadKeysByRunId.has(runId)) return () => {};
+    const listeners = state.pendingSignalListenersByRunId.get(runId) ?? new Set();
+    listeners.add(listener);
+    state.pendingSignalListenersByRunId.set(runId, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && state.pendingSignalListenersByRunId.get(runId) === listeners) {
+        state.pendingSignalListenersByRunId.delete(runId);
+      }
+    };
+  }
+
+  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string): void {
+    const runId = state.activeThreadRunIds.get(key);
+    if (
+      !runId ||
+      state.threadKeysByRunId.get(runId) !== key ||
+      state.abortedRunIds.has(runId) ||
+      state.preparedRunsById.get(runId)?.abortController.signal.aborted
+    ) {
+      return;
+    }
+    for (const listener of [...(state.pendingSignalListenersByRunId.get(runId) ?? [])]) listener();
+  }
+
   /**
    * Drains queued signals for a run.
    *
@@ -4040,7 +4081,11 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
-      if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+      if (state.remoteThreadKeysByRunId.get(runId) === key) {
+        state.remoteThreadKeysByRunId.delete(runId);
+        state.remoteAgentIdsByRunId.delete(runId);
+        state.unobservedRemoteRunIds.delete(runId);
+      }
     };
     const finish = () => {
       if (settled) return;
@@ -4252,7 +4297,11 @@ export class AgentThreadStreamRuntime {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
-      if (!local) state.remoteThreadKeysByRunId.set(runId, key);
+      if (!local) {
+        state.remoteThreadKeysByRunId.set(runId, key);
+        // The lease check awaited; only trust the run if someone still observes the thread.
+        if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
+      }
     };
 
     // A deferred run may be flushed only when its replayed chunks ended with a
@@ -4299,7 +4348,11 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
-      if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+      if (state.remoteThreadKeysByRunId.get(runId) === key) {
+        state.remoteThreadKeysByRunId.delete(runId);
+        state.remoteAgentIdsByRunId.delete(runId);
+        state.unobservedRemoteRunIds.delete(runId);
+      }
     };
 
     const stopRemoteRunLeaseWatch = (streamId: string) => {
@@ -4427,7 +4480,16 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
+        const registrationRedelivery = handledRegistrationEventIds.has(event.id);
+        handledRegistrationEventIds.add(event.id);
         noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
+        // A redelivered registration for a stream that already ended must not
+        // restore the finished run as the thread's active run.
+        if (registrationRedelivery && terminalEventStreamIds.has(data.streamId)) {
+          discardDeferredRun(data.streamId);
+          wake();
+          return;
+        }
         const localRecord = state.threadRunsByStreamId.get(data.streamId);
         if (localRecord) {
           localStreamIds.add(data.streamId);
@@ -4445,14 +4507,33 @@ export class AgentThreadStreamRuntime {
         // covers runs that complete before the event is delivered in-process
         // (record cleaned up, lease released) where deferral would strand the
         // run because its terminal event was already processed.
+        // A finished local record must not displace a different active run.
+        // Without a record (already cleaned up), a redelivered registration
+        // must not displace a different local run that still blocks the thread.
+        const currentActiveRunId = state.activeThreadRunIds.get(key);
+        const currentActiveRecord = currentActiveRunId ? state.threadRunsById.get(currentActiveRunId) : undefined;
+        const displacesActiveRun =
+          currentActiveRunId !== undefined &&
+          currentActiveRunId !== data.runId &&
+          (localRecord !== undefined ||
+            (currentActiveRecord !== undefined && this.#isThreadBlockingRun(state, currentActiveRecord)));
+        const sameSourceLive =
+          !backlog && !displacesActiveRun && data.sourceId !== undefined && data.sourceId === this.#getSourceId();
+        // A nonblocking local record is never live via the lease: fallback lease
+        // providers report every run as leased.
         const live =
-          local ||
-          (!backlog && data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
-          (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+          localRecord !== undefined
+            ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
+            : !displacesActiveRun &&
+              (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
-          if (!local) state.remoteThreadKeysByRunId.set(data.runId, key);
+          if (!local) {
+            state.remoteThreadKeysByRunId.set(data.runId, key);
+            if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
+            if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
+          }
         }
         // Reuse a proxy that a stream-part-first delivery already created for
         // this stream — creating a fresh record here would orphan its
@@ -4648,6 +4729,8 @@ export class AgentThreadStreamRuntime {
     const terminalEventStreamIds = new Set<string>();
     /** Terminal deliveries whose lifecycle side effects completed successfully. */
     const handledTerminalEventIds = new Set<string>();
+    /** Registration deliveries already handled by this subscription. */
+    const handledRegistrationEventIds = new Set<string>();
     /** Suspended halves whose run has since resumed: their prompts are already answered. */
     const answeredStreamIds = new Set<string>();
     // A run registering a later stream means its suspension was answered. A
@@ -4766,6 +4849,13 @@ export class AgentThreadStreamRuntime {
       remoteRunSuspensionPrompts.clear();
       control.references--;
       control.observers--;
+      // With no observer left, remote terminal events go unseen: stop trusting
+      // these runs as signal targets until a live registration confirms them.
+      if (!control.observers) {
+        for (const [runId, runKey] of state.remoteThreadKeysByRunId) {
+          if (runKey === key) state.unobservedRemoteRunIds.add(runId);
+        }
+      }
       this.#releaseUnusedThreadControlSubscription(state, key);
       void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
       // Cancel current reader so the generator's inner loop breaks.
@@ -5163,6 +5253,7 @@ export class AgentThreadStreamRuntime {
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
+    let remoteCrossAgent = false;
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -5177,7 +5268,15 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
-        if (state.threadKeysByRunId.get(activeRunId) === key) {
+        if (
+          state.threadKeysByRunId.get(activeRunId) === key ||
+          (state.remoteThreadKeysByRunId.get(activeRunId) === key && !state.unobservedRemoteRunIds.has(activeRunId))
+        ) {
+          // A remote run whose owner agent is unknown (e.g. seen via a stream part
+          // before its registration) is not a safe target for this agent.
+          remoteCrossAgent =
+            state.threadKeysByRunId.get(activeRunId) !== key &&
+            state.remoteAgentIdsByRunId.get(activeRunId) !== agent.id;
           // A run can be reserved before its stream record is registered. Keep the reserved
           // id so early follow-ups still attach to the run that is starting.
           runId = activeRunId;
@@ -5216,6 +5315,13 @@ export class AgentThreadStreamRuntime {
       signal,
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
+
+    if (remoteCrossAgent) {
+      return {
+        signal,
+        accepted: Promise.resolve({ action: 'blocked' as const, reason: 'thread-blocked' as const, runId: runId! }),
+      };
+    }
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
@@ -5264,6 +5370,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.pendingSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId,
@@ -5311,6 +5418,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',

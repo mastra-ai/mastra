@@ -742,7 +742,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/novita-ai',
-          label: 'NovitaAI',
+          label: 'Novita AI',
         },
         {
           type: 'doc',

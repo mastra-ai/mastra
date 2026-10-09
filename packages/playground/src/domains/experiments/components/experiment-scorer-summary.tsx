@@ -60,14 +60,16 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     }
 
     return (
-      <div className="flex items-center gap-2 text-muted-foreground">
+      <div className="flex items-start gap-2 text-muted-foreground">
         <GaugeIcon className="size-4 shrink-0 text-muted-foreground" />
-        <Txt as="span" variant="caption" tone="muted">
-          {title}
-        </Txt>
-        <Txt as="span" variant="caption" className="truncate">
-          {description}
-        </Txt>
+        <div className="grid min-w-0 gap-0.5">
+          <Txt as="span" variant="caption" tone="muted">
+            {title}
+          </Txt>
+          <Txt as="span" variant="caption">
+            {description}
+          </Txt>
+        </div>
       </div>
     );
   }

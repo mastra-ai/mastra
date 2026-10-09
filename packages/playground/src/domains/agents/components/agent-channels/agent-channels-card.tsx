@@ -31,14 +31,14 @@ export const AgentChannelsCard = ({ agentId }: { agentId: string }) => {
     return [{ platform, isPending: installations.some(i => i.status === 'pending') }];
   });
 
-  const hasConnection = installs.some(query => query.data?.length);
+  if (actions.length === 0) return null;
 
-  if (!hasConnection || actions.length === 0) return null;
+  const hasConnection = installs.some(query => query.data?.length);
 
   return (
     <Card elevation="flat" data-testid="agent-channels-card">
       <CardContent className="flex flex-col gap-1">
-        <CardTitle>Finish connecting your channels</CardTitle>
+        <CardTitle>{hasConnection ? 'Finish connecting your channels' : 'Connect your channels'}</CardTitle>
         <ul className="divide-y divide-border">
           {actions.map(({ platform, isPending }) => (
             <ChannelAction key={platform.id} platform={platform} agentId={agentId} isPending={isPending} />
