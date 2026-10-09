@@ -219,6 +219,7 @@ export class ObservationStep {
               sendSignal: this.turn.sendSignal,
               sendStateSignal: this.turn.sendStateSignal,
               requestContext: this.turn.requestContext,
+              currentModel: this.turn.actorModelContext,
               observabilityContext: this.turn.observabilityContext,
             })
             .catch((err: Error) => {

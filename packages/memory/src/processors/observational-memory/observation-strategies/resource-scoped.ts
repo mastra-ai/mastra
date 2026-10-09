@@ -268,6 +268,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           undefined,
           { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
           this.opts.record.observedTimezone,
+          this.opts.agent,
+          this.opts.currentModel,
         );
       }),
     );

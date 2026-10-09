@@ -120,6 +120,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
       timeZone: this.opts.record.observedTimezone,
+      currentModel: this.opts.currentModel,
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
